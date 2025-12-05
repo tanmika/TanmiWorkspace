@@ -1,0 +1,453 @@
+#!/usr/bin/env node
+// src/index.ts
+// 统一入口：MCP Server + HTTP Server
+
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+import type { FastifyInstance } from "fastify";
+
+import { createServices, type Services } from "./http/services.js";
+import { createServer } from "./http/server.js";
+import { isPortInUse } from "./utils/port.js";
+import { workspaceTools } from "./tools/workspace.js";
+import { nodeTools } from "./tools/node.js";
+import { stateTools } from "./tools/state.js";
+import { contextTools } from "./tools/context.js";
+import { logTools } from "./tools/log.js";
+import { helpTools, type HelpTopic, type PromptTemplate } from "./tools/help.js";
+import { getFullInstructions } from "./prompts/instructions.js";
+import { TanmiError } from "./types/errors.js";
+import type { TransitionAction, ReferenceAction } from "./types/index.js";
+
+// ============================================================================
+// 配置
+// ============================================================================
+const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? "3000", 10);
+const DISABLE_HTTP = process.env.DISABLE_HTTP === "true";
+
+// ============================================================================
+// 日志工具
+// ============================================================================
+function logMcp(message: string): void {
+  console.error(`[mcp] ${message}`);
+}
+
+function logHttp(message: string): void {
+  console.error(`[http] ${message}`);
+}
+
+// ============================================================================
+// HTTP Server 后台启动
+// ============================================================================
+async function startHttpServerInBackground(port: number): Promise<FastifyInstance | null> {
+  // 检查是否禁用 HTTP
+  if (DISABLE_HTTP) {
+    logHttp("HTTP server 已禁用 (DISABLE_HTTP=true)");
+    return null;
+  }
+
+  // 检测端口占用
+  if (await isPortInUse(port)) {
+    logHttp(`端口 ${port} 已被占用，跳过 HTTP 启动`);
+    return null;
+  }
+
+  try {
+    const server = await createServer();
+    await server.listen({ port, host: "0.0.0.0" });
+    logHttp(`Listening on http://localhost:${port}`);
+    return server;
+  } catch (err) {
+    logHttp(`启动失败: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+// ============================================================================
+// MCP Server 创建
+// ============================================================================
+function createMcpServer(services: Services): Server {
+  const server = new Server(
+    {
+      name: "tanmi-workspace",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        tools: {},
+        prompts: {},
+      },
+    }
+  );
+
+  // 注册工具列表处理器
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      ...workspaceTools,
+      ...nodeTools,
+      ...stateTools,
+      ...contextTools,
+      ...logTools,
+      ...helpTools,
+    ],
+  }));
+
+  // 注册工具调用处理器
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    try {
+      // 确保基础目录存在
+      await services.fs.ensureIndex();
+
+      let result: unknown;
+
+      switch (name) {
+        // Workspace 工具
+        case "workspace_init":
+          result = await services.workspace.init({
+            name: args?.name as string,
+            goal: args?.goal as string,
+            rules: args?.rules as string[] | undefined,
+            docs: args?.docs as Array<{ path: string; description: string }> | undefined,
+          });
+          break;
+
+        case "workspace_list":
+          result = await services.workspace.list({
+            status: args?.status as "active" | "archived" | "all" | undefined,
+          });
+          break;
+
+        case "workspace_get":
+          result = await services.workspace.get({
+            workspaceId: args?.workspaceId as string,
+          });
+          break;
+
+        case "workspace_delete":
+          result = await services.workspace.delete({
+            workspaceId: args?.workspaceId as string,
+            force: args?.force as boolean | undefined,
+          });
+          break;
+
+        case "workspace_status":
+          result = await services.workspace.status({
+            workspaceId: args?.workspaceId as string,
+            format: args?.format as "box" | "markdown" | undefined,
+          });
+          break;
+
+        // Node 工具
+        case "node_create":
+          result = await services.node.create({
+            workspaceId: args?.workspaceId as string,
+            parentId: args?.parentId as string,
+            title: args?.title as string,
+            requirement: args?.requirement as string | undefined,
+            docs: args?.docs as Array<{ path: string; description: string }> | undefined,
+          });
+          break;
+
+        case "node_get":
+          result = await services.node.get({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+          });
+          break;
+
+        case "node_list":
+          result = await services.node.list({
+            workspaceId: args?.workspaceId as string,
+            rootId: args?.rootId as string | undefined,
+            depth: args?.depth as number | undefined,
+          });
+          break;
+
+        case "node_delete":
+          result = await services.node.delete({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+          });
+          break;
+
+        // Phase 3: 节点分裂与更新
+        case "node_split":
+          result = await services.node.split({
+            workspaceId: args?.workspaceId as string,
+            parentId: args?.parentId as string,
+            title: args?.title as string,
+            requirement: args?.requirement as string,
+            inheritContext: args?.inheritContext as boolean | undefined,
+          });
+          break;
+
+        case "node_update":
+          result = await services.node.update({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+            title: args?.title as string | undefined,
+            requirement: args?.requirement as string | undefined,
+            note: args?.note as string | undefined,
+          });
+          break;
+
+        // Phase 2: 状态转换工具
+        case "node_transition":
+          result = await services.state.transition({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+            action: args?.action as TransitionAction,
+            reason: args?.reason as string | undefined,
+            conclusion: args?.conclusion as string | undefined,
+          });
+          break;
+
+        // Phase 2: 上下文工具
+        case "context_get":
+          result = await services.context.get({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+            includeLog: args?.includeLog as boolean | undefined,
+            maxLogEntries: args?.maxLogEntries as number | undefined,
+            reverseLog: args?.reverseLog as boolean | undefined,
+            includeProblem: args?.includeProblem as boolean | undefined,
+          });
+          break;
+
+        case "context_focus":
+          result = await services.context.focus({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+          });
+          break;
+
+        case "node_isolate":
+          result = await services.reference.isolate({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+            isolate: args?.isolate as boolean,
+          });
+          break;
+
+        case "node_reference":
+          result = await services.reference.reference({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+            targetIdOrPath: args?.targetIdOrPath as string,
+            action: args?.action as ReferenceAction,
+            description: args?.description as string | undefined,
+          });
+          break;
+
+        // Phase 2: 日志工具
+        case "log_append":
+          result = await services.log.append({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string | undefined,
+            operator: args?.operator as "AI" | "Human",
+            event: args?.event as string,
+          });
+          break;
+
+        case "problem_update":
+          result = await services.log.updateProblem({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string | undefined,
+            problem: args?.problem as string,
+            nextStep: args?.nextStep as string | undefined,
+          });
+          break;
+
+        case "problem_clear":
+          result = await services.log.clearProblem({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string | undefined,
+          });
+          break;
+
+        // Help 工具
+        case "tanmi_help":
+          result = services.help.getHelp(args?.topic as HelpTopic);
+          break;
+
+        case "tanmi_prompt":
+          result = services.help.getPrompt(
+            args?.template as PromptTemplate,
+            args?.params as Record<string, unknown> | undefined
+          );
+          break;
+
+        default:
+          throw new Error(`未知工具: ${name}`);
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      if (error instanceof TanmiError) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: {
+                  code: error.code,
+                  message: error.message,
+                },
+              }, null, 2),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: {
+                code: "INTERNAL_ERROR",
+                message,
+              },
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  });
+
+  // 注册 Prompts 列表处理器
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: [
+      {
+        name: "tanmi-instructions",
+        description: "TanmiWorkspace 完整使用指南 - AI 首次使用时应获取此指南",
+      },
+      {
+        name: "tanmi-quick-start",
+        description: "快速开始指南 - 简要的工作流程说明",
+      },
+    ],
+  }));
+
+  // 注册 Prompt 获取处理器
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const { name } = request.params;
+
+    switch (name) {
+      case "tanmi-instructions":
+        return {
+          description: "TanmiWorkspace 完整使用指南",
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: getFullInstructions(),
+              },
+            },
+          ],
+        };
+
+      case "tanmi-quick-start":
+        return {
+          description: "TanmiWorkspace 快速开始",
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: `# TanmiWorkspace 快速开始
+
+## 基本流程
+1. workspace_init - 创建工作区
+2. node_create - 创建子任务
+3. node_transition(action="start") - 开始执行
+4. log_append - 记录过程
+5. node_transition(action="complete") - 完成任务
+
+## 常用工具
+- tanmi_help(topic="overview") - 获取系统概述
+- workspace_status - 查看当前状态
+- context_get - 获取聚焦上下文
+
+详细信息请调用 tanmi_help(topic="all")`,
+              },
+            },
+          ],
+        };
+
+      default:
+        throw new Error(`未知 Prompt: ${name}`);
+    }
+  });
+
+  return server;
+}
+
+// ============================================================================
+// 主函数
+// ============================================================================
+async function main() {
+  // 1. 创建共享服务实例
+  const services = createServices();
+
+  // 2. 尝试启动 HTTP server（后台）
+  const httpServer = await startHttpServerInBackground(HTTP_PORT);
+
+  // 3. 创建并启动 MCP server
+  const mcpServer = createMcpServer(services);
+  const transport = new StdioServerTransport();
+  await mcpServer.connect(transport);
+  logMcp("Server started");
+
+  // 4. 优雅退出处理
+  const shutdown = async (signal: string) => {
+    logMcp(`收到 ${signal}，正在关闭...`);
+
+    // 关闭 HTTP server
+    if (httpServer) {
+      try {
+        await httpServer.close();
+        logHttp("Server closed");
+      } catch (err) {
+        logHttp(`关闭失败: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // 关闭 MCP server
+    try {
+      await mcpServer.close();
+      logMcp("Server closed");
+    } catch (err) {
+      logMcp(`关闭失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    process.exit(0);
+  };
+
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+}
+
+main().catch((err) => {
+  console.error("[main] 启动失败:", err);
+  process.exit(1);
+});

@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Workspace data (user-specific runtime data)
+.tanmi-workspace/
+.tanmi-workspace-dev/
+
+# Test temp data
+.test-tanmi-workspace-*/
+
+# Draft/development documents (not for commit)
+docs-draft/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+.nyc_output/
