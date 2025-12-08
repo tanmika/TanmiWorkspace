@@ -175,10 +175,17 @@ export class WorkspaceService {
     const index = await this.json.readIndex();
     const statusFilter = params.status || "all";
 
-    let workspaces = index.workspaces;
+    let filteredWorkspaces = index.workspaces;
     if (statusFilter !== "all") {
-      workspaces = workspaces.filter(ws => ws.status === statusFilter);
+      filteredWorkspaces = filteredWorkspaces.filter(ws => ws.status === statusFilter);
     }
+
+    // 为每个工作区添加 webUrl
+    const port = getHttpPort();
+    const workspaces = filteredWorkspaces.map(ws => ({
+      ...ws,
+      webUrl: `http://localhost:${port}/workspace/${ws.id}`,
+    }));
 
     return { workspaces };
   }

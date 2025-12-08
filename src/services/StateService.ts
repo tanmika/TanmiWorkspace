@@ -71,9 +71,10 @@ export class StateService {
     // 3. 验证转换合法性
     const newStatus = this.validateTransition(currentStatus, action);
     if (!newStatus) {
+      const suggestion = this.getTransitionSuggestion(currentStatus, action);
       throw new TanmiError(
         "INVALID_TRANSITION",
-        `非法状态转换: ${currentStatus} --[${action}]--> ? (不允许)`
+        `非法状态转换: ${currentStatus} --[${action}]--> ? (不允许)。${suggestion}`
       );
     }
 
@@ -174,6 +175,44 @@ export class StateService {
     action: TransitionAction
   ): NodeStatus | null {
     return TRANSITION_TABLE[currentStatus]?.[action] ?? null;
+  }
+
+  /**
+   * 生成状态转换错误的修复建议
+   */
+  private getTransitionSuggestion(
+    currentStatus: NodeStatus,
+    attemptedAction: TransitionAction
+  ): string {
+    // 常见错误场景的建议
+    if (currentStatus === "pending" && attemptedAction === "complete") {
+      return "请先调用 node_transition(action=\"start\") 开始执行节点，再进行 complete";
+    }
+    if (currentStatus === "pending" && attemptedAction === "submit") {
+      return "请先调用 node_transition(action=\"start\") 开始执行节点";
+    }
+    if (currentStatus === "completed" && attemptedAction === "complete") {
+      return "节点已完成，无需重复完成";
+    }
+    if (currentStatus === "completed" && attemptedAction === "start") {
+      return "节点已完成，如需重新执行请使用 node_transition(action=\"reopen\")";
+    }
+    if (currentStatus === "failed" && attemptedAction === "complete") {
+      return "失败的节点无法直接完成，请先 retry 后重新执行";
+    }
+    if (currentStatus === "validating" && attemptedAction === "start") {
+      return "节点正在验证中，请使用 pass/fail 来结束验证";
+    }
+    if (currentStatus === "implementing" && attemptedAction === "start") {
+      return "节点已在执行中，无需重复 start";
+    }
+
+    // 通用建议：显示当前状态可用的动作
+    const availableActions = Object.keys(TRANSITION_TABLE[currentStatus] || {});
+    if (availableActions.length > 0) {
+      return `当前状态 ${currentStatus} 可用的动作: ${availableActions.join(", ")}`;
+    }
+    return `当前状态 ${currentStatus} 无可用转换`;
   }
 
   /**

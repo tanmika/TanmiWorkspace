@@ -106,10 +106,17 @@ export interface WorkspaceListParams {
 }
 
 /**
+ * workspace_list 输出项（包含 webUrl）
+ */
+export interface WorkspaceListItem extends WorkspaceEntry {
+  webUrl: string;
+}
+
+/**
  * workspace_list 输出
  */
 export interface WorkspaceListResult {
-  workspaces: WorkspaceEntry[];
+  workspaces: WorkspaceListItem[];
 }
 
 /**
