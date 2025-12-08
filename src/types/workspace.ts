@@ -126,6 +126,7 @@ export interface WorkspaceGetResult {
   config: WorkspaceConfig;
   graph: import("./node.js").NodeGraph;
   workspaceMd: string;
+  webUrl: string;                     // Web UI 访问地址
 }
 
 /**
@@ -164,4 +165,5 @@ export interface WorkspaceStatusResult {
     completedNodes: number;
     currentFocus: string | null;
   };
+  webUrl: string;                     // Web UI 访问地址
 }

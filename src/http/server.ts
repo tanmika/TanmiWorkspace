@@ -1,10 +1,18 @@
 // src/http/server.ts
 // Fastify HTTP 服务器配置
 
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import * as fs from "node:fs";
 import Fastify, { FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { ensureBaseSetup } from "./services.js";
+
+// ESM 下获取 __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // 导入路由
 import { workspaceRoutes } from "./routes/workspace.js";
@@ -53,6 +61,31 @@ export async function createServer(): Promise<FastifyInstance> {
   await server.register(contextRoutes, { prefix: "/api" });
   await server.register(logRoutes, { prefix: "/api" });
 
+  // 托管前端静态文件（生产模式）
+  // web/dist 目录相对于 dist/http/server.js，路径为 ../../web/dist
+  const webDistPath = path.resolve(__dirname, "../../web/dist");
+  if (fs.existsSync(webDistPath)) {
+    await server.register(fastifyStatic, {
+      root: webDistPath,
+      prefix: "/",
+    });
+
+    // SPA 路由回退：非 API 路径且非静态文件时返回 index.html
+    server.setNotFoundHandler(async (request, reply) => {
+      // API 路由返回 404 JSON
+      if (request.url.startsWith("/api/")) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      // 其他路由返回 index.html（SPA 前端路由）
+      return reply.sendFile("index.html");
+    });
+
+    server.log.info(`Web UI 静态文件已加载: ${webDistPath}`);
+  } else {
+    server.log.warn(`Web UI 静态文件目录不存在: ${webDistPath}`);
+    server.log.warn("请运行 'cd web && npm run build' 构建前端");
+  }
+
   // 启动前确保基础目录存在
   server.addHook("onReady", async () => {
     await ensureBaseSetup();
@@ -62,14 +95,25 @@ export async function createServer(): Promise<FastifyInstance> {
 }
 
 /**
+ * 判断是否为开发模式
+ */
+function isDevelopment(): boolean {
+  return process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
+}
+
+/**
  * 启动服务器
  */
 export async function startServer(port: number = 3000): Promise<FastifyInstance> {
   const server = await createServer();
+  const isDev = isDevelopment();
+  const modeLabel = isDev ? "[DEV]" : "[PROD]";
+  const dataDir = isDev ? ".tanmi-workspace-dev" : ".tanmi-workspace";
 
   try {
     await server.listen({ port, host: "0.0.0.0" });
-    console.log(`TanmiWorkspace HTTP Server 已启动: http://localhost:${port}`);
+    console.log(`${modeLabel} TanmiWorkspace HTTP Server 已启动: http://localhost:${port}`);
+    console.log(`${modeLabel} 数据目录: ~/${dataDir}/`);
     return server;
   } catch (err) {
     server.log.error(err);

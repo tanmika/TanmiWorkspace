@@ -11,8 +11,7 @@ import type {
   DocRefWithStatus,
 } from "../types/context.js";
 import { TanmiError } from "../types/errors.js";
-import { now } from "../utils/time.js";
-import { formatHHmm } from "../utils/time.js";
+import { now, formatShort } from "../utils/time.js";
 
 /**
  * 引用服务
@@ -52,7 +51,7 @@ export class ReferenceService {
     }
 
     const currentTime = now();
-    const timestamp = formatHHmm();
+    const timestamp = formatShort(currentTime);
 
     // 3. 更新节点的 isolate 字段
     const nodeMeta = graph.nodes[nodeId];
@@ -97,7 +96,7 @@ export class ReferenceService {
     }
 
     const currentTime = now();
-    const timestamp = formatHHmm();
+    const timestamp = formatShort(currentTime);
 
     // 3. 读取节点 Info.md
     const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, workspaceId, nodeId);

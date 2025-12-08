@@ -7,7 +7,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
  */
 export const workspaceInitTool: Tool = {
   name: "workspace_init",
-  description: "初始化新工作区。创建工作区目录结构和必要的配置文件。",
+  description: "初始化新工作区。创建工作区目录结构和必要的配置文件。返回 webUrl 可在浏览器中查看。",
   inputSchema: {
     type: "object",
     properties: {
@@ -64,7 +64,7 @@ export const workspaceListTool: Tool = {
  */
 export const workspaceGetTool: Tool = {
   name: "workspace_get",
-  description: "获取工作区详情，包含配置、节点图和 Workspace.md 内容。",
+  description: "获取工作区详情，包含配置、节点图和 Workspace.md 内容。返回 webUrl 可在浏览器中查看。",
   inputSchema: {
     type: "object",
     properties: {
@@ -104,7 +104,7 @@ export const workspaceDeleteTool: Tool = {
  */
 export const workspaceStatusTool: Tool = {
   name: "workspace_status",
-  description: "获取工作区状态的可视化输出，包含节点树和统计信息。",
+  description: "获取工作区状态的可视化输出，包含节点树和统计信息。返回 webUrl 可在浏览器中查看完整界面。",
   inputSchema: {
     type: "object",
     properties: {

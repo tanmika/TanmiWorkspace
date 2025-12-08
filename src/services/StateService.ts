@@ -10,8 +10,7 @@ import type {
   NodeTransitionResult,
 } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
-import { now } from "../utils/time.js";
-import { formatHHmm } from "../utils/time.js";
+import { now, formatShort } from "../utils/time.js";
 
 /**
  * 状态转换规则表
@@ -21,7 +20,7 @@ const TRANSITION_TABLE: Record<NodeStatus, Partial<Record<TransitionAction, Node
   implementing: { submit: "validating", complete: "completed" },
   validating: { complete: "completed", fail: "failed" },
   failed: { retry: "implementing" },
-  completed: {},
+  completed: { reopen: "implementing" },  // 允许重新激活已完成的节点
 };
 
 /**
@@ -87,7 +86,7 @@ export class StateService {
     }
 
     const currentTime = now();
-    const timestamp = formatHHmm();
+    const timestamp = formatShort(currentTime);
 
     // 5. 更新 graph.json 中的节点状态和 conclusion
     nodeMeta.status = newStatus;
@@ -95,6 +94,33 @@ export class StateService {
     if (conclusion) {
       nodeMeta.conclusion = conclusion;
     }
+
+    // 5.1 父节点状态级联
+    const cascadeMessages: string[] = [];
+    if (action === "start" || action === "reopen") {
+      // 当子节点开始执行时，自动激活待处理的父节点链
+      let parentId = nodeMeta.parentId;
+      while (parentId && graph.nodes[parentId]) {
+        const parent = graph.nodes[parentId];
+        if (parent.status === "pending") {
+          parent.status = "implementing";
+          parent.updatedAt = currentTime;
+          cascadeMessages.push(`父节点 ${parentId}: pending → implementing`);
+          // 也更新父节点的 Info.md
+          await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "implementing");
+        } else if (parent.status === "completed" && action === "reopen") {
+          // 如果父节点已完成但子节点需要重新激活，父节点也需要重新激活
+          parent.status = "implementing";
+          parent.updatedAt = currentTime;
+          cascadeMessages.push(`父节点 ${parentId}: completed → implementing (级联重开)`);
+          await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "implementing");
+        } else {
+          break; // 父节点已在执行中或其他状态，停止级联
+        }
+        parentId = parent.parentId;
+      }
+    }
+
     await this.json.writeGraph(projectRoot, workspaceId, graph);
 
     // 6. 更新 Info.md 的 frontmatter 和结论部分
@@ -125,12 +151,19 @@ export class StateService {
     await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
 
     // 10. 返回结果
-    return {
+    const result: NodeTransitionResult = {
       success: true,
       previousStatus: currentStatus,
       currentStatus: newStatus,
       conclusion: conclusion ?? null,
     };
+
+    // 如果有级联更新，加入返回结果
+    if (cascadeMessages.length > 0) {
+      result.cascadeUpdates = cascadeMessages;
+    }
+
+    return result;
   }
 
   /**
@@ -158,6 +191,7 @@ export class StateService {
       complete: "完成任务",
       fail: "标记失败",
       retry: "重新执行",
+      reopen: "重新激活",
     };
 
     let event = `${actionDescriptions[action]}: ${from} → ${to}`;

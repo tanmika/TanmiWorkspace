@@ -4,7 +4,7 @@ import type { FileSystemAdapter } from "./FileSystemAdapter.js";
 import type { WorkspaceMdData, LogEntry, ProblemData, DocRef } from "../types/workspace.js";
 import type { NodeInfoData, NodeStatus } from "../types/node.js";
 import type { DocRefWithStatus, TypedLogEntry } from "../types/context.js";
-import { formatShort, formatHHmm } from "../utils/time.js";
+import { formatShort } from "../utils/time.js";
 
 /**
  * 解析后的 Markdown 数据

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // src/index.ts
 // 统一入口：MCP Server + HTTP Server
+// 注意：生产环境应通过 check-node-version.js 启动，以确保版本检查在模块加载前执行
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -28,18 +29,23 @@ import type { TransitionAction, ReferenceAction } from "./types/index.js";
 // ============================================================================
 // 配置
 // ============================================================================
-const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? "3000", 10);
+const IS_DEV = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
+// 开发模式默认端口 3001，正式模式默认端口 3000
+const DEFAULT_PORT = IS_DEV ? "3001" : "3000";
+const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? DEFAULT_PORT, 10);
 const DISABLE_HTTP = process.env.DISABLE_HTTP === "true";
 
 // ============================================================================
 // 日志工具
 // ============================================================================
+const MODE_LABEL = IS_DEV ? "[DEV]" : "[PROD]";
+
 function logMcp(message: string): void {
-  console.error(`[mcp] ${message}`);
+  console.error(`[mcp]${MODE_LABEL} ${message}`);
 }
 
 function logHttp(message: string): void {
-  console.error(`[http] ${message}`);
+  console.error(`[http]${MODE_LABEL} ${message}`);
 }
 
 // ============================================================================

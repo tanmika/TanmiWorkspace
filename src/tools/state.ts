@@ -12,7 +12,10 @@ export const nodeTransitionTool: Tool = {
 - submit: implementing → validating（提交验证）
 - complete: implementing/validating → completed（完成，需提供 conclusion）
 - fail: validating → failed（失败，需提供 conclusion）
-- retry: failed → implementing（重试）`,
+- retry: failed → implementing（重试）
+- reopen: completed → implementing（重新激活已完成节点，用于追加新功能）
+
+注意：start 和 reopen 会自动级联更新父节点状态（pending/completed → implementing）`,
   inputSchema: {
     type: "object",
     properties: {
@@ -26,7 +29,7 @@ export const nodeTransitionTool: Tool = {
       },
       action: {
         type: "string",
-        enum: ["start", "submit", "complete", "fail", "retry"],
+        enum: ["start", "submit", "complete", "fail", "retry", "reopen"],
         description: "状态转换动作",
       },
       reason: {

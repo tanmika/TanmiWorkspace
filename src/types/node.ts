@@ -20,7 +20,8 @@ export type TransitionAction =
   | "submit"     // implementing → validating
   | "complete"   // implementing/validating → completed
   | "fail"       // validating → failed
-  | "retry";     // failed → implementing
+  | "retry"      // failed → implementing
+  | "reopen";    // completed → implementing（用于重新激活已完成节点）
 
 /**
  * 节点图 - 存储在 .tanmi-workspace/[workspace-id]/graph.json
@@ -163,6 +164,7 @@ export interface NodeTransitionResult {
   previousStatus: NodeStatus;
   currentStatus: NodeStatus;
   conclusion: string | null;
+  cascadeUpdates?: string[];  // 级联更新的父节点状态变化
 }
 
 // ========== Phase 3: 节点分裂与更新 ==========

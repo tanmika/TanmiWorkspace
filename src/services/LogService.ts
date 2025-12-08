@@ -12,7 +12,7 @@ import type {
   ProblemClearResult,
 } from "../types/context.js";
 import { TanmiError } from "../types/errors.js";
-import { formatHHmm } from "../utils/time.js";
+import { formatShort, now } from "../utils/time.js";
 
 /**
  * 日志服务
@@ -53,8 +53,8 @@ export class LogService {
       }
     }
 
-    // 3. 生成时间戳（HH:mm 格式）
-    const timestamp = formatHHmm();
+    // 3. 生成时间戳（完整格式：YYYY-MM-DD HH:mm:ss）
+    const timestamp = formatShort(now());
 
     // 4. 构造日志条目并追加
     try {
@@ -101,7 +101,7 @@ export class LogService {
     await this.md.writeProblem(projectRoot, workspaceId, problemData, nodeId);
 
     // 5. 追加日志
-    const timestamp = formatHHmm();
+    const timestamp = formatShort(now());
     await this.md.appendTypedLogEntry(projectRoot, workspaceId, {
       timestamp,
       operator: "AI",
@@ -138,7 +138,7 @@ export class LogService {
     }, nodeId);
 
     // 4. 追加日志
-    const timestamp = formatHHmm();
+    const timestamp = formatShort(now());
     await this.md.appendTypedLogEntry(projectRoot, workspaceId, {
       timestamp,
       operator: "AI",

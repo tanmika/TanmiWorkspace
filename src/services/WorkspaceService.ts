@@ -24,6 +24,16 @@ import { now } from "../utils/time.js";
 import { validateWorkspaceName } from "../utils/validation.js";
 
 /**
+ * 获取 HTTP 服务端口
+ * 开发模式默认 3001，正式模式默认 3000
+ */
+function getHttpPort(): number {
+  const isDev = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
+  const defaultPort = isDev ? "3001" : "3000";
+  return parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? defaultPort, 10);
+}
+
+/**
  * 工作区服务
  * 处理工作区相关的业务逻辑
  *
@@ -154,7 +164,7 @@ export class WorkspaceService {
       path: this.fs.getWorkspacePath(projectRoot, workspaceId),
       projectRoot,
       rootNodeId,
-      webUrl: `http://localhost:${process.env.WEB_PORT ?? "5173"}/workspace/${workspaceId}`,
+      webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
     };
   }
 
@@ -201,6 +211,7 @@ export class WorkspaceService {
       config,
       graph,
       workspaceMd,
+      webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
     };
   }
 
@@ -278,12 +289,16 @@ export class WorkspaceService {
     // 生成输出
     let output: string;
     if (format === "markdown") {
-      output = this.generateMarkdownStatus(config, graph, workspaceMdData, summary);
+      output = await this.generateMarkdownStatus(projectRoot, workspaceId, config, graph, workspaceMdData, summary);
     } else {
-      output = this.generateBoxStatus(config, graph, workspaceMdData, summary);
+      output = await this.generateBoxStatus(projectRoot, workspaceId, config, graph, workspaceMdData, summary);
     }
 
-    return { output, summary };
+    return {
+      output,
+      summary,
+      webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
+    };
   }
 
   /**
@@ -300,12 +315,14 @@ export class WorkspaceService {
   /**
    * 生成 Box 格式状态输出
    */
-  private generateBoxStatus(
+  private async generateBoxStatus(
+    projectRoot: string,
+    workspaceId: string,
     config: WorkspaceConfig,
     graph: NodeGraph,
     workspaceMdData: { goal: string },
     summary: { totalNodes: number; completedNodes: number; currentFocus: string | null }
-  ): string {
+  ): Promise<string> {
     const lines: string[] = [];
     const width = 60;
 
@@ -321,7 +338,7 @@ export class WorkspaceService {
     lines.push("│" + " 节点树:".padEnd(width - 2) + "│");
 
     // 生成节点树
-    const treeLines = this.generateNodeTree(graph, config.rootNodeId, 0);
+    const treeLines = await this.generateNodeTree(projectRoot, workspaceId, graph, config.rootNodeId, 0);
     for (const treeLine of treeLines) {
       const truncated = treeLine.length > width - 4 ? treeLine.substring(0, width - 7) + "..." : treeLine;
       lines.push("│" + ` ${truncated}`.padEnd(width - 2) + "│");
@@ -335,12 +352,14 @@ export class WorkspaceService {
   /**
    * 生成 Markdown 格式状态输出
    */
-  private generateMarkdownStatus(
+  private async generateMarkdownStatus(
+    projectRoot: string,
+    workspaceId: string,
     config: WorkspaceConfig,
     graph: NodeGraph,
     workspaceMdData: { goal: string },
     summary: { totalNodes: number; completedNodes: number; currentFocus: string | null }
-  ): string {
+  ): Promise<string> {
     const lines: string[] = [];
 
     lines.push(`# ${config.name}`);
@@ -356,7 +375,7 @@ export class WorkspaceService {
     lines.push("## 节点树");
     lines.push("");
 
-    const treeLines = this.generateNodeTreeMd(graph, config.rootNodeId, 0);
+    const treeLines = await this.generateNodeTreeMd(projectRoot, workspaceId, graph, config.rootNodeId, 0);
     lines.push(...treeLines);
 
     return lines.join("\n");
@@ -365,7 +384,13 @@ export class WorkspaceService {
   /**
    * 生成节点树（Box 格式）
    */
-  private generateNodeTree(graph: NodeGraph, nodeId: string, depth: number): string[] {
+  private async generateNodeTree(
+    projectRoot: string,
+    workspaceId: string,
+    graph: NodeGraph,
+    nodeId: string,
+    depth: number
+  ): Promise<string[]> {
     const node = graph.nodes[nodeId];
     if (!node) return [];
 
@@ -374,10 +399,14 @@ export class WorkspaceService {
     const statusIcon = this.getStatusIcon(node.status);
     const focusIndicator = graph.currentFocus === nodeId ? " ◄" : "";
 
-    lines.push(`${indent}${statusIcon} ${nodeId}${focusIndicator}`);
+    // 读取节点标题
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+    const title = nodeInfo.title || nodeId;
+
+    lines.push(`${indent}${statusIcon} ${title}${focusIndicator}`);
 
     for (const childId of node.children) {
-      lines.push(...this.generateNodeTree(graph, childId, depth + 1));
+      lines.push(...await this.generateNodeTree(projectRoot, workspaceId, graph, childId, depth + 1));
     }
 
     return lines;
@@ -386,7 +415,13 @@ export class WorkspaceService {
   /**
    * 生成节点树（Markdown 格式）
    */
-  private generateNodeTreeMd(graph: NodeGraph, nodeId: string, depth: number): string[] {
+  private async generateNodeTreeMd(
+    projectRoot: string,
+    workspaceId: string,
+    graph: NodeGraph,
+    nodeId: string,
+    depth: number
+  ): Promise<string[]> {
     const node = graph.nodes[nodeId];
     if (!node) return [];
 
@@ -395,10 +430,14 @@ export class WorkspaceService {
     const statusIcon = this.getStatusIcon(node.status);
     const focusIndicator = graph.currentFocus === nodeId ? " **◄ 当前聚焦**" : "";
 
-    lines.push(`${indent}- ${statusIcon} \`${nodeId}\`${focusIndicator}`);
+    // 读取节点标题
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+    const title = nodeInfo.title || nodeId;
+
+    lines.push(`${indent}- ${statusIcon} ${title}${focusIndicator}`);
 
     for (const childId of node.children) {
-      lines.push(...this.generateNodeTreeMd(graph, childId, depth + 1));
+      lines.push(...await this.generateNodeTreeMd(projectRoot, workspaceId, graph, childId, depth + 1));
     }
 
     return lines;

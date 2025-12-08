@@ -14,7 +14,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        // 开发模式 API 端口为 3001（与 start:http:dev 对应）
+        target: 'http://localhost:3001',
         changeOrigin: true,
       },
     },

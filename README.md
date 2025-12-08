@@ -130,6 +130,21 @@ npm run preview     # 预览构建产物
 
 ---
 
+## 系统要求
+
+- **Node.js >= 20.0.0**（必须）
+
+### 安装 Node 20
+
+```bash
+# 方式 1：使用 nvm（推荐）
+nvm install 20
+nvm use 20
+
+# 方式 2：直接下载
+# https://nodejs.org/ 下载 LTS 版本
+```
+
 ## 安装
 
 ```bash
@@ -139,15 +154,42 @@ npm run build
 
 ## 配置 MCP 客户端
 
+### Claude Desktop / Cursor
+
 ```json
 {
   "mcpServers": {
     "tanmi-workspace": {
       "command": "node",
-      "args": ["/path/to/tanmi-workspace/dist/index.js"]
+      "args": ["/path/to/tanmi-workspace/dist/check-node-version.js"]
     }
   }
 }
+```
+
+### 如果系统默认 Node 版本低于 20
+
+需要指定 Node 20 的完整路径：
+
+```json
+{
+  "mcpServers": {
+    "tanmi-workspace": {
+      "command": "/path/to/node20/bin/node",
+      "args": ["/path/to/tanmi-workspace/dist/check-node-version.js"]
+    }
+  }
+}
+```
+
+**查找 Node 20 路径：**
+```bash
+# 使用 nvm
+nvm which 20
+# 输出: /Users/xxx/.nvm/versions/node/v20.x.x/bin/node
+
+# 或者查看已安装位置
+which node
 ```
 
 ## 快速开始
