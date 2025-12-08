@@ -25,7 +25,7 @@ export const nodeCreateTool: Tool = {
       },
       requirement: {
         type: "string",
-        description: "节点需求描述（可选）",
+        description: "节点需求描述，详细说明该节点要完成的任务（必填）",
       },
       docs: {
         type: "array",
@@ -40,7 +40,7 @@ export const nodeCreateTool: Tool = {
         description: "文档引用列表（可选）",
       },
     },
-    required: ["workspaceId", "parentId", "title"],
+    required: ["workspaceId", "parentId", "title", "requirement"],
   },
 };
 
