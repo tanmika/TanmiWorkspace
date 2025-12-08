@@ -240,7 +240,7 @@ async function handleSplit() {
 
 <style scoped>
 .node-detail {
-  max-width: 800px;
+  width: 100%;
 }
 
 .detail-header {

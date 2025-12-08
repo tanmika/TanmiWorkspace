@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus, List, Share } from '@element-plus/icons-vue'
@@ -18,6 +18,50 @@ function setViewMode(mode: ViewMode) {
   viewMode.value = mode
   localStorage.setItem('tanmi-workspace-view-mode', mode)
 }
+
+// 侧边栏宽度（可拖动调整）
+const DEFAULT_SIDEBAR_WIDTH = 300
+const MIN_SIDEBAR_WIDTH = 200
+const MAX_SIDEBAR_WIDTH = 800
+
+const sidebarWidth = ref(
+  parseInt(localStorage.getItem('tanmi-workspace-sidebar-width') || '') || DEFAULT_SIDEBAR_WIDTH
+)
+
+// 拖动状态
+const isResizing = ref(false)
+
+function startResize() {
+  isResizing.value = true
+  document.addEventListener('mousemove', handleResize)
+  document.addEventListener('mouseup', stopResize)
+  // 禁止选择文本
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'col-resize'
+}
+
+function handleResize(e: MouseEvent) {
+  if (!isResizing.value) return
+  const newWidth = e.clientX
+  if (newWidth >= MIN_SIDEBAR_WIDTH && newWidth <= MAX_SIDEBAR_WIDTH) {
+    sidebarWidth.value = newWidth
+  }
+}
+
+function stopResize() {
+  isResizing.value = false
+  document.removeEventListener('mousemove', handleResize)
+  document.removeEventListener('mouseup', stopResize)
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
+  // 保存宽度
+  localStorage.setItem('tanmi-workspace-sidebar-width', sidebarWidth.value.toString())
+}
+
+onUnmounted(() => {
+  document.removeEventListener('mousemove', handleResize)
+  document.removeEventListener('mouseup', stopResize)
+})
 
 const route = useRoute()
 const router = useRouter()
@@ -99,7 +143,7 @@ async function handleCreateNode() {
     <!-- 主内容区 -->
     <div class="main-content">
       <!-- 左侧：节点树 -->
-      <aside class="sidebar" :class="{ 'sidebar-wide': viewMode === 'graph' }">
+      <aside class="sidebar" :style="{ width: sidebarWidth + 'px' }">
         <div class="sidebar-header">
           <h3>任务树</h3>
           <div class="view-toggle">
@@ -140,6 +184,13 @@ async function handleCreateNode() {
           />
         </div>
       </aside>
+
+      <!-- 可拖动分隔条 -->
+      <div
+        class="resizer"
+        :class="{ 'is-resizing': isResizing }"
+        @mousedown="startResize"
+      />
 
       <!-- 右侧：节点详情 -->
       <main class="content">
@@ -207,18 +258,24 @@ async function handleCreateNode() {
 }
 
 .sidebar {
-  width: 300px;
+  flex-shrink: 0;
   border-right: 1px solid #e4e7ed;
   display: flex;
   flex-direction: column;
   background: #fafafa;
-  transition: width 0.3s ease;
 }
 
-.sidebar.sidebar-wide {
-  width: 50%;
-  min-width: 400px;
-  max-width: 600px;
+.resizer {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.resizer:hover,
+.resizer.is-resizing {
+  background: #409eff;
 }
 
 .sidebar-header {
