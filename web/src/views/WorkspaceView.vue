@@ -2,10 +2,22 @@
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, List, Share } from '@element-plus/icons-vue'
 import { useWorkspaceStore, useNodeStore } from '@/stores'
 import NodeTree from '@/components/node/NodeTree.vue'
+import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
+
+// 视图模式
+type ViewMode = 'list' | 'graph'
+const viewMode = ref<ViewMode>(
+  (localStorage.getItem('tanmi-workspace-view-mode') as ViewMode) || 'list'
+)
+
+function setViewMode(mode: ViewMode) {
+  viewMode.value = mode
+  localStorage.setItem('tanmi-workspace-view-mode', mode)
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -87,12 +99,40 @@ async function handleCreateNode() {
     <!-- 主内容区 -->
     <div class="main-content">
       <!-- 左侧：节点树 -->
-      <aside class="sidebar">
+      <aside class="sidebar" :class="{ 'sidebar-wide': viewMode === 'graph' }">
         <div class="sidebar-header">
           <h3>任务树</h3>
+          <div class="view-toggle">
+            <el-tooltip content="列表视图" placement="top">
+              <el-button
+                :type="viewMode === 'list' ? 'primary' : 'default'"
+                :icon="List"
+                size="small"
+                circle
+                @click="setViewMode('list')"
+              />
+            </el-tooltip>
+            <el-tooltip content="图形视图" placement="top">
+              <el-button
+                :type="viewMode === 'graph' ? 'primary' : 'default'"
+                :icon="Share"
+                size="small"
+                circle
+                @click="setViewMode('graph')"
+              />
+            </el-tooltip>
+          </div>
         </div>
         <div class="sidebar-content">
           <NodeTree
+            v-if="viewMode === 'list'"
+            :tree="nodeStore.nodeTree"
+            :selected-id="nodeStore.selectedNodeId"
+            :focus-id="workspaceStore.currentFocus"
+            @select="handleNodeSelect"
+          />
+          <NodeTreeGraph
+            v-else
             :tree="nodeStore.nodeTree"
             :selected-id="nodeStore.selectedNodeId"
             :focus-id="workspaceStore.currentFocus"
@@ -172,17 +212,32 @@ async function handleCreateNode() {
   display: flex;
   flex-direction: column;
   background: #fafafa;
+  transition: width 0.3s ease;
+}
+
+.sidebar.sidebar-wide {
+  width: 50%;
+  min-width: 400px;
+  max-width: 600px;
 }
 
 .sidebar-header {
   padding: 12px 16px;
   border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .sidebar-header h3 {
   margin: 0;
   font-size: 14px;
   color: #606266;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 4px;
 }
 
 .sidebar-content {
