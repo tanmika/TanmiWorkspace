@@ -29,8 +29,10 @@ export const ErrorCodes = {
   // 日志错误
   LOG_APPEND_FAILED: "LOG_APPEND_FAILED",
 
-  // 分裂错误
-  SPLIT_REQUIRES_IMPLEMENTING: "SPLIT_REQUIRES_IMPLEMENTING",
+  // 节点类型错误
+  EXECUTION_CANNOT_HAVE_CHILDREN: "EXECUTION_CANNOT_HAVE_CHILDREN",
+  INVALID_PARENT_STATUS: "INVALID_PARENT_STATUS",
+  INCOMPLETE_CHILDREN: "INCOMPLETE_CHILDREN",
 
   // 校验错误
   GRAPH_CORRUPTED: "GRAPH_CORRUPTED",
@@ -75,7 +77,9 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   REFERENCE_NOT_FOUND: "引用不存在",
   REFERENCE_EXISTS: "引用已存在",
   LOG_APPEND_FAILED: "日志追加失败",
-  SPLIT_REQUIRES_IMPLEMENTING: "只有 implementing 状态的节点才能分裂",
+  EXECUTION_CANNOT_HAVE_CHILDREN: "执行节点不能创建子节点",
+  INVALID_PARENT_STATUS: "父节点状态不允许创建子节点",
+  INCOMPLETE_CHILDREN: "存在未完成的子节点",
   GRAPH_CORRUPTED: "节点图数据损坏",
   NODE_DIR_MISSING: "节点目录不存在",
   NODE_INFO_MISSING: "节点 Info.md 不存在",

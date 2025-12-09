@@ -111,7 +111,7 @@ export class LogService {
     // 6. 返回结果
     return {
       success: true,
-      hint: "💡 问题已记录。如果问题复杂，考虑使用 node_split 将问题拆分为子任务；如果问题已解决，使用 problem_clear 清空。",
+      hint: "💡 问题已记录。如果问题复杂且当前是执行节点，考虑 fail 后回到父规划节点重新分解；如果问题已解决，使用 problem_clear 清空。",
     };
   }
 

@@ -7,7 +7,16 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
  */
 export const nodeCreateTool: Tool = {
   name: "node_create",
-  description: "在指定父节点下创建新的子节点。",
+  description: `在指定父节点下创建新的子节点。
+
+**节点类型说明**：
+- planning（规划节点）：负责分析、分解任务、派发子节点、汇总结论。可以有子节点。
+- execution（执行节点）：负责具体执行任务、产出结论。不能有子节点，执行中遇到问题需 fail 回退到父节点。
+
+**重要约束**：
+- 只有规划节点可以创建子节点
+- 父节点必须处于 pending 或 planning 状态
+- 创建第一个子节点时，父节点自动转为 monitoring 状态`,
   inputSchema: {
     type: "object",
     properties: {
@@ -17,7 +26,12 @@ export const nodeCreateTool: Tool = {
       },
       parentId: {
         type: "string",
-        description: "父节点 ID",
+        description: "父节点 ID（必须是规划节点）",
+      },
+      type: {
+        type: "string",
+        enum: ["planning", "execution"],
+        description: "节点类型：planning（规划）或 execution（执行）",
       },
       title: {
         type: "string",
@@ -37,10 +51,10 @@ export const nodeCreateTool: Tool = {
           },
           required: ["path", "description"],
         },
-        description: "文档引用列表（可选）",
+        description: "派发给子节点的文档引用（可选）",
       },
     },
-    required: ["workspaceId", "parentId", "title", "requirement"],
+    required: ["workspaceId", "parentId", "type", "title", "requirement"],
   },
 };
 
@@ -114,57 +128,7 @@ export const nodeDeleteTool: Tool = {
   },
 };
 
-// ========== Phase 3: 节点分裂与更新 ==========
-
-/**
- * node_split 工具定义
- */
-export const nodeSplitTool: Tool = {
-  name: "node_split",
-  description: `将当前执行中的步骤升级为独立子节点。
-用于执行阶段发现需要前置任务时使用。
-- 父节点必须处于 implementing 状态
-- 分裂后自动聚焦到新节点
-- 父节点的 Problem.md 会被清空（问题已转化为子任务）`,
-  inputSchema: {
-    type: "object",
-    properties: {
-      workspaceId: {
-        type: "string",
-        description: "工作区 ID",
-      },
-      parentId: {
-        type: "string",
-        description: "当前节点 ID（将成为父节点）",
-      },
-      title: {
-        type: "string",
-        description: "新节点标题",
-      },
-      requirement: {
-        type: "string",
-        description: "从父节点拆分出的需求",
-      },
-      inheritContext: {
-        type: "boolean",
-        description: "是否继承上下文，默认 true",
-      },
-      docs: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            path: { type: "string" },
-            description: { type: "string" },
-          },
-          required: ["path", "description"],
-        },
-        description: "派发给子节点的文档引用（可选）",
-      },
-    },
-    required: ["workspaceId", "parentId", "title", "requirement"],
-  },
-};
+// ========== Phase 3: 节点更新 ==========
 
 /**
  * node_update 工具定义
@@ -208,6 +172,7 @@ export const nodeMoveTool: Tool = {
   description: `移动节点到新的父节点下，用于重组节点层级结构。
 - 根节点无法移动
 - 不能将节点移动到其自身的子节点下（防止循环依赖）
+- 目标父节点必须是规划节点（执行节点不能有子节点）
 - 节点本身的数据（标题、需求、状态等）保持不变`,
   inputSchema: {
     type: "object",
@@ -222,7 +187,7 @@ export const nodeMoveTool: Tool = {
       },
       newParentId: {
         type: "string",
-        description: "目标父节点 ID",
+        description: "目标父节点 ID（必须是规划节点）",
       },
     },
     required: ["workspaceId", "nodeId", "newParentId"],
@@ -237,7 +202,6 @@ export const nodeTools: Tool[] = [
   nodeGetTool,
   nodeListTool,
   nodeDeleteTool,
-  nodeSplitTool,
   nodeUpdateTool,
   nodeMoveTool,
 ];

@@ -5,9 +5,26 @@
 
 export type WorkspaceStatus = 'active' | 'archived'
 
-export type NodeStatus = 'pending' | 'implementing' | 'validating' | 'completed' | 'failed'
+// 节点类型
+export type NodeType = 'planning' | 'execution'
 
-export type TransitionAction = 'start' | 'submit' | 'complete' | 'fail' | 'retry'
+// 执行节点状态
+export type ExecutionStatus = 'pending' | 'implementing' | 'validating' | 'completed' | 'failed'
+
+// 规划节点状态
+export type PlanningStatus = 'pending' | 'planning' | 'monitoring' | 'completed' | 'cancelled'
+
+// 联合状态类型
+export type NodeStatus = ExecutionStatus | PlanningStatus
+
+// 执行节点动作
+export type ExecutionAction = 'start' | 'submit' | 'complete' | 'fail' | 'retry' | 'reopen'
+
+// 规划节点动作
+export type PlanningAction = 'start' | 'complete' | 'cancel' | 'reopen'
+
+// 联合动作类型
+export type TransitionAction = ExecutionAction | PlanningAction
 
 export type ReferenceAction = 'add' | 'remove' | 'expire' | 'activate'
 
@@ -44,6 +61,7 @@ export interface WorkspaceConfig {
 
 export interface NodeMeta {
   id: string
+  type: NodeType
   parentId: string | null
   children: string[]
   status: NodeStatus
@@ -62,6 +80,7 @@ export interface NodeGraph {
 
 export interface NodeTreeItem {
   id: string
+  type: NodeType
   title: string
   status: NodeStatus
   children: NodeTreeItem[]
@@ -110,6 +129,7 @@ export interface WorkspaceListParams {
 export interface NodeCreateParams {
   workspaceId: string
   parentId: string
+  type: NodeType
   title: string
   requirement?: string
   docs?: DocRef[]
@@ -177,11 +197,6 @@ export interface NodeDeleteResult {
   deletedNodes: string[]
 }
 
-export interface NodeSplitResult {
-  nodeId: string
-  path: string
-}
-
 export interface NodeTransitionResult {
   success: boolean
   previousStatus: NodeStatus
@@ -239,12 +254,20 @@ export interface StatusConfig {
 }
 
 export const STATUS_CONFIG: Record<NodeStatus, StatusConfig> = {
+  // 共用状态
   pending: {
     icon: 'CircleClose',
     color: '#909399',
     label: '待执行',
     emoji: '⚪',
   },
+  completed: {
+    icon: 'CircleCheck',
+    color: '#67C23A',
+    label: '已完成',
+    emoji: '✅',
+  },
+  // 执行节点状态
   implementing: {
     icon: 'Loading',
     color: '#409EFF',
@@ -257,16 +280,49 @@ export const STATUS_CONFIG: Record<NodeStatus, StatusConfig> = {
     label: '验证中',
     emoji: '🟡',
   },
-  completed: {
-    icon: 'CircleCheck',
-    color: '#67C23A',
-    label: '已完成',
-    emoji: '✅',
-  },
   failed: {
     icon: 'CircleCloseFilled',
     color: '#F56C6C',
     label: '失败',
     emoji: '❌',
+  },
+  // 规划节点状态
+  planning: {
+    icon: 'Edit',
+    color: '#9B59B6',
+    label: '规划中',
+    emoji: '◇',
+  },
+  monitoring: {
+    icon: 'View',
+    color: '#3498DB',
+    label: '监控中',
+    emoji: '◈',
+  },
+  cancelled: {
+    icon: 'Remove',
+    color: '#95A5A6',
+    label: '已取消',
+    emoji: '⊘',
+  },
+}
+
+// 节点类型配置
+export interface NodeTypeConfig {
+  label: string
+  color: string
+  description: string
+}
+
+export const NODE_TYPE_CONFIG: Record<NodeType, NodeTypeConfig> = {
+  planning: {
+    label: '规划节点',
+    color: '#9B59B6',
+    description: '负责分析、分解任务、创建子节点',
+  },
+  execution: {
+    label: '执行节点',
+    color: '#3498DB',
+    description: '负责具体执行，不能有子节点',
   },
 }

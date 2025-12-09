@@ -3,9 +3,16 @@
 import type { DocRef } from "./workspace.js";
 
 /**
- * 节点状态
+ * 节点类型
  */
-export type NodeStatus =
+export type NodeType =
+  | "planning"    // 规划节点：负责分析、分解、派发、汇总
+  | "execution";  // 执行节点：负责具体执行，不能有子节点
+
+/**
+ * 执行节点状态
+ */
+export type ExecutionStatus =
   | "pending"       // 待执行
   | "implementing"  // 执行中
   | "validating"    // 验证中
@@ -13,15 +20,44 @@ export type NodeStatus =
   | "failed";       // 失败
 
 /**
- * 状态转换动作
+ * 规划节点状态
  */
-export type TransitionAction =
+export type PlanningStatus =
+  | "pending"       // 待执行
+  | "planning"      // 规划中：分析需求、创建子节点
+  | "monitoring"    // 监控中：子节点执行中，等待结果
+  | "completed"     // 已完成
+  | "cancelled";    // 已取消
+
+/**
+ * 节点状态（联合类型）
+ */
+export type NodeStatus = ExecutionStatus | PlanningStatus;
+
+/**
+ * 执行节点状态转换动作
+ */
+export type ExecutionAction =
   | "start"      // pending → implementing
   | "submit"     // implementing → validating
   | "complete"   // implementing/validating → completed
-  | "fail"       // validating → failed
+  | "fail"       // implementing/validating → failed
   | "retry"      // failed → implementing
-  | "reopen";    // completed → implementing（用于重新激活已完成节点）
+  | "reopen";    // completed → implementing
+
+/**
+ * 规划节点状态转换动作
+ */
+export type PlanningAction =
+  | "start"      // pending → planning
+  | "complete"   // monitoring/planning → completed
+  | "cancel"     // planning/monitoring → cancelled
+  | "reopen";    // completed/cancelled → planning
+
+/**
+ * 状态转换动作（联合类型，保持向后兼容）
+ */
+export type TransitionAction = ExecutionAction | PlanningAction;
 
 /**
  * 节点图 - 存储在 .tanmi-workspace/[workspace-id]/graph.json
@@ -37,8 +73,9 @@ export interface NodeGraph {
  */
 export interface NodeMeta {
   id: string;
+  type: NodeType;                   // 节点类型：planning 或 execution
   parentId: string | null;          // 根节点为 null
-  children: string[];               // 子节点 ID 列表
+  children: string[];               // 子节点 ID 列表（execution 节点永远为空）
   status: NodeStatus;
   isolate: boolean;                 // 是否切断上下文继承
   references: string[];             // 跨节点引用的 ID 列表
@@ -52,6 +89,7 @@ export interface NodeMeta {
  */
 export interface NodeInfoData {
   id: string;
+  type: NodeType;
   title: string;
   status: NodeStatus;
   createdAt: string;
@@ -67,6 +105,7 @@ export interface NodeInfoData {
  */
 export interface NodeTreeItem {
   id: string;
+  type: NodeType;
   title: string;
   status: NodeStatus;
   children: NodeTreeItem[];
@@ -80,6 +119,7 @@ export interface NodeTreeItem {
 export interface NodeCreateParams {
   workspaceId: string;
   parentId: string;
+  type: NodeType;                   // 节点类型（必填）
   title: string;
   requirement?: string;
   docs?: DocRef[];
@@ -169,28 +209,7 @@ export interface NodeTransitionResult {
   hint?: string;              // 工作流提示，提醒 AI 下一步应做什么
 }
 
-// ========== Phase 3: 节点分裂与更新 ==========
-
-/**
- * node_split 输入
- */
-export interface NodeSplitParams {
-  workspaceId: string;
-  parentId: string;           // 当前节点 ID（将成为父节点）
-  title: string;
-  requirement: string;
-  inheritContext?: boolean;   // 是否继承上下文，默认 true
-  docs?: DocRef[];            // 派发给子节点的文档引用
-}
-
-/**
- * node_split 输出
- */
-export interface NodeSplitResult {
-  nodeId: string;
-  path: string;
-  hint?: string;
-}
+// ========== Phase 3: 节点更新 ==========
 
 /**
  * node_update 输入
@@ -227,4 +246,24 @@ export interface NodeMoveResult {
   success: boolean;
   previousParentId: string | null;
   newParentId: string;
+}
+
+// ========== 执行节点失败信息 ==========
+
+/**
+ * 执行节点失败原因类型
+ */
+export type ExecutionFailureReason =
+  | "unclear_requirement"   // 需求不清晰
+  | "task_too_large"        // 任务过大需要分解
+  | "blocked"               // 执行受阻（依赖/权限等）
+  | "other";                // 其他原因
+
+/**
+ * 执行节点失败详情
+ */
+export interface ExecutionFailure {
+  reason: ExecutionFailureReason;
+  detail: string;
+  suggestion?: string;      // 给父规划节点的建议
 }

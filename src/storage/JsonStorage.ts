@@ -150,6 +150,11 @@ export class JsonStorage {
   // ========== Node Graph (项目级) ==========
 
   /**
+   * 当前 graph.json 版本
+   */
+  static readonly GRAPH_VERSION = "3.0";
+
+  /**
    * 读取节点图
    * @param projectRoot 项目根目录
    * @param workspaceId 工作区 ID
@@ -157,7 +162,58 @@ export class JsonStorage {
   async readGraph(projectRoot: string, workspaceId: string): Promise<NodeGraph> {
     const graphPath = this.fs.getGraphPath(projectRoot, workspaceId);
     const content = await this.fs.readFile(graphPath);
-    return JSON.parse(content) as NodeGraph;
+    const graph = JSON.parse(content) as NodeGraph;
+
+    // 版本迁移：1.0/2.0 -> 3.0
+    if (graph.version !== JsonStorage.GRAPH_VERSION) {
+      this.migrateGraph(graph);
+      // 自动保存迁移后的数据
+      await this.writeGraph(projectRoot, workspaceId, graph);
+    }
+
+    return graph;
+  }
+
+  /**
+   * 迁移旧版本 graph 到当前版本
+   * - 1.0/2.0 节点没有 type 字段，需要推断
+   */
+  private migrateGraph(graph: NodeGraph): void {
+    const oldVersion = graph.version;
+
+    // 迁移节点
+    for (const nodeId in graph.nodes) {
+      const node = graph.nodes[nodeId];
+
+      // 如果没有 type 字段，推断类型
+      if (!node.type) {
+        // 根节点必须是 planning（否则无法创建子节点）
+        if (node.parentId === null) {
+          node.type = "planning";
+          // 如果是 implementing 状态，转为 planning 或 monitoring
+          if (node.status === "implementing") {
+            node.status = node.children.length > 0 ? "monitoring" : "planning";
+          }
+        }
+        // 有子节点 → planning
+        else if (node.children && node.children.length > 0) {
+          node.type = "planning";
+          // 如果是 implementing 状态但有子节点，转为 monitoring
+          if (node.status === "implementing") {
+            node.status = "monitoring";
+          }
+        }
+        // 无子节点的非根节点 → execution
+        else {
+          node.type = "execution";
+        }
+      }
+    }
+
+    // 更新版本号
+    graph.version = JsonStorage.GRAPH_VERSION;
+
+    console.error(`[migration] graph.json 从 ${oldVersion} 迁移到 ${JsonStorage.GRAPH_VERSION}`);
   }
 
   /**

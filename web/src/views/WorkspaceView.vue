@@ -130,10 +130,14 @@ function handleNodeSelect(nodeId: string) {
 
 // 创建子节点对话框
 const showCreateDialog = ref(false)
-const createForm = ref({ title: '', requirement: '' })
+const createForm = ref<{ type: 'planning' | 'execution'; title: string; requirement: string }>({
+  type: 'execution',
+  title: '',
+  requirement: ''
+})
 
 function openCreateDialog() {
-  createForm.value = { title: '', requirement: '' }
+  createForm.value = { type: 'execution', title: '', requirement: '' }
   showCreateDialog.value = true
 }
 
@@ -146,6 +150,7 @@ async function handleCreateNode() {
   try {
     await nodeStore.createNode({
       parentId,
+      type: createForm.value.type,
       title: createForm.value.title,
       requirement: createForm.value.requirement,
     })
@@ -273,6 +278,19 @@ async function handleCreateNode() {
     <!-- 创建节点对话框 -->
     <el-dialog v-model="showCreateDialog" title="新建节点" width="500px">
       <el-form :model="createForm" label-width="80px">
+        <el-form-item label="类型" required>
+          <el-radio-group v-model="createForm.type">
+            <el-radio-button value="execution">
+              <span style="color: #3498DB">执行节点</span>
+            </el-radio-button>
+            <el-radio-button value="planning">
+              <span style="color: #9B59B6">规划节点</span>
+            </el-radio-button>
+          </el-radio-group>
+          <div class="type-hint">
+            {{ createForm.type === 'execution' ? '具体执行任务，不能有子节点' : '分析分解任务，可创建子节点' }}
+          </div>
+        </el-form-item>
         <el-form-item label="标题" required>
           <el-input v-model="createForm.title" placeholder="输入节点标题" />
         </el-form-item>
@@ -449,5 +467,11 @@ async function handleCreateNode() {
   overflow: auto;
   padding: 24px;
   background: #fff;
+}
+
+.type-hint {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
 }
 </style>

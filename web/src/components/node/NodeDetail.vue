@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore, useWorkspaceStore } from '@/stores'
-import { STATUS_CONFIG, type TransitionAction } from '@/types'
+import { STATUS_CONFIG, NODE_TYPE_CONFIG, type TransitionAction } from '@/types'
 import StatusIcon from '@/components/common/StatusIcon.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import LogTimeline from '@/components/log/LogTimeline.vue'
@@ -18,28 +18,61 @@ const currentNode = computed(() => {
   return context.value.chain[context.value.chain.length - 1]
 })
 
-// 可用的状态转换
+// 节点类型
+const nodeType = computed(() => nodeMeta.value?.type || 'execution')
+const isPlanning = computed(() => nodeType.value === 'planning')
+
+// 可用的状态转换（根据节点类型）
 const availableActions = computed(() => {
   const status = nodeMeta.value?.status
-  if (!status) return []
+  const type = nodeMeta.value?.type
+  if (!status || !type) return []
 
   const actions: { action: TransitionAction; label: string; type: 'primary' | 'success' | 'danger' | 'warning' | 'default' }[] = []
 
-  switch (status) {
-    case 'pending':
-      actions.push({ action: 'start', label: '开始执行', type: 'primary' })
-      break
-    case 'implementing':
-      actions.push({ action: 'submit', label: '提交验证', type: 'warning' })
-      actions.push({ action: 'complete', label: '直接完成', type: 'success' })
-      break
-    case 'validating':
-      actions.push({ action: 'complete', label: '验证通过', type: 'success' })
-      actions.push({ action: 'fail', label: '验证失败', type: 'danger' })
-      break
-    case 'failed':
-      actions.push({ action: 'retry', label: '重试', type: 'primary' })
-      break
+  if (type === 'execution') {
+    // 执行节点状态转换
+    switch (status) {
+      case 'pending':
+        actions.push({ action: 'start', label: '开始执行', type: 'primary' })
+        break
+      case 'implementing':
+        actions.push({ action: 'submit', label: '提交验证', type: 'warning' })
+        actions.push({ action: 'complete', label: '直接完成', type: 'success' })
+        actions.push({ action: 'fail', label: '标记失败', type: 'danger' })
+        break
+      case 'validating':
+        actions.push({ action: 'complete', label: '验证通过', type: 'success' })
+        actions.push({ action: 'fail', label: '验证失败', type: 'danger' })
+        break
+      case 'failed':
+        actions.push({ action: 'retry', label: '重试', type: 'primary' })
+        break
+      case 'completed':
+        actions.push({ action: 'reopen', label: '重新激活', type: 'warning' })
+        break
+    }
+  } else {
+    // 规划节点状态转换
+    switch (status) {
+      case 'pending':
+        actions.push({ action: 'start', label: '开始规划', type: 'primary' })
+        break
+      case 'planning':
+        actions.push({ action: 'complete', label: '完成规划', type: 'success' })
+        actions.push({ action: 'cancel', label: '取消', type: 'danger' })
+        break
+      case 'monitoring':
+        actions.push({ action: 'complete', label: '汇总完成', type: 'success' })
+        actions.push({ action: 'cancel', label: '取消', type: 'danger' })
+        break
+      case 'completed':
+        actions.push({ action: 'reopen', label: '重新激活', type: 'warning' })
+        break
+      case 'cancelled':
+        actions.push({ action: 'reopen', label: '重新激活', type: 'warning' })
+        break
+    }
   }
 
   return actions
@@ -50,9 +83,12 @@ async function handleTransition(action: TransitionAction) {
   try {
     let conclusion: string | undefined
 
-    if (action === 'complete' || action === 'fail') {
+    if (action === 'complete' || action === 'fail' || action === 'cancel') {
+      const promptTitle = action === 'complete' ? '请输入完成结论'
+        : action === 'fail' ? '请输入失败原因'
+        : '请输入取消原因'
       const result = await ElMessageBox.prompt(
-        action === 'complete' ? '请输入完成结论' : '请输入失败原因',
+        promptTitle,
         '填写结论',
         { inputType: 'textarea' }
       )
@@ -89,27 +125,16 @@ async function handleDelete() {
   }
 }
 
-// 分裂节点
-const showSplitDialog = ref(false)
-const splitForm = ref({ title: '', requirement: '' })
-
-function openSplitDialog() {
-  splitForm.value = { title: '', requirement: '' }
-  showSplitDialog.value = true
-}
-
-async function handleSplit() {
-  if (!splitForm.value.title || !splitForm.value.requirement) {
-    ElMessage.warning('请填写完整信息')
-    return
-  }
-  try {
-    await nodeStore.splitNode(splitForm.value)
-    ElMessage.success('分裂成功')
-    showSplitDialog.value = false
-  } catch {
-    ElMessage.error('分裂失败')
-  }
+// 格式化时间
+function formatTime(isoString: string) {
+  const date = new Date(isoString)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 </script>
 
@@ -121,10 +146,37 @@ async function handleSplit() {
         <StatusIcon :status="nodeMeta.status" :size="20" />
         <h3>{{ currentNode.title }}</h3>
       </div>
-      <div class="status-badge">
-        <el-tag :color="STATUS_CONFIG[nodeMeta.status].color" effect="dark">
+      <div class="header-badges">
+        <el-tag
+          :color="NODE_TYPE_CONFIG[nodeType].color"
+          effect="dark"
+          size="small"
+        >
+          {{ NODE_TYPE_CONFIG[nodeType].label }}
+        </el-tag>
+        <el-tag :color="STATUS_CONFIG[nodeMeta.status].color" effect="dark" size="small">
           {{ STATUS_CONFIG[nodeMeta.status].label }}
         </el-tag>
+      </div>
+    </div>
+
+    <!-- 节点属性 -->
+    <div class="node-properties">
+      <div class="property-item">
+        <span class="property-label">ID:</span>
+        <span class="property-value">{{ nodeMeta.id }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">创建时间:</span>
+        <span class="property-value">{{ formatTime(nodeMeta.createdAt) }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">更新时间:</span>
+        <span class="property-value">{{ formatTime(nodeMeta.updatedAt) }}</span>
+      </div>
+      <div class="property-item" v-if="nodeMeta.isolate">
+        <span class="property-label">隔离:</span>
+        <el-tag type="warning" size="small">已隔离</el-tag>
       </div>
     </div>
 
@@ -144,13 +196,6 @@ async function handleSplit() {
       <div class="extra-actions">
         <el-button size="small" @click="handleSetFocus" :disabled="workspaceStore.currentFocus === nodeMeta.id">
           设为焦点
-        </el-button>
-        <el-button
-          v-if="nodeMeta.status === 'implementing'"
-          size="small"
-          @click="openSplitDialog"
-        >
-          分裂子任务
         </el-button>
         <el-button size="small" type="danger" @click="handleDelete" :disabled="nodeMeta.id === 'root'">
           删除
@@ -190,8 +235,8 @@ async function handleSplit() {
       <LogTimeline :entries="currentNode.logEntries || []" />
     </el-card>
 
-    <!-- 子节点结论 -->
-    <el-card v-if="context?.childConclusions?.length" class="section-card">
+    <!-- 子节点结论（仅规划节点显示） -->
+    <el-card v-if="isPlanning && context?.childConclusions?.length" class="section-card">
       <template #header>
         <span>子节点结论</span>
       </template>
@@ -207,29 +252,6 @@ async function handleSplit() {
         </div>
       </div>
     </el-card>
-
-    <!-- 分裂对话框 -->
-    <el-dialog v-model="showSplitDialog" title="分裂子任务" width="500px">
-      <el-form :model="splitForm" label-width="80px">
-        <el-form-item label="标题" required>
-          <el-input v-model="splitForm.title" placeholder="输入子任务标题" />
-        </el-form-item>
-        <el-form-item label="需求" required>
-          <el-input
-            v-model="splitForm.requirement"
-            type="textarea"
-            :rows="3"
-            placeholder="描述子任务需求"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showSplitDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleSplit" :loading="nodeStore.loading">
-          创建
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -242,7 +264,7 @@ async function handleSplit() {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .title-row {
@@ -254,6 +276,37 @@ async function handleSplit() {
 .title-row h3 {
   margin: 0;
   font-size: 20px;
+}
+
+.header-badges {
+  display: flex;
+  gap: 8px;
+}
+
+.node-properties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.property-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.property-label {
+  color: #909399;
+}
+
+.property-value {
+  color: #606266;
+  font-family: monospace;
 }
 
 .action-bar {

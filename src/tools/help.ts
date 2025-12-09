@@ -22,7 +22,7 @@ export const helpTools: Tool[] = [
 - resume: 如何继续之前的任务
 - session_restore: 会话恢复（从摘要恢复时验证 ID）
 - blocked: 任务遇到问题时怎么办
-- split: 何时以及如何分裂任务
+- split: 何时以及如何分解任务
 - complete: 如何完成任务
 - progress: 如何查看和报告进度
 - guide: 如何引导不熟悉的用户

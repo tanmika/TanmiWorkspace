@@ -90,9 +90,10 @@ export class WorkspaceService {
     };
     await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
 
-    // 8. 写入 graph.json（含根节点）
+    // 8. 写入 graph.json（含根节点，类型为 planning）
     const rootNode: NodeMeta = {
       id: rootNodeId,
+      type: "planning",  // 根节点固定为规划节点
       parentId: null,
       children: [],
       status: "pending",
@@ -103,7 +104,7 @@ export class WorkspaceService {
       updatedAt: currentTime,
     };
     const graph: NodeGraph = {
-      version: "1.0",
+      version: "3.0",  // 新版本支持节点类型
       currentFocus: rootNodeId,
       nodes: {
         [rootNodeId]: rootNode,
@@ -125,9 +126,10 @@ export class WorkspaceService {
     await this.md.createEmptyLog(projectRoot, workspaceId);
     await this.md.createEmptyProblem(projectRoot, workspaceId);
 
-    // 11. 创建根节点文件
+    // 11. 创建根节点文件（规划节点）
     await this.md.writeNodeInfo(projectRoot, workspaceId, rootNodeId, {
       id: rootNodeId,
+      type: "planning",  // 根节点固定为规划节点
       title: params.name,
       status: "pending",
       createdAt: currentTime,
@@ -165,7 +167,7 @@ export class WorkspaceService {
       projectRoot,
       rootNodeId,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
-      hint: "💡 工作区已创建。下一步：使用 node_create 创建子节点来分解任务，然后 node_transition(action=\"start\") 开始执行。",
+      hint: "💡 工作区已创建。根节点是规划节点。下一步：调用 node_transition(action=\"start\") 进入规划状态，分析需求后使用 node_create 创建执行节点或子规划节点。",
     };
   }
 
@@ -456,16 +458,25 @@ export class WorkspaceService {
    */
   private getStatusIcon(status: string): string {
     switch (status) {
+      // 通用状态
       case "pending":
         return "○";
+      case "completed":
+        return "●";
+      // 执行节点状态
       case "implementing":
         return "◐";
       case "validating":
         return "◑";
-      case "completed":
-        return "●";
       case "failed":
         return "✕";
+      // 规划节点状态
+      case "planning":
+        return "◇";
+      case "monitoring":
+        return "◈";
+      case "cancelled":
+        return "⊘";
       default:
         return "?";
     }

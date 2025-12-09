@@ -8,10 +8,10 @@ import type {
   NodeGetParams,
   NodeListParams,
   NodeDeleteParams,
-  NodeSplitParams,
   NodeUpdateParams,
   NodeMoveParams,
   DocRef,
+  NodeType,
 } from "../../types/index.js";
 
 // 请求类型定义
@@ -25,6 +25,7 @@ interface NodeIdParams extends WorkspaceIdParams {
 
 interface CreateNodeBody {
   parentId: string;
+  type: NodeType;
   title: string;
   requirement?: string;
   docs?: DocRef[];
@@ -34,12 +35,6 @@ interface UpdateNodeBody {
   title?: string;
   requirement?: string;
   note?: string;
-}
-
-interface SplitNodeBody {
-  title: string;
-  requirement: string;
-  inheritContext?: boolean;
 }
 
 interface MoveNodeBody {
@@ -77,9 +72,10 @@ const createNodeSchema = {
   ...workspaceIdSchema,
   body: {
     type: "object",
-    required: ["parentId", "title"],
+    required: ["parentId", "type", "title"],
     properties: {
       parentId: { type: "string", minLength: 1, maxLength: 50 },
+      type: { type: "string", enum: ["planning", "execution"] },
       title: { type: "string", minLength: 1, maxLength: 100 },
       requirement: { type: "string", maxLength: 5000 },
       docs: {
@@ -124,20 +120,6 @@ const updateNodeSchema = {
   }
 };
 
-const splitNodeSchema = {
-  ...nodeIdSchema,
-  body: {
-    type: "object",
-    required: ["title", "requirement"],
-    properties: {
-      title: { type: "string", minLength: 1, maxLength: 100 },
-      requirement: { type: "string", minLength: 1, maxLength: 5000 },
-      inheritContext: { type: "boolean" }
-    },
-    additionalProperties: false
-  }
-};
-
 const moveNodeSchema = {
   ...nodeIdSchema,
   body: {
@@ -166,6 +148,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
       const params: NodeCreateParams = {
         workspaceId: request.params.wid,
         parentId: request.body.parentId,
+        type: request.body.type,
         title: request.body.title,
         requirement: request.body.requirement,
         docs: request.body.docs,
@@ -236,28 +219,6 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         nodeId: request.params.nid,
       };
       return services.node.delete(params);
-    }
-  );
-
-  /**
-   * POST /api/workspaces/:wid/nodes/:nid/split - 分裂节点
-   */
-  fastify.post<{ Params: NodeIdParams; Body: SplitNodeBody }>(
-    "/workspaces/:wid/nodes/:nid/split",
-    { schema: splitNodeSchema },
-    async (
-      request: FastifyRequest<{ Params: NodeIdParams; Body: SplitNodeBody }>,
-      reply: FastifyReply
-    ) => {
-      const params: NodeSplitParams = {
-        workspaceId: request.params.wid,
-        parentId: request.params.nid,
-        title: request.body.title,
-        requirement: request.body.requirement,
-        inheritContext: request.body.inheritContext,
-      };
-      const result = await services.node.split(params);
-      reply.status(201).send(result);
     }
   );
 

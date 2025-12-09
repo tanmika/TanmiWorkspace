@@ -8,25 +8,41 @@ import type {
   TransitionAction,
   NodeTransitionParams,
   NodeTransitionResult,
+  NodeType,
+  ExecutionStatus,
+  PlanningStatus,
+  ExecutionAction,
+  PlanningAction,
 } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
 
 /**
- * 状态转换规则表
+ * 执行节点状态转换规则表
  */
-const TRANSITION_TABLE: Record<NodeStatus, Partial<Record<TransitionAction, NodeStatus>>> = {
+const EXECUTION_TRANSITION_TABLE: Record<ExecutionStatus, Partial<Record<ExecutionAction, ExecutionStatus>>> = {
   pending: { start: "implementing" },
-  implementing: { submit: "validating", complete: "completed" },
+  implementing: { submit: "validating", complete: "completed", fail: "failed" },
   validating: { complete: "completed", fail: "failed" },
   failed: { retry: "implementing" },
-  completed: { reopen: "implementing" },  // 允许重新激活已完成的节点
+  completed: { reopen: "implementing" },
+};
+
+/**
+ * 规划节点状态转换规则表
+ */
+const PLANNING_TRANSITION_TABLE: Record<PlanningStatus, Partial<Record<PlanningAction, PlanningStatus>>> = {
+  pending: { start: "planning" },
+  planning: { complete: "completed", cancel: "cancelled" },
+  monitoring: { complete: "completed", cancel: "cancelled" },
+  completed: { reopen: "planning" },
+  cancelled: { reopen: "planning" },
 };
 
 /**
  * 需要 conclusion 的动作
  */
-const CONCLUSION_REQUIRED_ACTIONS: TransitionAction[] = ["complete", "fail"];
+const CONCLUSION_REQUIRED_ACTIONS: TransitionAction[] = ["complete", "fail", "cancel"];
 
 /**
  * 状态服务
@@ -66,12 +82,13 @@ export class StateService {
     }
 
     const nodeMeta = graph.nodes[nodeId];
+    const nodeType = nodeMeta.type;
     const currentStatus = nodeMeta.status;
 
-    // 3. 验证转换合法性
-    const newStatus = this.validateTransition(currentStatus, action);
+    // 3. 根据节点类型验证转换合法性
+    const newStatus = this.validateTransition(nodeType, currentStatus, action);
     if (!newStatus) {
-      const suggestion = this.getTransitionSuggestion(currentStatus, action);
+      const suggestion = this.getTransitionSuggestion(nodeType, currentStatus, action);
       throw new TanmiError(
         "INVALID_TRANSITION",
         `非法状态转换: ${currentStatus} --[${action}]--> ? (不允许)。${suggestion}`
@@ -86,6 +103,20 @@ export class StateService {
       );
     }
 
+    // 4.1 规划节点 complete 时验证子节点状态
+    if (nodeType === "planning" && action === "complete") {
+      const childStatuses = nodeMeta.children.map(cid => graph.nodes[cid]?.status);
+      const hasIncompleteChildren = childStatuses.some(
+        s => s && s !== "completed" && s !== "cancelled"
+      );
+      if (hasIncompleteChildren) {
+        throw new TanmiError(
+          "INCOMPLETE_CHILDREN",
+          "规划节点有未完成的子节点，无法直接完成。请先完成所有子节点或取消未完成的子节点。"
+        );
+      }
+    }
+
     const currentTime = now();
     const timestamp = formatShort(currentTime);
 
@@ -96,27 +127,30 @@ export class StateService {
       nodeMeta.conclusion = conclusion;
     }
 
-    // 5.1 父节点状态级联
+    // 5.1 父节点状态级联（仅执行节点 start/reopen 时）
     const cascadeMessages: string[] = [];
-    if (action === "start" || action === "reopen") {
-      // 当子节点开始执行时，自动激活待处理的父节点链
+    if (nodeType === "execution" && (action === "start" || action === "reopen")) {
+      // 当执行节点开始时，确保父规划节点处于 monitoring 状态
       let parentId = nodeMeta.parentId;
       while (parentId && graph.nodes[parentId]) {
         const parent = graph.nodes[parentId];
-        if (parent.status === "pending") {
-          parent.status = "implementing";
-          parent.updatedAt = currentTime;
-          cascadeMessages.push(`父节点 ${parentId}: pending → implementing`);
-          // 也更新父节点的 Info.md
-          await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "implementing");
-        } else if (parent.status === "completed" && action === "reopen") {
-          // 如果父节点已完成但子节点需要重新激活，父节点也需要重新激活
-          parent.status = "implementing";
-          parent.updatedAt = currentTime;
-          cascadeMessages.push(`父节点 ${parentId}: completed → implementing (级联重开)`);
-          await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "implementing");
-        } else {
-          break; // 父节点已在执行中或其他状态，停止级联
+        if (parent.type === "planning") {
+          if (parent.status === "pending" || parent.status === "planning") {
+            parent.status = "monitoring";
+            parent.updatedAt = currentTime;
+            cascadeMessages.push(`父节点 ${parentId}: ${parent.status} → monitoring`);
+            await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "monitoring");
+          } else if (parent.status === "completed" && action === "reopen") {
+            parent.status = "monitoring";
+            parent.updatedAt = currentTime;
+            cascadeMessages.push(`父节点 ${parentId}: completed → monitoring (级联重开)`);
+            await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "monitoring");
+          } else if (parent.status === "cancelled" && action === "reopen") {
+            parent.status = "monitoring";
+            parent.updatedAt = currentTime;
+            cascadeMessages.push(`父节点 ${parentId}: cancelled → monitoring (级联重开)`);
+            await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "monitoring");
+          }
         }
         parentId = parent.parentId;
       }
@@ -136,15 +170,15 @@ export class StateService {
     }
 
     // 7. 追加日志记录
-    const logEvent = this.buildLogEvent(action, currentStatus, newStatus, reason);
+    const logEvent = this.buildLogEvent(nodeType, action, currentStatus, newStatus, reason);
     await this.md.appendTypedLogEntry(projectRoot, workspaceId, {
       timestamp,
       operator: "AI",
       event: logEvent,
     }, nodeId);
 
-    // 8. 如果是 complete，清空 Problem.md
-    if (action === "complete") {
+    // 8. 如果是 complete/cancel，清空 Problem.md
+    if (action === "complete" || action === "cancel") {
       await this.md.writeProblem(projectRoot, workspaceId, {
         currentProblem: "（暂无）",
         nextStep: "（暂无）",
@@ -169,75 +203,130 @@ export class StateService {
       result.cascadeUpdates = cascadeMessages;
     }
 
-    // 11. 添加工作流提示
-    if (action === "start" || action === "reopen" || action === "retry") {
-      result.hint = "💡 任务已开始。请使用 log_append 记录关键发现和分析过程，便于后续回溯。";
-    } else if (action === "complete") {
-      // 检查父节点是否还有未完成的子节点
-      const parentId = nodeMeta.parentId;
-      if (parentId && graph.nodes[parentId]) {
-        const siblings = graph.nodes[parentId].children;
-        const incompleteSiblings = siblings.filter(
-          (sid) => graph.nodes[sid]?.status !== "completed"
-        );
-        if (incompleteSiblings.length === 0) {
-          result.hint = `💡 所有子任务已完成。建议：1) 评估节点文档是否需要过期（node_reference action="expire"）；2) 完成父节点 ${parentId} 或切换到其他任务。`;
-        } else {
-          result.hint = `💡 任务已完成。建议：1) 评估节点文档是否需要过期；2) 父节点下还有 ${incompleteSiblings.length} 个未完成的子任务，请切换到下一个任务。`;
-        }
-      } else {
-        // 根节点完成
-        result.hint = "💡 任务已完成。建议：评估工作区文档索引，将不再需要的文档标记为过期（node_reference action=\"expire\"）。";
-      }
-    }
+    // 11. 添加工作流提示（根据节点类型）
+    result.hint = this.generateHint(nodeType, action, nodeMeta, graph);
 
     return result;
+  }
+
+  /**
+   * 生成工作流提示
+   */
+  private generateHint(
+    nodeType: NodeType,
+    action: TransitionAction,
+    nodeMeta: { parentId: string | null; children: string[] },
+    graph: { nodes: Record<string, { status: NodeStatus; type: NodeType }> }
+  ): string {
+    if (nodeType === "execution") {
+      // 执行节点提示
+      if (action === "start" || action === "reopen" || action === "retry") {
+        return "💡 执行任务已开始。请使用 log_append 记录执行过程，完成后调用 complete，如遇问题调用 fail。";
+      } else if (action === "complete") {
+        const parentId = nodeMeta.parentId;
+        if (parentId && graph.nodes[parentId]) {
+          return `💡 执行任务已完成。建议切换到父规划节点 ${parentId} 检查是否还有其他任务。`;
+        }
+        return "💡 执行任务已完成。";
+      } else if (action === "fail") {
+        return "💡 执行任务已标记失败。请切换到父规划节点，根据失败原因决定：重新派发、修改需求后重试、或取消任务。";
+      }
+    } else {
+      // 规划节点提示
+      if (action === "start" || action === "reopen") {
+        return "💡 进入规划状态。请分析需求，使用 node_create 创建执行节点或子规划节点。";
+      } else if (action === "complete") {
+        const parentId = nodeMeta.parentId;
+        if (parentId && graph.nodes[parentId]) {
+          return `💡 规划节点已完成汇总。建议切换到父节点 ${parentId} 继续。`;
+        }
+        return "💡 规划节点已完成。工作区任务完成！";
+      } else if (action === "cancel") {
+        return "💡 规划节点已取消。如需重新规划请使用 reopen。";
+      }
+    }
+    return "";
   }
 
   /**
    * 验证状态转换合法性
    */
   private validateTransition(
+    nodeType: NodeType,
     currentStatus: NodeStatus,
     action: TransitionAction
   ): NodeStatus | null {
-    return TRANSITION_TABLE[currentStatus]?.[action] ?? null;
+    if (nodeType === "execution") {
+      return EXECUTION_TRANSITION_TABLE[currentStatus as ExecutionStatus]?.[action as ExecutionAction] ?? null;
+    } else {
+      return PLANNING_TRANSITION_TABLE[currentStatus as PlanningStatus]?.[action as PlanningAction] ?? null;
+    }
   }
 
   /**
    * 生成状态转换错误的修复建议
    */
   private getTransitionSuggestion(
+    nodeType: NodeType,
     currentStatus: NodeStatus,
     attemptedAction: TransitionAction
   ): string {
-    // 常见错误场景的建议
-    if (currentStatus === "pending" && attemptedAction === "complete") {
-      return "请先调用 node_transition(action=\"start\") 开始执行节点，再进行 complete";
-    }
-    if (currentStatus === "pending" && attemptedAction === "submit") {
-      return "请先调用 node_transition(action=\"start\") 开始执行节点";
-    }
-    if (currentStatus === "completed" && attemptedAction === "complete") {
-      return "节点已完成，无需重复完成";
-    }
-    if (currentStatus === "completed" && attemptedAction === "start") {
-      return "节点已完成，如需重新执行请使用 node_transition(action=\"reopen\")";
-    }
-    if (currentStatus === "failed" && attemptedAction === "complete") {
-      return "失败的节点无法直接完成，请先 retry 后重新执行";
-    }
-    if (currentStatus === "validating" && attemptedAction === "start") {
-      return "节点正在验证中，请使用 complete/fail 来结束验证";
-    }
-    if (currentStatus === "implementing" && attemptedAction === "start") {
-      return "节点已在执行中，无需重复 start";
-    }
+    if (nodeType === "execution") {
+      // 执行节点错误建议
+      if (currentStatus === "pending" && attemptedAction === "complete") {
+        return "请先调用 node_transition(action=\"start\") 开始执行，再进行 complete";
+      }
+      if (currentStatus === "pending" && attemptedAction === "submit") {
+        return "请先调用 node_transition(action=\"start\") 开始执行";
+      }
+      if (currentStatus === "completed" && attemptedAction === "complete") {
+        return "节点已完成，无需重复完成";
+      }
+      if (currentStatus === "completed" && attemptedAction === "start") {
+        return "节点已完成，如需重新执行请使用 node_transition(action=\"reopen\")";
+      }
+      if (currentStatus === "failed" && attemptedAction === "complete") {
+        return "失败的节点无法直接完成，请先 retry 后重新执行";
+      }
+      if (currentStatus === "implementing" && attemptedAction === "start") {
+        return "节点已在执行中，无需重复 start";
+      }
+      if (attemptedAction === "cancel") {
+        return "执行节点不支持 cancel 动作，如需放弃请使用 fail";
+      }
 
-    // 通用建议：显示当前状态可用的动作
-    const availableActions = Object.keys(TRANSITION_TABLE[currentStatus] || {});
-    if (availableActions.length > 0) {
-      return `当前状态 ${currentStatus} 可用的动作: ${availableActions.join(", ")}`;
+      const availableActions = Object.keys(EXECUTION_TRANSITION_TABLE[currentStatus as ExecutionStatus] || {});
+      if (availableActions.length > 0) {
+        return `执行节点当前状态 ${currentStatus} 可用的动作: ${availableActions.join(", ")}`;
+      }
+    } else {
+      // 规划节点错误建议
+      if (currentStatus === "pending" && attemptedAction === "complete") {
+        return "请先调用 node_transition(action=\"start\") 进入规划状态";
+      }
+      if (currentStatus === "monitoring" && attemptedAction === "start") {
+        return "节点已在监控子节点执行，如需重新规划请先 cancel 后 reopen";
+      }
+      if (currentStatus === "completed" && attemptedAction === "start") {
+        return "节点已完成，如需重新规划请使用 node_transition(action=\"reopen\")";
+      }
+      if (currentStatus === "planning" && attemptedAction === "start") {
+        return "节点已在规划中，无需重复 start";
+      }
+      if (attemptedAction === "fail") {
+        return "规划节点不支持 fail 动作，如需放弃请使用 cancel";
+      }
+      if (attemptedAction === "submit") {
+        return "规划节点不支持 submit 动作";
+      }
+      if (attemptedAction === "retry") {
+        return "规划节点不支持 retry 动作，如需重新开始请使用 reopen";
+      }
+
+      const availableActions = Object.keys(PLANNING_TRANSITION_TABLE[currentStatus as PlanningStatus] || {});
+      if (availableActions.length > 0) {
+        return `规划节点当前状态 ${currentStatus} 可用的动作: ${availableActions.join(", ")}`;
+      }
     }
     return `当前状态 ${currentStatus} 无可用转换`;
   }
@@ -246,21 +335,30 @@ export class StateService {
    * 构建日志事件描述
    */
   private buildLogEvent(
+    nodeType: NodeType,
     action: TransitionAction,
     from: NodeStatus,
     to: NodeStatus,
     reason?: string
   ): string {
-    const actionDescriptions: Record<TransitionAction, string> = {
+    const executionDescriptions: Record<string, string> = {
       start: "开始执行",
       submit: "提交验证",
-      complete: "完成任务",
-      fail: "标记失败",
+      complete: "完成执行",
+      fail: "执行失败",
       retry: "重新执行",
       reopen: "重新激活",
     };
 
-    let event = `${actionDescriptions[action]}: ${from} → ${to}`;
+    const planningDescriptions: Record<string, string> = {
+      start: "开始规划",
+      complete: "完成汇总",
+      cancel: "取消规划",
+      reopen: "重新规划",
+    };
+
+    const descriptions = nodeType === "execution" ? executionDescriptions : planningDescriptions;
+    let event = `${descriptions[action] || action}: ${from} → ${to}`;
     if (reason) {
       event += ` (${reason})`;
     }

@@ -145,7 +145,7 @@ export class ContextService {
         } else if (logCount < 3) {
           return "💡 任务执行中。继续使用 log_append 记录进展，完成后调用 node_transition(action=\"complete\")。" + docsWarning;
         } else {
-          return "💡 任务执行中，日志已较多。考虑是否需要 node_split 分裂子任务，或准备 complete 完成当前任务。" + docsWarning;
+          return "💡 任务执行中，日志已较多。执行节点准备 complete 完成；规划节点考虑是否需要创建更多子节点。" + docsWarning;
         }
       case "validating":
         return "💡 任务验证中。验证通过请 complete，验证失败请 fail。";

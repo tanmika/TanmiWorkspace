@@ -6,17 +6,17 @@ import type {
   NodeCreateResult,
   NodeUpdateResult,
   NodeDeleteResult,
-  NodeSplitResult,
   NodeTransitionResult,
   TransitionAction,
   DocRef,
+  NodeType,
 } from '@/types'
 
 export const nodeApi = {
   // 创建节点
   create(
     workspaceId: string,
-    params: { parentId: string; title: string; requirement?: string; docs?: DocRef[] }
+    params: { parentId: string; type: NodeType; title: string; requirement?: string; docs?: DocRef[] }
   ): Promise<NodeCreateResult> {
     return client.post(`/workspaces/${workspaceId}/nodes`, params)
   },
@@ -43,15 +43,6 @@ export const nodeApi = {
   // 删除节点
   delete(workspaceId: string, nodeId: string): Promise<NodeDeleteResult> {
     return client.delete(`/workspaces/${workspaceId}/nodes/${nodeId}`)
-  },
-
-  // 分裂节点
-  split(
-    workspaceId: string,
-    parentId: string,
-    params: { title: string; requirement: string; inheritContext?: boolean }
-  ): Promise<NodeSplitResult> {
-    return client.post(`/workspaces/${workspaceId}/nodes/${parentId}/split`, params)
   },
 
   // 状态转换

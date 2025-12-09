@@ -12,8 +12,6 @@ import type {
   NodeListResult,
   NodeDeleteParams,
   NodeDeleteResult,
-  NodeSplitParams,
-  NodeSplitResult,
   NodeUpdateParams,
   NodeUpdateResult,
   NodeMoveParams,
@@ -21,6 +19,7 @@ import type {
   NodeMeta,
   NodeTreeItem,
   NodeInfoData,
+  NodeType,
 } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { generateNodeId } from "../utils/id.js";
@@ -53,31 +52,49 @@ export class NodeService {
    * 创建节点
    */
   async create(params: NodeCreateParams): Promise<NodeCreateResult> {
-    const { workspaceId, parentId, title, requirement = "", docs = [] } = params;
+    const { workspaceId, parentId, type, title, requirement = "", docs = [] } = params;
 
     // 1. 获取 projectRoot
     const projectRoot = await this.resolveProjectRoot(workspaceId);
 
     // 2. 验证父节点存在
     const graph = await this.json.readGraph(projectRoot, workspaceId);
-    if (!graph.nodes[parentId]) {
+    const parentMeta = graph.nodes[parentId];
+    if (!parentMeta) {
       throw new TanmiError("PARENT_NOT_FOUND", `父节点 "${parentId}" 不存在`);
     }
 
-    // 3. 验证标题合法性
+    // 3. 验证父节点是规划节点（只有规划节点可以有子节点）
+    if (parentMeta.type === "execution") {
+      throw new TanmiError(
+        "EXECUTION_CANNOT_HAVE_CHILDREN",
+        "执行节点不能创建子节点，如需分解任务请 fail 后回到父规划节点处理"
+      );
+    }
+
+    // 4. 验证父节点状态允许创建子节点（planning 状态）
+    if (parentMeta.status !== "planning" && parentMeta.status !== "pending") {
+      throw new TanmiError(
+        "INVALID_PARENT_STATUS",
+        `父节点状态 "${parentMeta.status}" 不允许创建子节点，需要处于 pending 或 planning 状态`
+      );
+    }
+
+    // 5. 验证标题合法性
     validateNodeTitle(title);
 
-    // 4. 生成节点 ID
+    // 6. 生成节点 ID
     const nodeId = generateNodeId();
     const currentTime = now();
 
-    // 5. 创建节点目录
+    // 7. 创建节点目录
     const nodePath = this.fs.getNodePath(projectRoot, workspaceId, nodeId);
     await this.fs.mkdir(nodePath);
 
-    // 6. 写入 Info.md
+    // 8. 写入 Info.md
     const nodeInfo: NodeInfoData = {
       id: nodeId,
+      type,
       title,
       status: "pending",
       createdAt: currentTime,
@@ -89,13 +106,14 @@ export class NodeService {
     };
     await this.md.writeNodeInfo(projectRoot, workspaceId, nodeId, nodeInfo);
 
-    // 7. 创建空的 Log.md 和 Problem.md
+    // 9. 创建空的 Log.md 和 Problem.md
     await this.md.createEmptyLog(projectRoot, workspaceId, nodeId);
     await this.md.createEmptyProblem(projectRoot, workspaceId, nodeId);
 
-    // 8. 更新 graph.json
+    // 10. 更新 graph.json
     const newNode: NodeMeta = {
       id: nodeId,
+      type,
       parentId,
       children: [],
       status: "pending",
@@ -108,25 +126,42 @@ export class NodeService {
     graph.nodes[nodeId] = newNode;
     graph.nodes[parentId].children.push(nodeId);
     graph.nodes[parentId].updatedAt = currentTime;
+
+    // 11. 自动状态转换：如果父节点是 pending/planning，创建第一个子节点时转为 monitoring
+    const isFirstChild = graph.nodes[parentId].children.length === 1;
+    if (isFirstChild && (parentMeta.status === "pending" || parentMeta.status === "planning")) {
+      graph.nodes[parentId].status = "monitoring";
+      // 同步更新 Info.md 中的状态
+      await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "monitoring");
+    }
+
     await this.json.writeGraph(projectRoot, workspaceId, graph);
 
-    // 9. 更新工作区 updatedAt
+    // 12. 更新工作区 updatedAt
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
     config.updatedAt = currentTime;
     await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
 
-    // 10. 追加日志
+    // 13. 追加日志
+    const typeLabel = type === "planning" ? "规划" : "执行";
     await this.md.appendLog(projectRoot, workspaceId, {
       time: currentTime,
       operator: "system",
-      event: `节点 "${title}" (${nodeId}) 已创建`,
+      event: `${typeLabel}节点 "${title}" (${nodeId}) 已创建`,
     });
 
-    // 根据是否派发了文档生成不同的提示
+    // 14. 生成提示
     const hasDispatchedDocs = docs.length > 0;
-    const hint = hasDispatchedDocs
-      ? "💡 节点已创建并派发了文档。下一步：调用 node_transition(action=\"start\") 开始执行，或继续创建更多子节点进行任务分解。"
-      : "💡 节点已创建。提醒：如果子任务需要参考文档，请使用 docs 参数派发，或稍后用 node_reference 添加。下一步：调用 node_transition(action=\"start\") 开始执行。";
+    let hint: string;
+    if (type === "execution") {
+      hint = hasDispatchedDocs
+        ? "💡 执行节点已创建并派发了文档。下一步：调用 node_transition(action=\"start\") 开始执行。"
+        : "💡 执行节点已创建。提醒：如需参考文档请用 node_reference 添加。下一步：调用 node_transition(action=\"start\") 开始执行。";
+    } else {
+      hint = hasDispatchedDocs
+        ? "💡 规划节点已创建并派发了文档。下一步：调用 node_transition(action=\"start\") 进入规划状态，分析需求并创建子节点。"
+        : "💡 规划节点已创建。下一步：调用 node_transition(action=\"start\") 进入规划状态。";
+    }
 
     return {
       nodeId,
@@ -203,6 +238,7 @@ export class NodeService {
 
     const item: NodeTreeItem = {
       id: nodeId,
+      type: node.type,
       title: nodeInfo.title,
       status: node.status,
       children: [],
@@ -335,120 +371,7 @@ export class NodeService {
     return result;
   }
 
-  // ========== Phase 3: 节点分裂与更新 ==========
-
-  /**
-   * 节点分裂
-   * 将当前执行中的步骤升级为独立子节点
-   */
-  async split(params: NodeSplitParams): Promise<NodeSplitResult> {
-    const { workspaceId, parentId, title, requirement, inheritContext = true, docs = [] } = params;
-
-    // 1. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
-
-    // 2. 验证父节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
-    if (!graph.nodes[parentId]) {
-      throw new TanmiError("NODE_NOT_FOUND", `节点 "${parentId}" 不存在`);
-    }
-
-    // 3. 验证父节点状态为 implementing
-    const parentMeta = graph.nodes[parentId];
-    if (parentMeta.status !== "implementing") {
-      throw new TanmiError(
-        "SPLIT_REQUIRES_IMPLEMENTING",
-        `只有 implementing 状态的节点才能分裂，当前状态: ${parentMeta.status}`
-      );
-    }
-
-    // 4. 验证标题合法性
-    validateNodeTitle(title);
-
-    // 5. 生成节点 ID
-    const nodeId = generateNodeId();
-    const currentTime = now();
-
-    // 6. 创建节点目录
-    const nodePath = this.fs.getNodePath(projectRoot, workspaceId, nodeId);
-    await this.fs.mkdir(nodePath);
-
-    // 7. 写入 Info.md
-    const nodeInfo: NodeInfoData = {
-      id: nodeId,
-      title,
-      status: "pending",
-      createdAt: currentTime,
-      updatedAt: currentTime,
-      requirement,
-      docs,
-      notes: "",
-      conclusion: "",
-    };
-    await this.md.writeNodeInfo(projectRoot, workspaceId, nodeId, nodeInfo);
-
-    // 8. 创建空的 Log.md 和 Problem.md
-    await this.md.createEmptyLog(projectRoot, workspaceId, nodeId);
-    await this.md.createEmptyProblem(projectRoot, workspaceId, nodeId);
-
-    // 9. 更新 graph.json
-    const newNode: NodeMeta = {
-      id: nodeId,
-      parentId,
-      children: [],
-      status: "pending",
-      isolate: !inheritContext,  // 如果不继承上下文，设置为隔离
-      references: [],
-      conclusion: null,
-      createdAt: currentTime,
-      updatedAt: currentTime,
-    };
-    graph.nodes[nodeId] = newNode;
-    graph.nodes[parentId].children.push(nodeId);
-    graph.nodes[parentId].updatedAt = currentTime;
-
-    // 10. 自动切换焦点到新节点
-    graph.currentFocus = nodeId;
-
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
-
-    // 11. 清空父节点的 Problem.md（问题已转化为子任务）
-    await this.md.writeProblem(projectRoot, workspaceId, {
-      currentProblem: "（暂无）",
-      nextStep: "（暂无）",
-    }, parentId);
-
-    // 12. 更新工作区 updatedAt
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
-    config.updatedAt = currentTime;
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
-
-    // 13. 追加日志到父节点
-    await this.md.appendLog(projectRoot, workspaceId, {
-      time: currentTime,
-      operator: "AI",
-      event: `分裂子节点: "${title}" (${nodeId})`,
-    }, parentId);
-
-    // 14. 追加日志到全局
-    await this.md.appendLog(projectRoot, workspaceId, {
-      time: currentTime,
-      operator: "AI",
-      event: `节点 "${parentId}" 分裂出子节点 "${title}" (${nodeId})`,
-    });
-
-    // 根据是否派发了文档生成不同的提示
-    const hasDispatchedDocs = docs.length > 0;
-    const hint = hasDispatchedDocs
-      ? "💡 子节点已创建并自动聚焦，已派发文档。请调用 node_transition(action=\"start\") 开始执行，并使用 log_append 记录分析过程。"
-      : "💡 子节点已创建并自动聚焦。提醒：如果子任务需要参考文档，请用 node_reference 添加。请调用 node_transition(action=\"start\") 开始执行。";
-
-    return {
-      nodeId,
-      path: nodePath,
-      hint,
-    };
-  }
+  // ========== Phase 3: 节点更新 ==========
 
   /**
    * 更新节点
@@ -548,6 +471,14 @@ export class NodeService {
     const newParentMeta = graph.nodes[newParentId];
     if (!newParentMeta) {
       throw new TanmiError("PARENT_NOT_FOUND", `目标父节点 "${newParentId}" 不存在`);
+    }
+
+    // 5.1 验证新父节点是规划节点（执行节点不能有子节点）
+    if (newParentMeta.type === "execution") {
+      throw new TanmiError(
+        "EXECUTION_CANNOT_HAVE_CHILDREN",
+        "执行节点不能有子节点，无法将节点移动到执行节点下"
+      );
     }
 
     // 6. 防止循环依赖：不能把节点移到自己的子节点下

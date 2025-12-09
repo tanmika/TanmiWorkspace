@@ -9,6 +9,7 @@ import type {
   ContextGetResult,
   TransitionAction,
   DocRef,
+  NodeType,
 } from '@/types'
 
 export const useNodeStore = defineStore('node', () => {
@@ -65,6 +66,7 @@ export const useNodeStore = defineStore('node', () => {
 
   async function createNode(params: {
     parentId: string
+    type: NodeType
     title: string
     requirement?: string
     docs?: DocRef[]
@@ -121,29 +123,6 @@ export const useNodeStore = defineStore('node', () => {
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : '删除节点失败'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function splitNode(params: {
-    title: string
-    requirement: string
-    inheritContext?: boolean
-  }) {
-    const workspaceId = workspaceStore.currentWorkspace?.id
-    const nodeId = selectedNodeId.value
-    if (!workspaceId || !nodeId) throw new Error('未选择节点')
-
-    loading.value = true
-    error.value = null
-    try {
-      const result = await nodeApi.split(workspaceId, nodeId, params)
-      await fetchNodeTree()
-      return result
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : '分裂节点失败'
       throw e
     } finally {
       loading.value = false
@@ -212,7 +191,6 @@ export const useNodeStore = defineStore('node', () => {
     createNode,
     updateNode,
     deleteNode,
-    splitNode,
     transition,
     setFocus,
     clearSelection,

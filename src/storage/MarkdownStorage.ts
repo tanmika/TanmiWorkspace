@@ -2,7 +2,7 @@
 
 import type { FileSystemAdapter } from "./FileSystemAdapter.js";
 import type { WorkspaceMdData, LogEntry, ProblemData, DocRef } from "../types/workspace.js";
-import type { NodeInfoData, NodeStatus } from "../types/node.js";
+import type { NodeInfoData, NodeStatus, NodeType } from "../types/node.js";
 import type { DocRefWithStatus, TypedLogEntry } from "../types/context.js";
 import { formatShort } from "../utils/time.js";
 
@@ -285,6 +285,7 @@ ${data.goal}
 
     return {
       id: parsed.frontmatter.id as string || nodeId,
+      type: (parsed.frontmatter.type as NodeType) || "execution",
       title: parsed.frontmatter.title as string || "",
       status: (parsed.frontmatter.status as NodeStatus) || "pending",
       createdAt: parsed.frontmatter.createdAt as string || "",
@@ -306,13 +307,20 @@ ${data.goal}
       ? data.docs.map(doc => `- [${doc.description}](${doc.path})`).join("\n")
       : "";
 
+    const typeLabel = data.type === "planning" ? "规划" : "执行";
+
     const content = `---
 id: ${data.id}
+type: ${data.type}
 title: ${data.title}
 status: ${data.status}
 createdAt: ${data.createdAt}
 updatedAt: ${data.updatedAt}
 ---
+
+## 节点类型
+
+${typeLabel}节点
 
 ## 需求
 
@@ -731,6 +739,7 @@ ${data.nextStep}
 
     return {
       id: parsed.frontmatter.id as string || nodeId,
+      type: (parsed.frontmatter.type as NodeType) || "execution",
       title: parsed.frontmatter.title as string || "",
       status: (parsed.frontmatter.status as NodeStatus) || "pending",
       createdAt: parsed.frontmatter.createdAt as string || "",
@@ -827,13 +836,20 @@ ${data.nextStep}
       docsContent = data.docs.map(doc => `- [${doc.description}](${doc.path})`).join("\n");
     }
 
+    const typeLabel = data.type === "planning" ? "规划" : "执行";
+
     const content = `---
 id: ${data.id}
+type: ${data.type}
 title: ${data.title}
 status: ${data.status}
 createdAt: ${data.createdAt}
 updatedAt: ${data.updatedAt}
 ---
+
+## 节点类型
+
+${typeLabel}节点
 
 ## 需求
 

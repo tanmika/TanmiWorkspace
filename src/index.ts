@@ -156,6 +156,7 @@ function createMcpServer(services: Services): Server {
           result = await services.node.create({
             workspaceId: args?.workspaceId as string,
             parentId: args?.parentId as string,
+            type: args?.type as "planning" | "execution",
             title: args?.title as string,
             requirement: args?.requirement as string | undefined,
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
@@ -184,17 +185,7 @@ function createMcpServer(services: Services): Server {
           });
           break;
 
-        // Phase 3: 节点分裂与更新
-        case "node_split":
-          result = await services.node.split({
-            workspaceId: args?.workspaceId as string,
-            parentId: args?.parentId as string,
-            title: args?.title as string,
-            requirement: args?.requirement as string,
-            inheritContext: args?.inheritContext as boolean | undefined,
-          });
-          break;
-
+        // Phase 3: 节点更新
         case "node_update":
           result = await services.node.update({
             workspaceId: args?.workspaceId as string,
