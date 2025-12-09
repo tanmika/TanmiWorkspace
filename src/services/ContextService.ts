@@ -89,23 +89,27 @@ export class ContextService {
     }
 
     // 6. 收集子节点结论（completed/failed 状态的直接子节点）
+    // 内容数据以 Info.md 为权威来源
     const childConclusions: ChildConclusionItem[] = [];
     for (const childId of nodeMeta.children) {
       const childMeta = graph.nodes[childId];
       if (childMeta && (childMeta.status === "completed" || childMeta.status === "failed")) {
         const childInfo = await this.md.readNodeInfo(projectRoot, workspaceId, childId);
-        if (childMeta.conclusion) {
+        if (childInfo.conclusion) {
           childConclusions.push({
             nodeId: childId,
             title: childInfo.title,
             status: childMeta.status,
-            conclusion: childMeta.conclusion,
+            conclusion: childInfo.conclusion,
           });
         }
       }
     }
 
-    // 7. 返回结果
+    // 7. 生成工作流提示
+    const hint = this.generateHint(nodeMeta, chain);
+
+    // 8. 返回结果
     return {
       workspace: {
         goal: workspaceData.goal,
@@ -115,7 +119,37 @@ export class ContextService {
       chain,
       references,
       childConclusions,
+      hint,
     };
+  }
+
+  /**
+   * 根据节点状态生成工作流提示
+   */
+  private generateHint(nodeMeta: { status: string }, chain: ContextChainItem[]): string {
+    const currentNode = chain[chain.length - 1];
+    const logCount = currentNode?.logEntries?.length ?? 0;
+
+    switch (nodeMeta.status) {
+      case "pending":
+        return "💡 节点待执行。请调用 node_transition(action=\"start\") 开始执行。";
+      case "implementing":
+        if (logCount === 0) {
+          return "💡 任务执行中，但尚未记录日志。请使用 log_append 记录分析过程和关键发现。";
+        } else if (logCount < 3) {
+          return "💡 任务执行中。继续使用 log_append 记录进展，完成后调用 node_transition(action=\"complete\")。";
+        } else {
+          return "💡 任务执行中，日志已较多。考虑是否需要 node_split 分裂子任务，或准备 complete 完成当前任务。";
+        }
+      case "validating":
+        return "💡 任务验证中。验证通过请 complete，验证失败请 fail。";
+      case "completed":
+        return "💡 任务已完成。如需修改请 reopen，或切换到其他任务。";
+      case "failed":
+        return "💡 任务已失败。分析原因后可 retry 重试。";
+      default:
+        return "";
+    }
   }
 
   /**
@@ -214,7 +248,8 @@ export class ContextService {
       requirement: info.requirement,
       docs,
       note: info.notes,
-      conclusion: nodeMeta.conclusion ?? undefined,
+      // 内容数据以 Info.md 为权威来源
+      conclusion: info.conclusion || undefined,
     };
 
     // 包含日志

@@ -3,6 +3,7 @@
 
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { TanmiError, ErrorCode } from "../../types/errors.js";
+import { getServices } from "../services.js";
 
 /**
  * 错误码到 HTTP 状态码的映射
@@ -41,26 +42,40 @@ export interface ErrorResponse {
   error: {
     code: string;
     message: string;
+    availableWorkspaces?: unknown[];
   };
 }
 
 /**
  * Fastify 错误处理器
  */
-export function errorHandler(
+export async function errorHandler(
   error: FastifyError | Error,
   _request: FastifyRequest,
   reply: FastifyReply
-): void {
+): Promise<void> {
   // TanmiError 业务错误
   if (error instanceof TanmiError) {
     const status = ERROR_STATUS_MAP[error.code] || 400;
-    reply.status(status).send({
+    const errorResponse: ErrorResponse = {
       error: {
         code: error.code,
         message: error.message,
       },
-    } as ErrorResponse);
+    };
+
+    // 对于 WORKSPACE_NOT_FOUND 错误，附加活跃工作区列表以帮助恢复
+    if (error.code === "WORKSPACE_NOT_FOUND") {
+      try {
+        const services = getServices();
+        const listResult = await services.workspace.list({ status: "active" });
+        errorResponse.error.availableWorkspaces = listResult.workspaces;
+      } catch {
+        // 获取列表失败时忽略，不影响错误响应
+      }
+    }
+
+    reply.status(status).send(errorResponse);
     return;
   }
 

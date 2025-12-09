@@ -236,7 +236,7 @@ node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete",
 ### 状态
 | 工具 | 说明 |
 |------|------|
-| `node_transition` | 状态转换（start/submit/complete/pass/fail/retry） |
+| `node_transition` | 状态转换（start/submit/complete/fail/retry/reopen） |
 
 ### 上下文
 | 工具 | 说明 |
@@ -303,15 +303,24 @@ tanmi_prompt({ template: "confirm_workspace", params: { name: "任务名", goal:
 └── .tanmi-workspace/
     └── [workspace-id]/
         ├── workspace.json         # 元数据（含 projectRoot）
-        ├── graph.json             # 节点拓扑
+        ├── graph.json             # 节点拓扑（结构数据权威来源）
         ├── Workspace.md           # 规则、文档、目标
         ├── Log.md                 # 全局日志
         ├── Problem.md             # 全局问题
         └── nodes/[node-id]/
-            ├── Info.md            # 节点需求与引用
+            ├── Info.md            # 节点需求与结论（内容数据权威来源）
             ├── Log.md             # 节点日志
             └── Problem.md         # 节点问题
 ```
+
+### 分层数据源
+
+| 数据类型 | 权威来源 | 可直接编辑 |
+|---------|---------|----------|
+| 内容数据（requirement, conclusion, notes） | Info.md | ✅ 本地编辑即生效 |
+| 结构数据（status, children, references） | graph.json | ❌ 需通过 API |
+
+> 详见 [docs/architecture.md](docs/architecture.md) 的"数据源规范"章节
 
 ## 开发
 

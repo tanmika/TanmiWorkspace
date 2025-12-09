@@ -9,6 +9,7 @@ export const ErrorCodes = {
   WORKSPACE_NOT_FOUND: "WORKSPACE_NOT_FOUND",
   WORKSPACE_ACTIVE: "WORKSPACE_ACTIVE",
   INVALID_NAME: "INVALID_NAME",
+  INVALID_PATH: "INVALID_PATH",
   INIT_FAILED: "INIT_FAILED",
 
   // 节点错误
@@ -63,6 +64,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   WORKSPACE_NOT_FOUND: "工作区不存在",
   WORKSPACE_ACTIVE: "工作区处于活动状态，无法删除（使用 force 强制删除）",
   INVALID_NAME: "名称不合法，不能包含特殊字符: / \\ : * ? \" < > |",
+  INVALID_PATH: "路径不合法或不存在",
   INIT_FAILED: "工作区初始化失败",
   NODE_NOT_FOUND: "节点不存在",
   PARENT_NOT_FOUND: "父节点不存在",

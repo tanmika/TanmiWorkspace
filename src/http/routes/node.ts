@@ -10,6 +10,7 @@ import type {
   NodeDeleteParams,
   NodeSplitParams,
   NodeUpdateParams,
+  NodeMoveParams,
   DocRef,
 } from "../../types/index.js";
 
@@ -41,10 +42,113 @@ interface SplitNodeBody {
   inheritContext?: boolean;
 }
 
+interface MoveNodeBody {
+  newParentId: string;
+}
+
 interface ListNodesQuery {
   rootId?: string;
   depth?: string;
 }
+
+// JSON Schema 定义
+const workspaceIdSchema = {
+  params: {
+    type: "object",
+    required: ["wid"],
+    properties: {
+      wid: { type: "string", minLength: 1, maxLength: 50 }
+    }
+  }
+};
+
+const nodeIdSchema = {
+  params: {
+    type: "object",
+    required: ["wid", "nid"],
+    properties: {
+      wid: { type: "string", minLength: 1, maxLength: 50 },
+      nid: { type: "string", minLength: 1, maxLength: 50 }
+    }
+  }
+};
+
+const createNodeSchema = {
+  ...workspaceIdSchema,
+  body: {
+    type: "object",
+    required: ["parentId", "title"],
+    properties: {
+      parentId: { type: "string", minLength: 1, maxLength: 50 },
+      title: { type: "string", minLength: 1, maxLength: 100 },
+      requirement: { type: "string", maxLength: 5000 },
+      docs: {
+        type: "array",
+        maxItems: 100,
+        items: {
+          type: "object",
+          required: ["path", "description"],
+          properties: {
+            path: { type: "string", minLength: 1, maxLength: 500 },
+            description: { type: "string", maxLength: 200 }
+          }
+        }
+      }
+    },
+    additionalProperties: false
+  }
+};
+
+const listNodesSchema = {
+  ...workspaceIdSchema,
+  querystring: {
+    type: "object",
+    properties: {
+      rootId: { type: "string", maxLength: 50 },
+      depth: { type: "string", pattern: "^\\d+$" }
+    },
+    additionalProperties: false
+  }
+};
+
+const updateNodeSchema = {
+  ...nodeIdSchema,
+  body: {
+    type: "object",
+    properties: {
+      title: { type: "string", minLength: 1, maxLength: 100 },
+      requirement: { type: "string", maxLength: 5000 },
+      note: { type: "string", maxLength: 2000 }
+    },
+    additionalProperties: false
+  }
+};
+
+const splitNodeSchema = {
+  ...nodeIdSchema,
+  body: {
+    type: "object",
+    required: ["title", "requirement"],
+    properties: {
+      title: { type: "string", minLength: 1, maxLength: 100 },
+      requirement: { type: "string", minLength: 1, maxLength: 5000 },
+      inheritContext: { type: "boolean" }
+    },
+    additionalProperties: false
+  }
+};
+
+const moveNodeSchema = {
+  ...nodeIdSchema,
+  body: {
+    type: "object",
+    required: ["newParentId"],
+    properties: {
+      newParentId: { type: "string", minLength: 1, maxLength: 50 }
+    },
+    additionalProperties: false
+  }
+};
 
 export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
   const services = getServices();
@@ -54,6 +158,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post<{ Params: WorkspaceIdParams; Body: CreateNodeBody }>(
     "/workspaces/:wid/nodes",
+    { schema: createNodeSchema },
     async (
       request: FastifyRequest<{ Params: WorkspaceIdParams; Body: CreateNodeBody }>,
       reply: FastifyReply
@@ -75,6 +180,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get<{ Params: WorkspaceIdParams; Querystring: ListNodesQuery }>(
     "/workspaces/:wid/nodes",
+    { schema: listNodesSchema },
     async (request: FastifyRequest<{ Params: WorkspaceIdParams; Querystring: ListNodesQuery }>) => {
       const params: NodeListParams = {
         workspaceId: request.params.wid,
@@ -90,6 +196,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get<{ Params: NodeIdParams }>(
     "/workspaces/:wid/nodes/:nid",
+    { schema: nodeIdSchema },
     async (request: FastifyRequest<{ Params: NodeIdParams }>) => {
       const params: NodeGetParams = {
         workspaceId: request.params.wid,
@@ -104,6 +211,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.patch<{ Params: NodeIdParams; Body: UpdateNodeBody }>(
     "/workspaces/:wid/nodes/:nid",
+    { schema: updateNodeSchema },
     async (request: FastifyRequest<{ Params: NodeIdParams; Body: UpdateNodeBody }>) => {
       const params: NodeUpdateParams = {
         workspaceId: request.params.wid,
@@ -121,6 +229,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.delete<{ Params: NodeIdParams }>(
     "/workspaces/:wid/nodes/:nid",
+    { schema: nodeIdSchema },
     async (request: FastifyRequest<{ Params: NodeIdParams }>) => {
       const params: NodeDeleteParams = {
         workspaceId: request.params.wid,
@@ -135,6 +244,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post<{ Params: NodeIdParams; Body: SplitNodeBody }>(
     "/workspaces/:wid/nodes/:nid/split",
+    { schema: splitNodeSchema },
     async (
       request: FastifyRequest<{ Params: NodeIdParams; Body: SplitNodeBody }>,
       reply: FastifyReply
@@ -148,6 +258,22 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
       };
       const result = await services.node.split(params);
       reply.status(201).send(result);
+    }
+  );
+
+  /**
+   * POST /api/workspaces/:wid/nodes/:nid/move - 移动节点
+   */
+  fastify.post<{ Params: NodeIdParams; Body: MoveNodeBody }>(
+    "/workspaces/:wid/nodes/:nid/move",
+    { schema: moveNodeSchema },
+    async (request: FastifyRequest<{ Params: NodeIdParams; Body: MoveNodeBody }>) => {
+      const params: NodeMoveParams = {
+        workspaceId: request.params.wid,
+        nodeId: request.params.nid,
+        newParentId: request.body.newParentId,
+      };
+      return services.node.move(params);
     }
   );
 }

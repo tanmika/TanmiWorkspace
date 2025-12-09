@@ -16,6 +16,8 @@ import type {
   NodeSplitResult,
   NodeUpdateParams,
   NodeUpdateResult,
+  NodeMoveParams,
+  NodeMoveResult,
   NodeMeta,
   NodeTreeItem,
   NodeInfoData,
@@ -123,6 +125,7 @@ export class NodeService {
     return {
       nodeId,
       path: nodePath,
+      hint: "💡 节点已创建。下一步：调用 node_transition(action=\"start\") 开始执行，或继续创建更多子节点进行任务分解。",
     };
   }
 
@@ -266,6 +269,21 @@ export class NodeService {
     // 移除所有被删除的节点
     for (const id of deletedNodes) {
       delete graph.nodes[id];
+    }
+
+    // 清理其他节点中对被删除节点的引用
+    const deletedSet = new Set(deletedNodes);
+    for (const otherNodeId of Object.keys(graph.nodes)) {
+      const otherNode = graph.nodes[otherNodeId];
+      if (otherNode.references.length > 0) {
+        const originalLength = otherNode.references.length;
+        otherNode.references = otherNode.references.filter(
+          refId => !deletedSet.has(refId)
+        );
+        if (otherNode.references.length < originalLength) {
+          otherNode.updatedAt = currentTime;
+        }
+      }
     }
 
     // 如果当前聚焦的节点被删除，重置聚焦
@@ -416,6 +434,7 @@ export class NodeService {
     return {
       nodeId,
       path: nodePath,
+      hint: "💡 子节点已创建并自动聚焦。节点状态为 implementing，请使用 log_append 记录分析过程。",
     };
   }
 
@@ -487,6 +506,98 @@ export class NodeService {
     return {
       success: true,
       updatedAt: currentTime,
+    };
+  }
+
+  /**
+   * 移动节点到新的父节点
+   */
+  async move(params: NodeMoveParams): Promise<NodeMoveResult> {
+    const { workspaceId, nodeId, newParentId } = params;
+
+    // 1. 获取 projectRoot
+    const projectRoot = await this.resolveProjectRoot(workspaceId);
+
+    // 2. 读取图结构
+    const graph = await this.json.readGraph(projectRoot, workspaceId);
+
+    // 3. 验证节点存在
+    const nodeMeta = graph.nodes[nodeId];
+    if (!nodeMeta) {
+      throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
+    }
+
+    // 4. 不能移动根节点
+    if (nodeId === "root") {
+      throw new TanmiError("INVALID_TRANSITION", "根节点无法移动");
+    }
+
+    // 5. 验证新父节点存在
+    const newParentMeta = graph.nodes[newParentId];
+    if (!newParentMeta) {
+      throw new TanmiError("PARENT_NOT_FOUND", `目标父节点 "${newParentId}" 不存在`);
+    }
+
+    // 6. 防止循环依赖：不能把节点移到自己的子节点下
+    const isDescendant = (ancestorId: string, descendantId: string): boolean => {
+      const ancestor = graph.nodes[ancestorId];
+      if (!ancestor) return false;
+      for (const childId of ancestor.children) {
+        if (childId === descendantId) return true;
+        if (isDescendant(childId, descendantId)) return true;
+      }
+      return false;
+    };
+
+    if (isDescendant(nodeId, newParentId)) {
+      throw new TanmiError("INVALID_TRANSITION", "不能将节点移动到其子节点下");
+    }
+
+    // 7. 如果已经在目标父节点下，无需移动
+    const previousParentId = nodeMeta.parentId;
+    if (previousParentId === newParentId) {
+      return {
+        success: true,
+        previousParentId,
+        newParentId,
+      };
+    }
+
+    const currentTime = now();
+
+    // 8. 从旧父节点的 children 中移除
+    if (previousParentId && graph.nodes[previousParentId]) {
+      graph.nodes[previousParentId].children = graph.nodes[previousParentId].children.filter(
+        (id) => id !== nodeId
+      );
+      graph.nodes[previousParentId].updatedAt = currentTime;
+    }
+
+    // 9. 添加到新父节点的 children
+    newParentMeta.children.push(nodeId);
+    newParentMeta.updatedAt = currentTime;
+
+    // 10. 更新节点的 parentId
+    nodeMeta.parentId = newParentId;
+    nodeMeta.updatedAt = currentTime;
+
+    // 11. 保存图结构
+    await this.json.writeGraph(projectRoot, workspaceId, graph);
+
+    // 12. 读取节点 Info.md 获取标题用于日志
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+
+    // 13. 记录日志
+    await this.md.appendLog(projectRoot, workspaceId, {
+      time: currentTime,
+      operator: "AI",
+      event: `移动节点 "${nodeInfo.title}" 到 ${newParentId === "root" ? "根节点" : newParentId}`,
+    }, nodeId);
+
+    return {
+      success: true,
+      previousParentId,
+      newParentId,
     };
   }
 }

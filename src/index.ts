@@ -205,6 +205,14 @@ function createMcpServer(services: Services): Server {
           });
           break;
 
+        case "node_move":
+          result = await services.node.move({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+            newParentId: args?.newParentId as string,
+          });
+          break;
+
         // Phase 2: 状态转换工具
         case "node_transition":
           result = await services.state.transition({
@@ -305,16 +313,28 @@ function createMcpServer(services: Services): Server {
       };
     } catch (error) {
       if (error instanceof TanmiError) {
+        // 对于 WORKSPACE_NOT_FOUND 错误，附加活跃工作区列表以帮助恢复
+        let errorResponse: { error: { code: string; message: string; availableWorkspaces?: unknown[] } } = {
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        };
+
+        if (error.code === "WORKSPACE_NOT_FOUND") {
+          try {
+            const listResult = await services.workspace.list({ status: "active" });
+            errorResponse.error.availableWorkspaces = listResult.workspaces;
+          } catch {
+            // 获取列表失败时忽略，不影响错误响应
+          }
+        }
+
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({
-                error: {
-                  code: error.code,
-                  message: error.message,
-                },
-              }, null, 2),
+              text: JSON.stringify(errorResponse, null, 2),
             },
           ],
           isError: true,

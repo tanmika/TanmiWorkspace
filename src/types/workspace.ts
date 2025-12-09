@@ -96,6 +96,7 @@ export interface WorkspaceInitResult {
   projectRoot: string;              // 实际使用的项目根目录
   rootNodeId: string;
   webUrl?: string;                  // Web 访问地址（如果服务运行中）
+  hint?: string;                    // 工作流提示
 }
 
 /**

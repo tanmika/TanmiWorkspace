@@ -21,7 +21,7 @@ import type { NodeGraph, NodeMeta } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { generateWorkspaceId } from "../utils/id.js";
 import { now } from "../utils/time.js";
-import { validateWorkspaceName } from "../utils/validation.js";
+import { validateWorkspaceName, validateProjectRoot } from "../utils/validation.js";
 
 /**
  * 获取 HTTP 服务端口
@@ -55,9 +55,9 @@ export class WorkspaceService {
     // 1. 验证名称合法性
     validateWorkspaceName(params.name);
 
-    // 2. 确定项目根目录（默认为当前工作目录）
+    // 2. 确定并验证项目根目录（默认为当前工作目录）
     const projectRoot = params.projectRoot
-      ? path.resolve(params.projectRoot)
+      ? validateProjectRoot(params.projectRoot)
       : process.cwd();
 
     // 3. 检查同一项目下是否存在同名工作区（允许多工作区，但名称需唯一）
@@ -165,6 +165,7 @@ export class WorkspaceService {
       projectRoot,
       rootNodeId,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
+      hint: "💡 工作区已创建。下一步：使用 node_create 创建子节点来分解任务，然后 node_transition(action=\"start\") 开始执行。",
     };
   }
 

@@ -106,7 +106,7 @@ export const CORE_WORKFLOW = `
 
 ### 3. 状态流转规则
 \`\`\`
-pending ──start──→ implementing ──submit──→ validating ──pass──→ completed
+pending ──start──→ implementing ──submit──→ validating ──complete──→ completed
                         │                       │                     │
                         │ complete              │ fail                │ reopen
                         ↓                       ↓                     ↓
@@ -174,8 +174,7 @@ export const TOOLS_QUICK_REFERENCE = `
 |------|-----------|------|
 | node_transition | start | pending → implementing |
 | node_transition | submit | implementing → validating |
-| node_transition | complete | implementing → completed |
-| node_transition | pass | validating → completed |
+| node_transition | complete | implementing/validating → completed |
 | node_transition | fail | validating → failed |
 | node_transition | retry | failed → implementing |
 | node_transition | reopen | completed → implementing |
@@ -273,6 +272,54 @@ context_get({ workspaceId: "xxx", nodeId: "current-focus", includeLog: true })
 > "找到了，上次我们在处理 [节点名称]，当前状态是 [状态]。"
 > "上次记录的问题是：[问题内容]"
 > "我们继续吗？"
+`,
+
+  // 会话恢复（从摘要恢复）
+  "session_restore": `
+## 场景：会话从摘要恢复
+
+### 当会话因上下文过长被截断，从摘要恢复时：
+
+**重要**：摘要中的工作区 ID 可能已经失效（工作区被删除/重建、环境变化等）。
+必须先验证 ID 是否有效，再进行后续操作。
+
+**步骤 1：验证工作区 ID**
+\`\`\`typescript
+// 先尝试获取摘要中的工作区
+workspace_get({ workspaceId: "摘要中的ID" })
+\`\`\`
+
+**步骤 2：如果 ID 无效（返回 WORKSPACE_NOT_FOUND）**
+
+错误响应会**自动包含**活跃工作区列表，无需额外调用 workspace_list()：
+\`\`\`json
+{
+  "error": {
+    "code": "WORKSPACE_NOT_FOUND",
+    "message": "工作区 \"ws-xxx\" 不存在",
+    "availableWorkspaces": [
+      { "id": "ws-yyy", "name": "TanmiWorkspace 查缺补漏", "status": "active" },
+      ...
+    ]
+  }
+}
+\`\`\`
+
+直接从错误响应的 \`availableWorkspaces\` 中通过名称或项目路径匹配正确的工作区。
+
+**步骤 3：继续执行**
+使用匹配到的正确 ID 继续之前的任务。
+
+**错误处理原则**：
+- WORKSPACE_NOT_FOUND 错误响应已包含可用工作区列表，直接使用
+- 通过名称或 projectRoot 匹配摘要中的工作区信息
+- 如果无法找到匹配的工作区，告知用户情况
+
+**示例**：
+摘要显示工作区 "TanmiWorkspace 查缺补漏" (ID: ws-xxx)
+1. 尝试任意工作区操作 → 返回 WORKSPACE_NOT_FOUND
+2. 从 error.availableWorkspaces 中找到名称匹配的 ws-yyy
+3. 使用 ws-yyy 继续执行
 `,
 
   // 任务受阻
@@ -565,6 +612,10 @@ export const HELP_TOPICS: Record<string, { title: string; content: string }> = {
   "resume": {
     title: "如何继续任务",
     content: SCENARIO_GUIDES["resume_task"]
+  },
+  "session_restore": {
+    title: "会话恢复（从摘要恢复）",
+    content: SCENARIO_GUIDES["session_restore"]
   },
   "blocked": {
     title: "任务受阻时怎么办",

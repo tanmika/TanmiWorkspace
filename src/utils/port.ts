@@ -23,6 +23,7 @@ export function isPortInUse(port: number): Promise<boolean> {
       resolve(false);
     });
 
-    server.listen(port, "0.0.0.0");
+    // 使用 127.0.0.1 检测本地端口占用（安全）
+    server.listen(port, "127.0.0.1");
   });
 }

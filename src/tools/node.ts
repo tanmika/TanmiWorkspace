@@ -189,6 +189,35 @@ export const nodeUpdateTool: Tool = {
 };
 
 /**
+ * node_move 工具定义
+ */
+export const nodeMoveTool: Tool = {
+  name: "node_move",
+  description: `移动节点到新的父节点下，用于重组节点层级结构。
+- 根节点无法移动
+- 不能将节点移动到其自身的子节点下（防止循环依赖）
+- 节点本身的数据（标题、需求、状态等）保持不变`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+      nodeId: {
+        type: "string",
+        description: "要移动的节点 ID",
+      },
+      newParentId: {
+        type: "string",
+        description: "目标父节点 ID",
+      },
+    },
+    required: ["workspaceId", "nodeId", "newParentId"],
+  },
+};
+
+/**
  * 所有节点工具
  */
 export const nodeTools: Tool[] = [
@@ -198,4 +227,5 @@ export const nodeTools: Tool[] = [
   nodeDeleteTool,
   nodeSplitTool,
   nodeUpdateTool,
+  nodeMoveTool,
 ];

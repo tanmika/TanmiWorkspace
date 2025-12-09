@@ -56,6 +56,7 @@ export interface ContextGetResult {
   chain: ContextChainItem[];   // 从根到当前节点的上下文链
   references: ContextChainItem[]; // 跨节点引用（仅 active）
   childConclusions: ChildConclusionItem[]; // 子节点结论冒泡
+  hint?: string;                // 工作流提示
 }
 
 // ========== API 输入输出类型 ==========
@@ -164,6 +165,7 @@ export interface ProblemUpdateParams {
  */
 export interface ProblemUpdateResult {
   success: boolean;
+  hint?: string;
 }
 
 /**

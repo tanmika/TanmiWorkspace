@@ -7,6 +7,7 @@ import type {
   WorkspaceConfig,
   WorkspaceInitParams,
   NodeGraph,
+  WorkspaceStatusResult,
 } from '@/types'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
@@ -14,6 +15,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const workspaces = ref<WorkspaceEntry[]>([])
   const currentWorkspace = ref<WorkspaceConfig | null>(null)
   const currentGraph = ref<NodeGraph | null>(null)
+  const currentStatus = ref<WorkspaceStatusResult['summary'] | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -50,11 +52,24 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const result = await workspaceApi.get(id)
       currentWorkspace.value = result.config
       currentGraph.value = result.graph
+      // 同时获取状态摘要
+      const statusResult = await workspaceApi.status(id)
+      currentStatus.value = statusResult.summary
     } catch (e) {
       error.value = e instanceof Error ? e.message : '获取工作区详情失败'
       throw e
     } finally {
       loading.value = false
+    }
+  }
+
+  async function fetchStatus(id: string) {
+    try {
+      const result = await workspaceApi.status(id)
+      currentStatus.value = result.summary
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '获取工作区状态失败'
+      throw e
     }
   }
 
@@ -94,6 +109,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   function clearCurrent() {
     currentWorkspace.value = null
     currentGraph.value = null
+    currentStatus.value = null
   }
 
   return {
@@ -101,6 +117,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workspaces,
     currentWorkspace,
     currentGraph,
+    currentStatus,
     loading,
     error,
     // 计算属性
@@ -110,6 +127,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     // 方法
     fetchWorkspaces,
     fetchWorkspace,
+    fetchStatus,
     createWorkspace,
     deleteWorkspace,
     clearCurrent,

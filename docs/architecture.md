@@ -111,6 +111,41 @@ http://localhost:5173/api/* → 代理到 → http://localhost:3001/api/*
 
 **关键行为**：端口占用时静默跳过 HTTP，MCP 继续正常工作。
 
+## 数据源规范
+
+TanmiWorkspace 采用**分层数据源**设计，不同类型的数据有不同的权威来源：
+
+| 数据类型 | 权威来源 | 字段 | 说明 |
+|---------|---------|------|------|
+| **内容数据** | Info.md | requirement, conclusion, notes | 用户可直接编辑 Markdown 文件 |
+| **结构数据** | graph.json | status, children, references | 状态机逻辑由 API 控制 |
+
+### 设计原则
+
+1. **本地编辑友好**：用户打开 `Info.md` 修改需求/结论，保存即生效
+2. **Web 编辑一致**：Web UI 编辑也是修改 `Info.md`，与本地编辑走同一条路
+3. **结构可控**：状态转换有业务逻辑约束，必须通过 API 控制
+
+### 读取优先级
+
+```
+内容数据（requirement, conclusion, notes）
+└── 读取来源：Info.md
+└── 写入目标：Info.md（+ graph.json 作为缓存）
+
+结构数据（status, children, references）
+└── 读取来源：graph.json
+└── 写入目标：graph.json（+ Info.md frontmatter 同步）
+```
+
+### 编辑方式对照
+
+| 编辑方式 | 内容数据 | 结构数据 |
+|---------|---------|---------|
+| 本地编辑 Info.md | ✅ 生效 | ⚠️ frontmatter 中的 status 仅展示用 |
+| Web UI 编辑 | ✅ 通过 API 修改 Info.md | ✅ 通过 API 修改 graph.json |
+| MCP 工具 | ✅ 调用 node_update | ✅ 调用 node_transition |
+
 ## 日志规范
 
 | 标签 | 输出 | 示例 |

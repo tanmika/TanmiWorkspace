@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore, useWorkspaceStore } from '@/stores'
 import { STATUS_CONFIG, type TransitionAction } from '@/types'
 import StatusIcon from '@/components/common/StatusIcon.vue'
+import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import LogTimeline from '@/components/log/LogTimeline.vue'
 
 const nodeStore = useNodeStore()
@@ -162,9 +163,7 @@ async function handleSplit() {
       <template #header>
         <span>需求描述</span>
       </template>
-      <div class="requirement">
-        {{ currentNode.requirement || '暂无描述' }}
-      </div>
+      <MarkdownContent :content="currentNode.requirement || '暂无描述'" />
     </el-card>
 
     <!-- 结论（已完成节点） -->
@@ -172,9 +171,7 @@ async function handleSplit() {
       <template #header>
         <span>结论</span>
       </template>
-      <div class="conclusion">
-        {{ nodeMeta.conclusion }}
-      </div>
+      <MarkdownContent :content="nodeMeta.conclusion" />
     </el-card>
 
     <!-- 当前问题 -->
@@ -182,9 +179,7 @@ async function handleSplit() {
       <template #header>
         <span>当前问题</span>
       </template>
-      <div class="problem">
-        {{ currentNode.problem }}
-      </div>
+      <MarkdownContent :content="currentNode.problem" />
     </el-card>
 
     <!-- 日志时间线 -->
@@ -286,12 +281,6 @@ async function handleSplit() {
   color: #303133;
 }
 
-.requirement,
-.conclusion,
-.problem {
-  white-space: pre-wrap;
-  line-height: 1.6;
-}
 
 .problem-card {
   border-color: #e6a23c;

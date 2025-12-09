@@ -25,30 +25,58 @@ export class MarkdownStorage {
 
   /**
    * 解析 Markdown 内容（提取 frontmatter 和正文）
+   * 增强健壮性：处理各种边界情况和格式变体
    */
   parse(content: string): ParsedMarkdown {
-    const frontmatterRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
-    const match = content.match(frontmatterRegex);
+    // 处理空内容
+    if (!content || typeof content !== "string") {
+      return {
+        frontmatter: {},
+        content: ""
+      };
+    }
+
+    // 规范化换行符（处理 Windows \r\n）
+    const normalizedContent = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    // 更宽松的 frontmatter 正则：允许开头有空白，末尾可选换行
+    const frontmatterRegex = /^\s*---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
+    const match = normalizedContent.match(frontmatterRegex);
 
     if (!match) {
       return {
         frontmatter: {},
-        content: content
+        content: normalizedContent.trim()
       };
     }
 
     const frontmatterStr = match[1];
     const body = match[2];
 
-    // 简单的 YAML 解析（只处理 key: value 格式）
+    // 增强的 YAML 解析（处理引号值、冒号在值中等情况）
     const frontmatter: Record<string, unknown> = {};
     const lines = frontmatterStr.split("\n");
     for (const line of lines) {
+      // 跳过空行和注释
+      const trimmedLine = line.trim();
+      if (!trimmedLine || trimmedLine.startsWith("#")) {
+        continue;
+      }
+
       const colonIndex = line.indexOf(":");
       if (colonIndex !== -1) {
         const key = line.substring(0, colonIndex).trim();
-        const value = line.substring(colonIndex + 1).trim();
-        frontmatter[key] = value;
+        let value = line.substring(colonIndex + 1).trim();
+
+        // 处理引号包裹的值（支持单引号和双引号）
+        if ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+
+        if (key) {
+          frontmatter[key] = value;
+        }
       }
     }
 
@@ -56,6 +84,42 @@ export class MarkdownStorage {
       frontmatter,
       content: body
     };
+  }
+
+  /**
+   * 安全地提取 section 内容
+   * @param content Markdown 内容
+   * @param sectionName section 名称（不含 ##）
+   * @param isLast 是否是最后一个 section（不需要后续 section 作为结束标记）
+   * @returns 提取的内容，如果未找到返回空字符串
+   */
+  private extractSection(content: string, sectionName: string, isLast = false): string {
+    if (!content) return "";
+
+    // 规范化换行符
+    const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    // 构建更宽松的正则：允许 section 标题后有可选的提示行（> 开头）
+    const pattern = isLast
+      ? new RegExp(`## ${sectionName}\\n\\n(?:>.*\\n\\n)?([\\s\\S]*)$`)
+      : new RegExp(`## ${sectionName}\\n\\n(?:>.*\\n\\n)?([\\s\\S]*?)(?=\\n## |$)`);
+
+    const match = normalized.match(pattern);
+    return match ? match[1].trim() : "";
+  }
+
+  /**
+   * 安全解析列表项
+   * @param content section 内容
+   * @returns 列表项数组
+   */
+  private parseListItems(content: string): string[] {
+    if (!content) return [];
+    return content
+      .split("\n")
+      .filter(line => line.trim().startsWith("- "))
+      .map(line => line.trim().substring(2).trim())
+      .filter(item => item.length > 0);
   }
 
   /**
@@ -278,6 +342,7 @@ ${data.conclusion}
 
   /**
    * 读取日志
+   * 增强健壮性：处理各种表格格式变体
    */
   async readLog(projectRoot: string, workspaceId: string, nodeId?: string): Promise<LogEntry[]> {
     const logPath = nodeId
@@ -288,21 +353,45 @@ ${data.conclusion}
       return [];
     }
 
-    const content = await this.fs.readFile(logPath);
+    try {
+      const content = await this.fs.readFile(logPath);
+      return this.parseLogTableSafe(content);
+    } catch {
+      // 文件读取或解析失败，返回空数组
+      return [];
+    }
+  }
+
+  /**
+   * 安全解析日志表格
+   * @param content 日志内容
+   * @returns 解析后的日志条目
+   */
+  private parseLogTableSafe(content: string): LogEntry[] {
+    if (!content || typeof content !== "string") {
+      return [];
+    }
+
     const logs: LogEntry[] = [];
 
+    // 规范化换行符
+    const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
     // 解析表格行
-    const lines = content.split("\n");
+    const lines = normalized.split("\n");
     for (const line of lines) {
-      if (line.startsWith("|") && !line.includes("时间") && !line.includes("---")) {
-        const parts = line.split("|").map(p => p.trim()).filter(p => p);
-        if (parts.length >= 3) {
-          logs.push({
-            time: parts[0],
-            operator: parts[1],
-            event: parts[2]
-          });
-        }
+      // 跳过非表格行、表头和分隔线
+      if (!line.startsWith("|")) continue;
+      if (line.includes("时间") || line.includes("Time")) continue;
+      if (/^\|[\s-:|]+\|$/.test(line)) continue;
+
+      const parts = line.split("|").map(p => p.trim()).filter(p => p);
+      if (parts.length >= 3) {
+        logs.push({
+          time: parts[0] || "",
+          operator: parts[1] || "AI",
+          event: parts[2] || ""
+        });
       }
     }
 
@@ -465,23 +554,33 @@ ${data.nextStep}
 
   /**
    * 解析日志表格（返回带类型的日志条目）
+   * 增强健壮性：处理各种表格格式变体
    */
   parseLogTable(content: string): TypedLogEntry[] {
-    const lines = content.split("\n");
+    if (!content || typeof content !== "string") {
+      return [];
+    }
+
+    // 规范化换行符
+    const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const lines = normalized.split("\n");
     const entries: TypedLogEntry[] = [];
 
     for (const line of lines) {
+      // 跳过非表格行
+      if (!line.startsWith("|")) continue;
       // 跳过表头和分隔线
-      if (line.startsWith("|") && !line.includes("---") && !line.includes("时间")) {
-        const cells = line.split("|").map(c => c.trim()).filter(Boolean);
-        if (cells.length >= 3) {
-          const operator = cells[1];
-          entries.push({
-            timestamp: cells[0],
-            operator: operator === "AI" || operator === "Human" ? operator : "AI",
-            event: cells[2],
-          });
-        }
+      if (line.includes("时间") || line.includes("Time")) continue;
+      if (/^\|[\s-:|]+\|$/.test(line)) continue;
+
+      const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+      if (cells.length >= 3) {
+        const operator = cells[1];
+        entries.push({
+          timestamp: cells[0] || "",
+          operator: operator === "AI" || operator === "Human" ? operator : "AI",
+          event: cells[2] || "",
+        });
       }
     }
 

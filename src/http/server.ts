@@ -109,10 +109,12 @@ export async function startServer(port: number = 3000): Promise<FastifyInstance>
   const isDev = isDevelopment();
   const modeLabel = isDev ? "[DEV]" : "[PROD]";
   const dataDir = isDev ? ".tanmi-workspace-dev" : ".tanmi-workspace";
+  // 默认只监听本地地址（安全），可通过 TANMI_HOST 环境变量覆盖
+  const host = process.env.TANMI_HOST || "127.0.0.1";
 
   try {
-    await server.listen({ port, host: "0.0.0.0" });
-    console.log(`${modeLabel} TanmiWorkspace HTTP Server 已启动: http://localhost:${port}`);
+    await server.listen({ port, host });
+    console.log(`${modeLabel} TanmiWorkspace HTTP Server 已启动: http://${host}:${port}`);
     console.log(`${modeLabel} 数据目录: ~/${dataDir}/`);
     return server;
   } catch (err) {

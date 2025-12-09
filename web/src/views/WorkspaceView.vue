@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Plus, List, Share, Refresh } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, List, Share, Refresh, InfoFilled } from '@element-plus/icons-vue'
 import { useWorkspaceStore, useNodeStore } from '@/stores'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
@@ -82,6 +82,16 @@ async function loadWorkspace() {
   }
 }
 
+// 工作区信息栏展开状态
+const showInfoBar = ref(true)
+
+// 进度百分比
+const progressPercent = computed(() => {
+  const status = workspaceStore.currentStatus
+  if (!status || status.totalNodes === 0) return 0
+  return Math.round((status.completedNodes / status.totalNodes) * 100)
+})
+
 // 刷新数据
 const isRefreshing = ref(false)
 async function handleRefresh() {
@@ -154,6 +164,15 @@ async function handleCreateNode() {
       <div class="left">
         <el-button :icon="ArrowLeft" text @click="goBack">返回</el-button>
         <h2>{{ workspaceStore.currentWorkspace?.name }}</h2>
+        <el-tooltip :content="showInfoBar ? '隐藏工作区信息' : '显示工作区信息'" placement="bottom">
+          <el-button
+            :icon="InfoFilled"
+            circle
+            size="small"
+            :type="showInfoBar ? 'primary' : 'default'"
+            @click="showInfoBar = !showInfoBar"
+          />
+        </el-tooltip>
       </div>
       <div class="right">
         <el-tooltip content="刷新数据" placement="bottom">
@@ -167,6 +186,30 @@ async function handleCreateNode() {
         <el-button type="primary" :icon="Plus" @click="openCreateDialog">新建节点</el-button>
       </div>
     </header>
+
+    <!-- 工作区信息栏 -->
+    <transition name="slide">
+      <div v-if="showInfoBar && workspaceStore.currentStatus" class="info-bar">
+        <div class="info-item goal">
+          <span class="label">目标</span>
+          <span class="value">{{ workspaceStore.currentStatus.goal }}</span>
+        </div>
+        <div class="info-item progress">
+          <span class="label">进度</span>
+          <div class="progress-content">
+            <el-progress
+              :percentage="progressPercent"
+              :stroke-width="8"
+              :show-text="false"
+              style="width: 120px"
+            />
+            <span class="progress-text">
+              {{ workspaceStore.currentStatus.completedNodes }}/{{ workspaceStore.currentStatus.totalNodes }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- 主内容区 -->
     <div class="main-content">
@@ -283,6 +326,70 @@ async function handleCreateNode() {
 .header h2 {
   margin: 0;
   font-size: 18px;
+}
+
+/* 信息栏样式 */
+.info-bar {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-item .label {
+  font-size: 12px;
+  color: #909399;
+  font-weight: 500;
+}
+
+.info-item.goal {
+  flex: 1;
+}
+
+.info-item.goal .value {
+  font-size: 14px;
+  color: #303133;
+}
+
+.info-item.progress .progress-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-item.progress .progress-text {
+  font-size: 13px;
+  color: #606266;
+  font-weight: 500;
+}
+
+/* 信息栏展开/收起动画 */
+.slide-enter-active,
+.slide-leave-active {
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.slide-enter-to,
+.slide-leave-from {
+  opacity: 1;
+  max-height: 60px;
 }
 
 .main-content {

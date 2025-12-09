@@ -91,6 +91,7 @@ export interface NodeCreateParams {
 export interface NodeCreateResult {
   nodeId: string;
   path: string;
+  hint?: string;
 }
 
 /**
@@ -165,6 +166,7 @@ export interface NodeTransitionResult {
   currentStatus: NodeStatus;
   conclusion: string | null;
   cascadeUpdates?: string[];  // 级联更新的父节点状态变化
+  hint?: string;              // 工作流提示，提醒 AI 下一步应做什么
 }
 
 // ========== Phase 3: 节点分裂与更新 ==========
@@ -186,6 +188,7 @@ export interface NodeSplitParams {
 export interface NodeSplitResult {
   nodeId: string;
   path: string;
+  hint?: string;
 }
 
 /**
@@ -205,4 +208,22 @@ export interface NodeUpdateParams {
 export interface NodeUpdateResult {
   success: boolean;
   updatedAt: string;
+}
+
+/**
+ * node_move 输入
+ */
+export interface NodeMoveParams {
+  workspaceId: string;
+  nodeId: string;
+  newParentId: string;
+}
+
+/**
+ * node_move 输出
+ */
+export interface NodeMoveResult {
+  success: boolean;
+  previousParentId: string | null;
+  newParentId: string;
 }

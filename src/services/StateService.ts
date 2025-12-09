@@ -122,6 +122,11 @@ export class StateService {
       }
     }
 
+    // 5.2 自动切换焦点到当前节点（start/reopen 时）
+    if (action === "start" || action === "reopen") {
+      graph.currentFocus = nodeId;
+    }
+
     await this.json.writeGraph(projectRoot, workspaceId, graph);
 
     // 6. 更新 Info.md 的 frontmatter 和结论部分
@@ -164,6 +169,25 @@ export class StateService {
       result.cascadeUpdates = cascadeMessages;
     }
 
+    // 11. 添加工作流提示
+    if (action === "start" || action === "reopen" || action === "retry") {
+      result.hint = "💡 任务已开始。请使用 log_append 记录关键发现和分析过程，便于后续回溯。";
+    } else if (action === "complete") {
+      // 检查父节点是否还有未完成的子节点
+      const parentId = nodeMeta.parentId;
+      if (parentId && graph.nodes[parentId]) {
+        const siblings = graph.nodes[parentId].children;
+        const incompleteSiblings = siblings.filter(
+          (sid) => graph.nodes[sid]?.status !== "completed"
+        );
+        if (incompleteSiblings.length === 0) {
+          result.hint = `💡 所有子任务已完成。可以考虑完成父节点 ${parentId}，或使用 context_focus 切换到其他任务。`;
+        } else {
+          result.hint = `💡 任务已完成。父节点下还有 ${incompleteSiblings.length} 个未完成的子任务，请使用 context_focus 切换到下一个任务。`;
+        }
+      }
+    }
+
     return result;
   }
 
@@ -201,7 +225,7 @@ export class StateService {
       return "失败的节点无法直接完成，请先 retry 后重新执行";
     }
     if (currentStatus === "validating" && attemptedAction === "start") {
-      return "节点正在验证中，请使用 pass/fail 来结束验证";
+      return "节点正在验证中，请使用 complete/fail 来结束验证";
     }
     if (currentStatus === "implementing" && attemptedAction === "start") {
       return "节点已在执行中，无需重复 start";
