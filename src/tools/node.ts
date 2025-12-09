@@ -149,6 +149,18 @@ export const nodeSplitTool: Tool = {
         type: "boolean",
         description: "是否继承上下文，默认 true",
       },
+      docs: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            path: { type: "string" },
+            description: { type: "string" },
+          },
+          required: ["path", "description"],
+        },
+        description: "派发给子节点的文档引用（可选）",
+      },
     },
     required: ["workspaceId", "parentId", "title", "requirement"],
   },

@@ -122,10 +122,16 @@ export class NodeService {
       event: `节点 "${title}" (${nodeId}) 已创建`,
     });
 
+    // 根据是否派发了文档生成不同的提示
+    const hasDispatchedDocs = docs.length > 0;
+    const hint = hasDispatchedDocs
+      ? "💡 节点已创建并派发了文档。下一步：调用 node_transition(action=\"start\") 开始执行，或继续创建更多子节点进行任务分解。"
+      : "💡 节点已创建。提醒：如果子任务需要参考文档，请使用 docs 参数派发，或稍后用 node_reference 添加。下一步：调用 node_transition(action=\"start\") 开始执行。";
+
     return {
       nodeId,
       path: nodePath,
-      hint: "💡 节点已创建。下一步：调用 node_transition(action=\"start\") 开始执行，或继续创建更多子节点进行任务分解。",
+      hint,
     };
   }
 
@@ -336,7 +342,7 @@ export class NodeService {
    * 将当前执行中的步骤升级为独立子节点
    */
   async split(params: NodeSplitParams): Promise<NodeSplitResult> {
-    const { workspaceId, parentId, title, requirement, inheritContext = true } = params;
+    const { workspaceId, parentId, title, requirement, inheritContext = true, docs = [] } = params;
 
     // 1. 获取 projectRoot
     const projectRoot = await this.resolveProjectRoot(workspaceId);
@@ -375,7 +381,7 @@ export class NodeService {
       createdAt: currentTime,
       updatedAt: currentTime,
       requirement,
-      docs: [],
+      docs,
       notes: "",
       conclusion: "",
     };
@@ -431,10 +437,16 @@ export class NodeService {
       event: `节点 "${parentId}" 分裂出子节点 "${title}" (${nodeId})`,
     });
 
+    // 根据是否派发了文档生成不同的提示
+    const hasDispatchedDocs = docs.length > 0;
+    const hint = hasDispatchedDocs
+      ? "💡 子节点已创建并自动聚焦，已派发文档。请调用 node_transition(action=\"start\") 开始执行，并使用 log_append 记录分析过程。"
+      : "💡 子节点已创建并自动聚焦。提醒：如果子任务需要参考文档，请用 node_reference 添加。请调用 node_transition(action=\"start\") 开始执行。";
+
     return {
       nodeId,
       path: nodePath,
-      hint: "💡 子节点已创建并自动聚焦。节点状态为 implementing，请使用 log_append 记录分析过程。",
+      hint,
     };
   }
 

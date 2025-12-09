@@ -129,24 +129,30 @@ export class ContextService {
   private generateHint(nodeMeta: { status: string }, chain: ContextChainItem[]): string {
     const currentNode = chain[chain.length - 1];
     const logCount = currentNode?.logEntries?.length ?? 0;
+    const docsCount = currentNode?.docs?.length ?? 0;
+
+    // 文档缺失提醒（仅在 pending/implementing 状态提示）
+    const docsWarning = docsCount === 0 && (nodeMeta.status === "pending" || nodeMeta.status === "implementing")
+      ? " ⚠️ 当前节点无文档引用，如需参考文档请用 node_reference 添加，或确认父节点是否遗漏派发。"
+      : "";
 
     switch (nodeMeta.status) {
       case "pending":
-        return "💡 节点待执行。请调用 node_transition(action=\"start\") 开始执行。";
+        return "💡 节点待执行。请调用 node_transition(action=\"start\") 开始执行。" + docsWarning;
       case "implementing":
         if (logCount === 0) {
-          return "💡 任务执行中，但尚未记录日志。请使用 log_append 记录分析过程和关键发现。";
+          return "💡 任务执行中，但尚未记录日志。请使用 log_append 记录分析过程和关键发现。" + docsWarning;
         } else if (logCount < 3) {
-          return "💡 任务执行中。继续使用 log_append 记录进展，完成后调用 node_transition(action=\"complete\")。";
+          return "💡 任务执行中。继续使用 log_append 记录进展，完成后调用 node_transition(action=\"complete\")。" + docsWarning;
         } else {
-          return "💡 任务执行中，日志已较多。考虑是否需要 node_split 分裂子任务，或准备 complete 完成当前任务。";
+          return "💡 任务执行中，日志已较多。考虑是否需要 node_split 分裂子任务，或准备 complete 完成当前任务。" + docsWarning;
         }
       case "validating":
         return "💡 任务验证中。验证通过请 complete，验证失败请 fail。";
       case "completed":
         return "💡 任务已完成。如需修改请 reopen，或切换到其他任务。";
       case "failed":
-        return "💡 任务已失败。分析原因后可 retry 重试。";
+        return "💡 任务已失败。分析原因后可 retry 重试。如因信息不足失败，请回到父节点补充文档后重新派发。";
       default:
         return "";
     }

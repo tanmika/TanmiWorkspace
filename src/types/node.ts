@@ -180,6 +180,7 @@ export interface NodeSplitParams {
   title: string;
   requirement: string;
   inheritContext?: boolean;   // 是否继承上下文，默认 true
+  docs?: DocRef[];            // 派发给子节点的文档引用
 }
 
 /**

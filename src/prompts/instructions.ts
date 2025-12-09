@@ -45,17 +45,24 @@ export const CORE_WORKFLOW = `
 \`\`\`
 用户提出任务
     ↓
-自动扫描项目（./Doc/, ./docs/, ./RULE/, ./README.md）
+★ 扫描项目根目录一级菜单，分析结构
+  - 有没有文档文件夹？（./Doc/, ./docs/, ./documentation/）
+  - 有没有规则文件夹？（./RULE/, ./rules/）
+  - 有没有 README？
+  - 项目大致结构是什么？
     ↓
-智能匹配相关文档和规范
+记录项目结构到日志，智能匹配相关文档和规范
     ↓
 向用户确认：目标、规则、文档引用
     ↓
 调用 workspace_init 创建工作区
+  - rules: 只读的项目规范（md 规则文件、对话中补充的临时规则）
+  - docs: 全局文档索引（md 文档、重要代码文件）
     ↓
 ★ 告知用户 webUrl（可视化界面地址）
     ↓
 根据任务类型制定计划，创建子节点
+  - ★ 创建子节点时使用 docs 参数派发相关文档
 \`\`\`
 
 ### 2. 节点执行流程
@@ -162,12 +169,15 @@ export const TOOLS_QUICK_REFERENCE = `
 ### 节点管理
 | 工具 | 用途 | 关键参数 |
 |------|------|----------|
-| node_create | 计划阶段创建子任务 | workspaceId, parentId, title, requirement? |
-| node_split | 执行中分裂子任务 | workspaceId, parentId, title, requirement |
+| node_create | 计划阶段创建子任务 | workspaceId, parentId, title, requirement, **docs?** |
+| node_split | 执行中分裂子任务 | workspaceId, parentId, title, requirement, **docs?** |
 | node_get | 获取节点详情 | workspaceId, nodeId |
 | node_list | 列出节点树 | workspaceId, rootId?, depth? |
 | node_update | 更新节点信息 | workspaceId, nodeId, title?, requirement?, note? |
 | node_delete | 删除节点 | workspaceId, nodeId |
+
+**★ docs 参数**：创建/分裂子节点时，使用 docs 参数显式派发该子任务需要的文档引用。
+子节点不会自动继承父节点的文档，必须显式派发。
 
 ### 状态转换
 | 工具 | action 值 | 转换 |
@@ -502,6 +512,81 @@ workspace_status({ workspaceId: "xxx", format: "markdown" })
 \`\`\`
 `,
 
+  // 文档引用管理
+  "docs_management": `
+## 场景：文档引用管理
+
+### 文档 vs 规则
+
+| 类型 | 文档 (docs) | 规则 (rules) |
+|------|-------------|--------------|
+| 性质 | 可读写、动态变化 | 只读、全局固定 |
+| 内容 | md 文档、重要代码文件 | md 规则文件、对话中补充的临时规则 |
+| 存储 | 工作区（全局索引）+ 节点（当前需要） | 仅工作区 |
+| 生命周期 | 可添加、可过期 | 创建时设定，不变 |
+
+### 核心原则：显式派发，不自动继承
+
+\`\`\`
+父节点 (docs: [A, B, C])
+    │
+    │ node_create(docs: [A, B])  ← 显式指定派发哪些
+    ↓
+子节点 (docs: [A, B])  ← 只有被派发的文档
+    │
+    │ 执行过程中发现信息不足
+    ↓
+子节点标记失败 → 返回父节点 → 补充信息/文档 → 重新派发
+\`\`\`
+
+### 文档查找优先级
+
+当节点需要文档时：
+1. **先查工作区全局索引**（Workspace.md ## 文档）
+2. **没有 → 搜索项目文件系统**
+3. **搜索结果 → 存入工作区索引 + 引用到节点**
+
+### 创建子节点时派发文档
+
+\`\`\`typescript
+// 创建子节点时显式派发文档
+node_create({
+  workspaceId: "xxx",
+  parentId: "parent-node",
+  title: "实现登录 API",
+  requirement: "实现用户名密码登录接口",
+  docs: [
+    { path: "./docs/api-spec.md", description: "API 规范文档" },
+    { path: "./src/auth/types.ts", description: "认证类型定义" }
+  ]
+})
+
+// 分裂节点时也可以派发文档
+node_split({
+  workspaceId: "xxx",
+  parentId: "current-node",
+  title: "修复类型错误",
+  requirement: "修复 UserModule 的类型定义缺失",
+  docs: [
+    { path: "./src/types/user.ts", description: "需要修改的类型文件" }
+  ]
+})
+\`\`\`
+
+### 文档生命周期
+
+- **添加时机**：任务开始、需求变化时
+- **过期时机**：任务完成后评估，调用 node_reference(action="expire")
+- **工作区索引**：记录所有使用过的文档（除被删除的），作为查找优先级
+
+### 信息不足时的处理
+
+当子节点因信息不足而无法完成时：
+1. 子节点标记为 failed，conclusion 说明缺少什么信息
+2. 返回父节点补充信息/文档
+3. 重新创建或 retry 子节点，带上补充的文档
+`,
+
   // 用户不熟悉
   "user_guide": `
 ## 场景：用户不熟悉 TanmiWorkspace
@@ -636,6 +721,10 @@ export const HELP_TOPICS: Record<string, { title: string; content: string }> = {
   "guide": {
     title: "用户引导",
     content: SCENARIO_GUIDES["user_guide"]
+  },
+  "docs": {
+    title: "文档引用管理",
+    content: SCENARIO_GUIDES["docs_management"]
   }
 };
 
