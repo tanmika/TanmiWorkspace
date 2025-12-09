@@ -148,6 +148,7 @@ export interface LogAppendParams {
 export interface LogAppendResult {
   success: boolean;
   timestamp: string;
+  hint?: string;
 }
 
 /**

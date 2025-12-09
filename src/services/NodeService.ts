@@ -80,18 +80,26 @@ export class NodeService {
       );
     }
 
-    // 5. 验证标题合法性
+    // 5. 验证节点类型
+    if (!type || (type !== "planning" && type !== "execution")) {
+      throw new TanmiError(
+        "INVALID_NODE_TYPE",
+        `节点类型 "${type}" 无效，必须是 "planning" 或 "execution"`
+      );
+    }
+
+    // 6. 验证标题合法性
     validateNodeTitle(title);
 
-    // 6. 生成节点 ID
+    // 7. 生成节点 ID
     const nodeId = generateNodeId();
     const currentTime = now();
 
-    // 7. 创建节点目录
+    // 8. 创建节点目录
     const nodePath = this.fs.getNodePath(projectRoot, workspaceId, nodeId);
     await this.fs.mkdir(nodePath);
 
-    // 8. 写入 Info.md
+    // 9. 写入 Info.md
     const nodeInfo: NodeInfoData = {
       id: nodeId,
       type,
@@ -106,11 +114,11 @@ export class NodeService {
     };
     await this.md.writeNodeInfo(projectRoot, workspaceId, nodeId, nodeInfo);
 
-    // 9. 创建空的 Log.md 和 Problem.md
+    // 10. 创建空的 Log.md 和 Problem.md
     await this.md.createEmptyLog(projectRoot, workspaceId, nodeId);
     await this.md.createEmptyProblem(projectRoot, workspaceId, nodeId);
 
-    // 10. 更新 graph.json
+    // 11. 更新 graph.json
     const newNode: NodeMeta = {
       id: nodeId,
       type,
@@ -127,7 +135,7 @@ export class NodeService {
     graph.nodes[parentId].children.push(nodeId);
     graph.nodes[parentId].updatedAt = currentTime;
 
-    // 11. 自动状态转换：如果父节点是 pending/planning，创建第一个子节点时转为 monitoring
+    // 12. 自动状态转换：如果父节点是 pending/planning，创建第一个子节点时转为 monitoring
     const isFirstChild = graph.nodes[parentId].children.length === 1;
     if (isFirstChild && (parentMeta.status === "pending" || parentMeta.status === "planning")) {
       graph.nodes[parentId].status = "monitoring";

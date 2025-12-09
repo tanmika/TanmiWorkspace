@@ -30,6 +30,7 @@ export const ErrorCodes = {
   LOG_APPEND_FAILED: "LOG_APPEND_FAILED",
 
   // 节点类型错误
+  INVALID_NODE_TYPE: "INVALID_NODE_TYPE",
   EXECUTION_CANNOT_HAVE_CHILDREN: "EXECUTION_CANNOT_HAVE_CHILDREN",
   INVALID_PARENT_STATUS: "INVALID_PARENT_STATUS",
   INCOMPLETE_CHILDREN: "INCOMPLETE_CHILDREN",
@@ -77,6 +78,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   REFERENCE_NOT_FOUND: "引用不存在",
   REFERENCE_EXISTS: "引用已存在",
   LOG_APPEND_FAILED: "日志追加失败",
+  INVALID_NODE_TYPE: "节点类型无效，必须是 planning 或 execution",
   EXECUTION_CANNOT_HAVE_CHILDREN: "执行节点不能创建子节点",
   INVALID_PARENT_STATUS: "父节点状态不允许创建子节点",
   INCOMPLETE_CHILDREN: "存在未完成的子节点",

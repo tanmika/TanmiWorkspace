@@ -45,12 +45,17 @@ export class LogService {
     // 1. 获取 projectRoot
     const projectRoot = await this.resolveProjectRoot(workspaceId);
 
-    // 2. 如果有 nodeId，验证节点存在
+    // 2. 获取节点信息（用于生成 hint）
+    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    let hint: string | undefined;
+
     if (nodeId) {
-      const graph = await this.json.readGraph(projectRoot, workspaceId);
-      if (!graph.nodes[nodeId]) {
+      const nodeMeta = graph.nodes[nodeId];
+      if (!nodeMeta) {
         throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
       }
+      // 根据节点类型和状态生成 hint
+      hint = this.generateLogHint(nodeMeta.type, nodeMeta.status, nodeMeta.children.length, event);
     }
 
     // 3. 生成时间戳（完整格式：YYYY-MM-DD HH:mm:ss）
@@ -71,7 +76,40 @@ export class LogService {
     return {
       success: true,
       timestamp,
+      hint,
     };
+  }
+
+  /**
+   * 根据节点状态生成日志追加后的提示
+   */
+  private generateLogHint(
+    nodeType: string | undefined,
+    status: string,
+    childCount: number,
+    event: string
+  ): string {
+    // 检测是否是"方案确定"类的日志
+    const planningKeywords = ["确定", "决定", "方案", "设计", "计划", "开始实现", "准备"];
+    const isPlanningEvent = planningKeywords.some(kw => event.includes(kw));
+
+    if (nodeType === "planning") {
+      if (status === "planning" && childCount === 0 && isPlanningEvent) {
+        return "💡 看起来方案已确定。规划节点的下一步是使用 node_create 创建子节点来分解任务。";
+      }
+      if (status === "monitoring") {
+        return "💡 规划节点正在监控子节点执行。等待所有子节点完成后可以 complete 汇总结论。";
+      }
+    } else if (nodeType === "execution") {
+      if (status === "implementing") {
+        if (isPlanningEvent) {
+          return "💡 执行节点应聚焦于具体执行而非规划。如果任务需要分解，请 fail 回退到父规划节点。";
+        }
+        return "💡 继续执行任务，完成后调用 node_transition(action=\"complete\", conclusion=\"...\")。";
+      }
+    }
+
+    return "";
   }
 
   /**

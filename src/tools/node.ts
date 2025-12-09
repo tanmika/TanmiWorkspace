@@ -9,6 +9,15 @@ export const nodeCreateTool: Tool = {
   name: "node_create",
   description: `在指定父节点下创建新的子节点。
 
+**节点类型选择指南**（重要！）：
+| 场景 | 选择类型 | 原因 |
+|------|----------|------|
+| 具体的代码修改、bug修复 | execution | 有明确的产出，不需要再分解 |
+| 简单的文件操作、配置更改 | execution | 单步完成，不需要分解 |
+| 需要分析后再决定具体步骤 | planning | 先分析，再创建子节点执行 |
+| 涉及多个模块或多步操作 | planning | 需要分解为多个执行节点 |
+| 不确定具体做法 | planning | 先规划，再决定如何执行 |
+
 **节点类型说明**：
 - planning（规划节点）：负责分析、分解任务、派发子节点、汇总结论。可以有子节点。
 - execution（执行节点）：负责具体执行任务、产出结论。不能有子节点，执行中遇到问题需 fail 回退到父节点。
@@ -16,7 +25,8 @@ export const nodeCreateTool: Tool = {
 **重要约束**：
 - 只有规划节点可以创建子节点
 - 父节点必须处于 pending 或 planning 状态
-- 创建第一个子节点时，父节点自动转为 monitoring 状态`,
+- 创建第一个子节点时，父节点自动转为 monitoring 状态
+- 执行节点发现任务过于复杂时，应 fail 回退让父规划节点重新分解`,
   inputSchema: {
     type: "object",
     properties: {

@@ -107,7 +107,7 @@ export class ContextService {
     }
 
     // 7. 生成工作流提示
-    const hint = this.generateHint(nodeMeta, chain);
+    const hint = this.generateHint(nodeMeta, chain, childConclusions);
 
     // 8. 返回结果
     return {
@@ -124,35 +124,87 @@ export class ContextService {
   }
 
   /**
-   * 根据节点状态生成工作流提示
+   * 根据节点类型和状态生成工作流提示
    */
-  private generateHint(nodeMeta: { status: string }, chain: ContextChainItem[]): string {
+  private generateHint(
+    nodeMeta: { status: string; type?: string; children: string[] },
+    chain: ContextChainItem[],
+    childConclusions: ChildConclusionItem[]
+  ): string {
     const currentNode = chain[chain.length - 1];
     const logCount = currentNode?.logEntries?.length ?? 0;
     const docsCount = currentNode?.docs?.length ?? 0;
+    const nodeType = nodeMeta.type;
+    const childCount = nodeMeta.children.length;
 
-    // 文档缺失提醒（仅在 pending/implementing 状态提示）
-    const docsWarning = docsCount === 0 && (nodeMeta.status === "pending" || nodeMeta.status === "implementing")
+    // 文档缺失提醒（仅在 pending/implementing/planning 状态提示）
+    const needsDocsWarning = ["pending", "implementing", "planning"].includes(nodeMeta.status);
+    const docsWarning = docsCount === 0 && needsDocsWarning
       ? " ⚠️ 当前节点无文档引用，如需参考文档请用 node_reference 添加，或确认父节点是否遗漏派发。"
       : "";
 
+    // 规划节点特殊处理
+    if (nodeType === "planning") {
+      switch (nodeMeta.status) {
+        case "pending":
+          return "💡 规划节点待启动。请调用 node_transition(action=\"start\") 进入规划状态。" + docsWarning;
+        case "planning":
+          if (childCount === 0) {
+            return "💡 规划节点已激活，尚无子节点。分析完需求后，使用 node_create 创建执行节点(type=\"execution\")或子规划节点(type=\"planning\")来分解任务。" + docsWarning;
+          } else {
+            return "💡 规划节点有子节点但仍在规划状态。如需继续添加子节点可继续创建，否则等待子节点 start 后进入 monitoring。" + docsWarning;
+          }
+        case "monitoring":
+          const completedCount = childConclusions.length;
+          const pendingChildren = childCount - completedCount;
+          if (pendingChildren > 0) {
+            return `💡 规划节点正在监控子节点。已完成 ${completedCount}/${childCount}，还有 ${pendingChildren} 个子节点待完成。`;
+          } else {
+            return "💡 所有子节点已完成。请调用 node_transition(action=\"complete\", conclusion=\"...\") 汇总结论。";
+          }
+        case "completed":
+          return "💡 规划节点已完成。如需修改请 reopen，或切换到其他任务。";
+        case "cancelled":
+          return "💡 规划节点已取消。如需重新规划请 reopen。";
+        default:
+          return "";
+      }
+    }
+
+    // 执行节点处理
+    if (nodeType === "execution") {
+      switch (nodeMeta.status) {
+        case "pending":
+          return "💡 执行节点待启动。请调用 node_transition(action=\"start\") 开始执行。" + docsWarning;
+        case "implementing":
+          if (logCount === 0) {
+            return "💡 执行任务进行中，但尚未记录日志。请使用 log_append 记录执行过程。如果发现任务过于复杂，请 fail 回退到父规划节点分解。" + docsWarning;
+          } else {
+            return "💡 执行任务进行中。继续执行并记录日志，完成后调用 node_transition(action=\"complete\", conclusion=\"...\")。" + docsWarning;
+          }
+        case "validating":
+          return "💡 执行任务验证中。验证通过请 complete，验证失败请 fail。";
+        case "completed":
+          return "💡 执行任务已完成。如需修改请 reopen，或切换到其他任务。";
+        case "failed":
+          return "💡 执行任务已失败。分析失败原因：如果任务过于复杂，回到父规划节点重新分解；如果是可修复的问题，retry 后重试。";
+        default:
+          return "";
+      }
+    }
+
+    // 兼容旧节点（无 type）
     switch (nodeMeta.status) {
       case "pending":
         return "💡 节点待执行。请调用 node_transition(action=\"start\") 开始执行。" + docsWarning;
       case "implementing":
-        if (logCount === 0) {
-          return "💡 任务执行中，但尚未记录日志。请使用 log_append 记录分析过程和关键发现。" + docsWarning;
-        } else if (logCount < 3) {
-          return "💡 任务执行中。继续使用 log_append 记录进展，完成后调用 node_transition(action=\"complete\")。" + docsWarning;
-        } else {
-          return "💡 任务执行中，日志已较多。执行节点准备 complete 完成；规划节点考虑是否需要创建更多子节点。" + docsWarning;
-        }
+        return "💡 任务执行中。使用 log_append 记录进展，完成后调用 node_transition(action=\"complete\")。" + docsWarning;
       case "validating":
         return "💡 任务验证中。验证通过请 complete，验证失败请 fail。";
       case "completed":
         return "💡 任务已完成。如需修改请 reopen，或切换到其他任务。";
       case "failed":
-        return "💡 任务已失败。分析原因后可 retry 重试。如因信息不足失败，请回到父节点补充文档后重新派发。";
+        return "💡 任务已失败。分析原因后可 retry 重试。";
       default:
         return "";
     }
