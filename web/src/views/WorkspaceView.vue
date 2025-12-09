@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Plus, List, Share } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, List, Share, Refresh } from '@element-plus/icons-vue'
 import { useWorkspaceStore, useNodeStore } from '@/stores'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
@@ -82,6 +82,24 @@ async function loadWorkspace() {
   }
 }
 
+// 刷新数据
+const isRefreshing = ref(false)
+async function handleRefresh() {
+  isRefreshing.value = true
+  try {
+    await loadWorkspace()
+    // 如果有选中的节点，刷新其详情
+    if (nodeStore.selectedNodeId) {
+      await nodeStore.selectNode(nodeStore.selectedNodeId)
+    }
+    ElMessage.success('刷新成功')
+  } catch {
+    ElMessage.error('刷新失败')
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
 // 监听路由变化
 watch(workspaceId, loadWorkspace)
 
@@ -137,7 +155,17 @@ async function handleCreateNode() {
         <el-button :icon="ArrowLeft" text @click="goBack">返回</el-button>
         <h2>{{ workspaceStore.currentWorkspace?.name }}</h2>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openCreateDialog">新建节点</el-button>
+      <div class="right">
+        <el-tooltip content="刷新数据" placement="bottom">
+          <el-button
+            :icon="Refresh"
+            circle
+            :loading="isRefreshing"
+            @click="handleRefresh"
+          />
+        </el-tooltip>
+        <el-button type="primary" :icon="Plus" @click="openCreateDialog">新建节点</el-button>
+      </div>
     </header>
 
     <!-- 主内容区 -->
@@ -244,6 +272,12 @@ async function handleCreateNode() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.header .right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .header h2 {
