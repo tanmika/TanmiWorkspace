@@ -8,7 +8,50 @@ import type {
   WorkspaceInitParams,
   NodeGraph,
   WorkspaceStatusResult,
+  DocRef,
 } from '@/types'
+
+// 解析 Workspace.md 提取规则和文档
+function parseWorkspaceMd(md: string): { rules: string[]; docs: DocRef[] } {
+  const rules: string[] = []
+  const docs: DocRef[] = []
+
+  // 提取规则部分
+  const rulesMatch = md.match(/## 规则[\s\S]*?(?=##|$)/)
+  if (rulesMatch) {
+    const rulesSection = rulesMatch[0]
+    const lines = rulesSection.split('\n')
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('- ')) {
+        rules.push(trimmed.slice(2))
+      }
+    }
+  }
+
+  // 提取文档部分
+  const docsMatch = md.match(/## 文档[\s\S]*?(?=##|$)/)
+  if (docsMatch) {
+    const docsSection = docsMatch[0]
+    const lines = docsSection.split('\n')
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('- ')) {
+        // 格式: - path: description 或 - [path](url): description
+        const content = trimmed.slice(2)
+        const colonIdx = content.indexOf(':')
+        if (colonIdx > 0) {
+          docs.push({
+            path: content.slice(0, colonIdx).trim(),
+            description: content.slice(colonIdx + 1).trim(),
+          })
+        }
+      }
+    }
+  }
+
+  return { rules, docs }
+}
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   // 状态
@@ -16,6 +59,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const currentWorkspace = ref<WorkspaceConfig | null>(null)
   const currentGraph = ref<NodeGraph | null>(null)
   const currentStatus = ref<WorkspaceStatusResult['summary'] | null>(null)
+  const currentRules = ref<string[]>([])
+  const currentDocs = ref<DocRef[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -52,6 +97,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const result = await workspaceApi.get(id)
       currentWorkspace.value = result.config
       currentGraph.value = result.graph
+      // 解析 workspaceMd 获取规则和文档
+      const { rules, docs } = parseWorkspaceMd(result.workspaceMd || '')
+      currentRules.value = rules
+      currentDocs.value = docs
       // 同时获取状态摘要
       const statusResult = await workspaceApi.status(id)
       currentStatus.value = statusResult.summary
@@ -110,6 +159,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentWorkspace.value = null
     currentGraph.value = null
     currentStatus.value = null
+    currentRules.value = []
+    currentDocs.value = []
   }
 
   return {
@@ -118,6 +169,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentWorkspace,
     currentGraph,
     currentStatus,
+    currentRules,
+    currentDocs,
     loading,
     error,
     // 计算属性

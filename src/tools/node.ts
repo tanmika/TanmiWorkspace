@@ -22,11 +22,26 @@ export const nodeCreateTool: Tool = {
 - planning（规划节点）：负责分析、分解任务、派发子节点、汇总结论。可以有子节点。
 - execution（执行节点）：负责具体执行任务、产出结论。不能有子节点，执行中遇到问题需 fail 回退到父节点。
 
+**节点角色（role）说明**：
+- info_collection：信息收集节点。用于调研、分析项目信息。完成时在 conclusion 中使用特定格式，系统会自动归档到工作区：
+  \`\`\`
+  ## 规则
+  - 规则1
+  - 规则2
+
+  ## 文档
+  - /path/to/doc1: 文档1描述
+  - /path/to/doc2: 文档2描述
+  \`\`\`
+- 其他角色（validation, summary）：预留，暂不使用
+
 **重要约束**：
 - 只有规划节点可以创建子节点
-- 父节点必须处于 pending 或 planning 状态
+- 父节点必须处于 pending、planning 或 monitoring 状态
 - 创建第一个子节点时，父节点自动转为 monitoring 状态
-- 执行节点发现任务过于复杂时，应 fail 回退让父规划节点重新分解`,
+- 执行节点发现任务过于复杂时，应 fail 回退让父规划节点重新分解
+- **如果工作区有规则，必须传入正确的 rulesHash**（通过 workspace_get 或 context_get 获取）
+- **根节点 start 前必须先完成一个 role='info_collection' 的信息收集节点**`,
   inputSchema: {
     type: "object",
     properties: {
@@ -62,6 +77,15 @@ export const nodeCreateTool: Tool = {
           required: ["path", "description"],
         },
         description: "派发给子节点的文档引用（可选）",
+      },
+      rulesHash: {
+        type: "string",
+        description: "规则哈希（如果工作区有规则则必填，通过 workspace_get 或 context_get 获取）",
+      },
+      role: {
+        type: "string",
+        enum: ["info_collection", "validation", "summary"],
+        description: "节点角色（可选）：info_collection=信息收集节点，完成时自动归档规则和文档到工作区",
       },
     },
     required: ["workspaceId", "parentId", "type", "title", "requirement"],
@@ -145,7 +169,7 @@ export const nodeDeleteTool: Tool = {
  */
 export const nodeUpdateTool: Tool = {
   name: "node_update",
-  description: "更新节点信息（标题、需求、备注）。只更新提供的字段，保留其他字段不变。",
+  description: "更新节点信息（标题、需求、备注、结论）。只更新提供的字段，保留其他字段不变。",
   inputSchema: {
     type: "object",
     properties: {
@@ -168,6 +192,10 @@ export const nodeUpdateTool: Tool = {
       note: {
         type: "string",
         description: "新备注（可选）",
+      },
+      conclusion: {
+        type: "string",
+        description: "新结论（可选，用于修正已完成节点的结论）",
       },
     },
     required: ["workspaceId", "nodeId"],

@@ -1,5 +1,6 @@
 // src/services/ContextService.ts
 
+import * as crypto from "node:crypto";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
@@ -109,11 +110,17 @@ export class ContextService {
     // 7. 生成工作流提示
     const hint = this.generateHint(nodeMeta, chain, childConclusions);
 
-    // 8. 返回结果
+    // 8. 计算规则哈希
+    const rulesHash = workspaceData.rules.length > 0
+      ? crypto.createHash("md5").update(workspaceData.rules.join("\n")).digest("hex").substring(0, 8)
+      : "";
+
+    // 9. 返回结果
     return {
       workspace: {
         goal: workspaceData.goal,
         rules: workspaceData.rules,
+        rulesHash,
         docs: activeDocs,
       },
       chain,

@@ -8,6 +8,9 @@ export type WorkspaceStatus = 'active' | 'archived'
 // 节点类型
 export type NodeType = 'planning' | 'execution'
 
+// 节点角色
+export type NodeRole = 'info_collection' | 'validation' | 'summary'
+
 // 执行节点状态
 export type ExecutionStatus = 'pending' | 'implementing' | 'validating' | 'completed' | 'failed'
 
@@ -68,6 +71,7 @@ export interface NodeMeta {
   isolate: boolean
   references: string[]
   conclusion: string | null
+  role?: NodeRole
   createdAt: string
   updatedAt: string
 }
@@ -83,6 +87,7 @@ export interface NodeTreeItem {
   type: NodeType
   title: string
   status: NodeStatus
+  role?: NodeRole
   children: NodeTreeItem[]
 }
 
@@ -324,5 +329,34 @@ export const NODE_TYPE_CONFIG: Record<NodeType, NodeTypeConfig> = {
     label: '执行节点',
     color: '#3498DB',
     description: '负责具体执行，不能有子节点',
+  },
+}
+
+// 节点角色配置
+export interface NodeRoleConfig {
+  label: string
+  color: string
+  emoji: string
+  description: string
+}
+
+export const NODE_ROLE_CONFIG: Record<NodeRole, NodeRoleConfig> = {
+  info_collection: {
+    label: '信息收集',
+    color: '#E6A23C',
+    emoji: '📋',
+    description: '收集项目信息，完成时自动归档规则和文档到工作区',
+  },
+  validation: {
+    label: '验证',
+    color: '#67C23A',
+    emoji: '✔️',
+    description: '验证类任务（预留）',
+  },
+  summary: {
+    label: '汇总',
+    color: '#909399',
+    emoji: '📝',
+    description: '汇总类任务（预留）',
   },
 }

@@ -13,9 +13,12 @@ import type {
   PlanningStatus,
   ExecutionAction,
   PlanningAction,
+  NodeMeta,
+  NodeRole,
 } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
+import type { DocRef } from "../types/workspace.js";
 
 /**
  * 执行节点状态转换规则表
@@ -103,16 +106,28 @@ export class StateService {
       );
     }
 
-    // 4.1 规划节点 complete 时验证子节点状态
+    // 4.1 根节点 start 时检查是否有已完成的信息收集节点
+    if (nodeId === "root" && action === "start") {
+      const infoCollectionCheck = this.checkInfoCollectionNode(graph.nodes, nodeMeta.children);
+      if (!infoCollectionCheck.passed) {
+        throw new TanmiError(
+          "INFO_COLLECTION_REQUIRED",
+          infoCollectionCheck.message
+        );
+      }
+    }
+
+    // 4.2 规划节点 complete 时验证子节点状态（所有子节点必须处于终态）
     if (nodeType === "planning" && action === "complete") {
+      const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
       const childStatuses = nodeMeta.children.map(cid => graph.nodes[cid]?.status);
       const hasIncompleteChildren = childStatuses.some(
-        s => s && s !== "completed" && s !== "cancelled"
+        s => s && !terminalStatuses.has(s)
       );
       if (hasIncompleteChildren) {
         throw new TanmiError(
           "INCOMPLETE_CHILDREN",
-          "规划节点有未完成的子节点，无法直接完成。请先完成所有子节点或取消未完成的子节点。"
+          "规划节点有未完成的子节点，无法直接完成。请先完成所有子节点（completed/failed/cancelled）。"
         );
       }
     }
@@ -185,6 +200,12 @@ export class StateService {
       }, nodeId);
     }
 
+    // 8.1 信息收集节点 complete 时自动归档规则和文档
+    let archiveResult: { rules: string[]; docs: DocRef[] } | null = null;
+    if (nodeMeta.role === "info_collection" && action === "complete" && conclusion) {
+      archiveResult = await this.archiveInfoCollection(projectRoot, workspaceId, conclusion);
+    }
+
     // 9. 更新工作区配置的 updatedAt
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
     config.updatedAt = currentTime;
@@ -204,7 +225,7 @@ export class StateService {
     }
 
     // 11. 添加工作流提示（根据节点类型）
-    result.hint = this.generateHint(nodeType, action, nodeMeta, graph);
+    result.hint = this.generateHint(nodeType, action, nodeMeta, graph, archiveResult);
 
     return result;
   }
@@ -215,12 +236,35 @@ export class StateService {
   private generateHint(
     nodeType: NodeType,
     action: TransitionAction,
-    nodeMeta: { parentId: string | null; children: string[] },
-    graph: { nodes: Record<string, { status: NodeStatus; type: NodeType }> }
+    nodeMeta: { parentId: string | null; children: string[]; conclusion?: string | null; role?: NodeRole },
+    graph: { nodes: Record<string, { status: NodeStatus; type: NodeType }> },
+    archiveResult?: { rules: string[]; docs: DocRef[] } | null
   ): string {
+    // 信息收集节点完成时，显示归档结果
+    if (nodeMeta.role === "info_collection" && action === "complete" && archiveResult) {
+      const parts: string[] = ["💡 信息收集已完成，已自动归档到工作区："];
+      if (archiveResult.rules.length > 0) {
+        parts.push(`- 新增 ${archiveResult.rules.length} 条规则`);
+      }
+      if (archiveResult.docs.length > 0) {
+        parts.push(`- 新增 ${archiveResult.docs.length} 个文档引用`);
+      }
+      if (archiveResult.rules.length === 0 && archiveResult.docs.length === 0) {
+        parts[0] = "💡 信息收集已完成。未在 conclusion 中发现需要归档的规则或文档。";
+      }
+      parts.push("建议返回根节点继续规划执行任务。");
+      return parts.join("\n");
+    }
+
     if (nodeType === "execution") {
       // 执行节点提示
-      if (action === "start" || action === "reopen" || action === "retry") {
+      if (action === "start" || action === "retry") {
+        return "💡 执行任务已开始。请使用 log_append 记录执行过程，完成后调用 complete，如遇问题调用 fail。";
+      } else if (action === "reopen") {
+        const oldConclusion = nodeMeta.conclusion;
+        if (oldConclusion) {
+          return `💡 执行任务已重开。旧结论：「${oldConclusion}」\n完成时请将新工作与旧结论合并。`;
+        }
         return "💡 执行任务已开始。请使用 log_append 记录执行过程，完成后调用 complete，如遇问题调用 fail。";
       } else if (action === "complete") {
         const parentId = nodeMeta.parentId;
@@ -233,7 +277,13 @@ export class StateService {
       }
     } else {
       // 规划节点提示
-      if (action === "start" || action === "reopen") {
+      if (action === "start") {
+        return "💡 进入规划状态。请分析需求，使用 node_create 创建执行节点或子规划节点。";
+      } else if (action === "reopen") {
+        const oldConclusion = nodeMeta.conclusion;
+        if (oldConclusion) {
+          return `💡 规划节点已重开。旧结论：「${oldConclusion}」\n完成时请将新工作与旧结论合并，确保结论完整反映所有已完成的工作。`;
+        }
         return "💡 进入规划状态。请分析需求，使用 node_create 创建执行节点或子规划节点。";
       } else if (action === "complete") {
         const parentId = nodeMeta.parentId;
@@ -363,5 +413,125 @@ export class StateService {
       event += ` (${reason})`;
     }
     return event;
+  }
+
+  /**
+   * 检查根节点是否有已完成的信息收集节点
+   */
+  private checkInfoCollectionNode(
+    nodes: Record<string, NodeMeta>,
+    childIds: string[]
+  ): { passed: boolean; message: string } {
+    // 查找信息收集节点
+    const infoCollectionNodes = childIds
+      .map(id => nodes[id])
+      .filter(node => node?.role === "info_collection");
+
+    if (infoCollectionNodes.length === 0) {
+      return {
+        passed: false,
+        message: "根节点 start 前必须先创建信息收集节点（role: 'info_collection'）。\n" +
+          "请先使用 node_create 创建一个 planning 类型、role 为 'info_collection' 的节点，" +
+          "用于收集项目信息、环境配置、相关文档等，收集完成后信息会自动归档到工作区规则和文档中。",
+      };
+    }
+
+    // 检查是否有已完成的信息收集节点
+    const completedInfoCollection = infoCollectionNodes.find(
+      node => node.status === "completed"
+    );
+
+    if (!completedInfoCollection) {
+      const infoNode = infoCollectionNodes[0];
+      return {
+        passed: false,
+        message: `信息收集节点 "${infoNode.id}" 尚未完成（当前状态: ${infoNode.status}）。\n` +
+          "请先完成信息收集，系统会自动将收集的规则和文档归档到工作区，然后再开始根节点规划。",
+      };
+    }
+
+    return { passed: true, message: "" };
+  }
+
+  /**
+   * 归档信息收集节点的 conclusion 到工作区
+   * 解析 ## 规则 和 ## 文档 部分
+   */
+  private async archiveInfoCollection(
+    projectRoot: string,
+    workspaceId: string,
+    conclusion: string
+  ): Promise<{ rules: string[]; docs: DocRef[] }> {
+    const result: { rules: string[]; docs: DocRef[] } = { rules: [], docs: [] };
+
+    // 解析 ## 规则 部分
+    const rulesMatch = conclusion.match(/##\s*规则\s*\n([\s\S]*?)(?=\n##|\n*$)/i);
+    if (rulesMatch) {
+      const rulesSection = rulesMatch[1];
+      // 解析列表项（支持 - 或 * 开头）
+      const ruleLines = rulesSection.split("\n")
+        .map(line => line.trim())
+        .filter(line => line.match(/^[-*]\s+/))
+        .map(line => line.replace(/^[-*]\s+/, "").trim())
+        .filter(line => line.length > 0);
+      result.rules = ruleLines;
+    }
+
+    // 解析 ## 文档 部分
+    const docsMatch = conclusion.match(/##\s*文档\s*\n([\s\S]*?)(?=\n##|\n*$)/i);
+    if (docsMatch) {
+      const docsSection = docsMatch[1];
+      // 解析列表项，格式：- path: description 或 - path（description 可选）
+      const docLines = docsSection.split("\n")
+        .map(line => line.trim())
+        .filter(line => line.match(/^[-*]\s+/))
+        .map(line => line.replace(/^[-*]\s+/, "").trim())
+        .filter(line => line.length > 0);
+
+      for (const line of docLines) {
+        // 尝试匹配 "path: description" 格式
+        const colonMatch = line.match(/^([^:]+):\s*(.+)$/);
+        if (colonMatch) {
+          result.docs.push({
+            path: colonMatch[1].trim(),
+            description: colonMatch[2].trim(),
+          });
+        } else {
+          // 没有描述，只有路径
+          result.docs.push({
+            path: line,
+            description: "",
+          });
+        }
+      }
+    }
+
+    // 如果有解析到内容，追加到工作区
+    if (result.rules.length > 0 || result.docs.length > 0) {
+      const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
+
+      // 追加规则（去重）
+      const existingRules = new Set(workspaceMdData.rules);
+      for (const rule of result.rules) {
+        if (!existingRules.has(rule)) {
+          workspaceMdData.rules.push(rule);
+          existingRules.add(rule);
+        }
+      }
+
+      // 追加文档（去重，按路径判断）
+      const existingDocPaths = new Set(workspaceMdData.docs.map(d => d.path));
+      for (const doc of result.docs) {
+        if (!existingDocPaths.has(doc.path)) {
+          workspaceMdData.docs.push(doc);
+          existingDocPaths.add(doc.path);
+        }
+      }
+
+      // 写回工作区
+      await this.md.writeWorkspaceMd(projectRoot, workspaceId, workspaceMdData);
+    }
+
+    return result;
   }
 }

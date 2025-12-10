@@ -1,6 +1,7 @@
 // src/services/WorkspaceService.ts
 
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
@@ -15,6 +16,8 @@ import type {
   WorkspaceDeleteResult,
   WorkspaceStatusParams,
   WorkspaceStatusResult,
+  WorkspaceUpdateRulesParams,
+  WorkspaceUpdateRulesResult,
   WorkspaceConfig,
 } from "../types/workspace.js";
 import type { NodeGraph, NodeMeta } from "../types/node.js";
@@ -217,11 +220,20 @@ export class WorkspaceService {
     const graph = await this.json.readGraph(projectRoot, workspaceId);
     const workspaceMd = await this.md.readWorkspaceMdRaw(projectRoot, workspaceId);
 
+    // 解析规则并计算哈希
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
+    const rulesCount = workspaceMdData.rules.length;
+    const rulesHash = rulesCount > 0
+      ? crypto.createHash("md5").update(workspaceMdData.rules.join("\n")).digest("hex").substring(0, 8)
+      : "";
+
     return {
       config,
       graph,
       workspaceMd,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
+      rulesCount,
+      rulesHash,
     };
   }
 
@@ -282,10 +294,11 @@ export class WorkspaceService {
     const graph = await this.json.readGraph(projectRoot, workspaceId);
     const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
 
-    // 计算统计信息
+    // 计算统计信息（终态 = completed + failed + cancelled）
     const nodes = Object.values(graph.nodes);
     const totalNodes = nodes.length;
-    const completedNodes = nodes.filter(n => n.status === "completed").length;
+    const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
+    const completedNodes = nodes.filter(n => terminalStatuses.has(n.status)).length;
 
     const summary = {
       name: config.name,
@@ -342,7 +355,7 @@ export class WorkspaceService {
     lines.push("├" + "─".repeat(width - 2) + "┤");
     lines.push("│" + ` 目标: ${workspaceMdData.goal.substring(0, width - 10)}`.padEnd(width - 2) + "│");
     lines.push("├" + "─".repeat(width - 2) + "┤");
-    lines.push("│" + ` 节点统计: ${summary.completedNodes}/${summary.totalNodes} 完成`.padEnd(width - 2) + "│");
+    lines.push("│" + ` 节点统计: ${summary.completedNodes}/${summary.totalNodes} 已处理`.padEnd(width - 2) + "│");
     lines.push("│" + ` 当前聚焦: ${summary.currentFocus || "无"}`.padEnd(width - 2) + "│");
     lines.push("├" + "─".repeat(width - 2) + "┤");
     lines.push("│" + " 节点树:".padEnd(width - 2) + "│");
@@ -379,7 +392,7 @@ export class WorkspaceService {
     lines.push("");
     lines.push("## 统计");
     lines.push(`- 节点总数: ${summary.totalNodes}`);
-    lines.push(`- 已完成: ${summary.completedNodes}`);
+    lines.push(`- 已处理: ${summary.completedNodes}`);
     lines.push(`- 当前聚焦: ${summary.currentFocus || "无"}`);
     lines.push("");
     lines.push("## 节点树");
@@ -480,5 +493,65 @@ export class WorkspaceService {
       default:
         return "?";
     }
+  }
+
+  /**
+   * 更新工作区规则
+   */
+  async updateRules(params: WorkspaceUpdateRulesParams): Promise<WorkspaceUpdateRulesResult> {
+    const { workspaceId, action, rule, rules } = params;
+
+    // 获取 projectRoot
+    const projectRoot = await this.json.getProjectRoot(workspaceId);
+    if (!projectRoot) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+
+    // 读取当前工作区数据
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
+    let currentRules = [...workspaceMdData.rules];
+
+    // 执行操作
+    switch (action) {
+      case "add":
+        if (!rule) {
+          throw new TanmiError("INVALID_PARAMS", "add 操作需要提供 rule 参数");
+        }
+        if (!currentRules.includes(rule)) {
+          currentRules.push(rule);
+        }
+        break;
+
+      case "remove":
+        if (!rule) {
+          throw new TanmiError("INVALID_PARAMS", "remove 操作需要提供 rule 参数");
+        }
+        currentRules = currentRules.filter(r => r !== rule);
+        break;
+
+      case "replace":
+        if (!rules) {
+          throw new TanmiError("INVALID_PARAMS", "replace 操作需要提供 rules 参数");
+        }
+        currentRules = [...rules];
+        break;
+    }
+
+    // 更新 Workspace.md
+    workspaceMdData.rules = currentRules;
+    workspaceMdData.updatedAt = now();
+    await this.md.writeWorkspaceMd(projectRoot, workspaceId, workspaceMdData);
+
+    // 计算新的哈希
+    const rulesHash = currentRules.length > 0
+      ? crypto.createHash("md5").update(currentRules.join("\n")).digest("hex").substring(0, 8)
+      : "";
+
+    return {
+      success: true,
+      rulesCount: currentRules.length,
+      rulesHash,
+      rules: currentRules,
+    };
   }
 }

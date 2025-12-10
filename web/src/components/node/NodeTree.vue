@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { NodeTreeItem, NodeStatus } from '@/types'
-import { STATUS_CONFIG } from '@/types'
+import type { NodeTreeItem, NodeStatus, NodeRole } from '@/types'
+import { STATUS_CONFIG, NODE_ROLE_CONFIG } from '@/types'
 
 const props = defineProps<{
   tree: NodeTreeItem | null
@@ -27,6 +27,12 @@ function getStatusColor(status: NodeStatus) {
 // 获取状态 emoji
 function getStatusEmoji(status: NodeStatus) {
   return STATUS_CONFIG[status]?.emoji || '⚪'
+}
+
+// 获取角色 emoji
+function getRoleEmoji(role?: NodeRole) {
+  if (!role) return ''
+  return NODE_ROLE_CONFIG[role]?.emoji || ''
 }
 
 // 选择节点
@@ -65,6 +71,9 @@ function isSelected(id: string) {
           <span class="status-icon" :style="{ color: getStatusColor(data.status) }">
             {{ getStatusEmoji(data.status) }}
           </span>
+          <span v-if="data.role" class="role-icon" :title="NODE_ROLE_CONFIG[data.role as NodeRole]?.label">
+            {{ getRoleEmoji(data.role as NodeRole) }}
+          </span>
           <span class="node-title">{{ data.title }}</span>
           <span v-if="isFocus(data.id)" class="focus-indicator">◄</span>
         </span>
@@ -92,6 +101,11 @@ function isSelected(id: string) {
 
 .status-icon {
   font-size: 14px;
+}
+
+.role-icon {
+  font-size: 12px;
+  opacity: 0.8;
 }
 
 .node-title {

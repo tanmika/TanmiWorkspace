@@ -51,6 +51,7 @@ export interface ContextGetResult {
   workspace: {
     goal: string;
     rules: string[];
+    rulesHash: string;           // 规则哈希（用于 node_create 验证）
     docs: DocRefWithStatus[];  // 仅包含 status == 'active' 的引用
   };
   chain: ContextChainItem[];   // 从根到当前节点的上下文链

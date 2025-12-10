@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore, useWorkspaceStore } from '@/stores'
-import { STATUS_CONFIG, NODE_TYPE_CONFIG, type TransitionAction } from '@/types'
+import { STATUS_CONFIG, NODE_TYPE_CONFIG, NODE_ROLE_CONFIG, type TransitionAction } from '@/types'
 import StatusIcon from '@/components/common/StatusIcon.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import LogTimeline from '@/components/log/LogTimeline.vue'
@@ -21,6 +21,10 @@ const currentNode = computed(() => {
 // 节点类型
 const nodeType = computed(() => nodeMeta.value?.type || 'execution')
 const isPlanning = computed(() => nodeType.value === 'planning')
+
+// 节点角色
+const nodeRole = computed(() => nodeMeta.value?.role)
+const roleConfig = computed(() => nodeRole.value ? NODE_ROLE_CONFIG[nodeRole.value] : null)
 
 // 可用的状态转换（根据节点类型）
 const availableActions = computed(() => {
@@ -157,6 +161,15 @@ function formatTime(isoString: string) {
         <el-tag :color="STATUS_CONFIG[nodeMeta.status].color" effect="dark" size="small">
           {{ STATUS_CONFIG[nodeMeta.status].label }}
         </el-tag>
+        <el-tag
+          v-if="roleConfig"
+          :color="roleConfig.color"
+          effect="dark"
+          size="small"
+          :title="roleConfig.description"
+        >
+          {{ roleConfig.emoji }} {{ roleConfig.label }}
+        </el-tag>
       </div>
     </div>
 
@@ -246,9 +259,11 @@ function formatTime(isoString: string) {
           :key="child.nodeId"
           class="child-item"
         >
-          <StatusIcon :status="child.status" :size="14" />
-          <span class="child-title">{{ child.title }}</span>
-          <span class="child-conclusion">{{ child.conclusion }}</span>
+          <div class="child-header">
+            <StatusIcon :status="child.status" :size="14" />
+            <span class="child-title">{{ child.title }}</span>
+          </div>
+          <div class="child-conclusion">{{ child.conclusion }}</div>
         </div>
       </div>
     </el-card>
@@ -347,25 +362,33 @@ function formatTime(isoString: string) {
 .child-conclusions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .child-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
+  padding: 10px 12px;
   background: #f5f7fa;
-  border-radius: 4px;
+  border-radius: 6px;
+  border-left: 3px solid #409eff;
+}
+
+.child-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .child-title {
   font-weight: 600;
-  min-width: 100px;
+  font-size: 13px;
+  color: #303133;
 }
 
 .child-conclusion {
-  flex: 1;
+  font-size: 13px;
   color: #606266;
+  line-height: 1.5;
+  padding-left: 20px;
 }
 </style>

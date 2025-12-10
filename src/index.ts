@@ -151,6 +151,15 @@ function createMcpServer(services: Services): Server {
           });
           break;
 
+        case "workspace_update_rules":
+          result = await services.workspace.updateRules({
+            workspaceId: args?.workspaceId as string,
+            action: args?.action as "add" | "remove" | "replace",
+            rule: args?.rule as string | undefined,
+            rules: args?.rules as string[] | undefined,
+          });
+          break;
+
         // Node 工具
         case "node_create":
           result = await services.node.create({
@@ -160,6 +169,8 @@ function createMcpServer(services: Services): Server {
             title: args?.title as string,
             requirement: args?.requirement as string | undefined,
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
+            rulesHash: args?.rulesHash as string | undefined,
+            role: args?.role as "info_collection" | "validation" | "summary" | undefined,
           });
           break;
 

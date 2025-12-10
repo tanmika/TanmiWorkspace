@@ -10,6 +10,23 @@ export type NodeType =
   | "execution";  // 执行节点：负责具体执行，不能有子节点
 
 /**
+ * 节点角色 - 节点在工作流中的特殊职责
+ */
+export type NodeRole =
+  | "info_collection"  // 信息收集：调研、分析，完成时自动归档到工作区规则和文档
+  | "validation"       // 验证：预留，用于验证类任务
+  | "summary";         // 汇总：预留，用于汇总类任务
+
+/**
+ * 节点执行者 - 预留字段，用于未来子 agent 派发
+ * @reserved 暂不实现，仅作设计预留
+ */
+// export type NodeExecutor =
+//   | "main"        // 主 agent 执行（默认）
+//   | "sub_agent"   // 派发到子 agent 执行
+//   | "human";      // 需要人工介入
+
+/**
  * 执行节点状态
  */
 export type ExecutionStatus =
@@ -80,6 +97,8 @@ export interface NodeMeta {
   isolate: boolean;                 // 是否切断上下文继承
   references: string[];             // 跨节点引用的 ID 列表
   conclusion: string | null;        // 节点完成时的结论
+  role?: NodeRole;                  // 节点角色（可选）
+  // executor?: NodeExecutor;       // 执行者（预留，用于子 agent 派发）
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +127,7 @@ export interface NodeTreeItem {
   type: NodeType;
   title: string;
   status: NodeStatus;
+  role?: NodeRole;
   children: NodeTreeItem[];
 }
 
@@ -123,6 +143,8 @@ export interface NodeCreateParams {
   title: string;
   requirement?: string;
   docs?: DocRef[];
+  rulesHash?: string;               // 规则哈希（用于验证 AI 已阅读规则）
+  role?: NodeRole;                  // 节点角色（可选）
 }
 
 /**
@@ -131,6 +153,7 @@ export interface NodeCreateParams {
 export interface NodeCreateResult {
   nodeId: string;
   path: string;
+  autoReopened?: string; // 如果父节点被自动 reopen，返回父节点 ID
   hint?: string;
 }
 
@@ -220,6 +243,7 @@ export interface NodeUpdateParams {
   title?: string;
   requirement?: string;
   note?: string;
+  conclusion?: string;
 }
 
 /**

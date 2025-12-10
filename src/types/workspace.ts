@@ -135,6 +135,8 @@ export interface WorkspaceGetResult {
   graph: import("./node.js").NodeGraph;
   workspaceMd: string;
   webUrl: string;                     // Web UI 访问地址
+  rulesCount: number;                 // 规则条数
+  rulesHash: string;                  // 规则内容哈希（用于验证）
 }
 
 /**
@@ -174,4 +176,24 @@ export interface WorkspaceStatusResult {
     currentFocus: string | null;
   };
   webUrl: string;                     // Web UI 访问地址
+}
+
+/**
+ * workspace_update_rules 输入
+ */
+export interface WorkspaceUpdateRulesParams {
+  workspaceId: string;
+  action: "add" | "remove" | "replace";
+  rule?: string;                      // add/remove 时使用
+  rules?: string[];                   // replace 时使用
+}
+
+/**
+ * workspace_update_rules 输出
+ */
+export interface WorkspaceUpdateRulesResult {
+  success: boolean;
+  rulesCount: number;
+  rulesHash: string;
+  rules: string[];
 }

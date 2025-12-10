@@ -1,5 +1,6 @@
 // src/services/NodeService.ts
 
+import * as crypto from "node:crypto";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
@@ -52,7 +53,7 @@ export class NodeService {
    * 创建节点
    */
   async create(params: NodeCreateParams): Promise<NodeCreateResult> {
-    const { workspaceId, parentId, type, title, requirement = "", docs = [] } = params;
+    const { workspaceId, parentId, type, title, requirement = "", docs = [], role } = params;
 
     // 1. 获取 projectRoot
     const projectRoot = await this.resolveProjectRoot(workspaceId);
@@ -72,15 +73,41 @@ export class NodeService {
       );
     }
 
-    // 4. 验证父节点状态允许创建子节点（planning 状态）
-    if (parentMeta.status !== "planning" && parentMeta.status !== "pending") {
+    // 4. 如果父节点是 completed 状态，自动 reopen 到 planning
+    let autoReopened = false;
+    if (parentMeta.status === "completed") {
+      parentMeta.status = "planning";
+      parentMeta.updatedAt = now();
+      // 清空结论（reopen 语义）
+      const oldConclusion = parentMeta.conclusion;
+      parentMeta.conclusion = null;
+      autoReopened = true;
+      // 同步更新 Info.md 中的状态
+      await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "planning");
+    }
+
+    // 5. 验证父节点状态允许创建子节点（pending/planning/monitoring 状态）
+    const allowedStatuses = new Set(["pending", "planning", "monitoring"]);
+    if (!allowedStatuses.has(parentMeta.status)) {
       throw new TanmiError(
         "INVALID_PARENT_STATUS",
-        `父节点状态 "${parentMeta.status}" 不允许创建子节点，需要处于 pending 或 planning 状态`
+        `父节点状态 "${parentMeta.status}" 不允许创建子节点，需要处于 pending、planning 或 monitoring 状态`
       );
     }
 
-    // 5. 验证节点类型
+    // 5.1 验证规则哈希（如果工作区有规则）
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
+    if (workspaceMdData.rules.length > 0) {
+      const expectedHash = crypto.createHash("md5").update(workspaceMdData.rules.join("\n")).digest("hex").substring(0, 8);
+      if (params.rulesHash !== expectedHash) {
+        throw new TanmiError(
+          "RULES_HASH_MISMATCH",
+          `工作区有 ${workspaceMdData.rules.length} 条规则，请先通过 workspace_get 或 context_get 获取 rulesHash，并在创建节点时传入。\n规则内容：\n${workspaceMdData.rules.map((r, i) => `${i + 1}. ${r}`).join("\n")}`
+        );
+      }
+    }
+
+    // 6. 验证节点类型
     if (!type || (type !== "planning" && type !== "execution")) {
       throw new TanmiError(
         "INVALID_NODE_TYPE",
@@ -128,6 +155,7 @@ export class NodeService {
       isolate: false,
       references: [],
       conclusion: null,
+      role,  // 节点角色（可选）
       createdAt: currentTime,
       updatedAt: currentTime,
     };
@@ -171,9 +199,23 @@ export class NodeService {
         : "💡 规划节点已创建。下一步：调用 node_transition(action=\"start\") 进入规划状态。";
     }
 
+    // 如果自动 reopen 了父节点，追加提示
+    if (autoReopened) {
+      hint = `⚠️ 父节点 ${parentId} 已自动从 completed 重开为 planning。` + hint;
+    }
+
+    // 14.1 如果工作区有规则，在 hint 末尾追加规则提醒
+    if (workspaceMdData.rules.length > 0) {
+      const rulesReminder = workspaceMdData.rules
+        .map((r, i) => `  ${i + 1}. ${r}`)
+        .join("\n");
+      hint += `\n\n📋 工作区规则提醒：\n${rulesReminder}`;
+    }
+
     return {
       nodeId,
       path: nodePath,
+      autoReopened: autoReopened ? parentId : undefined,
       hint,
     };
   }
@@ -249,6 +291,7 @@ export class NodeService {
       type: node.type,
       title: nodeInfo.title,
       status: node.status,
+      role: node.role,
       children: [],
     };
 
@@ -385,7 +428,7 @@ export class NodeService {
    * 更新节点
    */
   async update(params: NodeUpdateParams): Promise<NodeUpdateResult> {
-    const { workspaceId, nodeId, title, requirement, note } = params;
+    const { workspaceId, nodeId, title, requirement, note, conclusion } = params;
 
     // 1. 获取 projectRoot
     const projectRoot = await this.resolveProjectRoot(workspaceId);
@@ -420,6 +463,10 @@ export class NodeService {
       nodeInfo.notes = note;
       updates.push("备注");
     }
+    if (conclusion !== undefined && conclusion !== nodeInfo.conclusion) {
+      nodeInfo.conclusion = conclusion;
+      updates.push("结论");
+    }
 
     // 如果没有任何更新，直接返回
     if (updates.length === 0) {
@@ -435,8 +482,11 @@ export class NodeService {
     // 7. 写入 Info.md
     await this.md.writeNodeInfo(projectRoot, workspaceId, nodeId, nodeInfo);
 
-    // 8. 更新 graph.json 的 updatedAt
+    // 8. 更新 graph.json 的 updatedAt 和 conclusion
     graph.nodes[nodeId].updatedAt = currentTime;
+    if (conclusion !== undefined) {
+      graph.nodes[nodeId].conclusion = conclusion || null;
+    }
     await this.json.writeGraph(projectRoot, workspaceId, graph);
 
     // 9. 追加日志

@@ -123,6 +123,47 @@ export const workspaceStatusTool: Tool = {
 };
 
 /**
+ * workspace_update_rules 工具定义
+ */
+export const workspaceUpdateRulesTool: Tool = {
+  name: "workspace_update_rules",
+  description: `动态更新工作区规则。
+
+**规则分类**：
+- 全局规则：工作区级别，所有节点都要遵守 → 通过此 API 更新
+- 节点规则：针对特定任务的约束 → 通过 node_update 更新 requirement
+
+**使用场景**：
+- 用户要求记录重要信息（如环境变量、路径配置）到规则中
+- 发现需要全局遵守的新约束
+- 清理过时的规则`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+      action: {
+        type: "string",
+        enum: ["add", "remove", "replace"],
+        description: "操作类型：add（追加单条）、remove（删除单条）、replace（替换全部）",
+      },
+      rule: {
+        type: "string",
+        description: "规则内容（add/remove 时使用）",
+      },
+      rules: {
+        type: "array",
+        items: { type: "string" },
+        description: "规则数组（replace 时使用）",
+      },
+    },
+    required: ["workspaceId", "action"],
+  },
+};
+
+/**
  * 所有工作区工具
  */
 export const workspaceTools: Tool[] = [
@@ -131,4 +172,5 @@ export const workspaceTools: Tool[] = [
   workspaceGetTool,
   workspaceDeleteTool,
   workspaceStatusTool,
+  workspaceUpdateRulesTool,
 ];

@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Plus, List, Share, Refresh, InfoFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, List, Share, Refresh, InfoFilled, Aim, ArrowDown, ArrowUp, Close } from '@element-plus/icons-vue'
 import { useWorkspaceStore, useNodeStore } from '@/stores'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
@@ -84,6 +84,12 @@ async function loadWorkspace() {
 
 // 工作区信息栏展开状态
 const showInfoBar = ref(true)
+const infoExpanded = ref(false)
+
+// 是否有规则或文档可展开
+const hasRulesOrDocs = computed(() => {
+  return workspaceStore.currentRules.length > 0 || workspaceStore.currentDocs.length > 0
+})
 
 // 进度百分比
 const progressPercent = computed(() => {
@@ -107,6 +113,30 @@ async function handleRefresh() {
     ElMessage.error('刷新失败')
   } finally {
     isRefreshing.value = false
+  }
+}
+
+// 聚焦当前任务
+const isFocusing = ref(false)
+async function handleFocusCurrent() {
+  isFocusing.value = true
+  try {
+    // 先刷新工作区数据，获取最新的 currentFocus
+    await workspaceStore.fetchWorkspace(workspaceId.value)
+    await nodeStore.fetchNodeTree()
+
+    const focusId = workspaceStore.currentFocus
+    if (focusId) {
+      // 选中聚焦的节点
+      await nodeStore.selectNode(focusId)
+      ElMessage.success('已定位到当前任务')
+    } else {
+      ElMessage.info('当前没有聚焦的任务')
+    }
+  } catch {
+    ElMessage.error('定位失败')
+  } finally {
+    isFocusing.value = false
   }
 }
 
@@ -180,6 +210,14 @@ async function handleCreateNode() {
         </el-tooltip>
       </div>
       <div class="right">
+        <el-tooltip content="聚焦当前任务" placement="bottom">
+          <el-button
+            :icon="Aim"
+            circle
+            :loading="isFocusing"
+            @click="handleFocusCurrent"
+          />
+        </el-tooltip>
         <el-tooltip content="刷新数据" placement="bottom">
           <el-button
             :icon="Refresh"
@@ -195,29 +233,72 @@ async function handleCreateNode() {
     <!-- 工作区信息栏 -->
     <transition name="slide">
       <div v-if="showInfoBar && workspaceStore.currentStatus" class="info-bar">
-        <div class="info-item goal">
-          <span class="label">目标</span>
-          <span class="value">{{ workspaceStore.currentStatus.goal }}</span>
-        </div>
-        <div class="info-item progress">
-          <span class="label">进度</span>
-          <div class="progress-content">
-            <el-progress
-              :percentage="progressPercent"
-              :stroke-width="8"
-              :show-text="false"
-              style="width: 120px"
-            />
-            <span class="progress-text">
-              {{ workspaceStore.currentStatus.completedNodes }}/{{ workspaceStore.currentStatus.totalNodes }}
-            </span>
+        <div class="info-bar-main">
+          <div class="info-item goal">
+            <span class="label">目标</span>
+            <span class="value">{{ workspaceStore.currentStatus.goal }}</span>
           </div>
+          <div class="info-item progress">
+            <span class="label">进度</span>
+            <div class="progress-content">
+              <el-progress
+                :percentage="progressPercent"
+                :stroke-width="8"
+                :show-text="false"
+                style="width: 120px"
+              />
+              <span class="progress-text">
+                {{ workspaceStore.currentStatus.completedNodes }}/{{ workspaceStore.currentStatus.totalNodes }}
+              </span>
+            </div>
+          </div>
+          <el-button
+            v-if="hasRulesOrDocs"
+            :icon="infoExpanded ? ArrowUp : ArrowDown"
+            text
+            size="small"
+            @click="infoExpanded = !infoExpanded"
+          >
+            {{ infoExpanded ? '收起' : '详情' }}
+          </el-button>
         </div>
       </div>
     </transition>
 
     <!-- 主内容区 -->
     <div class="main-content">
+      <!-- 工作区详情浮层 -->
+      <transition name="fade">
+        <div v-if="infoExpanded" class="info-overlay" @click.self="infoExpanded = false">
+          <div class="info-panel">
+            <div class="info-panel-header">
+              <span>工作区详情</span>
+              <el-button :icon="Close" text size="small" @click="infoExpanded = false" />
+            </div>
+            <div class="info-panel-body">
+              <div v-if="workspaceStore.currentRules.length > 0" class="info-section">
+                <span class="section-label">规则</span>
+                <ul class="info-list">
+                  <li v-for="(rule, idx) in workspaceStore.currentRules" :key="idx">{{ rule }}</li>
+                </ul>
+              </div>
+              <div v-if="workspaceStore.currentDocs.length > 0" class="info-section">
+                <span class="section-label">文档</span>
+                <ul class="info-list">
+                  <li v-for="(doc, idx) in workspaceStore.currentDocs" :key="idx">
+                    <span class="doc-path">{{ doc.path }}</span>
+                    <span class="doc-desc">{{ doc.description }}</span>
+                  </li>
+                </ul>
+              </div>
+              <div v-if="workspaceStore.currentRules.length === 0 && workspaceStore.currentDocs.length === 0" class="empty-tip">
+                暂无规则和文档
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+
       <!-- 左侧：节点树 -->
       <aside class="sidebar" :style="{ width: sidebarWidth + 'px' }">
         <div class="sidebar-header">
@@ -349,11 +430,16 @@ async function handleCreateNode() {
 /* 信息栏样式 */
 .info-bar {
   display: flex;
-  align-items: center;
-  gap: 32px;
+  flex-direction: column;
   padding: 12px 24px;
   background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
   border-bottom: 1px solid #e4e7ed;
+}
+
+.info-bar-main {
+  display: flex;
+  align-items: center;
+  gap: 32px;
 }
 
 .info-item {
@@ -389,6 +475,101 @@ async function handleCreateNode() {
   font-weight: 500;
 }
 
+/* 工作区详情浮层 */
+.info-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  padding-top: 40px;
+}
+
+.info-panel {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 600px;
+  max-width: 90%;
+  max-height: calc(100% - 80px);
+  display: flex;
+  flex-direction: column;
+}
+
+.info-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4e7ed;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.info-panel-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.info-section {
+  margin-bottom: 16px;
+}
+
+.info-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-label {
+  font-size: 13px;
+  color: #909399;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.info-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  color: #303133;
+  line-height: 1.8;
+}
+
+.info-list li {
+  margin-bottom: 4px;
+}
+
+.doc-path {
+  color: #409eff;
+  margin-right: 8px;
+}
+
+.doc-desc {
+  color: #909399;
+}
+
+.empty-tip {
+  color: #909399;
+  text-align: center;
+  padding: 20px;
+}
+
+/* 浮层动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
 /* 信息栏展开/收起动画 */
 .slide-enter-active,
 .slide-leave-active {
@@ -414,6 +595,7 @@ async function handleCreateNode() {
   flex: 1;
   display: flex;
   overflow: hidden;
+  position: relative;
 }
 
 .sidebar {

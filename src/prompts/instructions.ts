@@ -45,25 +45,40 @@ export const CORE_WORKFLOW = `
 \`\`\`
 用户提出任务
     ↓
-★ 扫描项目根目录一级菜单，分析结构
-  - 有没有文档文件夹？（./Doc/, ./docs/, ./documentation/）
-  - 有没有规则文件夹？（./RULE/, ./rules/）
-  - 有没有 README？
-  - 项目大致结构是什么？
-    ↓
-记录项目结构到日志，智能匹配相关文档和规范
-    ↓
-向用户确认：目标、规则、文档引用
-    ↓
 调用 workspace_init 创建工作区
-  - rules: 只读的项目规范（md 规则文件、对话中补充的临时规则）
-  - docs: 全局文档索引（md 文档、重要代码文件）
+  - name: 任务名称
+  - goal: 任务目标
+  - rules: 初始规则（可选，后续会通过信息收集补充）
+  - docs: 初始文档（可选，后续会通过信息收集补充）
     ↓
 ★ 告知用户 webUrl（可视化界面地址）
     ↓
-根据任务类型制定计划，创建子节点
-  - ★ 创建子节点时使用 docs 参数派发相关文档
+★★★ 必须先创建信息收集节点 ★★★
+    ↓
+创建 planning 类型、role='info_collection' 的信息收集节点
+    ↓
+在信息收集节点中：
+  - 扫描项目根目录一级菜单，分析结构
+  - 查找文档文件夹（./Doc/, ./docs/, ./documentation/）
+  - 查找规则文件夹（./RULE/, ./rules/）
+  - 阅读 README 和项目配置
+  - 收集环境配置、路径信息等
+    ↓
+信息收集节点 complete 时，在 conclusion 中按格式归档：
+  ## 规则
+  - 规则1
+  - 规则2
+
+  ## 文档
+  - /path/to/doc1: 文档1描述
+  - /path/to/doc2: 文档2描述
+    ↓
+★ 系统自动将规则和文档追加到工作区
+    ↓
+返回根节点，开始规划具体执行任务
 \`\`\`
+
+**重要**：根节点 start 前必须先完成信息收集节点，否则会报错 INFO_COLLECTION_REQUIRED。
 
 ### 2. 节点类型与执行流程
 
@@ -261,41 +276,68 @@ export const SCENARIO_GUIDES: Record<string, string> = {
 
 ### 当用户说"帮我做 XXX"时：
 
-**步骤 1：收集信息**
+**步骤 1：向用户确认任务目标**
 \`\`\`
 向用户确认：
 1. 任务目标是什么？（简明描述）
-2. 有哪些相关的文档或规范需要遵循？
-3. 这是什么类型的任务？（需求开发/Bug修复/重构/总结）
+2. 这是什么类型的任务？（需求开发/Bug修复/重构/总结）
 \`\`\`
 
 **步骤 2：创建工作区**
 \`\`\`typescript
-// 调用示例
 workspace_init({
   name: "实现用户登录功能",
-  goal: "为应用添加用户名密码登录功能，包括前端表单和后端验证",
-  rules: ["./RULE/coding_standard.md"],
-  docs: [
-    { path: "./Doc/API设计.md", description: "后端 API 规范" },
-    { path: "./src/auth/", description: "现有认证模块" }
-  ]
+  goal: "为应用添加用户名密码登录功能"
+  // 不需要预先填写 rules 和 docs，信息收集阶段会补充
 })
 \`\`\`
 
 **步骤 2.5：告知用户 Web UI 地址**
-workspace_init 返回的 \`webUrl\` 是可视化界面地址，**务必告知用户**：
-> "工作区已创建！你可以在浏览器中打开此地址查看进度：
-> [webUrl 的值，例如 http://localhost:5173/workspace/ws-xxx]"
+workspace_init 返回的 \`webUrl\` 是可视化界面地址，**务必告知用户**。
 
-**步骤 3：制定计划**
-根据任务类型，创建子节点分解任务。
+**步骤 3：★ 创建信息收集节点（必须！）**
+\`\`\`typescript
+node_create({
+  workspaceId: "ws-xxx",
+  parentId: "root",
+  type: "planning",
+  role: "info_collection",  // 关键！标记为信息收集节点
+  title: "项目信息收集",
+  requirement: "收集项目结构、开发规范、相关文档等信息"
+})
+\`\`\`
+
+**步骤 4：在信息收集节点中执行调研**
+- 扫描项目根目录，了解结构
+- 查找文档文件夹、规则文件夹
+- 阅读 README 和配置文件
+- 收集环境变量、路径配置等
+
+**步骤 5：完成信息收集，归档到工作区**
+\`\`\`typescript
+node_transition({
+  workspaceId: "ws-xxx",
+  nodeId: "info-collection-node",
+  action: "complete",
+  conclusion: \`
+## 规则
+- 使用 TypeScript 开发
+- 遵循 ESLint 规范
+- 测试覆盖率 > 80%
+
+## 文档
+- ./docs/API.md: API 设计文档
+- ./docs/架构.md: 系统架构说明
+\`
+})
+// 系统会自动将规则和文档追加到工作区
+\`\`\`
+
+**步骤 6：返回根节点，制定执行计划**
+信息收集完成后，根节点可以 start，开始规划具体任务。
 
 **引导话术**：
-> "好的，我来帮你管理这个任务。首先让我确认几个问题：
-> 1. 这个任务的具体目标是什么？
-> 2. 有没有需要遵循的项目规范或参考文档？
-> 我会创建一个工作区来跟踪整个过程。"
+> "好的，我来帮你管理这个任务。让我先创建工作区，然后收集一下项目信息..."
 `,
 
   // 继续任务

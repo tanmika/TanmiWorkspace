@@ -21,6 +21,7 @@ export const ErrorCodes = {
   // 状态转换错误
   INVALID_TRANSITION: "INVALID_TRANSITION",
   CONCLUSION_REQUIRED: "CONCLUSION_REQUIRED",
+  INFO_COLLECTION_REQUIRED: "INFO_COLLECTION_REQUIRED",
 
   // 引用错误
   REFERENCE_NOT_FOUND: "REFERENCE_NOT_FOUND",
@@ -34,6 +35,8 @@ export const ErrorCodes = {
   EXECUTION_CANNOT_HAVE_CHILDREN: "EXECUTION_CANNOT_HAVE_CHILDREN",
   INVALID_PARENT_STATUS: "INVALID_PARENT_STATUS",
   INCOMPLETE_CHILDREN: "INCOMPLETE_CHILDREN",
+  RULES_HASH_MISMATCH: "RULES_HASH_MISMATCH",
+  INVALID_PARAMS: "INVALID_PARAMS",
 
   // 校验错误
   GRAPH_CORRUPTED: "GRAPH_CORRUPTED",
@@ -75,6 +78,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   CANNOT_DELETE_ROOT: "无法删除根节点",
   INVALID_TRANSITION: "非法状态转换",
   CONCLUSION_REQUIRED: "complete/fail 动作必须提供 conclusion",
+  INFO_COLLECTION_REQUIRED: "根节点 start 前必须完成信息收集节点",
   REFERENCE_NOT_FOUND: "引用不存在",
   REFERENCE_EXISTS: "引用已存在",
   LOG_APPEND_FAILED: "日志追加失败",
@@ -82,6 +86,8 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   EXECUTION_CANNOT_HAVE_CHILDREN: "执行节点不能创建子节点",
   INVALID_PARENT_STATUS: "父节点状态不允许创建子节点",
   INCOMPLETE_CHILDREN: "存在未完成的子节点",
+  RULES_HASH_MISMATCH: "规则哈希不匹配，请先获取最新规则",
+  INVALID_PARAMS: "参数无效",
   GRAPH_CORRUPTED: "节点图数据损坏",
   NODE_DIR_MISSING: "节点目录不存在",
   NODE_INFO_MISSING: "节点 Info.md 不存在",
