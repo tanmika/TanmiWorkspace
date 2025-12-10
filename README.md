@@ -5,212 +5,122 @@
 ## 核心特性
 
 - **分形任务结构**：支持任务的无限层级嵌套，任意步骤可升级为独立子任务
+- **双节点类型**：规划节点（planning）负责分解任务，执行节点（execution）负责具体执行
 - **聚焦上下文**：执行特定节点时自动过滤无关信息，避免上下文污染
 - **过程可追溯**：完整操作历史和试错路径，支持回溯复盘
-- **状态管理**：pending → implementing → validating → completed/failed
-- **项目级存储隔离**：workspaceId 通过全局索引映射到 projectRoot，数据写入项目内 `.tanmi-workspace`
+- **规则防护**：rulesHash 验证 + hint 提醒，确保 AI 遵守工作区规则
+- **信息收集机制**：根节点启动前强制完成信息收集，自动归档到工作区规则和文档
+- **项目级存储隔离**：数据写入项目内 `.tanmi-workspace`，支持多项目并行
 - **AI 引导**：内置使用指南和话术模板，可引导不熟悉的用户
 
----
+## 快速开始
 
-## Web 客户端
+### 系统要求
 
-前端单页应用托管于 `web/` 目录，为 TanmiWorkspace 提供可视化交互界面。
+- **Node.js >= 20.0.0**
 
-### 技术栈
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Vue 3 | ^3.5 | 响应式 UI 框架 |
-| TypeScript | ~5.9 | 类型安全 |
-| Vite | ^7.2 | 构建工具与开发服务器 |
-| Pinia | ^3.0 | 状态管理 |
-| Element Plus | ^2.11 | UI 组件库 |
-| Axios | ^1.13 | HTTP 客户端 |
-| Vue Router | ^4.6 | 路由管理 |
-
-### 页面结构
-
-#### 首页（HomeView）
-
-工作区管理面板，提供：
-
-- **工作区列表**：卡片式展示所有工作区，包含名称、状态、创建/更新时间
-- **状态筛选**：全部 / 活跃 / 已归档 三种过滤模式
-- **新建工作区**：弹窗表单，填写名称和目标即可创建
-- **快捷操作**：进入详情、删除（带确认）
-
-#### 工作区详情（WorkspaceView）
-
-双栏布局的任务管理界面：
-
-**左侧 - 节点树（NodeTree）**
-- 树形结构展示分形任务层级
-- 状态图标（emoji）实时反映节点状态
-- 焦点节点高亮标识（◄ 指示器）
-- 点击节点切换查看详情
-
-**右侧 - 节点详情（NodeDetail）**
-- 标题与状态徽章
-- 操作按钮组：根据当前状态动态显示可用转换
-  - pending → 开始执行
-  - implementing → 提交验证 / 直接完成 / 分裂子任务
-  - validating → 验证通过 / 验证失败
-  - failed → 重试
-- 需求描述卡片
-- 结论卡片（已完成节点）
-- 当前问题卡片（高亮警示）
-- 执行日志时间线（LogTimeline）：按时间线展示 AI/Human 操作记录
-- 子节点结论汇总
-
-### 组件一览
-
-```
-web/src/
-├── views/
-│   ├── HomeView.vue        # 工作区列表页
-│   ├── WorkspaceView.vue   # 工作区详情页
-│   └── NotFoundView.vue    # 404 页面
-├── components/
-│   ├── node/
-│   │   ├── NodeTree.vue    # 分形任务树
-│   │   └── NodeDetail.vue  # 节点详情面板
-│   ├── log/
-│   │   └── LogTimeline.vue # 日志时间线
-│   └── common/
-│       └── StatusIcon.vue  # 状态图标
-├── stores/
-│   ├── workspace.ts        # 工作区状态
-│   ├── node.ts             # 节点状态
-│   └── index.ts            # Store 导出
-├── api/
-│   ├── client.ts           # Axios 实例
-│   ├── workspace.ts        # 工作区 API
-│   ├── node.ts             # 节点 API
-│   ├── context.ts          # 上下文 API
-│   ├── log.ts              # 日志 API
-│   └── index.ts            # API 导出
-├── types/
-│   └── index.ts            # 类型定义与状态配置
-├── router/
-│   └── index.ts            # 路由配置
-├── main.ts                 # 入口文件
-└── App.vue                 # 根组件
-```
-
-### 状态配置
-
-节点状态通过颜色和 emoji 可视化区分：
-
-| 状态 | 颜色 | 图标 | 说明 |
-|------|------|------|------|
-| pending | #909399 | ⚪ | 待执行 |
-| implementing | #409EFF | 🔵 | 执行中 |
-| validating | #E6A23C | 🟡 | 验证中 |
-| completed | #67C23A | ✅ | 已完成 |
-| failed | #F56C6C | ❌ | 失败 |
-
-### 运行与开发
+### 安装
 
 ```bash
-cd web
-npm install
-npm run dev         # 开发服务器（热更新）
-npm run build       # 构建生产版本
-npm run preview     # 预览构建产物
-```
-
-### API 通信
-
-前端通过 `/api` 前缀与后端 HTTP 服务通信，Axios 实例配置：
-
-- 基础路径：`/api`
-- 超时时间：10 秒
-- 统一错误处理：拦截器提取错误信息
-
----
-
-## 系统要求
-
-- **Node.js >= 20.0.0**（必须）
-
-### 安装 Node 20
-
-```bash
-# 方式 1：使用 nvm（推荐）
-nvm install 20
-nvm use 20
-
-# 方式 2：直接下载
-# https://nodejs.org/ 下载 LTS 版本
-```
-
-## 安装
-
-```bash
+git clone https://github.com/tanmika/TanmiWorkspace.git
+cd TanmiWorkspace
 npm install
 npm run build
 ```
 
-## 配置 MCP 客户端
+### 配置 Claude Code（推荐）
 
-### Claude Desktop / Cursor
+1. 运行配置脚本添加 MCP 权限：
+```bash
+./scripts/setup-claude-code.sh
+```
 
+2. 编辑 `~/.claude/settings.json`，添加 MCP 服务器：
 ```json
 {
   "mcpServers": {
     "tanmi-workspace": {
       "command": "node",
-      "args": ["/path/to/tanmi-workspace/dist/check-node-version.js"]
+      "args": ["/path/to/TanmiWorkspace/dist/index.js"],
+      "env": {
+        "TANMI_PROJECT_ROOT": "/path/to/TanmiWorkspace"
+      }
     }
   }
 }
 ```
 
-### 如果系统默认 Node 版本低于 20
-
-需要指定 Node 20 的完整路径：
-
-```json
-{
-  "mcpServers": {
-    "tanmi-workspace": {
-      "command": "/path/to/node20/bin/node",
-      "args": ["/path/to/tanmi-workspace/dist/check-node-version.js"]
-    }
-  }
-}
-```
-
-**查找 Node 20 路径：**
+3. 启动 Claude Code：
 ```bash
-# 使用 nvm
-nvm which 20
-# 输出: /Users/xxx/.nvm/versions/node/v20.x.x/bin/node
-
-# 或者查看已安装位置
-which node
+claude
 ```
 
-## 快速开始
+> 详细配置说明见 [配置方式.md](配置方式.md)
+
+### 验证安装
+
+```
+调用 tanmi_help(topic="overview") 获取系统概述
+```
+
+## 基本用法
 
 ```typescript
 // 1. 创建工作区
-workspace_init({ name: "实现登录功能", goal: "添加用户名密码登录", projectRoot: process.cwd() }) // projectRoot 可选，默认当前目录
+workspace_init({ name: "实现登录功能", goal: "添加用户名密码登录" })
 
-// 2. 创建子任务
-node_create({ workspaceId: "ws-xxx", parentId: "root", title: "设计数据库" })
+// 2. 创建信息收集节点（根节点启动前必须）
+node_create({ workspaceId: "ws-xxx", parentId: "root", type: "planning",
+              title: "需求调研", role: "info_collection", rulesHash: "xxx" })
 
-// 3. 开始执行
+// 3. 完成信息收集后，创建执行任务
+node_create({ workspaceId: "ws-xxx", parentId: "root", type: "execution",
+              title: "实现登录接口", requirement: "使用 JWT 认证", rulesHash: "xxx" })
+
+// 4. 开始执行
 node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "start" })
 
-// 4. 记录过程
+// 5. 记录过程
 log_append({ workspaceId: "ws-xxx", nodeId: "node-xxx", operator: "AI", event: "创建表结构" })
 
-// 5. 完成任务
+// 6. 完成任务
 node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete", conclusion: "完成" })
 ```
-> workspace_init 现返回实际的 `projectRoot`，并可选带回前端 `webUrl` 便于直接打开 Web 界面。
+
+## 节点类型与状态
+
+### 节点类型
+
+| 类型 | 说明 | 可有子节点 |
+|------|------|:----------:|
+| `planning` | 规划节点：负责分析、分解、派发、汇总 | ✅ |
+| `execution` | 执行节点：负责具体执行任务 | ❌ |
+
+### 节点角色（可选）
+
+| 角色 | 说明 |
+|------|------|
+| `info_collection` | 信息收集节点，完成时自动归档规则和文档到工作区 |
+| `validation` | 验证节点（预留） |
+| `summary` | 汇总节点（预留） |
+
+### 状态流转
+
+**执行节点**：
+```
+pending → implementing → validating → completed
+                ↓              ↓
+              failed ←────────┘
+                ↓
+           (retry) → implementing
+```
+
+**规划节点**：
+```
+pending → planning → monitoring → completed
+              ↓           ↓
+          cancelled ←────┘
+```
 
 ## 工具列表（22 个）
 
@@ -219,7 +129,7 @@ node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete",
 |------|------|
 | `workspace_init` | 创建工作区 |
 | `workspace_list` | 列出工作区 |
-| `workspace_get` | 获取详情 |
+| `workspace_get` | 获取详情（含 rulesHash） |
 | `workspace_delete` | 删除工作区 |
 | `workspace_status` | 状态概览 |
 | `workspace_update_rules` | 动态更新规则 |
@@ -227,7 +137,7 @@ node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete",
 ### 节点
 | 工具 | 说明 |
 |------|------|
-| `node_create` | 创建子任务 |
+| `node_create` | 创建子任务（需传 type 和 rulesHash） |
 | `node_split` | 分裂子任务 |
 | `node_get` | 获取详情 |
 | `node_list` | 列出节点树 |
@@ -238,12 +148,12 @@ node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete",
 ### 状态
 | 工具 | 说明 |
 |------|------|
-| `node_transition` | 状态转换（start/submit/complete/fail/retry/reopen） |
+| `node_transition` | 状态转换（start/submit/complete/fail/retry/reopen/cancel） |
 
 ### 上下文
 | 工具 | 说明 |
 |------|------|
-| `context_get` | 获取聚焦上下文 |
+| `context_get` | 获取聚焦上下文（含 rulesHash） |
 | `context_focus` | 切换焦点 |
 | `node_isolate` | 设置隔离 |
 | `node_reference` | 管理引用 |
@@ -268,51 +178,47 @@ node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete",
 tanmi_help({ topic: "all" })
 
 // 场景指导
-tanmi_help({ topic: "start" })    // 开始新任务
-tanmi_help({ topic: "blocked" })  // 任务受阻
-tanmi_help({ topic: "split" })    // 分裂任务
-tanmi_help({ topic: "guide" })    // 引导用户
-
-// 话术模板
-tanmi_prompt({ template: "welcome" })
-tanmi_prompt({ template: "confirm_workspace", params: { name: "任务名", goal: "目标" } })
+tanmi_help({ topic: "start" })           // 开始新任务
+tanmi_help({ topic: "resume" })          // 继续任务
+tanmi_help({ topic: "session_restore" }) // 会话恢复
+tanmi_help({ topic: "blocked" })         // 任务受阻
+tanmi_help({ topic: "split" })           // 分裂任务
+tanmi_help({ topic: "complete" })        // 完成任务
+tanmi_help({ topic: "docs" })            // 文档引用管理
 ```
 
-### 帮助主题
+## Web 界面
 
-| 主题 | 说明 |
-|------|------|
-| `overview` | 系统概述 |
-| `workflow` | 核心流程 |
-| `tools` | 工具速查 |
-| `start` | 开始任务 |
-| `resume` | 继续任务 |
-| `session_restore` | 会话恢复 |
-| `blocked` | 任务受阻 |
-| `split` | 分裂任务 |
-| `complete` | 完成任务 |
-| `progress` | 查看进度 |
-| `guide` | 引导用户 |
-| `docs` | 文档引用管理 |
+TanmiWorkspace 提供可视化 Web 界面：
+
+```bash
+npm run start:http
+```
+
+访问 http://localhost:3000 查看工作区状态。
+
+**功能特性**：
+- 工作区列表与状态筛选
+- 节点树可视化（含状态图标和角色 emoji）
+- 节点详情面板（需求、结论、日志、问题）
+- 进度统计（含 failed/cancelled）
+- Markdown 渲染支持
 
 ## 数据存储
 
 ```
 ~/.tanmi-workspace/
 ├── index.json                     # workspaceId → projectRoot 映射
-├── templates/
-│   └── [template-id].json
 
 {projectRoot}/
 └── .tanmi-workspace/
     └── [workspace-id]/
-        ├── workspace.json         # 元数据（含 projectRoot）
-        ├── graph.json             # 节点拓扑（结构数据权威来源）
+        ├── workspace.json         # 元数据
+        ├── graph.json             # 节点拓扑（结构数据）
         ├── Workspace.md           # 规则、文档、目标
         ├── Log.md                 # 全局日志
-        ├── Problem.md             # 全局问题
         └── nodes/[node-id]/
-            ├── Info.md            # 节点需求与结论（内容数据权威来源）
+            ├── Info.md            # 节点需求与结论（内容数据）
             ├── Log.md             # 节点日志
             └── Problem.md         # 节点问题
 ```
@@ -320,31 +226,27 @@ tanmi_prompt({ template: "confirm_workspace", params: { name: "任务名", goal:
 ### 分层数据源
 
 | 数据类型 | 权威来源 | 可直接编辑 |
-|---------|---------|----------|
-| 内容数据（requirement, conclusion, notes） | Info.md | ✅ 本地编辑即生效 |
-| 结构数据（status, children, references） | graph.json | ❌ 需通过 API |
-
-> 详见 [docs/architecture.md](docs/architecture.md) 的"数据源规范"章节
+|---------|---------|:----------:|
+| 内容数据（requirement, conclusion, notes） | Info.md | ✅ |
+| 结构数据（status, children, references） | graph.json | ❌ |
 
 ## 开发
 
 ```bash
-# 一键启动（推荐）- 同时启动后端 API + 前端开发服务器
+# 一键启动（推荐）- 后端 API + 前端开发服务器
 npm run dev:all
 
 # 分别启动
-npm run start:http   # 后端 HTTP API (端口 3000)
-cd web && npm run dev  # 前端 Vite (端口 5173)
+npm run start:http:dev   # 后端 HTTP API (端口 3001)
+cd web && npm run dev    # 前端 Vite (端口 5173)
 
-# 其他命令
-npm run dev          # TypeScript 监视模式
-npm run build:all    # 构建后端 + 前端
-npm test             # 运行测试
+# 构建
+npm run build            # 后端
+npm run build:all        # 后端 + 前端
+
+# 测试
+npm test
 ```
-
-**访问地址：**
-- Web 界面：http://localhost:5173
-- API 服务：http://localhost:3000
 
 ## 项目结构
 
@@ -352,9 +254,30 @@ npm test             # 运行测试
 src/
 ├── index.ts           # MCP Server 入口
 ├── types/             # 类型定义
-├── storage/           # 存储层
-├── services/          # 业务逻辑
-├── tools/             # MCP Tools
-├── prompts/           # AI 指南
+├── storage/           # 存储层（JSON/Markdown）
+├── services/          # 业务逻辑层
+├── tools/             # MCP Tools 定义
+├── prompts/           # AI 指南与话术
+├── http/              # HTTP 服务器
 └── utils/             # 工具函数
+
+web/
+├── src/
+│   ├── views/         # 页面组件
+│   ├── components/    # 通用组件
+│   ├── stores/        # Pinia 状态管理
+│   ├── api/           # API 客户端
+│   └── types/         # 类型定义
 ```
+
+## 文档
+
+- [配置方式.md](配置方式.md) - 详细配置指南
+- [docs/architecture.md](docs/architecture.md) - 系统架构
+- [docs/core-layer.md](docs/core-layer.md) - 核心服务层
+- [docs/storage-layer.md](docs/storage-layer.md) - 存储层
+- [docs/reference-system.md](docs/reference-system.md) - 引用系统
+
+## License
+
+MIT
