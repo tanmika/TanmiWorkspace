@@ -139,7 +139,8 @@ export class StateService {
     nodeMeta.status = newStatus;
     nodeMeta.updatedAt = currentTime;
     if (conclusion) {
-      nodeMeta.conclusion = conclusion;
+      // 将字面量 \\n 转换为真正的换行符（MCP 工具调用时可能传入转义字符串）
+      nodeMeta.conclusion = conclusion.replace(/\\n/g, "\n");
     }
 
     // 5.1 父节点状态级联（仅执行节点 start/reopen 时）

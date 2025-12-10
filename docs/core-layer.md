@@ -42,9 +42,10 @@ category: core
 |------|------|
 | `init(params)` | 创建工作区，初始化目录结构和根节点 |
 | `list(params)` | 列出工作区，支持按状态过滤 |
-| `get(params)` | 获取工作区详情，包含配置、节点图、Markdown 内容 |
+| `get(params)` | 获取工作区详情，包含配置、节点图、Markdown 内容、rulesHash |
 | `delete(params)` | 删除工作区，活动状态需 force=true |
 | `status(params)` | 生成工作区状态可视化（box/markdown 格式） |
+| `updateRules(params)` | 动态更新规则（add/remove/replace），返回新 rulesHash |
 
 **初始化流程**:
 1. 生成唯一 workspaceId（`ws-{timestamp}-{random}`）
@@ -66,10 +67,11 @@ category: core
 | `create(params)` | 创建子节点，继承父节点上下文 |
 | `get(params)` | 获取节点详情，合并 graph + Info.md |
 | `list(params)` | 获取节点树，支持指定起点和深度 |
-| `delete(params)` | 递归删除节点及其子树 |
-| `update(params)` | 更新节点信息（标题、需求、备注） |
+| `delete(params)` | 递归删除节点及其子树，清理悬空引用 |
+| `update(params)` | 更新节点信息（标题、需求、备注、结论） |
 | `split(params)` | 执行中分裂子任务，清空父节点 Problem |
 | `move(params)` | 移动节点到新父节点，防止循环依赖 |
+| `buildNodeTree(params)` | 构建节点树结构，支持深度限制 |
 
 **节点 ID 格式**: `node-{timestamp}-{random}`
 
@@ -81,7 +83,7 @@ category: core
 
 **职责**: 状态机和状态转换
 
-**状态流转图**:
+**状态流转图（执行节点）**:
 
 ```
                     ┌─────────────────────────────────┐
@@ -104,18 +106,52 @@ category: core
                   └─────────────┘
 ```
 
-**状态转换表**:
+**状态流转图（规划节点）**:
+
+```
+┌─────────┐ start ┌──────────┐  创建子节点  ┌────────────┐
+│ pending │──────▶│ planning │────────────▶│ monitoring │
+└─────────┘       └────┬─────┘             └─────┬──────┘
+                       │                         │
+                       │ cancel                  │ complete（子节点全部终态）
+                       ▼                         ▼
+                 ┌───────────┐            ┌───────────┐
+                 │ cancelled │            │ completed │
+                 └───────────┘            └─────┬─────┘
+                                                │
+                                                │ reopen
+                                                ▼
+                                          ┌──────────┐
+                                          │ planning │
+                                          └──────────┘
+```
+
+**执行节点状态转换表**:
 
 | Action | From | To | 说明 |
 |--------|------|-----|------|
 | start | pending | implementing | 开始执行 |
 | submit | implementing | validating | 提交验证 |
 | complete | implementing/validating | completed | 完成（需 conclusion） |
-| fail | validating | failed | 失败（需 conclusion） |
+| fail | implementing/validating | failed | 失败（需 conclusion） |
 | retry | failed | implementing | 重试 |
 | reopen | completed | implementing | 重新激活 |
 
-**级联更新**: start/reopen 会将父节点状态从 pending/completed 更新为 implementing
+**规划节点状态转换表**:
+
+| Action | From | To | 说明 |
+|--------|------|-----|------|
+| start | pending | planning | 开始规划 |
+| complete | planning/monitoring | completed | 完成汇总（需 conclusion，子节点需全部终态） |
+| cancel | planning/monitoring | cancelled | 取消规划（需 conclusion） |
+| reopen | completed/cancelled | planning | 重新规划 |
+
+**级联更新**:
+- start/reopen 自动将父规划节点从 pending/completed 更新为 planning/monitoring
+- 创建子节点时，父规划节点自动从 pending/planning 转为 monitoring
+- 在 completed 父节点下创建子节点时，自动 reopen 父节点
+
+**终态定义**: completed、failed、cancelled 均为终态
 
 ### ContextService
 
@@ -137,6 +173,7 @@ category: core
   workspace: {
     goal: string;           // 工作区目标
     rules: string[];        // 规则列表
+    rulesHash: string;      // 规则哈希（用于 node_create 验证）
     docs: DocRef[];         // 活跃文档引用
   },
   chain: ContextChainItem[];     // 上下文链（根→当前）

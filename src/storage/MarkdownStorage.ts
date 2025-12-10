@@ -663,7 +663,8 @@ ${data.nextStep}
     conclusion: string
   ): Promise<void> {
     const info = await this.readNodeInfo(projectRoot, workspaceId, nodeId);
-    info.conclusion = conclusion;
+    // 将字面量 \\n 转换为真正的换行符（MCP 工具调用时可能传入转义字符串）
+    info.conclusion = conclusion.replace(/\\n/g, "\n");
     await this.writeNodeInfo(projectRoot, workspaceId, nodeId, info);
   }
 

@@ -212,7 +212,7 @@ node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete",
 ```
 > workspace_init 现返回实际的 `projectRoot`，并可选带回前端 `webUrl` 便于直接打开 Web 界面。
 
-## 工具列表（19 个）
+## 工具列表（22 个）
 
 ### 工作区
 | 工具 | 说明 |
@@ -222,6 +222,7 @@ node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete",
 | `workspace_get` | 获取详情 |
 | `workspace_delete` | 删除工作区 |
 | `workspace_status` | 状态概览 |
+| `workspace_update_rules` | 动态更新规则 |
 
 ### 节点
 | 工具 | 说明 |
@@ -232,6 +233,7 @@ node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete",
 | `node_list` | 列出节点树 |
 | `node_update` | 更新节点 |
 | `node_delete` | 删除节点 |
+| `node_move` | 移动节点 |
 
 ### 状态
 | 工具 | 说明 |
@@ -285,11 +287,13 @@ tanmi_prompt({ template: "confirm_workspace", params: { name: "任务名", goal:
 | `tools` | 工具速查 |
 | `start` | 开始任务 |
 | `resume` | 继续任务 |
+| `session_restore` | 会话恢复 |
 | `blocked` | 任务受阻 |
 | `split` | 分裂任务 |
 | `complete` | 完成任务 |
 | `progress` | 查看进度 |
 | `guide` | 引导用户 |
+| `docs` | 文档引用管理 |
 
 ## 数据存储
 

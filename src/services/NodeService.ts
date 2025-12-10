@@ -127,6 +127,8 @@ export class NodeService {
     await this.fs.mkdir(nodePath);
 
     // 9. 写入 Info.md
+    // 将字面量 \\n 转换为真正的换行符（MCP 工具调用时可能传入转义字符串）
+    const normalizedRequirement = requirement.replace(/\\n/g, "\n");
     const nodeInfo: NodeInfoData = {
       id: nodeId,
       type,
@@ -134,7 +136,7 @@ export class NodeService {
       status: "pending",
       createdAt: currentTime,
       updatedAt: currentTime,
-      requirement,
+      requirement: normalizedRequirement,
       docs,
       notes: "",
       conclusion: "",
