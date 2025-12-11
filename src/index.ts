@@ -21,6 +21,7 @@ import { nodeTools } from "./tools/node.js";
 import { stateTools } from "./tools/state.js";
 import { contextTools } from "./tools/context.js";
 import { logTools } from "./tools/log.js";
+import { sessionTools } from "./tools/session.js";
 import { helpTools, type HelpTopic, type PromptTemplate } from "./tools/help.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
@@ -100,6 +101,7 @@ function createMcpServer(services: Services): Server {
       ...stateTools,
       ...contextTools,
       ...logTools,
+      ...sessionTools,
       ...helpTools,
     ],
   }));
@@ -204,6 +206,7 @@ function createMcpServer(services: Services): Server {
             title: args?.title as string | undefined,
             requirement: args?.requirement as string | undefined,
             note: args?.note as string | undefined,
+            conclusion: args?.conclusion as string | undefined,
           });
           break;
 
@@ -286,6 +289,27 @@ function createMcpServer(services: Services): Server {
           result = await services.log.clearProblem({
             workspaceId: args?.workspaceId as string,
             nodeId: args?.nodeId as string | undefined,
+          });
+          break;
+
+        // Session 工具
+        case "session_bind":
+          result = await services.session.bind({
+            sessionId: args?.sessionId as string,
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string | undefined,
+          });
+          break;
+
+        case "session_unbind":
+          result = await services.session.unbind({
+            sessionId: args?.sessionId as string,
+          });
+          break;
+
+        case "session_status":
+          result = await services.session.status({
+            sessionId: args?.sessionId as string,
           });
           break;
 

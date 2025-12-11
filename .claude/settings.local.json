@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__tanmi-workspace__workspace_list",
+      "mcp__tanmi-workspace__workspace_get",
+      "mcp__tanmi-workspace__node_create",
+      "mcp__tanmi-workspace__node_transition",
+      "mcp__tanmi-workspace__node_update",
+      "mcp__tanmi-workspace__context_get",
+      "mcp__tanmi-workspace__node_move",
+      "Bash(npm run build:*)",
+      "mcp__tanmi-workspace__node_list",
+      "mcp__tanmi-workspace__node_get",
+      "mcp__tanmi-workspace__workspace_status",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(python3:*)",
+      "mcp__tanmi-workspace__workspace_init",
+      "Bash(chmod:*)",
+      "Bash(node:*)",
+      "mcp__tanmi-workspace__problem_update",
+      "Bash(TANMI_DEV=true node:*)",
+      "Bash(TANMI_DEV=true echo:*)",
+      "mcp__tanmi-workspace__log_append",
+      "Bash(echo:*)",
+      "mcp__tanmi-workspace__problem_clear",
+      "Bash(./scripts/install-global.sh:*)",
+      "mcp__tanmi-workspace__tanmi_help",
+      "Bash(ls:*)"
+    ]
+  }
+}

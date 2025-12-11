@@ -122,7 +122,7 @@ pending → planning → monitoring → completed
           cancelled ←────┘
 ```
 
-## 工具列表（22 个）
+## 工具列表（25 个）
 
 ### 工作区
 | 工具 | 说明 |
@@ -171,6 +171,15 @@ pending → planning → monitoring → completed
 | `tanmi_help` | 获取使用指南 |
 | `tanmi_prompt` | 获取话术模板 |
 
+### 会话（Claude Code 专属）
+| 工具 | 说明 |
+|------|------|
+| `session_bind` | 绑定会话到工作区 |
+| `session_unbind` | 解除会话绑定 |
+| `session_status` | 查询会话绑定状态 |
+
+> 注：session_* 工具配合 Claude Code Hook 系统使用，用于自动注入工作区上下文。详见 [Hook 系统](#hook-系统claude-code-专属)。
+
 ## AI 使用指南
 
 ```typescript
@@ -204,11 +213,72 @@ npm run start:http
 - 进度统计（含 failed/cancelled）
 - Markdown 渲染支持
 
+## Hook 系统（Claude Code 专属）
+
+TanmiWorkspace 提供 Claude Code Hook 插件，在 AI 对话过程中**自动注入工作区上下文**。
+
+### 功能特性
+
+| 功能 | 说明 |
+|------|------|
+| 自动注入 sessionId | 会话开始时告知 AI 当前会话 ID |
+| 自动注入工作区上下文 | 绑定后自动注入目标、规则、聚焦节点 |
+| 关键词检测提醒 | 未绑定时检测工作区关键词，提醒 AI 绑定 |
+| 多窗口隔离 | 不同窗口可绑定不同工作区 |
+
+### 安装
+
+```bash
+# 交互式安装
+./scripts/install-global.sh
+
+# 或直接安装 Hook
+./scripts/install-global.sh --hooks
+```
+
+### 工作流程
+
+```
+会话开始 (SessionStart)
+    ↓
+Hook 注入 sessionId 给 AI
+    ↓
+AI 调用 session_bind(sessionId, workspaceId) 绑定工作区
+    ↓
+后续每次对话 Hook 自动注入工作区上下文
+    ↓
+任务完成后调用 session_unbind(sessionId) 解绑
+```
+
+### 使用示例
+
+```typescript
+// 1. AI 收到 Hook 注入的 sessionId 后，查看可用工作区
+session_status({ sessionId: "abc123" })
+
+// 2. 绑定到指定工作区
+session_bind({ sessionId: "abc123", workspaceId: "ws-xxx" })
+
+// 3. 之后正常使用工作区工具，Hook 会自动注入上下文
+
+// 4. 完成后解绑
+session_unbind({ sessionId: "abc123" })
+```
+
+### 注意事项
+
+- Hook 系统是**可选增强功能**，不影响核心工具的使用
+- 非 Claude Code 环境可直接使用 workspace_*/node_* 等核心工具
+- sessionId 由 Claude Code 提供，无法手动创建
+
+> 详细设计见 [docs/tanmi-workspace-hook-design.md](docs/tanmi-workspace-hook-design.md)
+
 ## 数据存储
 
 ```
 ~/.tanmi-workspace/
 ├── index.json                     # workspaceId → projectRoot 映射
+├── session-bindings.json          # 会话绑定记录（Hook 系统）
 
 {projectRoot}/
 └── .tanmi-workspace/
@@ -277,6 +347,7 @@ web/
 - [docs/core-layer.md](docs/core-layer.md) - 核心服务层
 - [docs/storage-layer.md](docs/storage-layer.md) - 存储层
 - [docs/reference-system.md](docs/reference-system.md) - 引用系统
+- [docs/tanmi-workspace-hook-design.md](docs/tanmi-workspace-hook-design.md) - Hook 系统设计
 
 ## License
 
