@@ -106,14 +106,12 @@ export class StateService {
       );
     }
 
-    // 4.1 根节点 start 时检查是否有已完成的信息收集节点
+    // 4.1 根节点 start 时检查信息收集节点状态（不阻止，但记录用于后续提醒）
+    let infoCollectionWarning: string | null = null;
     if (nodeId === "root" && action === "start") {
       const infoCollectionCheck = this.checkInfoCollectionNode(graph.nodes, nodeMeta.children);
       if (!infoCollectionCheck.passed) {
-        throw new TanmiError(
-          "INFO_COLLECTION_REQUIRED",
-          infoCollectionCheck.message
-        );
+        infoCollectionWarning = infoCollectionCheck.message;
       }
     }
 
@@ -226,7 +224,7 @@ export class StateService {
     }
 
     // 11. 添加工作流提示（根据节点类型）
-    result.hint = this.generateHint(nodeType, action, nodeMeta, graph, archiveResult);
+    result.hint = this.generateHint(nodeType, action, nodeMeta, graph, archiveResult, infoCollectionWarning);
 
     return result;
   }
@@ -237,10 +235,16 @@ export class StateService {
   private generateHint(
     nodeType: NodeType,
     action: TransitionAction,
-    nodeMeta: { parentId: string | null; children: string[]; conclusion?: string | null; role?: NodeRole },
+    nodeMeta: { parentId: string | null; children: string[]; conclusion?: string | null; role?: NodeRole; id?: string },
     graph: { nodes: Record<string, { status: NodeStatus; type: NodeType }> },
-    archiveResult?: { rules: string[]; docs: DocRef[] } | null
+    archiveResult?: { rules: string[]; docs: DocRef[] } | null,
+    infoCollectionWarning?: string | null
   ): string {
+    // 根节点 start 时如果缺少信息收集节点，优先显示强提醒
+    if (infoCollectionWarning) {
+      return `⚠️ **重要提醒**\n\n${infoCollectionWarning}\n\n` +
+        "这是开始任务前的必要步骤，信息收集的结果会自动归档到工作区规则和文档中，帮助后续任务更好地执行。";
+    }
     // 信息收集节点完成时，显示归档结果
     if (nodeMeta.role === "info_collection" && action === "complete" && archiveResult) {
       const parts: string[] = ["💡 信息收集已完成，已自动归档到工作区："];
