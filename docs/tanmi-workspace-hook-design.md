@@ -4,7 +4,14 @@
 
 ### 这是什么？
 
-为 Tanmi-Workspace 设计的 **Claude Code Hook 插件**，用于在 AI 对话过程中自动注入工作区上下文。
+为 Tanmi-Workspace 设计的 **Hook 插件**，用于在 AI 对话过程中自动注入工作区上下文。支持 **Claude Code** 和 **Cursor** 两个平台。
+
+### 支持平台
+
+| 平台 | 会话标识 | 触发事件 | 配置文件 |
+|------|---------|---------|---------|
+| Claude Code | `session_id` | SessionStart, UserPromptSubmit | `~/.claude/settings.json` |
+| Cursor | `conversation_id` | beforeSubmitPrompt | `~/.cursor/hooks.json` |
 
 ### 能实现什么功能？
 
@@ -236,6 +243,10 @@ interface SessionBinding {
   workspaceId: string;     // 绑定的工作区
   focusedNodeId?: string;  // 当前聚焦的节点（可选）
   boundAt: number;         // 绑定时间戳
+  lastReminder?: {         // 最后一次智能提醒记录（用于节流）
+    type: string;          // 提醒类型（如 'log_timeout', 'problem'）
+    time: number;          // 提醒时间戳
+  }
 }
 ```
 
@@ -248,7 +259,11 @@ interface SessionBinding {
   "abc123": {
     "workspaceId": "ws-xxx",
     "focusedNodeId": "node-yyy",
-    "boundAt": 1699564800000
+    "boundAt": 1699564800000,
+    "lastReminder": {
+      "type": "log_timeout",
+      "time": 1699565000000
+    }
   },
   "xyz789": {
     "workspaceId": "ws-zzz",
@@ -351,13 +366,31 @@ session_status({
 ```
 tanmi-workspace/
 ├── plugin/
-│   ├── hooks/
-│   │   └── hooks.json           # Hook 配置
 │   └── scripts/
-│       └── hook-entry.js        # 统一入口脚本
+│       ├── hook-entry.cjs           # Claude Code 入口脚本
+│       ├── cursor-hook-entry.cjs    # Cursor 入口脚本
+│       └── shared/                  # 共享模块
+│           ├── config.cjs           # 配置常量
+│           ├── utils.cjs            # 工具函数
+│           ├── binding.cjs          # 会话绑定逻辑 + 节流控制
+│           ├── workspace.cjs        # 工作区数据读取 + 日志/问题解析
+│           ├── context.cjs          # 上下文生成
+│           ├── reminder.cjs         # 智能提醒分析模块
+│           └── index.cjs            # 统一导出
 ```
 
-### hooks.json
+### 安装后的目录
+
+```
+~/.tanmi-workspace/
+├── scripts/
+│   ├── hook-entry.cjs               # Claude Code 入口
+│   ├── cursor-hook-entry.cjs        # Cursor 入口
+│   └── shared/                      # 共享模块
+│       └── *.cjs
+```
+
+### Claude Code 配置 (~/.claude/settings.json)
 
 ```json
 {
@@ -367,8 +400,8 @@ tanmi-workspace/
         "matcher": "startup|clear|compact",
         "hooks": [{
           "type": "command",
-          "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/hook-entry.js SessionStart",
-          "timeout": 10
+          "command": "node ~/.tanmi-workspace/scripts/hook-entry.cjs SessionStart",
+          "timeout": 10000
         }]
       }
     ],
@@ -376,8 +409,8 @@ tanmi-workspace/
       {
         "hooks": [{
           "type": "command",
-          "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/hook-entry.js UserPromptSubmit",
-          "timeout": 5
+          "command": "node ~/.tanmi-workspace/scripts/hook-entry.cjs UserPromptSubmit",
+          "timeout": 5000
         }]
       }
     ]
@@ -385,121 +418,161 @@ tanmi-workspace/
 }
 ```
 
-### hook-entry.js
+### Cursor 配置 (~/.cursor/hooks.json)
 
-```javascript
-#!/usr/bin/env node
-
-const MCP_URL = 'http://localhost:YOUR_PORT';
-
-async function main() {
-  // 1. 读取 Hook 输入
-  const input = await readStdin();
-  const sessionId = input.session_id;
-  const eventType = process.argv[2];
-
-  // 2. 检查会话绑定
-  let binding;
-  try {
-    const res = await fetch(`${MCP_URL}/session_status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId })
-    });
-    binding = await res.json();
-  } catch (e) {
-    // MCP 服务未启动或出错，静默退出
-    process.exit(0);
-  }
-
-  // 3. 未绑定则静默退出
-  if (!binding.bound) {
-    process.exit(0);
-  }
-
-  // 4. 已绑定，根据事件类型处理
-  switch (eventType) {
-    case 'SessionStart':
-      await handleSessionStart(binding);
-      break;
-    case 'UserPromptSubmit':
-      await handlePromptSubmit(binding);
-      break;
-  }
-
-  process.exit(0);
-}
-
-async function handleSessionStart(binding) {
-  const context = generateContext(binding);
-
-  // 输出 Hook 响应，注入上下文
-  console.log(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: 'SessionStart',
-      additionalContext: context
-    }
-  }));
-}
-
-async function handlePromptSubmit(binding) {
-  // 可以在这里刷新状态提醒
-  // 或者静默处理（只记录日志）
-}
-
-function generateContext(binding) {
-  const { workspace, focusedNode } = binding;
-
-  let context = `
-<tanmi-workspace-context>
-## 当前工作区: ${workspace.name}
-
-**目标**: ${workspace.goal}
-`;
-
-  if (workspace.rules && workspace.rules.length > 0) {
-    context += `
-**规则**:
-${workspace.rules.map(r => `- ${r}`).join('\n')}
-`;
-  }
-
-  if (focusedNode) {
-    context += `
-**聚焦节点**: ${focusedNode.title}
-- 状态: ${focusedNode.status}
-- 需求: ${focusedNode.requirement || '无'}
-`;
-  }
-
-  context += `
----
-请在执行任务时：
-- 开始前调用 node_transition(action='start')
-- 完成后调用 node_transition(action='complete', conclusion='...')
-- 重要事件调用 log_append 记录
-</tanmi-workspace-context>
-`;
-
-  return context;
-}
-
-async function readStdin() {
-  return new Promise((resolve) => {
-    let data = '';
-    process.stdin.on('data', chunk => data += chunk);
-    process.stdin.on('end', () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch {
-        resolve({});
+```json
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "node ~/.tanmi-workspace/scripts/cursor-hook-entry.cjs"
       }
-    });
-  });
+    ]
+  }
 }
-
-main().catch(() => process.exit(0));
 ```
+
+### 输出格式对比
+
+**Claude Code**:
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "SessionStart",
+    "additionalContext": "<tanmi-workspace-context>...</tanmi-workspace-context>"
+  }
+}
+```
+
+**Cursor**:
+```json
+{
+  "continue": true,
+  "agent_message": "<tanmi-workspace-context>...</tanmi-workspace-context>"
+}
+```
+
+---
+
+## 智能提醒
+
+### 概述
+
+智能提醒功能在 **UserPromptSubmit**（Claude Code）或 **beforeSubmitPrompt**（Cursor）事件中触发，基于当前节点状态向 AI 注入提醒信息，帮助 AI 养成良好的工作习惯。
+
+### 提醒优先级
+
+按优先级从高到低排列，**只会触发最高优先级的提醒**：
+
+| 优先级 | 类型 | 触发条件 | 提醒内容 |
+|--------|------|---------|---------|
+| P0 | `problem` | 节点有未解决的问题 | 提醒解决问题或调用 `problem_clear` |
+| P1 | `log_timeout` | implementing 状态 + 最后日志 > 3 分钟 | 提醒记录工作进展 |
+| P2 | `children_completed` | monitoring 状态 + 所有子节点已完成 | 提醒汇总结论并完成节点 |
+| P3 | `plan_completed` | planning 状态 + 有子节点 + 是根的直接子节点 | 提醒向用户确认计划 |
+| P4 | `no_log_start` | implementing 状态 + 无日志 + 已开始 > 1 分钟 | 提醒开始记录工作日志 |
+| P5 | `no_problem` | implementing 状态 + 无问题记录 + 已开始 > 5 分钟 | 提醒使用 `problem_update` 记录问题和计划 |
+
+### 节流机制
+
+为避免提醒过于频繁，实现了节流机制：
+
+| 规则 | 说明 |
+|------|------|
+| 节流间隔 | 3 分钟内同类型提醒只触发一次 |
+| P0 豁免 | `problem` 类型的提醒不受节流限制 |
+| 按会话隔离 | 不同会话的提醒相互独立 |
+
+### 触发逻辑
+
+```
+UserPromptSubmit 触发
+    ↓
+检查是否已绑定工作区
+    ↓
+已绑定？
+    ├─ 是 → 获取聚焦节点
+    │       ↓
+    │   有聚焦节点？
+    │       ├─ 是 → 分析节点状态
+    │       │       ↓
+    │       │   有需要提醒的情况？
+    │       │       ├─ 是 → 检查节流
+    │       │       │       ├─ 未节流 → 注入提醒 + 更新 lastReminder
+    │       │       │       └─ 已节流 → 静默
+    │       │       └─ 否 → 静默
+    │       └─ 否 → 静默
+    │
+    └─ 否 → 原有关键词检测逻辑
+```
+
+### 输出格式
+
+提醒内容通过 `<tanmi-smart-reminder>` 标签包裹：
+
+```xml
+<tanmi-smart-reminder>
+⏰ 距离上次日志已超过 3 分钟。
+建议：使用 log_append 记录当前工作进展，保持工作可追溯性。
+</tanmi-smart-reminder>
+```
+
+### 提醒消息模板
+
+| 类型 | 消息模板 |
+|------|---------|
+| `problem` | `⚠️ 当前节点存在问题记录。\n建议：先解决问题再继续，或使用 problem_clear 清除已解决的问题。` |
+| `log_timeout` | `⏰ 距离上次日志已超过 3 分钟。\n建议：使用 log_append 记录当前工作进展，保持工作可追溯性。` |
+| `children_completed` | `✅ 所有子节点已完成。\n建议：汇总子节点结论，调用 node_transition(action='complete', conclusion='...') 完成当前节点。` |
+| `plan_completed` | `📋 计划节点已创建完子任务。\n建议：向用户展示完整计划并等待确认，再开始执行第一个任务。` |
+| `no_log_start` | `📝 节点已开始 1 分钟但尚无日志记录。\n建议：使用 log_append 开始记录工作日志。` |
+| `no_problem` | `💭 节点执行超过 5 分钟，建议记录当前状态。\n建议：使用 problem_update 记录遇到的问题和下一步计划，即使没有问题也可以记录下一步意图。` |
+
+---
+
+## 平台差异
+
+### Claude Code vs Cursor
+
+| 特性 | Claude Code | Cursor |
+|------|-------------|--------|
+| 会话标识 | `session_id` | `conversation_id` |
+| 启动事件 | SessionStart ✅ | 无 ❌ |
+| 提交事件 | UserPromptSubmit | beforeSubmitPrompt |
+| 上下文注入 | `additionalContext` 字段 | `agent_message` 字段 |
+| 执行控制 | 无 | `permission` 字段 |
+
+### 行为差异
+
+**Claude Code**:
+```
+SessionStart 触发
+    ↓
+已绑定？→ 注入工作区上下文
+未绑定？→ 注入 sessionId（让 AI 知道自己的会话 ID）
+
+UserPromptSubmit 触发
+    ↓
+已绑定？→ 智能提醒分析
+         有需提醒项？→ 检查节流 → 注入提醒
+         无需提醒？  → 静默
+未绑定？→ 检测关键词，有则提醒绑定
+```
+
+**Cursor**:
+```
+beforeSubmitPrompt 触发
+    ↓
+已绑定？→ 注入工作区上下文 + 智能提醒（追加到上下文末尾）
+未绑定？→ 检测关键词
+         有关键词？→ 注入 conversation_id + 绑定提醒
+         无关键词？→ 静默
+```
+
+**关键差异**：
+- Cursor 没有 SessionStart 事件，所以未绑定时只有检测到关键词才会注入 conversation_id
+- Claude Code 的智能提醒在 UserPromptSubmit 单独注入；Cursor 则追加到 beforeSubmitPrompt 的上下文末尾
 
 ---
 
@@ -635,6 +708,8 @@ AI: [调用 workspace_init(...)]
 | **静默失败** | 未绑定时 exit 0，不干扰用户 |
 | **用户控制** | 用户决定何时启用/停用工作区 |
 | **按需激活** | 不强制，不自动，不打扰 |
+| **智能提醒** | 绑定后根据节点状态自动提醒，帮助 AI 养成好习惯 |
+| **节流控制** | 避免提醒过于频繁，3分钟间隔，P0 问题提醒豁免 |
 
 ### API 清单
 
@@ -657,9 +732,21 @@ AI: [调用 workspace_init(...)]
 
 | 会话状态 | Hook 行为 |
 |---------|----------|
-| 已绑定工作区 | 静默退出（上下文已在 SessionStart 注入） |
+| 已绑定 + 有智能提醒需求 | 注入智能提醒（日志超时、问题未解决等） |
+| 已绑定 + 无需提醒 | 静默退出 |
 | 未绑定 + 有工作区关键词 | 注入绑定提醒 |
 | 未绑定 + 普通消息 | 静默退出 |
+
+### 智能提醒优先级
+
+| 级别 | 触发条件 | 节流 |
+|------|---------|------|
+| P0 | 节点有未解决问题 | 不节流 |
+| P1 | implementing + 日志超时 > 3分钟 | 3分钟 |
+| P2 | monitoring + 子节点全完成 | 3分钟 |
+| P3 | planning + 计划完成 | 3分钟 |
+| P4 | implementing + 无日志 > 1分钟 | 3分钟 |
+| P5 | implementing + 无问题 > 5分钟 | 3分钟 |
 
 ### 与其他插件共存
 

@@ -171,14 +171,14 @@ pending → planning → monitoring → completed
 | `tanmi_help` | 获取使用指南 |
 | `tanmi_prompt` | 获取话术模板 |
 
-### 会话（Claude Code 专属）
+### 会话（Hook 系统）
 | 工具 | 说明 |
 |------|------|
 | `session_bind` | 绑定会话到工作区 |
 | `session_unbind` | 解除会话绑定 |
 | `session_status` | 查询会话绑定状态 |
 
-> 注：session_* 工具配合 Claude Code Hook 系统使用，用于自动注入工作区上下文。详见 [Hook 系统](#hook-系统claude-code-专属)。
+> 注：session_* 工具配合 Hook 系统使用，用于自动注入工作区上下文。支持 Claude Code 和 Cursor。详见 [Hook 系统](#hook-系统)。
 
 ## AI 使用指南
 
@@ -213,47 +213,80 @@ npm run start:http
 - 进度统计（含 failed/cancelled）
 - Markdown 渲染支持
 
-## Hook 系统（Claude Code 专属）
+## Hook 系统
 
-TanmiWorkspace 提供 Claude Code Hook 插件，在 AI 对话过程中**自动注入工作区上下文**。
+TanmiWorkspace 提供 Hook 插件，在 AI 对话过程中**自动注入工作区上下文**。支持 Claude Code 和 Cursor。
+
+### 支持平台
+
+| 平台 | 会话标识 | 触发事件 |
+|------|---------|---------|
+| Claude Code | `session_id` | SessionStart, UserPromptSubmit |
+| Cursor | `conversation_id` | beforeSubmitPrompt |
 
 ### 功能特性
 
-| 功能 | 说明 |
-|------|------|
-| 自动注入 sessionId | 会话开始时告知 AI 当前会话 ID |
-| 自动注入工作区上下文 | 绑定后自动注入目标、规则、聚焦节点 |
-| 关键词检测提醒 | 未绑定时检测工作区关键词，提醒 AI 绑定 |
-| 多窗口隔离 | 不同窗口可绑定不同工作区 |
+| 功能 | Claude Code | Cursor |
+|------|:-----------:|:------:|
+| 自动注入会话 ID | ✅ 会话开始时 | ✅ 检测到关键词时 |
+| 自动注入工作区上下文 | ✅ | ✅ |
+| 关键词检测提醒 | ✅ | ✅ |
+| 智能提醒 | ✅ | ✅ |
+| 多窗口隔离 | ✅ | ✅ |
 
 ### 安装
 
 ```bash
-# 交互式安装
+# 交互式安装（推荐）
 ./scripts/install-global.sh
 
-# 或直接安装 Hook
-./scripts/install-global.sh --hooks
+# Claude Code 专用
+./scripts/install-global.sh --claude-hooks
+
+# Cursor 专用
+./scripts/install-global.sh --cursor-hooks
+
+# 全部安装
+./scripts/install-global.sh --all
 ```
 
 ### 工作流程
 
+**Claude Code**：
 ```
-会话开始 (SessionStart)
+SessionStart 触发 → 注入会话 ID / 工作区上下文
     ↓
-Hook 注入 sessionId 给 AI
+UserPromptSubmit 触发
     ↓
-AI 调用 session_bind(sessionId, workspaceId) 绑定工作区
-    ↓
-后续每次对话 Hook 自动注入工作区上下文
-    ↓
-任务完成后调用 session_unbind(sessionId) 解绑
+已绑定？→ 智能提醒（日志超时、问题未解决等）
+未绑定？→ 检测关键词，有则提醒绑定
 ```
+
+**Cursor**：
+```
+beforeSubmitPrompt 触发
+    ↓
+已绑定？→ 注入工作区上下文 + 智能提醒
+未绑定？→ 检测关键词，有则注入 conversation_id + 绑定提醒
+```
+
+### 智能提醒
+
+绑定工作区后，Hook 会根据节点状态自动提醒 AI：
+
+| 类型 | 触发条件 | 节流 |
+|------|---------|------|
+| 问题提醒 | 节点有未解决的问题 | 不节流 |
+| 日志超时 | implementing + 日志 > 3分钟 | 3分钟 |
+| 子节点完成 | monitoring + 所有子节点完成 | 3分钟 |
+| 计划确认 | planning + 有子节点 | 3分钟 |
+| 无日志 | implementing + 无日志 > 1分钟 | 3分钟 |
+| 问题记录 | implementing + 无问题 > 5分钟 | 3分钟 |
 
 ### 使用示例
 
 ```typescript
-// 1. AI 收到 Hook 注入的 sessionId 后，查看可用工作区
+// 1. AI 收到 Hook 注入的会话 ID 后，查看可用工作区
 session_status({ sessionId: "abc123" })
 
 // 2. 绑定到指定工作区
@@ -268,8 +301,8 @@ session_unbind({ sessionId: "abc123" })
 ### 注意事项
 
 - Hook 系统是**可选增强功能**，不影响核心工具的使用
-- 非 Claude Code 环境可直接使用 workspace_*/node_* 等核心工具
-- sessionId 由 Claude Code 提供，无法手动创建
+- 未安装 Hook 时可直接使用 workspace_*/node_* 等核心工具
+- 会话 ID 由各平台提供：Claude Code 用 `session_id`，Cursor 用 `conversation_id`
 
 > 详细设计见 [docs/tanmi-workspace-hook-design.md](docs/tanmi-workspace-hook-design.md)
 

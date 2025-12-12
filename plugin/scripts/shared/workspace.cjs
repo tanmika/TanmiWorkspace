@@ -155,12 +155,125 @@ function getNodeInfo(workspaceId, nodeId) {
   }
 }
 
+/**
+ * 解析 Log.md 获取日志信息
+ * @param {string} content - Markdown 内容
+ * @returns {object} 解析结果 { lastEntry, lastTime, entryCount }
+ */
+function parseLogMd(content) {
+  const result = {
+    lastEntry: null,
+    lastTime: null,
+    entryCount: 0
+  };
+
+  // 匹配日志表格行: | 时间 | 操作者 | 事件 |
+  const tableRows = content.match(/\| \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|[^|]+\|[^|]+\|/g);
+  if (!tableRows || tableRows.length === 0) {
+    return result;
+  }
+
+  result.entryCount = tableRows.length;
+
+  // 获取最后一条日志
+  const lastRow = tableRows[tableRows.length - 1];
+  const parts = lastRow.split('|').map(s => s.trim()).filter(s => s);
+  if (parts.length >= 3) {
+    result.lastTime = parts[0];
+    result.lastEntry = {
+      time: parts[0],
+      operator: parts[1],
+      event: parts[2]
+    };
+  }
+
+  return result;
+}
+
+/**
+ * 获取节点日志信息
+ * @param {string} workspaceId - 工作区 ID
+ * @param {string} nodeId - 节点 ID
+ * @returns {object|null} 日志信息 { lastEntry, lastTime, entryCount }
+ */
+function getNodeLog(workspaceId, nodeId) {
+  const entry = getWorkspaceEntry(workspaceId);
+  if (!entry || !entry.projectRoot) {
+    return null;
+  }
+
+  const logPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, workspaceId, 'nodes', nodeId, 'Log.md');
+  try {
+    const content = fs.readFileSync(logPath, 'utf-8');
+    return parseLogMd(content);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 解析 Problem.md 获取问题信息
+ * @param {string} content - Markdown 内容
+ * @returns {object} 解析结果 { problem, nextStep }
+ */
+function parseProblemMd(content) {
+  const result = {
+    problem: null,
+    nextStep: null
+  };
+
+  // 解析当前问题
+  const problemMatch = content.match(/## 当前问题\n\n([\s\S]*?)(?=\n##|$)/);
+  if (problemMatch) {
+    const problemText = problemMatch[1].trim();
+    if (problemText && problemText !== '无') {
+      result.problem = problemText;
+    }
+  }
+
+  // 解析下一步计划
+  const nextStepMatch = content.match(/## 下一步计划\n\n([\s\S]*?)(?=\n##|$)/);
+  if (nextStepMatch) {
+    const nextStepText = nextStepMatch[1].trim();
+    if (nextStepText && nextStepText !== '无') {
+      result.nextStep = nextStepText;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 获取节点问题信息
+ * @param {string} workspaceId - 工作区 ID
+ * @param {string} nodeId - 节点 ID
+ * @returns {object|null} 问题信息 { problem, nextStep }
+ */
+function getNodeProblem(workspaceId, nodeId) {
+  const entry = getWorkspaceEntry(workspaceId);
+  if (!entry || !entry.projectRoot) {
+    return null;
+  }
+
+  const problemPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, workspaceId, 'nodes', nodeId, 'Problem.md');
+  try {
+    const content = fs.readFileSync(problemPath, 'utf-8');
+    return parseProblemMd(content);
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   getWorkspaceEntry,
   getWorkspaceConfig,
   getWorkspaceMdData,
   getNodeGraph,
   getNodeInfo,
+  getNodeLog,
+  getNodeProblem,
   parseWorkspaceMd,
-  parseNodeInfo
+  parseNodeInfo,
+  parseLogMd,
+  parseProblemMd
 };

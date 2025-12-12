@@ -2,8 +2,12 @@
  * 会话绑定逻辑
  */
 
+const fs = require('node:fs');
 const { readJsonFile } = require('./utils.cjs');
 const { BINDINGS_PATH } = require('./config.cjs');
+
+// 提醒节流间隔（毫秒）
+const THROTTLE_INTERVAL = 3 * 60 * 1000; // 3 分钟
 
 /**
  * 获取会话绑定信息（本地读取）
@@ -30,7 +34,63 @@ function containsWorkspaceKeywords(text) {
   return WORKSPACE_KEYWORDS.some(kw => lowerText.includes(kw.toLowerCase()));
 }
 
+/**
+ * 判断是否应该节流提醒
+ * @param {object} binding - 会话绑定信息
+ * @param {string} reminderType - 提醒类型
+ * @returns {boolean} true 表示应该节流（不发送提醒）
+ */
+function shouldThrottle(binding, reminderType) {
+  // P0 (problem) 类型不节流，每次都提醒
+  if (reminderType === 'problem') {
+    return false;
+  }
+
+  if (!binding || !binding.lastReminder) {
+    return false;
+  }
+
+  const lastReminder = binding.lastReminder;
+
+  // 同一类型的提醒需要节流
+  if (lastReminder.type === reminderType) {
+    const lastTime = new Date(lastReminder.time).getTime();
+    const now = Date.now();
+    return (now - lastTime) < THROTTLE_INTERVAL;
+  }
+
+  return false;
+}
+
+/**
+ * 更新上次提醒记录
+ * @param {string} sessionId - 会话 ID
+ * @param {string} reminderType - 提醒类型
+ * @returns {boolean} 是否更新成功
+ */
+function updateLastReminder(sessionId, reminderType) {
+  try {
+    const bindings = readJsonFile(BINDINGS_PATH);
+    if (!bindings || !bindings.bindings || !bindings.bindings[sessionId]) {
+      return false;
+    }
+
+    bindings.bindings[sessionId].lastReminder = {
+      type: reminderType,
+      time: new Date().toISOString()
+    };
+
+    fs.writeFileSync(BINDINGS_PATH, JSON.stringify(bindings, null, 2), 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 module.exports = {
   getSessionBinding,
-  containsWorkspaceKeywords
+  containsWorkspaceKeywords,
+  shouldThrottle,
+  updateLastReminder,
+  THROTTLE_INTERVAL
 };

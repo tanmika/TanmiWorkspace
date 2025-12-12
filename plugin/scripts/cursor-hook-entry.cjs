@@ -20,7 +20,10 @@ const {
   containsWorkspaceKeywords,
   getFullWorkspaceContext,
   generateSessionIdContext,
-  generateBindingReminder
+  generateBindingReminder,
+  analyzeNodeStatus,
+  shouldThrottle,
+  updateLastReminder
 } = require('./shared/index.cjs');
 
 // ============================================================================
@@ -67,9 +70,24 @@ function passThrough() {
 function handleBeforeSubmitPrompt(conversationId, binding, input) {
   const userPrompt = input.prompt || '';
 
-  if (binding) {
-    // 已绑定：注入工作区上下文
-    const context = getFullWorkspaceContext(binding);
+  if (binding && binding.workspaceId) {
+    // 已绑定：注入工作区上下文 + 智能提醒
+    let context = getFullWorkspaceContext(binding);
+
+    // 检查是否需要智能提醒
+    const focusNodeId = binding.focusedNodeId;
+    if (focusNodeId) {
+      const reminderInfo = analyzeNodeStatus(binding.workspaceId, focusNodeId);
+      if (reminderInfo && !shouldThrottle(binding, reminderInfo.type)) {
+        // 更新上次提醒记录
+        updateLastReminder(conversationId, reminderInfo.type);
+
+        // 追加智能提醒到上下文
+        const reminderContent = `\n\n<tanmi-smart-reminder>\n${reminderInfo.message}\n</tanmi-smart-reminder>`;
+        context = (context || '') + reminderContent;
+      }
+    }
+
     if (context) {
       // 通过 agent_message 注入上下文给 AI
       outputCursorResponse(true, null, context);

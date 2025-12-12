@@ -214,6 +214,11 @@ export class NodeService {
       hint += `\n\n📋 工作区规则提醒：\n${rulesReminder}`;
     }
 
+    // 14.2 如果在根节点下创建非信息收集的子节点，提示需要用户确认计划
+    if (parentId === "root" && role !== "info_collection") {
+      hint += `\n\n⚠️ **重要**：完成所有计划节点创建后，请向用户展示完整计划并等待确认，再开始执行第一个任务。`;
+    }
+
     return {
       nodeId,
       path: nodePath,

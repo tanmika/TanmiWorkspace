@@ -16,7 +16,10 @@ const {
   containsWorkspaceKeywords,
   getFullWorkspaceContext,
   generateSessionIdContext,
-  generateBindingReminder
+  generateBindingReminder,
+  analyzeNodeStatus,
+  shouldThrottle,
+  updateLastReminder
 } = require('./shared/index.cjs');
 
 // ============================================================================
@@ -72,11 +75,31 @@ function handleSessionStart(sessionId, binding) {
 
 /**
  * 处理 UserPromptSubmit 事件
- * 未绑定时检测关键词并提醒
+ * 已绑定时进行智能提醒，未绑定时检测关键词提醒绑定
  */
 function handleUserPromptSubmit(sessionId, binding, input) {
-  // 已绑定则静默（上下文已在 SessionStart 注入）
-  if (binding) {
+  // 已绑定：进行智能提醒分析
+  if (binding && binding.workspaceId) {
+    const focusNodeId = binding.focusedNodeId;
+    if (focusNodeId) {
+      // 分析节点状态
+      const reminderInfo = analyzeNodeStatus(binding.workspaceId, focusNodeId);
+
+      if (reminderInfo) {
+        // 检查是否应该节流
+        if (!shouldThrottle(binding, reminderInfo.type)) {
+          // 更新上次提醒记录
+          updateLastReminder(sessionId, reminderInfo.type);
+
+          // 输出智能提醒
+          const reminderContent = `<tanmi-smart-reminder>\n${reminderInfo.message}\n</tanmi-smart-reminder>`;
+          outputHookResponse('UserPromptSubmit', reminderContent);
+          return;
+        }
+      }
+    }
+
+    // 无需提醒，静默退出
     process.exit(0);
   }
 

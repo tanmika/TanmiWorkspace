@@ -7,6 +7,7 @@ const utils = require('./utils.cjs');
 const binding = require('./binding.cjs');
 const workspace = require('./workspace.cjs');
 const context = require('./context.cjs');
+const reminder = require('./reminder.cjs');
 
 module.exports = {
   // 配置
@@ -22,5 +23,8 @@ module.exports = {
   ...workspace,
 
   // 上下文生成
-  ...context
+  ...context,
+
+  // 智能提醒
+  ...reminder
 };
