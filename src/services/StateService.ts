@@ -130,6 +130,26 @@ export class StateService {
       }
     }
 
+    // 4.3 执行节点 start 时检查同级节点并发（一次只能有一个执行中的节点）
+    if (nodeType === "execution" && action === "start" && nodeMeta.parentId) {
+      const parentNode = graph.nodes[nodeMeta.parentId];
+      if (parentNode) {
+        const activeStatuses = new Set(["implementing", "validating"]);
+        const activeSiblings = parentNode.children
+          .filter(sibId => sibId !== nodeId)
+          .map(sibId => graph.nodes[sibId])
+          .filter(sib => sib && sib.type === "execution" && activeStatuses.has(sib.status));
+
+        if (activeSiblings.length > 0) {
+          const activeIds = activeSiblings.map(s => `${s.id}(${s.status})`).join(", ");
+          throw new TanmiError(
+            "CONCURRENT_EXECUTION",
+            `同级节点 ${activeIds} 正在执行中。请先完成或暂停当前任务，再开始新任务。遵循"一次一个节点"原则。`
+          );
+        }
+      }
+    }
+
     const currentTime = now();
     const timestamp = formatShort(currentTime);
 
