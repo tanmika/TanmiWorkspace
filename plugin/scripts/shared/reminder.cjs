@@ -3,7 +3,10 @@
  * 根据节点状态、日志、问题等信息智能判断是否需要提醒
  */
 
-const { getNodeGraph, getNodeLog, getNodeProblem } = require('./workspace.cjs');
+const fs = require('node:fs');
+const path = require('node:path');
+const { getNodeGraph, getNodeLog, getNodeProblem, getWorkspaceEntry } = require('./workspace.cjs');
+const { DIR_SUFFIX } = require('./config.cjs');
 
 // 提醒优先级
 const PRIORITY = {
@@ -12,7 +15,9 @@ const PRIORITY = {
   P2_ALL_COMPLETED: 2,  // 所有子节点已完成
   P3_PLAN_CONFIRM: 3,   // 计划需要用户确认
   P4_NO_LOG: 4,         // 开始执行但未记录日志
-  P5_NO_PROBLEM: 5      // 执行较长时间但未记录问题
+  P5_NO_PROBLEM: 5,     // 执行较长时间但未记录问题
+  P6_FAILED_NODE: 6,    // 执行节点失败后引导
+  P7_NO_DOCS: 7         // 执行中但无文档引用
 };
 
 // 时间阈值（分钟）
@@ -64,6 +69,38 @@ function getMinutesSinceISO(isoStr) {
 }
 
 /**
+ * 检查节点是否有文档引用
+ * @param {string} workspaceId - 工作区 ID
+ * @param {string} nodeId - 节点 ID
+ * @returns {boolean} 是否有文档引用
+ */
+function hasDocumentReferences(workspaceId, nodeId) {
+  const entry = getWorkspaceEntry(workspaceId);
+  if (!entry || !entry.projectRoot) {
+    return true; // 无法确认时不提醒
+  }
+
+  const infoPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, workspaceId, 'nodes', nodeId, 'Info.md');
+  try {
+    const content = fs.readFileSync(infoPath, 'utf-8');
+    // 查找文档引用区块
+    const docsMatch = content.match(/## 文档引用\n\n([\s\S]*?)(?=\n##|$)/);
+    if (!docsMatch) {
+      return false;
+    }
+    // 检查是否有实际的文档引用（排除"无"或空内容）
+    const docsText = docsMatch[1].trim();
+    if (!docsText || docsText === '无' || docsText === '（无）') {
+      return false;
+    }
+    // 检查是否有 active 状态的文档
+    return docsText.includes('- ') && !docsText.includes('[expired]');
+  } catch {
+    return true; // 文件读取失败时不提醒
+  }
+}
+
+/**
  * 分析节点状态，返回需要的提醒
  * @param {string} workspaceId - 工作区 ID
  * @param {string} nodeId - 节点 ID
@@ -90,6 +127,17 @@ function analyzeNodeStatus(workspaceId, nodeId) {
       priority: PRIORITY.P0_PROBLEM,
       type: 'problem',
       message: `⚠️ 当前有未解决问题：${problemInfo.problem}${problemInfo.nextStep ? `\n下一步：${problemInfo.nextStep}` : ''}`
+    };
+  }
+
+  // P6: 执行节点失败后引导
+  if (nodeType === 'execution' && status === 'failed') {
+    return {
+      priority: PRIORITY.P6_FAILED_NODE,
+      type: 'failed_node',
+      message: `❌ 任务执行失败。请分析失败原因：
+- 如果是可修复的问题（如临时错误、配置问题），使用 node_transition(action="retry") 重试
+- 如果任务过于复杂或需要重新规划，回到父规划节点 ${parentId || 'root'} 重新分解任务`
     };
   }
 
@@ -127,6 +175,15 @@ function analyzeNodeStatus(workspaceId, nodeId) {
         priority: PRIORITY.P5_NO_PROBLEM,
         type: 'no_problem',
         message: `💡 任务已执行 ${minutesSinceUpdate} 分钟，如遇到阻塞请用 problem_update 记录问题和下一步计划`
+      };
+    }
+
+    // P7: 执行中但无文档引用（仅在执行超过1分钟后提醒）
+    if (minutesSinceUpdate >= THRESHOLDS.NO_LOG_START && !hasDocumentReferences(workspaceId, nodeId)) {
+      return {
+        priority: PRIORITY.P7_NO_DOCS,
+        type: 'no_docs',
+        message: `📄 当前节点无文档引用。如需参考文档请用 node_reference 添加，或确认父节点是否遗漏派发文档。`
       };
     }
   }
@@ -174,7 +231,9 @@ function generateSmartReminder(binding) {
     return null;
   }
 
-  const focusNodeId = binding.focusedNodeId;
+  // 获取聚焦节点（优先使用 graph.currentFocus 作为权威来源）
+  const graph = getNodeGraph(binding.workspaceId);
+  const focusNodeId = graph?.currentFocus || binding.focusedNodeId;
   if (!focusNodeId) {
     return null;
   }
@@ -192,6 +251,7 @@ module.exports = {
   THRESHOLDS,
   getMinutesSince,
   getMinutesSinceISO,
+  hasDocumentReferences,
   analyzeNodeStatus,
   generateSmartReminder
 };

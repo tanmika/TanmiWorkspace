@@ -27,8 +27,8 @@ ${workspaceMdData.rules.map(r => `- ${r}`).join('\n')}
 `;
   }
 
-  // 添加聚焦节点信息
-  const focusNodeId = binding.focusedNodeId || graph?.currentFocus;
+  // 添加聚焦节点信息（优先使用 graph.currentFocus 作为权威来源）
+  const focusNodeId = graph?.currentFocus || binding.focusedNodeId;
   if (focusNodeId && focusedNodeInfo) {
     const nodeStatus = graph?.nodes[focusNodeId]?.status || focusedNodeInfo.status;
     context += `
@@ -101,7 +101,8 @@ function getFullWorkspaceContext(binding) {
 
   const workspaceMdData = getWorkspaceMdData(binding.workspaceId);
   const graph = getNodeGraph(binding.workspaceId);
-  const focusNodeId = binding.focusedNodeId || graph?.currentFocus;
+  // 优先使用 graph.currentFocus 作为权威来源
+  const focusNodeId = graph?.currentFocus || binding.focusedNodeId;
   const focusedNodeInfo = focusNodeId ? getNodeInfo(binding.workspaceId, focusNodeId) : null;
 
   if (workspaceMdData) {

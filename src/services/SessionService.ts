@@ -109,11 +109,16 @@ export class SessionService {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在`);
     }
 
-    // 如果指定了节点，验证节点存在
+    // 如果指定了节点，验证节点存在并同步到 graph.currentFocus
     if (nodeId) {
       const graph = await this.json.readGraph(projectRoot, workspaceId);
       if (!graph.nodes[nodeId]) {
         throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
+      }
+      // 同步聚焦节点到 graph.currentFocus，确保单一数据源
+      if (graph.currentFocus !== nodeId) {
+        graph.currentFocus = nodeId;
+        await this.json.writeGraph(projectRoot, workspaceId, graph);
       }
     }
 
@@ -228,8 +233,8 @@ export class SessionService {
       rules: workspaceMdData.rules
     };
 
-    // 获取聚焦节点信息
-    const focusNodeId = binding.focusedNodeId || graph.currentFocus;
+    // 获取聚焦节点信息（优先使用 graph.currentFocus 作为权威来源）
+    const focusNodeId = graph.currentFocus || binding.focusedNodeId;
     if (focusNodeId && graph.nodes[focusNodeId]) {
       const nodeInfo = await this.md.readNodeInfo(projectRoot, binding.workspaceId, focusNodeId);
       result.focusedNode = {

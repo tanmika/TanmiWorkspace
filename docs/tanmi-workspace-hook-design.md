@@ -473,6 +473,8 @@ tanmi-workspace/
 | P3 | `plan_completed` | planning 状态 + 有子节点 + 是根的直接子节点 | 提醒向用户确认计划 |
 | P4 | `no_log_start` | implementing 状态 + 无日志 + 已开始 > 1 分钟 | 提醒开始记录工作日志 |
 | P5 | `no_problem` | implementing 状态 + 无问题记录 + 已开始 > 5 分钟 | 提醒使用 `problem_update` 记录问题和计划 |
+| P6 | `failed_node` | execution 节点 + failed 状态 | 提醒 retry 或回退父节点重新分解 |
+| P7 | `no_docs` | implementing 状态 + 无文档引用 + 已开始 > 1 分钟 | 提醒添加文档引用或确认父节点派发 |
 
 ### 节流机制
 
@@ -528,6 +530,8 @@ UserPromptSubmit 触发
 | `plan_completed` | `📋 计划节点已创建完子任务。\n建议：向用户展示完整计划并等待确认，再开始执行第一个任务。` |
 | `no_log_start` | `📝 节点已开始 1 分钟但尚无日志记录。\n建议：使用 log_append 开始记录工作日志。` |
 | `no_problem` | `💭 节点执行超过 5 分钟，建议记录当前状态。\n建议：使用 problem_update 记录遇到的问题和下一步计划，即使没有问题也可以记录下一步意图。` |
+| `failed_node` | `❌ 任务执行失败。\n建议：如果是可修复问题使用 retry 重试；如果任务过于复杂，回到父规划节点重新分解。` |
+| `no_docs` | `📄 当前节点无文档引用。\n建议：如需参考文档请用 node_reference 添加，或确认父节点是否遗漏派发文档。` |
 
 ---
 
@@ -747,6 +751,8 @@ AI: [调用 workspace_init(...)]
 | P3 | planning + 计划完成 | 3分钟 |
 | P4 | implementing + 无日志 > 1分钟 | 3分钟 |
 | P5 | implementing + 无问题 > 5分钟 | 3分钟 |
+| P6 | execution + failed 状态 | 3分钟 |
+| P7 | implementing + 无文档引用 > 1分钟 | 3分钟 |
 
 ### 与其他插件共存
 

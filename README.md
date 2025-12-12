@@ -282,6 +282,8 @@ beforeSubmitPrompt 触发
 | 计划确认 | planning + 有子节点 | 3分钟 |
 | 无日志 | implementing + 无日志 > 1分钟 | 3分钟 |
 | 问题记录 | implementing + 无问题 > 5分钟 | 3分钟 |
+| 失败引导 | execution + failed 状态 | 3分钟 |
+| 文档缺失 | implementing + 无文档引用 > 1分钟 | 3分钟 |
 
 ### 使用示例
 
@@ -397,18 +399,19 @@ web/
 - [ ] **智能验证节点** - 加强验证节点能力，让 AI 能更智能地判断是否需要验证，并自动执行验证流程
 - [ ] **Prompt 扩展为 Hook** - 将部分静态 prompt 改为 Hook 动态注入，实现更智能的上下文感知提醒
 - [ ] **WebUI 编辑与 AI 同步** - 实现 WebUI 中的节点编辑功能（需求、结论等），变更能实时同步给 AI 会话
+- [ ] **重命名功能** - 支持工作区和节点的重命名，保持引用关系不变
 
 ### 待修复问题
 
 - [ ] **已完成工作区追加需求处理不当** - 根节点完成后补充/更新需求时，AI 倾向于直接修改代码而非 reopen 工作区继续跟踪
 - [ ] **并发安全** - 多个 API 调用同时到达时可能导致数据不一致，缺少乐观锁机制
 - [ ] **completed 节点自动 reopen** - 在已完成节点下创建子节点会自动 reopen 并清空 conclusion，应改为显式操作
-- [ ] **聚焦节点不同步** - `context_focus` 和 `session_bind` 的 focusedNodeId 可能不一致，导致 Hook 注入错误上下文
-- [ ] **并发执行控制缺失** - 同级执行节点可同时启动，违反"一次一个节点"原则
+- [x] **聚焦节点不同步** - ~~`context_focus` 和 `session_bind` 的 focusedNodeId 可能不一致~~ 已修复：统一以 graph.currentFocus 为权威来源
+- [x] **并发执行控制缺失** - ~~同级执行节点可同时启动~~ 已修复：start 时检查同级节点状态，阻止并发执行
 - [ ] **规则提醒改用 Hook 实现** - 弃用 rulesHash 验证机制，改用 PreToolUse Hook（Claude Code）或 beforeMCPExecution（Cursor）在 node_create 前主动注入规则
 - [ ] **操作幂等性缺失** - 网络重试时同一操作可能失败，缺少 request ID 去重机制
 - [ ] **信息收集检查不完善** - 只检查 info_collection 节点存在，不验证 conclusion 有效性和规则/文档是否真正归档
-- [ ] **Hook 提醒场景遗漏** - 缺少执行节点 fail 后引导、文档派发不足提醒等关键场景
+- [x] **Hook 提醒场景遗漏** - ~~缺少执行节点 fail 后引导、文档派发不足提醒~~ 已修复：新增 P6_FAILED_NODE 和 P7_NO_DOCS 提醒
 - [ ] **文档派发验证缺失** - `node_create` 派发的文档路径不验证是否存在
 - [ ] **Hint 信息碎片化** - 各服务返回的 hint 没有统一格式，异常情况下提示不清晰
 - [ ] **日志缺少结构化** - 缺少决策日志类型，难以回溯"为什么选这个方案"
