@@ -225,6 +225,15 @@ export class StateService {
       archiveResult = await this.archiveInfoCollection(projectRoot, workspaceId, conclusion);
     }
 
+    // 8.2 complete 时获取节点的文档引用（用于提醒更新）
+    let nodeDocRefs: DocRef[] = [];
+    if (action === "complete") {
+      const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, workspaceId, nodeId);
+      nodeDocRefs = nodeInfo.docsWithStatus
+        .filter(d => d.status === "active")
+        .map(d => ({ path: d.path, description: d.description }));
+    }
+
     // 9. 更新工作区配置的 updatedAt
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
     config.updatedAt = currentTime;
@@ -244,7 +253,7 @@ export class StateService {
     }
 
     // 11. 添加工作流提示（根据节点类型）
-    result.hint = this.generateHint(nodeType, action, nodeMeta, graph, archiveResult, infoCollectionWarning);
+    result.hint = this.generateHint(nodeType, action, nodeMeta, graph, archiveResult, infoCollectionWarning, nodeDocRefs);
 
     return result;
   }
@@ -258,7 +267,8 @@ export class StateService {
     nodeMeta: { parentId: string | null; children: string[]; conclusion?: string | null; role?: NodeRole; id?: string },
     graph: { nodes: Record<string, { status: NodeStatus; type: NodeType }> },
     archiveResult?: { rules: string[]; docs: DocRef[] } | null,
-    infoCollectionWarning?: string | null
+    infoCollectionWarning?: string | null,
+    nodeDocRefs?: DocRef[]
   ): string {
     // 根节点 start 时如果缺少信息收集节点，优先显示强提醒
     if (infoCollectionWarning) {
@@ -293,10 +303,18 @@ export class StateService {
         return "💡 执行任务已开始。请使用 log_append 记录执行过程，完成后调用 complete，如遇问题调用 fail。";
       } else if (action === "complete") {
         const parentId = nodeMeta.parentId;
+        let hint = "💡 执行任务已完成。";
         if (parentId && graph.nodes[parentId]) {
-          return `💡 执行任务已完成。建议切换到父规划节点 ${parentId} 检查是否还有其他任务。`;
+          hint = `💡 执行任务已完成。建议切换到父规划节点 ${parentId} 检查是否还有其他任务。`;
         }
-        return "💡 执行任务已完成。";
+        // 如果有文档引用，追加更新提醒
+        if (nodeDocRefs && nodeDocRefs.length > 0) {
+          hint += `\n\n📄 您在此任务中引用了 ${nodeDocRefs.length} 个文档，请确认是否需要同步更新：`;
+          for (const doc of nodeDocRefs) {
+            hint += `\n- ${doc.path}${doc.description ? ` (${doc.description})` : ""}`;
+          }
+        }
+        return hint;
       } else if (action === "fail") {
         return "💡 执行任务已标记失败。请切换到父规划节点，根据失败原因决定：重新派发、修改需求后重试、或取消任务。";
       }
@@ -312,10 +330,18 @@ export class StateService {
         return "💡 进入规划状态。请分析需求，使用 node_create 创建执行节点或子规划节点。";
       } else if (action === "complete") {
         const parentId = nodeMeta.parentId;
+        let hint = "💡 规划节点已完成。工作区任务完成！";
         if (parentId && graph.nodes[parentId]) {
-          return `💡 规划节点已完成汇总。建议切换到父节点 ${parentId} 继续。`;
+          hint = `💡 规划节点已完成汇总。建议切换到父节点 ${parentId} 继续。`;
         }
-        return "💡 规划节点已完成。工作区任务完成！";
+        // 如果有文档引用，追加更新提醒
+        if (nodeDocRefs && nodeDocRefs.length > 0) {
+          hint += `\n\n📄 您在此任务中引用了 ${nodeDocRefs.length} 个文档，请确认是否需要同步更新：`;
+          for (const doc of nodeDocRefs) {
+            hint += `\n- ${doc.path}${doc.description ? ` (${doc.description})` : ""}`;
+          }
+        }
+        return hint;
       } else if (action === "cancel") {
         return "💡 规划节点已取消。如需重新规划请使用 reopen。";
       }
