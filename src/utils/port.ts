@@ -5,8 +5,10 @@ import * as net from "node:net";
 
 /**
  * 检测端口是否被占用
+ * @param port 端口号
+ * @param host 主机地址，默认 127.0.0.1
  */
-export function isPortInUse(port: number): Promise<boolean> {
+export function isPortInUse(port: number, host: string = "127.0.0.1"): Promise<boolean> {
   return new Promise((resolve) => {
     const server = net.createServer();
 
@@ -23,7 +25,7 @@ export function isPortInUse(port: number): Promise<boolean> {
       resolve(false);
     });
 
-    // 使用 127.0.0.1 检测本地端口占用（安全）
-    server.listen(port, "127.0.0.1");
+    // 使用指定的 host 检测端口占用
+    server.listen(port, host);
   });
 }

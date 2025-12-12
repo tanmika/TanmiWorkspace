@@ -1,10 +1,20 @@
 <script setup lang="ts">
-// App 根组件
+import { onMounted } from 'vue'
+import { useServiceStore } from '@/stores/service'
+import ServiceUnavailable from '@/components/ServiceUnavailable.vue'
+
+const serviceStore = useServiceStore()
+
+// 启动时检查服务状态
+onMounted(() => {
+  serviceStore.checkHealth()
+})
 </script>
 
 <template>
   <el-config-provider>
     <router-view />
+    <ServiceUnavailable />
   </el-config-provider>
 </template>
 

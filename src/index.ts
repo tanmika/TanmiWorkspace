@@ -59,16 +59,19 @@ async function startHttpServerInBackground(port: number): Promise<FastifyInstanc
     return null;
   }
 
-  // 检测端口占用
-  if (await isPortInUse(port)) {
-    logHttp(`端口 ${port} 已被占用，跳过 HTTP 启动`);
+  // 使用与 server.ts 一致的 host 设置（默认 127.0.0.1，可通过环境变量覆盖）
+  const host = process.env.TANMI_HOST || "127.0.0.1";
+
+  // 检测端口占用（使用相同的 host）
+  if (await isPortInUse(port, host)) {
+    logHttp(`端口 ${host}:${port} 已被占用，跳过 HTTP 启动`);
     return null;
   }
 
   try {
     const server = await createServer();
-    await server.listen({ port, host: "0.0.0.0" });
-    logHttp(`Listening on http://localhost:${port}`);
+    await server.listen({ port, host });
+    logHttp(`Listening on http://${host}:${port}`);
     return server;
   } catch (err) {
     logHttp(`启动失败: ${err instanceof Error ? err.message : String(err)}`);
