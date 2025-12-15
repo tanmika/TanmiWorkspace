@@ -165,6 +165,18 @@ function createMcpServer(services: Services): Server {
           });
           break;
 
+        case "workspace_archive":
+          result = await services.workspace.archive({
+            workspaceId: args?.workspaceId as string,
+          });
+          break;
+
+        case "workspace_restore":
+          result = await services.workspace.restore({
+            workspaceId: args?.workspaceId as string,
+          });
+          break;
+
         // Node 工具
         case "node_create":
           result = await services.node.create({

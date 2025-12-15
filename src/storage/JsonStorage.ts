@@ -118,12 +118,23 @@ export class JsonStorage {
   // ========== Workspace Config (项目级) ==========
 
   /**
+   * 获取工作区配置文件路径（根据是否归档）
+   */
+  private getConfigPath(projectRoot: string, workspaceId: string, isArchived = false): string {
+    if (isArchived) {
+      return this.fs.getArchivePath(projectRoot, workspaceId) + "/workspace.json";
+    }
+    return this.fs.getWorkspaceConfigPath(projectRoot, workspaceId);
+  }
+
+  /**
    * 读取工作区配置
    * @param projectRoot 项目根目录
    * @param workspaceId 工作区 ID
+   * @param isArchived 是否从归档目录读取
    */
-  async readWorkspaceConfig(projectRoot: string, workspaceId: string): Promise<WorkspaceConfig> {
-    const configPath = this.fs.getWorkspaceConfigPath(projectRoot, workspaceId);
+  async readWorkspaceConfig(projectRoot: string, workspaceId: string, isArchived = false): Promise<WorkspaceConfig> {
+    const configPath = this.getConfigPath(projectRoot, workspaceId, isArchived);
     const content = await this.fs.readFile(configPath);
     return JSON.parse(content) as WorkspaceConfig;
   }
@@ -133,9 +144,10 @@ export class JsonStorage {
    * @param projectRoot 项目根目录
    * @param workspaceId 工作区 ID
    * @param config 工作区配置
+   * @param isArchived 是否写入归档目录
    */
-  async writeWorkspaceConfig(projectRoot: string, workspaceId: string, config: WorkspaceConfig): Promise<void> {
-    const configPath = this.fs.getWorkspaceConfigPath(projectRoot, workspaceId);
+  async writeWorkspaceConfig(projectRoot: string, workspaceId: string, config: WorkspaceConfig, isArchived = false): Promise<void> {
+    const configPath = this.getConfigPath(projectRoot, workspaceId, isArchived);
     await this.fs.writeFile(configPath, JSON.stringify(config, null, 2));
   }
 
@@ -158,17 +170,22 @@ export class JsonStorage {
    * 读取节点图
    * @param projectRoot 项目根目录
    * @param workspaceId 工作区 ID
+   * @param isArchived 是否为归档工作区
    */
-  async readGraph(projectRoot: string, workspaceId: string): Promise<NodeGraph> {
-    const graphPath = this.fs.getGraphPath(projectRoot, workspaceId);
+  async readGraph(projectRoot: string, workspaceId: string, isArchived = false): Promise<NodeGraph> {
+    const graphPath = isArchived
+      ? this.fs.getGraphPathWithArchive(projectRoot, workspaceId, true)
+      : this.fs.getGraphPath(projectRoot, workspaceId);
     const content = await this.fs.readFile(graphPath);
     const graph = JSON.parse(content) as NodeGraph;
 
-    // 版本迁移：1.0/2.0 -> 3.0
+    // 版本迁移：1.0/2.0 -> 3.0（仅对活跃工作区执行迁移写入）
     if (graph.version !== JsonStorage.GRAPH_VERSION) {
       this.migrateGraph(graph);
-      // 自动保存迁移后的数据
-      await this.writeGraph(projectRoot, workspaceId, graph);
+      if (!isArchived) {
+        // 自动保存迁移后的数据
+        await this.writeGraph(projectRoot, workspaceId, graph);
+      }
     }
 
     return graph;

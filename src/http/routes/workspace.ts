@@ -188,4 +188,26 @@ export async function workspaceRoutes(fastify: FastifyInstance): Promise<void> {
       return services.workspace.delete(params);
     }
   );
+
+  /**
+   * POST /api/workspaces/:id/archive - 归档工作区
+   */
+  fastify.post<{ Params: WorkspaceIdParams }>(
+    "/workspaces/:id/archive",
+    { schema: workspaceIdParamsSchema },
+    async (request: FastifyRequest<{ Params: WorkspaceIdParams }>) => {
+      return services.workspace.archive({ workspaceId: request.params.id });
+    }
+  );
+
+  /**
+   * POST /api/workspaces/:id/restore - 恢复归档的工作区
+   */
+  fastify.post<{ Params: WorkspaceIdParams }>(
+    "/workspaces/:id/restore",
+    { schema: workspaceIdParamsSchema },
+    async (request: FastifyRequest<{ Params: WorkspaceIdParams }>) => {
+      return services.workspace.restore({ workspaceId: request.params.id });
+    }
+  );
 }

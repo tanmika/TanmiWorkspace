@@ -155,6 +155,34 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  async function archiveWorkspace(id: string) {
+    loading.value = true
+    error.value = null
+    try {
+      await workspaceApi.archive(id)
+      await fetchWorkspaces()
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '归档工作区失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function restoreWorkspace(id: string) {
+    loading.value = true
+    error.value = null
+    try {
+      await workspaceApi.restore(id)
+      await fetchWorkspaces()
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '恢复工作区失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   function clearCurrent() {
     currentWorkspace.value = null
     currentGraph.value = null
@@ -183,6 +211,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     fetchStatus,
     createWorkspace,
     deleteWorkspace,
+    archiveWorkspace,
+    restoreWorkspace,
     clearCurrent,
   }
 })

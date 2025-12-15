@@ -164,6 +164,53 @@ export const workspaceUpdateRulesTool: Tool = {
 };
 
 /**
+ * workspace_archive 工具定义
+ */
+export const workspaceArchiveTool: Tool = {
+  name: "workspace_archive",
+  description: `归档工作区。将工作区移动到归档目录，标记为已完成。
+
+**归档后**：
+- 工作区状态变为 archived
+- 目录移动到 .tanmi-workspace/archive/ 下
+- 仍可通过 workspace_get/workspace_status 查看
+- 可通过 workspace_restore 恢复`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+    },
+    required: ["workspaceId"],
+  },
+};
+
+/**
+ * workspace_restore 工具定义
+ */
+export const workspaceRestoreTool: Tool = {
+  name: "workspace_restore",
+  description: `恢复归档的工作区。将工作区从归档目录移回，重新激活。
+
+**恢复后**：
+- 工作区状态变为 active
+- 目录移回原位置
+- 可继续正常使用`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+    },
+    required: ["workspaceId"],
+  },
+};
+
+/**
  * 所有工作区工具
  */
 export const workspaceTools: Tool[] = [
@@ -173,4 +220,6 @@ export const workspaceTools: Tool[] = [
   workspaceDeleteTool,
   workspaceStatusTool,
   workspaceUpdateRulesTool,
+  workspaceArchiveTool,
+  workspaceRestoreTool,
 ];

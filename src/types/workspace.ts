@@ -197,3 +197,34 @@ export interface WorkspaceUpdateRulesResult {
   rulesHash: string;
   rules: string[];
 }
+
+/**
+ * workspace_archive 输入
+ */
+export interface WorkspaceArchiveParams {
+  workspaceId: string;
+}
+
+/**
+ * workspace_archive 输出
+ */
+export interface WorkspaceArchiveResult {
+  success: boolean;
+  archivePath: string;
+}
+
+/**
+ * workspace_restore 输入
+ */
+export interface WorkspaceRestoreParams {
+  workspaceId: string;
+}
+
+/**
+ * workspace_restore 输出
+ */
+export interface WorkspaceRestoreResult {
+  success: boolean;
+  path: string;
+  webUrl: string;
+}
