@@ -225,7 +225,7 @@ TanmiWorkspace 提供 Hook 插件，在 AI 对话过程中**自动注入工作�
 
 | 平台 | 会话标识 | 触发事件 |
 |------|---------|---------|
-| Claude Code | `session_id` | SessionStart, UserPromptSubmit |
+| Claude Code | `session_id` | SessionStart, UserPromptSubmit, PostToolUse, Stop |
 | Cursor | `conversation_id` | beforeSubmitPrompt |
 
 ### 功能特性
@@ -264,6 +264,14 @@ UserPromptSubmit 触发
     ↓
 已绑定？→ 智能提醒（日志超时、问题未解决等）
 未绑定？→ 检测关键词，有则提醒绑定
+    ↓
+PostToolUse 触发（Edit/Write/Bash/MCP）
+    ↓
+已绑定？→ 文件变更提醒 / 命令错误提醒 / MCP 参数错误提醒
+    ↓
+Stop 触发（AI 响应完成）
+    ↓
+已绑定？→ 分析响应内容，检测到错误关键词则提醒记录问题
 ```
 
 **Cursor**：
@@ -276,7 +284,9 @@ beforeSubmitPrompt 触发
 
 ### 智能提醒
 
-绑定工作区后，Hook 会根据节点状态自动提醒 AI：
+绑定工作区后，Hook 会根据节点状态和工具执行结果自动提醒 AI：
+
+**UserPromptSubmit 提醒**（用户输入时）：
 
 | 类型 | 触发条件 | 节流 |
 |------|---------|------|
@@ -288,6 +298,20 @@ beforeSubmitPrompt 触发
 | 问题记录 | implementing + 无问题 > 5分钟 | 3分钟 |
 | 失败引导 | execution + failed 状态 | 3分钟 |
 | 文档缺失 | implementing + 无文档引用 > 1分钟 | 3分钟 |
+
+**PostToolUse 提醒**（工具执行后）：
+
+| 类型 | 触发条件 | 节流 |
+|------|---------|------|
+| 文件变更 | Edit/Write 成功 | 1分钟 |
+| 命令错误 | Bash 失败 (exit code != 0) | 30秒 |
+| MCP 参数错误 | tanmi-workspace MCP 调用失败 | 不节流 |
+
+**Stop 提醒**（AI 响应完成时）：
+
+| 类型 | 触发条件 | 节流 |
+|------|---------|------|
+| 错误检测 | AI 响应中包含错误/阻碍关键词 | 30秒 |
 
 ### 使用示例
 
