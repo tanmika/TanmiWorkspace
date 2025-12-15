@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, ArrowRight, Box, RefreshRight } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowRight, Box, RefreshRight, Search, Sort } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@/stores'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
-import type { WorkspaceInitParams } from '@/types'
+import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
@@ -18,7 +18,45 @@ const createForm = ref<WorkspaceInitParams>({
   rules: [],
   docs: [],
 })
-const statusFilter = ref<'all' | 'active' | 'archived'>('all')
+// 本地存储的偏好设置 key
+const PREFERENCES_KEY = 'tanmi-workspace-home-preferences'
+
+// 偏好设置类型
+interface HomePreferences {
+  statusFilter: 'all' | 'active' | 'archived'
+  sortBy: 'updatedAt' | 'createdAt'
+  sortOrder: 'desc' | 'asc'
+}
+
+// 加载本地偏好
+function loadPreferences(): HomePreferences {
+  try {
+    const saved = localStorage.getItem(PREFERENCES_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch {
+    // 忽略解析错误
+  }
+  return { statusFilter: 'all', sortBy: 'updatedAt', sortOrder: 'desc' }
+}
+
+// 保存本地偏好
+function savePreferences() {
+  const prefs: HomePreferences = {
+    statusFilter: statusFilter.value,
+    sortBy: sortBy.value,
+    sortOrder: sortOrder.value,
+  }
+  localStorage.setItem(PREFERENCES_KEY, JSON.stringify(prefs))
+}
+
+// 初始化偏好设置
+const savedPrefs = loadPreferences()
+const statusFilter = ref<'all' | 'active' | 'archived'>(savedPrefs.statusFilter)
+const searchQuery = ref('')
+const sortBy = ref<'updatedAt' | 'createdAt'>(savedPrefs.sortBy)
+const sortOrder = ref<'desc' | 'asc'>(savedPrefs.sortOrder)
 
 // 开发信息
 const devInfo = ref<DevInfoResult | null>(null)
@@ -37,6 +75,11 @@ onMounted(async () => {
   } catch {
     // 忽略
   }
+})
+
+// 监听偏好变化并自动保存
+watch([statusFilter, sortBy, sortOrder], () => {
+  savePreferences()
 })
 
 // 格式化开发信息时间
@@ -123,15 +166,48 @@ function formatTime(isoString: string) {
   })
 }
 
-// 过滤后的工作区列表
-function getFilteredWorkspaces() {
+// 过滤、搜索、排序后的工作区列表
+const filteredWorkspaces = computed(() => {
+  let list: WorkspaceEntry[] = []
+
+  // 1. 按状态筛选
   if (statusFilter.value === 'active') {
-    return workspaceStore.activeWorkspaces
+    list = [...workspaceStore.activeWorkspaces]
+  } else if (statusFilter.value === 'archived') {
+    list = [...workspaceStore.archivedWorkspaces]
+  } else {
+    list = [...workspaceStore.workspaces]
   }
-  if (statusFilter.value === 'archived') {
-    return workspaceStore.archivedWorkspaces
+
+  // 2. 搜索过滤（名称或路径）
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase().trim()
+    list = list.filter(ws =>
+      ws.name.toLowerCase().includes(query) ||
+      ws.projectRoot.toLowerCase().includes(query)
+    )
   }
-  return workspaceStore.workspaces
+
+  // 3. 排序
+  list.sort((a, b) => {
+    const aTime = new Date(a[sortBy.value]).getTime()
+    const bTime = new Date(b[sortBy.value]).getTime()
+    return sortOrder.value === 'desc' ? bTime - aTime : aTime - bTime
+  })
+
+  return list
+})
+
+// 获取路径显示（只显示最后两级目录）
+function getShortPath(fullPath: string): string {
+  const parts = fullPath.split('/')
+  if (parts.length <= 2) return fullPath
+  return '.../' + parts.slice(-2).join('/')
+}
+
+// 切换排序顺序
+function toggleSortOrder() {
+  sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
 }
 </script>
 
@@ -147,19 +223,38 @@ function getFilteredWorkspaces() {
 
     <!-- 筛选栏 -->
     <div class="filter-bar">
-      <el-radio-group v-model="statusFilter" size="small">
-        <el-radio-button value="all">全部</el-radio-button>
-        <el-radio-button value="active">活跃</el-radio-button>
-        <el-radio-button value="archived">已归档</el-radio-button>
-      </el-radio-group>
+      <div class="filter-left">
+        <el-radio-group v-model="statusFilter" size="small">
+          <el-radio-button value="all">全部</el-radio-button>
+          <el-radio-button value="active">活跃</el-radio-button>
+          <el-radio-button value="archived">已归档</el-radio-button>
+        </el-radio-group>
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜索名称或路径..."
+          :prefix-icon="Search"
+          clearable
+          size="small"
+          class="search-input"
+        />
+      </div>
+      <div class="filter-right">
+        <el-select v-model="sortBy" size="small" class="sort-select">
+          <el-option value="updatedAt" label="更新时间" />
+          <el-option value="createdAt" label="创建时间" />
+        </el-select>
+        <el-button size="small" :icon="Sort" @click="toggleSortOrder" :title="sortOrder === 'desc' ? '降序' : '升序'">
+          {{ sortOrder === 'desc' ? '↓' : '↑' }}
+        </el-button>
+      </div>
     </div>
 
     <!-- 工作区列表 -->
     <div class="workspace-list" v-loading="workspaceStore.loading">
-      <el-empty v-if="getFilteredWorkspaces().length === 0" description="暂无工作区" />
+      <el-empty v-if="filteredWorkspaces.length === 0" :description="searchQuery ? '没有匹配的工作区' : '暂无工作区'" />
       <div v-else class="workspace-grid">
         <el-card
-          v-for="ws in getFilteredWorkspaces()"
+          v-for="ws in filteredWorkspaces"
           :key="ws.id"
           class="workspace-card"
           shadow="hover"
@@ -173,6 +268,9 @@ function getFilteredWorkspaces() {
             </div>
           </template>
           <div class="card-body">
+            <div class="project-path" :title="ws.projectRoot">
+              {{ getShortPath(ws.projectRoot) }}
+            </div>
             <div class="meta">
               <span>创建于 {{ formatTime(ws.createdAt) }}</span>
               <span>更新于 {{ formatTime(ws.updatedAt) }}</span>
@@ -271,6 +369,32 @@ function getFilteredWorkspaces() {
 
 .filter-bar {
   margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.filter-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-input {
+  width: 220px;
+}
+
+.sort-select {
+  width: 110px;
 }
 
 .workspace-grid {
@@ -292,6 +416,19 @@ function getFilteredWorkspaces() {
 .card-header .name {
   font-weight: 600;
   font-size: 16px;
+}
+
+.card-body .project-path {
+  color: #606266;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  background: #f5f7fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-body .meta {
