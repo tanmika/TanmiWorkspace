@@ -23,6 +23,8 @@ import { contextTools } from "./tools/context.js";
 import { logTools } from "./tools/log.js";
 import { sessionTools } from "./tools/session.js";
 import { helpTools, type HelpTopic, type PromptTemplate } from "./tools/help.js";
+import { importTools } from "./tools/import.js";
+import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
 import type { TransitionAction, ReferenceAction } from "./types/index.js";
@@ -107,6 +109,7 @@ function createMcpServer(services: Services): Server {
       ...logTools,
       ...sessionTools,
       ...helpTools,
+      ...importTools,
     ],
   }));
 
@@ -344,6 +347,34 @@ function createMcpServer(services: Services): Server {
             args?.params as Record<string, unknown> | undefined
           );
           break;
+
+        // Import 工具
+        case "workspace_import_guide": {
+          const path = args?.path as string;
+          const type = args?.type as string;
+          const changeId = args?.changeId as string;
+          const projectRoot = args?.projectRoot as string;
+
+          if (type !== 'openspec') {
+            throw new Error(`不支持的规范类型: ${type}`);
+          }
+
+          result = generateImportGuide(path, changeId, projectRoot);
+          break;
+        }
+
+        case "workspace_import_list": {
+          const path = args?.path as string;
+          const type = args?.type as string;
+
+          if (type !== 'openspec') {
+            throw new Error(`不支持的规范类型: ${type}`);
+          }
+
+          const changes = listChanges(path);
+          result = { type, changes };
+          break;
+        }
 
         default:
           throw new Error(`未知工具: ${name}`);
