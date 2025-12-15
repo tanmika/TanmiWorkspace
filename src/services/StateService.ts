@@ -239,7 +239,15 @@ export class StateService {
     config.updatedAt = currentTime;
     await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
 
-    // 10. 返回结果
+    // 10. 同步更新索引中的 updatedAt（确保 workspace_list 返回正确时间）
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (wsEntry) {
+      wsEntry.updatedAt = currentTime;
+      await this.json.writeIndex(index);
+    }
+
+    // 11. 返回结果
     const result: NodeTransitionResult = {
       success: true,
       previousStatus: currentStatus,
@@ -252,7 +260,7 @@ export class StateService {
       result.cascadeUpdates = cascadeMessages;
     }
 
-    // 11. 添加工作流提示（根据节点类型）
+    // 12. 添加工作流提示（根据节点类型）
     result.hint = this.generateHint(nodeType, action, nodeMeta, graph, archiveResult, infoCollectionWarning, nodeDocRefs);
 
     return result;

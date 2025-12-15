@@ -45,7 +45,12 @@
       "Bash(npm run build:all:*)",
       "Bash(npm run)",
       "Bash(npm run dev:all:*)",
-      "mcp__tanmi-workspace__context_focus"
+      "mcp__tanmi-workspace__context_focus",
+      "mcp__tanmi-workspace__workspace_delete",
+      "mcp__tanmi-workspace__workspace_import_guide",
+      "Bash(npx tsc:*)",
+      "Bash(git merge:*)",
+      "Bash(git push)"
     ]
   }
 }

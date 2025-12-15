@@ -42,6 +42,14 @@ export class LogService {
   async append(params: LogAppendParams): Promise<LogAppendResult> {
     const { workspaceId, nodeId, operator, event } = params;
 
+    // 参数验证（防止 AI 使用错误参数名）
+    if (!operator) {
+      throw new TanmiError("INVALID_PARAMS", "缺少必填参数 operator（操作者），请检查是否使用了正确的参数名");
+    }
+    if (!event) {
+      throw new TanmiError("INVALID_PARAMS", "缺少必填参数 event（事件描述），请检查是否使用了正确的参数名（不是 content）");
+    }
+
     // 1. 获取 projectRoot
     const projectRoot = await this.resolveProjectRoot(workspaceId);
 
@@ -87,8 +95,13 @@ export class LogService {
     nodeType: string | undefined,
     status: string,
     childCount: number,
-    event: string
+    event: string | undefined
   ): string {
+    // 防御性检查：如果 event 为空则跳过关键词检测
+    if (!event) {
+      return "";
+    }
+
     // 检测是否是"方案确定"类的日志
     const planningKeywords = ["确定", "决定", "方案", "设计", "计划", "开始实现", "准备"];
     const isPlanningEvent = planningKeywords.some(kw => event.includes(kw));

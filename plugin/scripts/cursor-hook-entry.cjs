@@ -121,6 +121,55 @@ function handleStop(conversationId, binding, input) {
   process.exit(0);
 }
 
+/**
+ * 处理 afterMCPExecution 事件
+ * MCP 调用完成后检测错误，提醒 AI 查看 schema
+ */
+function handleAfterMCPExecution(conversationId, input) {
+  const { server_name, tool_name, result } = input;
+
+  // 仅处理 tanmi-workspace MCP 工具
+  if (server_name !== 'tanmi-workspace') {
+    passThrough();
+    return;
+  }
+
+  // 检测是否调用失败
+  const resultStr = typeof result === 'string'
+    ? result
+    : JSON.stringify(result || '');
+
+  const errorPatterns = [
+    'undefined',
+    '无效',
+    'INVALID_PARAMS',
+    '不存在',
+    '缺少必填参数',
+    'required'
+  ];
+
+  const isError = result?.isError ||
+                  errorPatterns.some(pattern => resultStr.includes(pattern));
+
+  if (isError) {
+    const toolPath = `tanmi-workspace/${tool_name}`;
+    const reminder = `<tanmi-mcp-error-hint>
+⚠️ MCP 调用可能使用了错误的参数名。
+
+请运行以下命令查看正确的参数 schema：
+\`\`\`bash
+mcp-cli info ${toolPath}
+\`\`\`
+
+然后使用正确的参数名重试。
+</tanmi-mcp-error-hint>`;
+
+    outputCursorResponse(true, null, reminder);
+  } else {
+    passThrough();
+  }
+}
+
 // ============================================================================
 // 主逻辑
 // ============================================================================
@@ -146,6 +195,10 @@ async function main() {
   switch (eventType) {
     case 'beforeSubmitPrompt':
       handleBeforeSubmitPrompt(conversationId, binding, input);
+      break;
+
+    case 'afterMCPExecution':
+      handleAfterMCPExecution(conversationId, input);
       break;
 
     case 'stop':

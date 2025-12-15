@@ -148,6 +148,18 @@ configure_claude_hooks() {
                     }
                 ]
             }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "mcp__tanmi-workspace__.*",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node \"'"$hook_script"'\" PostToolUse",
+                        "timeout": 3000
+                    }
+                ]
+            }
         ]
     }'
 
@@ -224,15 +236,20 @@ configure_cursor_hooks() {
                 {
                     "command": "node \"'"$hook_script"'\""
                 }
+            ],
+            "afterMCPExecution": [
+                {
+                    "command": "node \"'"$hook_script"'\""
+                }
             ]
         }
     }'
 
     # 检查是否存在现有配置
     if [ -f "$CURSOR_HOOKS" ]; then
-        # 合并配置：保留现有 hooks，添加 beforeSubmitPrompt
+        # 合并配置：保留现有 hooks，添加 beforeSubmitPrompt 和 afterMCPExecution
         jq --argjson new_hook "[{\"command\": \"node \\\"$hook_script\\\"\"}]" \
-           '.hooks.beforeSubmitPrompt = $new_hook' "$CURSOR_HOOKS" > "${CURSOR_HOOKS}.tmp"
+           '.hooks.beforeSubmitPrompt = $new_hook | .hooks.afterMCPExecution = $new_hook' "$CURSOR_HOOKS" > "${CURSOR_HOOKS}.tmp"
         mv "${CURSOR_HOOKS}.tmp" "$CURSOR_HOOKS"
     else
         # 创建新配置
@@ -252,11 +269,11 @@ uninstall_cursor_hooks() {
         success "已删除 $TANMI_SCRIPTS/cursor-hook-entry.cjs"
     fi
 
-    # 从 hooks.json 移除 beforeSubmitPrompt 配置
+    # 从 hooks.json 移除 beforeSubmitPrompt 和 afterMCPExecution 配置
     if [ -f "$CURSOR_HOOKS" ] && check_jq; then
-        jq 'del(.hooks.beforeSubmitPrompt)' "$CURSOR_HOOKS" > "${CURSOR_HOOKS}.tmp"
+        jq 'del(.hooks.beforeSubmitPrompt) | del(.hooks.afterMCPExecution)' "$CURSOR_HOOKS" > "${CURSOR_HOOKS}.tmp"
         mv "${CURSOR_HOOKS}.tmp" "$CURSOR_HOOKS"
-        success "已从 $CURSOR_HOOKS 移除 beforeSubmitPrompt 配置"
+        success "已从 $CURSOR_HOOKS 移除 hooks 配置"
     fi
 
     success "Cursor Hook 系统已卸载"

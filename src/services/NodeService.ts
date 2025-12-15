@@ -202,7 +202,15 @@ export class NodeService {
     config.updatedAt = currentTime;
     await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
 
-    // 13. 追加日志
+    // 13. 同步更新索引中的 updatedAt
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (wsEntry) {
+      wsEntry.updatedAt = currentTime;
+      await this.json.writeIndex(index);
+    }
+
+    // 14. 追加日志
     const typeLabel = type === "planning" ? "规划" : "执行";
     await this.md.appendLog(projectRoot, workspaceId, {
       time: currentTime,
@@ -421,7 +429,15 @@ export class NodeService {
     config.updatedAt = currentTime;
     await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
 
-    // 8. 追加日志
+    // 8. 同步更新索引中的 updatedAt
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (wsEntry) {
+      wsEntry.updatedAt = currentTime;
+      await this.json.writeIndex(index);
+    }
+
+    // 9. 追加日志
     await this.md.appendLog(projectRoot, workspaceId, {
       time: currentTime,
       operator: "system",

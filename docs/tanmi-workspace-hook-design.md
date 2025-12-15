@@ -10,8 +10,8 @@
 
 | 平台 | 会话标识 | 触发事件 | 配置文件 |
 |------|---------|---------|---------|
-| Claude Code | `session_id` | SessionStart, UserPromptSubmit | `~/.claude/settings.json` |
-| Cursor | `conversation_id` | beforeSubmitPrompt | `~/.cursor/hooks.json` |
+| Claude Code | `session_id` | SessionStart, UserPromptSubmit, PostToolUse | `~/.claude/settings.json` |
+| Cursor | `conversation_id` | beforeSubmitPrompt, afterMCPExecution | `~/.cursor/hooks.json` |
 
 ### 能实现什么功能？
 
@@ -20,6 +20,7 @@
 | **自动提醒工作区** | 每次对话开始时注入当前工作区信息 | AI 经常忘记 → AI 始终知道 |
 | **自动提醒规则** | 注入工作区规则，AI 不会遗漏 | 规则容易被忽略 → 规则始终可见 |
 | **自动提醒聚焦节点** | 注入当前任务状态和需求 | 需要手动查询 → 自动获知 |
+| **MCP 调用错误提醒** | MCP 调用失败时提醒 AI 检查 schema | 参数错误难以发现 → 立即提醒 |
 | **多窗口隔离** | 不同窗口可绑定不同工作区 | 无法区分 → 精确控制 |
 | **按需启用** | 只有绑定后才激活，不干扰普通对话 | - |
 

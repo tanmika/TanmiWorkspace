@@ -263,10 +263,19 @@ export class ContextService {
 
     // 6. 更新工作区配置的 updatedAt
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
-    config.updatedAt = now();
+    const currentTime = now();
+    config.updatedAt = currentTime;
     await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
 
-    // 7. 返回结果
+    // 7. 同步更新索引中的 updatedAt
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (wsEntry) {
+      wsEntry.updatedAt = currentTime;
+      await this.json.writeIndex(index);
+    }
+
+    // 8. 返回结果
     return {
       success: true,
       previousFocus,

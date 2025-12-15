@@ -79,6 +79,63 @@ function handleSessionStart(sessionId, binding) {
 }
 
 /**
+ * 处理 PostToolUse 事件
+ * 检测 MCP 调用失败，提醒 AI 查看 schema
+ */
+function handlePostToolUse(sessionId, input) {
+  const { tool_name, tool_response } = input;
+
+  // 仅处理 tanmi-workspace MCP 工具
+  if (!tool_name?.startsWith('mcp__tanmi-workspace__')) {
+    process.exit(0);
+    return;
+  }
+
+  // 检测是否调用失败
+  // MCP 工具失败时 tool_response 可能包含 isError: true 或错误信息
+  const responseStr = typeof tool_response === 'string'
+    ? tool_response
+    : JSON.stringify(tool_response || '');
+
+  const errorPatterns = [
+    'undefined',
+    '无效',
+    'INVALID_PARAMS',
+    '不存在',
+    '缺少必填参数',
+    'required'
+  ];
+
+  const isError = tool_response?.isError ||
+                  errorPatterns.some(pattern => responseStr.includes(pattern));
+
+  if (isError) {
+    const toolPath = tool_name.replace('mcp__tanmi-workspace__', 'tanmi-workspace/');
+    const reminder = `<tanmi-mcp-error-hint>
+⚠️ MCP 调用可能使用了错误的参数名。
+
+请运行以下命令查看正确的参数 schema：
+\`\`\`bash
+mcp-cli info ${toolPath}
+\`\`\`
+
+然后使用正确的参数名重试。
+</tanmi-mcp-error-hint>`;
+
+    logHook(sessionId, 'PostToolUse', {
+      tool: toolPath,
+      error: true,
+      response: responseStr.slice(0, 200)
+    });
+
+    outputHookResponse('PostToolUse', reminder);
+  } else {
+    // 调用成功，静默退出
+    process.exit(0);
+  }
+}
+
+/**
  * 处理 UserPromptSubmit 事件
  * 已绑定时进行智能提醒，未绑定时检测关键词提醒绑定
  */
@@ -167,6 +224,10 @@ async function main() {
 
     case 'UserPromptSubmit':
       handleUserPromptSubmit(sessionId, binding, input);
+      break;
+
+    case 'PostToolUse':
+      handlePostToolUse(sessionId, input);
       break;
 
     default:
