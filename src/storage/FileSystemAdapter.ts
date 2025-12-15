@@ -215,6 +215,14 @@ export class FileSystemAdapter {
     return path.join(basePath, "nodes", nodeId, "Problem.md");
   }
 
+  /**
+   * 获取工作区问题文件路径（支持归档）
+   */
+  getWorkspaceProblemPathWithArchive(projectRoot: string, workspaceId: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+    return path.join(basePath, "Problem.md");
+  }
+
   // ========== 文件操作 ==========
 
   /**

@@ -19,7 +19,8 @@ const {
   generateBindingReminder,
   analyzeNodeStatus,
   shouldThrottle,
-  updateLastReminder
+  updateLastReminder,
+  logHook
 } = require('./shared/index.cjs');
 
 // ============================================================================
@@ -59,6 +60,9 @@ function handleSessionStart(sessionId, binding) {
   if (binding) {
     // 已绑定：注入工作区上下文
     context = getFullWorkspaceContext(binding);
+    logHook(sessionId, 'SessionStart', { bound: true, workspaceId: binding.workspaceId });
+  } else {
+    logHook(sessionId, 'SessionStart', { bound: false });
   }
 
   if (!context) {
@@ -78,6 +82,9 @@ function handleSessionStart(sessionId, binding) {
  * 已绑定时进行智能提醒，未绑定时检测关键词提醒绑定
  */
 function handleUserPromptSubmit(sessionId, binding, input) {
+  const userPrompt = input.prompt || '';
+  const promptPreview = userPrompt.slice(0, 100) + (userPrompt.length > 100 ? '...' : '');
+
   // 已绑定：进行智能提醒分析
   if (binding && binding.workspaceId) {
     const focusNodeId = binding.focusedNodeId;
@@ -91,6 +98,12 @@ function handleUserPromptSubmit(sessionId, binding, input) {
           // 更新上次提醒记录
           updateLastReminder(sessionId, reminderInfo.type);
 
+          logHook(sessionId, 'UserPromptSubmit', {
+            bound: true,
+            reminder: reminderInfo.type,
+            prompt: promptPreview
+          });
+
           // 输出智能提醒
           const reminderContent = `<tanmi-smart-reminder>\n${reminderInfo.message}\n</tanmi-smart-reminder>`;
           outputHookResponse('UserPromptSubmit', reminderContent);
@@ -99,18 +112,21 @@ function handleUserPromptSubmit(sessionId, binding, input) {
       }
     }
 
+    logHook(sessionId, 'UserPromptSubmit', { bound: true, reminder: null, prompt: promptPreview });
     // 无需提醒，静默退出
     process.exit(0);
   }
 
   // 未绑定：检测用户消息是否涉及工作区
-  const userPrompt = input.prompt || '';
+  const hasKeywords = containsWorkspaceKeywords(userPrompt);
 
-  if (containsWorkspaceKeywords(userPrompt)) {
+  if (hasKeywords) {
+    logHook(sessionId, 'UserPromptSubmit', { bound: false, keywordDetected: true, prompt: promptPreview });
     // 检测到工作区关键词，提醒绑定
     const reminder = generateBindingReminder(sessionId, 'claude-code');
     outputHookResponse('UserPromptSubmit', reminder);
   } else {
+    logHook(sessionId, 'UserPromptSubmit', { bound: false, keywordDetected: false, prompt: promptPreview });
     // 普通对话，静默退出
     process.exit(0);
   }

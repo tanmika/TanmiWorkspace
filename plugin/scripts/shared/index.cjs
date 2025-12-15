@@ -8,6 +8,7 @@ const binding = require('./binding.cjs');
 const workspace = require('./workspace.cjs');
 const context = require('./context.cjs');
 const reminder = require('./reminder.cjs');
+const logger = require('./logger.cjs');
 
 module.exports = {
   // 配置
@@ -26,5 +27,8 @@ module.exports = {
   ...context,
 
   // 智能提醒
-  ...reminder
+  ...reminder,
+
+  // 日志
+  ...logger
 };

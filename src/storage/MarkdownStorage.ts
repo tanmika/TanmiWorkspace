@@ -479,11 +479,16 @@ ${data.conclusion}
 
   /**
    * 读取问题
+   * @param isArchived 是否为归档工作区
    */
-  async readProblem(projectRoot: string, workspaceId: string, nodeId?: string): Promise<ProblemData> {
+  async readProblem(projectRoot: string, workspaceId: string, nodeId?: string, isArchived: boolean = false): Promise<ProblemData> {
     const problemPath = nodeId
-      ? this.fs.getNodeProblemPath(projectRoot, workspaceId, nodeId)
-      : this.fs.getWorkspaceProblemPath(projectRoot, workspaceId);
+      ? (isArchived
+          ? this.fs.getNodeProblemPathWithArchive(projectRoot, workspaceId, nodeId, true)
+          : this.fs.getNodeProblemPath(projectRoot, workspaceId, nodeId))
+      : (isArchived
+          ? this.fs.getWorkspaceProblemPathWithArchive(projectRoot, workspaceId, true)
+          : this.fs.getWorkspaceProblemPath(projectRoot, workspaceId));
 
     if (!(await this.fs.exists(problemPath))) {
       return {
@@ -728,9 +733,12 @@ ${data.nextStep}
 
   /**
    * 读取节点 Info.md（带状态的文档引用）
+   * @param isArchived 是否为归档工作区
    */
-  async readNodeInfoWithStatus(projectRoot: string, workspaceId: string, nodeId: string): Promise<NodeInfoData & { docsWithStatus: DocRefWithStatus[] }> {
-    const infoPath = this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
+  async readNodeInfoWithStatus(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean = false): Promise<NodeInfoData & { docsWithStatus: DocRefWithStatus[] }> {
+    const infoPath = isArchived
+      ? this.fs.getNodeInfoPathWithArchive(projectRoot, workspaceId, nodeId, true)
+      : this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
     const content = await this.fs.readFile(infoPath);
     const parsed = this.parse(content);
 
@@ -799,9 +807,12 @@ ${data.nextStep}
 
   /**
    * 读取 Workspace.md（带状态的文档引用）
+   * @param isArchived 是否为归档工作区
    */
-  async readWorkspaceMdWithStatus(projectRoot: string, workspaceId: string): Promise<WorkspaceMdData & { docsWithStatus: DocRefWithStatus[] }> {
-    const mdPath = this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
+  async readWorkspaceMdWithStatus(projectRoot: string, workspaceId: string, isArchived: boolean = false): Promise<WorkspaceMdData & { docsWithStatus: DocRefWithStatus[] }> {
+    const mdPath = isArchived
+      ? this.fs.getWorkspaceMdPathWithArchive(projectRoot, workspaceId, true)
+      : this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
     const content = await this.fs.readFile(mdPath);
     const parsed = this.parse(content);
 

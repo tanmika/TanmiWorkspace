@@ -121,8 +121,12 @@ function analyzeNodeStatus(workspaceId, nodeId) {
   const logInfo = getNodeLog(workspaceId, nodeId);
   const problemInfo = getNodeProblem(workspaceId, nodeId);
 
-  // P0: 有未解决的问题
-  if (problemInfo && problemInfo.problem) {
+  // P0: 有未解决的问题（排除空问题占位符）
+  const hasProblem = problemInfo && problemInfo.problem &&
+    problemInfo.problem !== '（暂无）' &&
+    problemInfo.problem !== '暂无' &&
+    problemInfo.problem.trim() !== '';
+  if (hasProblem) {
     return {
       priority: PRIORITY.P0_PROBLEM,
       type: 'problem',

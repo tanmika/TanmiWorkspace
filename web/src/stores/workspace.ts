@@ -127,7 +127,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     error.value = null
     try {
       const result = await workspaceApi.create(params)
-      await fetchWorkspaces()
+      await fetchWorkspaces('all')
       return result
     } catch (e) {
       error.value = e instanceof Error ? e.message : '创建工作区失败'
@@ -142,7 +142,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     error.value = null
     try {
       await workspaceApi.delete(id, force)
-      await fetchWorkspaces()
+      await fetchWorkspaces('all')
       if (currentWorkspace.value?.id === id) {
         currentWorkspace.value = null
         currentGraph.value = null
@@ -160,7 +160,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     error.value = null
     try {
       await workspaceApi.archive(id)
-      await fetchWorkspaces()
+      await fetchWorkspaces('all')
     } catch (e) {
       error.value = e instanceof Error ? e.message : '归档工作区失败'
       throw e
@@ -174,7 +174,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     error.value = null
     try {
       await workspaceApi.restore(id)
-      await fetchWorkspaces()
+      await fetchWorkspaces('all')
     } catch (e) {
       error.value = e instanceof Error ? e.message : '恢复工作区失败'
       throw e

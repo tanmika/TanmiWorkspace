@@ -231,11 +231,11 @@ function parseProblemMd(content) {
     }
   }
 
-  // 解析下一步计划
-  const nextStepMatch = content.match(/## 下一步计划\n\n([\s\S]*?)(?=\n##|$)/);
+  // 解析下一步计划（支持 "下一步" 和 "下一步计划" 两种格式）
+  const nextStepMatch = content.match(/## 下一步(?:计划)?\n\n([\s\S]*?)(?=\n##|$)/);
   if (nextStepMatch) {
     const nextStepText = nextStepMatch[1].trim();
-    if (nextStepText && nextStepText !== '无') {
+    if (nextStepText && nextStepText !== '无' && nextStepText !== '（暂无）') {
       result.nextStep = nextStepText;
     }
   }

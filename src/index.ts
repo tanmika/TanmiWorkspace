@@ -26,6 +26,7 @@ import { helpTools, type HelpTopic, type PromptTemplate } from "./tools/help.js"
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
 import type { TransitionAction, ReferenceAction } from "./types/index.js";
+import { logMcpStart, logMcpEnd, logMcpError } from "./utils/sessionLogger.js";
 
 // ============================================================================
 // 配置
@@ -112,6 +113,10 @@ function createMcpServer(services: Services): Server {
   // 注册工具调用处理器
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    const startTime = Date.now();
+
+    // 记录 MCP 调用开始
+    logMcpStart(name, args as Record<string, unknown> || {});
 
     try {
       // 确保基础目录存在
@@ -344,6 +349,10 @@ function createMcpServer(services: Services): Server {
           throw new Error(`未知工具: ${name}`);
       }
 
+      // 记录 MCP 调用成功
+      const duration = Date.now() - startTime;
+      logMcpEnd(name, true, result, duration);
+
       return {
         content: [
           {
@@ -353,6 +362,10 @@ function createMcpServer(services: Services): Server {
         ],
       };
     } catch (error) {
+      // 记录 MCP 调用错误
+      const duration = Date.now() - startTime;
+      logMcpError(name, error instanceof Error ? error : String(error));
+      logMcpEnd(name, false, error instanceof Error ? error.message : String(error), duration);
       if (error instanceof TanmiError) {
         // 对于 WORKSPACE_NOT_FOUND 错误，附加活跃工作区列表以帮助恢复
         let errorResponse: { error: { code: string; message: string; availableWorkspaces?: unknown[] } } = {

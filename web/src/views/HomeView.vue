@@ -64,7 +64,7 @@ const devInfo = ref<DevInfoResult | null>(null)
 // 加载工作区列表和开发信息
 onMounted(async () => {
   try {
-    await workspaceStore.fetchWorkspaces()
+    await workspaceStore.fetchWorkspaces('all')
   } catch {
     ElMessage.error('加载工作区列表失败')
   }

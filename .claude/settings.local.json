@@ -26,7 +26,26 @@
       "mcp__tanmi-workspace__problem_clear",
       "Bash(./scripts/install-global.sh:*)",
       "mcp__tanmi-workspace__tanmi_help",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git checkout:*)",
+      "mcp__tanmi-workspace__session_status",
+      "mcp__tanmi-workspace__session_bind",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "mcp__tanmi-workspace__workspace_archive",
+      "Bash(npm run build:mcp:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(lsof:*)",
+      "Bash(ps:*)",
+      "Bash(source ~/.nvm/nvm.sh)",
+      "Bash(nvm use:*)",
+      "Bash(npm run build:web:*)",
+      "Bash(npm run build:all:*)",
+      "Bash(npm run)",
+      "Bash(npm run dev:all:*)",
+      "mcp__tanmi-workspace__context_focus"
     ]
   }
 }

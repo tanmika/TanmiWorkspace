@@ -17,6 +17,7 @@ import type {
 } from "../types/context.js";
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
+import { devLog } from "../utils/devLog.js";
 
 /**
  * 上下文服务
@@ -41,6 +42,25 @@ export class ContextService {
   }
 
   /**
+   * 根据 workspaceId 获取工作区信息（包括归档状态）
+   */
+  private async resolveWorkspaceInfo(workspaceId: string): Promise<{ projectRoot: string; isArchived: boolean }> {
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (!wsEntry) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+    const isArchived = wsEntry.status === "archived";
+    if (isArchived) {
+      devLog.archivePath(workspaceId, isArchived, this.fs.getWorkspaceBasePath(wsEntry.projectRoot, workspaceId, true));
+    }
+    return {
+      projectRoot: wsEntry.projectRoot,
+      isArchived,
+    };
+  }
+
+  /**
    * 获取聚焦上下文
    */
   async get(params: ContextGetParams): Promise<ContextGetResult> {
@@ -53,17 +73,17 @@ export class ContextService {
       includeProblem = true,
     } = params;
 
-    // 1. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 1. 获取工作区信息（包括归档状态）
+    const { projectRoot, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
 
     // 2. 验证节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
 
     // 3. 读取工作区 Workspace.md，提取 goal/rules/docs（仅 active）
-    const workspaceData = await this.md.readWorkspaceMdWithStatus(projectRoot, workspaceId);
+    const workspaceData = await this.md.readWorkspaceMdWithStatus(projectRoot, workspaceId, isArchived);
     const activeDocs = this.filterActiveRefs(workspaceData.docsWithStatus);
 
     // 4. 构建上下文链（从根到当前节点）
@@ -72,7 +92,7 @@ export class ContextService {
       maxLogEntries,
       includeProblem,
       reverseLog,
-    });
+    }, isArchived);
 
     // 5. 收集跨节点引用
     const nodeMeta = graph.nodes[nodeId];
@@ -84,7 +104,7 @@ export class ContextService {
           maxLogEntries,
           includeProblem,
           reverseLog,
-        });
+        }, isArchived);
         references.push(refItem);
       }
     }
@@ -95,7 +115,7 @@ export class ContextService {
     for (const childId of nodeMeta.children) {
       const childMeta = graph.nodes[childId];
       if (childMeta && (childMeta.status === "completed" || childMeta.status === "failed")) {
-        const childInfo = await this.md.readNodeInfo(projectRoot, workspaceId, childId);
+        const childInfo = await this.md.readNodeInfo(projectRoot, workspaceId, childId, isArchived);
         if (childInfo.conclusion) {
           childConclusions.push({
             nodeId: childId,
@@ -267,7 +287,8 @@ export class ContextService {
       maxLogEntries: number;
       includeProblem: boolean;
       reverseLog: boolean;
-    }
+    },
+    isArchived: boolean = false
   ): Promise<ContextChainItem[]> {
     const chain: ContextChainItem[] = [];
     let currentId: string | null = nodeId;
@@ -276,7 +297,7 @@ export class ContextService {
       const nodeMeta: NodeMeta | undefined = graph.nodes[currentId];
       if (!nodeMeta) break;
 
-      const item = await this.buildSingleContextItem(projectRoot, workspaceId, currentId, graph, options);
+      const item = await this.buildSingleContextItem(projectRoot, workspaceId, currentId, graph, options, isArchived);
       chain.unshift(item); // 从根开始
 
       // 检查隔离标记
@@ -301,10 +322,11 @@ export class ContextService {
       maxLogEntries: number;
       includeProblem: boolean;
       reverseLog: boolean;
-    }
+    },
+    isArchived: boolean = false
   ): Promise<ContextChainItem> {
     const nodeMeta = graph.nodes[nodeId];
-    const info = await this.md.readNodeInfoWithStatus(projectRoot, workspaceId, nodeId);
+    const info = await this.md.readNodeInfoWithStatus(projectRoot, workspaceId, nodeId, isArchived);
     const docs = this.filterActiveRefs(info.docsWithStatus);
 
     const item: ContextChainItem = {
@@ -319,7 +341,7 @@ export class ContextService {
 
     // 包含日志
     if (options.includeLog) {
-      const logContent = await this.md.readLogRaw(projectRoot, workspaceId, nodeId);
+      const logContent = await this.md.readLogRaw(projectRoot, workspaceId, nodeId, isArchived);
       let logs = this.md.parseLogTable(logContent);
       logs = this.tailLogs(logs, options.maxLogEntries);
       if (options.reverseLog) {
@@ -330,7 +352,7 @@ export class ContextService {
 
     // 包含问题
     if (options.includeProblem) {
-      const problem = await this.md.readProblem(projectRoot, workspaceId, nodeId);
+      const problem = await this.md.readProblem(projectRoot, workspaceId, nodeId, isArchived);
       if (problem.currentProblem && problem.currentProblem !== "（暂无）") {
         item.problem = problem.currentProblem;
       }
