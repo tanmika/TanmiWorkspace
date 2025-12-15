@@ -38,9 +38,10 @@ function containsWorkspaceKeywords(text) {
  * 判断是否应该节流提醒
  * @param {object} binding - 会话绑定信息
  * @param {string} reminderType - 提醒类型
+ * @param {number} [customInterval] - 自定义节流间隔（毫秒），默认使用 THROTTLE_INTERVAL
  * @returns {boolean} true 表示应该节流（不发送提醒）
  */
-function shouldThrottle(binding, reminderType) {
+function shouldThrottle(binding, reminderType, customInterval) {
   // P0 (problem) 类型不节流，每次都提醒
   if (reminderType === 'problem') {
     return false;
@@ -51,12 +52,13 @@ function shouldThrottle(binding, reminderType) {
   }
 
   const lastReminder = binding.lastReminder;
+  const interval = customInterval || THROTTLE_INTERVAL;
 
   // 同一类型的提醒需要节流
   if (lastReminder.type === reminderType) {
     const lastTime = new Date(lastReminder.time).getTime();
     const now = Date.now();
-    return (now - lastTime) < THROTTLE_INTERVAL;
+    return (now - lastTime) < interval;
   }
 
   return false;

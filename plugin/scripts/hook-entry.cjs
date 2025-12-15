@@ -80,19 +80,29 @@ function handleSessionStart(sessionId, binding) {
 
 /**
  * 处理 PostToolUse 事件
- * 检测 MCP 调用失败，提醒 AI 查看 schema
+ * 1. MCP 调用失败时提醒查看 schema
+ * 2. Edit/Write 成功后提醒记录日志
+ * 3. Bash 失败后提醒记录问题
  */
-function handlePostToolUse(sessionId, input) {
-  const { tool_name, tool_response } = input;
+function handlePostToolUse(sessionId, binding, input) {
+  const { tool_name, tool_response, tool_input } = input;
 
-  // 仅处理 tanmi-workspace MCP 工具
-  if (!tool_name?.startsWith('mcp__tanmi-workspace__')) {
+  // 根据工具类型分发处理
+  if (tool_name?.startsWith('mcp__tanmi-workspace__')) {
+    handleMcpToolUse(sessionId, tool_name, tool_response);
+  } else if (tool_name === 'Edit' || tool_name === 'Write') {
+    handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_response);
+  } else if (tool_name === 'Bash') {
+    handleBashToolUse(sessionId, binding, tool_input, tool_response);
+  } else {
     process.exit(0);
-    return;
   }
+}
 
-  // 检测是否调用失败
-  // MCP 工具失败时 tool_response 可能包含 isError: true 或错误信息
+/**
+ * 处理 MCP 工具调用
+ */
+function handleMcpToolUse(sessionId, tool_name, tool_response) {
   const responseStr = typeof tool_response === 'string'
     ? tool_response
     : JSON.stringify(tool_response || '');
@@ -130,7 +140,226 @@ mcp-cli info ${toolPath}
 
     outputHookResponse('PostToolUse', reminder);
   } else {
-    // 调用成功，静默退出
+    process.exit(0);
+  }
+}
+
+/**
+ * 处理文件编辑工具 (Edit/Write)
+ * 成功后提醒记录日志
+ */
+function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_response) {
+  // 未绑定工作区时不提醒
+  if (!binding?.workspaceId) {
+    process.exit(0);
+    return;
+  }
+
+  // 检查是否成功
+  const isSuccess = tool_response?.success !== false;
+  if (!isSuccess) {
+    process.exit(0);
+    return;
+  }
+
+  // 节流检查：file_changed 类型，1分钟内不重复提醒
+  if (shouldThrottle(binding, 'file_changed', 60000)) {
+    process.exit(0);
+    return;
+  }
+
+  const filePath = tool_input?.file_path || '';
+  const fileName = filePath.split('/').pop() || filePath;
+
+  const reminder = `<tanmi-post-tool-reminder>
+📝 文件 \`${fileName}\` 已${tool_name === 'Edit' ? '编辑' : '写入'}。
+
+建议：使用 \`log_append\` 记录本次变更的内容和目的，保持工作可追溯。
+</tanmi-post-tool-reminder>`;
+
+  updateLastReminder(sessionId, 'file_changed');
+  logHook(sessionId, 'PostToolUse', {
+    tool: tool_name,
+    file: fileName,
+    reminder: 'file_changed'
+  });
+
+  outputHookResponse('PostToolUse', reminder);
+}
+
+/**
+ * 处理 Bash 命令
+ * 失败后提醒记录问题
+ */
+function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
+  // 未绑定工作区时不提醒
+  if (!binding?.workspaceId) {
+    process.exit(0);
+    return;
+  }
+
+  // 检查是否失败
+  const responseStr = typeof tool_response === 'string'
+    ? tool_response
+    : JSON.stringify(tool_response || '');
+
+  // 检测错误：exit code 非 0，或包含错误关键词
+  const exitCode = tool_response?.exit_code ?? tool_response?.exitCode;
+  const hasExitError = exitCode !== undefined && exitCode !== 0;
+
+  const errorKeywords = ['error', 'Error', 'ERROR', 'failed', 'Failed', 'FAILED',
+                         'exception', 'Exception', 'ENOENT', 'EACCES', 'Permission denied',
+                         'command not found', 'No such file'];
+  const hasErrorKeyword = errorKeywords.some(kw => responseStr.includes(kw));
+
+  const isError = hasExitError || hasErrorKeyword;
+
+  if (!isError) {
+    process.exit(0);
+    return;
+  }
+
+  // 节流检查：bash_error 类型，30秒内不重复提醒
+  if (shouldThrottle(binding, 'bash_error', 30000)) {
+    process.exit(0);
+    return;
+  }
+
+  const command = tool_input?.command || '';
+  const cmdPreview = command.length > 50 ? command.slice(0, 50) + '...' : command;
+
+  const reminder = `<tanmi-post-tool-reminder>
+⚠️ 命令执行出错${hasExitError ? ` (exit code: ${exitCode})` : ''}。
+
+命令: \`${cmdPreview}\`
+
+建议：使用 \`problem_update\` 记录遇到的问题和解决思路，便于追踪和复盘。
+</tanmi-post-tool-reminder>`;
+
+  updateLastReminder(sessionId, 'bash_error');
+  logHook(sessionId, 'PostToolUse', {
+    tool: 'Bash',
+    command: cmdPreview,
+    exitCode,
+    reminder: 'bash_error'
+  });
+
+  outputHookResponse('PostToolUse', reminder);
+}
+
+/**
+ * 处理 Stop 事件
+ * 分析 AI 响应中是否遇到错误/阻碍，提醒记录问题
+ */
+function handleStop(sessionId, binding, input) {
+  const fs = require('node:fs');
+
+  // 未绑定工作区时不处理
+  if (!binding?.workspaceId) {
+    process.exit(0);
+    return;
+  }
+
+  // 如果已经因为 Stop hook 继续过，避免无限循环
+  if (input.stop_hook_active) {
+    process.exit(0);
+    return;
+  }
+
+  // 节流检查：stop_error 类型，30秒内不重复提醒
+  if (shouldThrottle(binding, 'stop_error', 30000)) {
+    process.exit(0);
+    return;
+  }
+
+  // 读取 transcript 分析错误
+  const transcriptPath = input.transcript_path;
+  if (!transcriptPath) {
+    process.exit(0);
+    return;
+  }
+
+  try {
+    const content = fs.readFileSync(transcriptPath, 'utf-8');
+    const lines = content.trim().split('\n');
+
+    // 分析最后 10 条消息
+    const recentLines = lines.slice(-10);
+    let errorContext = null;
+
+    // 错误/阻碍的检测模式
+    const errorPatterns = [
+      /遇到了?(错误|问题|异常|失败)/,
+      /出现了?(错误|问题|异常|失败)/,
+      /发现了?(错误|问题|bug|Bug|BUG)/,
+      /(错误|问题|异常)[:：]/,
+      /无法(完成|执行|实现|解决)/,
+      /不能(正常|成功)/,
+      /(失败|报错|异常|崩溃)/,
+      /Error:|error:|ERROR:/,
+      /Exception:|exception:/,
+      /failed|Failed|FAILED/,
+      /blocked|Blocked|阻塞/,
+      /卡住了|卡在/,
+      /需要.*帮助/,
+      /不确定.*如何/
+    ];
+
+    for (const line of recentLines) {
+      try {
+        const msg = JSON.parse(line);
+        // 只分析 assistant 的消息
+        if (msg.role !== 'assistant') continue;
+
+        const text = typeof msg.content === 'string'
+          ? msg.content
+          : JSON.stringify(msg.content || '');
+
+        for (const pattern of errorPatterns) {
+          if (pattern.test(text)) {
+            // 提取错误上下文（前后 50 字符）
+            const match = text.match(pattern);
+            if (match) {
+              const idx = match.index || 0;
+              const start = Math.max(0, idx - 30);
+              const end = Math.min(text.length, idx + match[0].length + 50);
+              errorContext = text.slice(start, end).replace(/\n/g, ' ').trim();
+              if (start > 0) errorContext = '...' + errorContext;
+              if (end < text.length) errorContext = errorContext + '...';
+              break;
+            }
+          }
+        }
+        if (errorContext) break;
+      } catch {
+        continue;
+      }
+    }
+
+    if (errorContext) {
+      updateLastReminder(sessionId, 'stop_error');
+      logHook(sessionId, 'Stop', {
+        error: true,
+        context: errorContext.slice(0, 100)
+      });
+
+      // 使用 decision: block 来提醒 AI
+      const response = {
+        decision: 'block',
+        reason: `<tanmi-error-detected>
+⚠️ 检测到可能遇到了问题或阻碍。
+
+上下文: "${errorContext}"
+
+建议：使用 \`problem_update\` 记录当前问题和下一步计划，便于追踪和复盘。
+如果问题已解决，可以忽略此提醒。
+</tanmi-error-detected>`
+      };
+      console.log(JSON.stringify(response));
+    } else {
+      process.exit(0);
+    }
+  } catch {
     process.exit(0);
   }
 }
@@ -227,7 +456,11 @@ async function main() {
       break;
 
     case 'PostToolUse':
-      handlePostToolUse(sessionId, input);
+      handlePostToolUse(sessionId, binding, input);
+      break;
+
+    case 'Stop':
+      handleStop(sessionId, binding, input);
       break;
 
     default:
