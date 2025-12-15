@@ -486,6 +486,15 @@ tanmi-workspace/
 | P0 豁免 | `problem` 类型的提醒不受节流限制 |
 | 按会话隔离 | 不同会话的提醒相互独立 |
 
+### 聚焦节点获取优先级
+
+智能提醒需要获取当前聚焦节点来分析状态。获取优先级为：
+
+1. **graph.currentFocus**（权威来源）- 从工作区 graph.json 读取
+2. **binding.focusedNodeId**（兜底）- 从会话绑定记录读取
+
+这确保了 `context_focus` 和 `node_transition(start)` 的更改能正确反映到智能提醒中。
+
 ### 触发逻辑
 
 ```
@@ -494,7 +503,7 @@ UserPromptSubmit 触发
 检查是否已绑定工作区
     ↓
 已绑定？
-    ├─ 是 → 获取聚焦节点
+    ├─ 是 → 获取聚焦节点（graph.currentFocus || binding.focusedNodeId）
     │       ↓
     │   有聚焦节点？
     │       ├─ 是 → 分析节点状态

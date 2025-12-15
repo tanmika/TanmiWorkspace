@@ -23,7 +23,8 @@ const {
   generateBindingReminder,
   analyzeNodeStatus,
   shouldThrottle,
-  updateLastReminder
+  updateLastReminder,
+  getNodeGraph
 } = require('./shared/index.cjs');
 
 // ============================================================================
@@ -74,8 +75,9 @@ function handleBeforeSubmitPrompt(conversationId, binding, input) {
     // 已绑定：注入工作区上下文 + 智能提醒
     let context = getFullWorkspaceContext(binding);
 
-    // 检查是否需要智能提醒
-    const focusNodeId = binding.focusedNodeId;
+    // 检查是否需要智能提醒（优先从 graph.currentFocus 获取焦点节点）
+    const graph = getNodeGraph(binding.workspaceId);
+    const focusNodeId = graph?.currentFocus || binding.focusedNodeId;
     if (focusNodeId) {
       const reminderInfo = analyzeNodeStatus(binding.workspaceId, focusNodeId);
       if (reminderInfo && !shouldThrottle(binding, reminderInfo.type)) {

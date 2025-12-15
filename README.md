@@ -122,17 +122,21 @@ pending → planning → monitoring → completed
           cancelled ←────┘
 ```
 
-## 工具列表（25 个）
+## 工具列表（29 个）
 
 ### 工作区
 | 工具 | 说明 |
 |------|------|
 | `workspace_init` | 创建工作区 |
-| `workspace_list` | 列出工作区 |
+| `workspace_list` | 列出工作区（优先显示当前路径） |
 | `workspace_get` | 获取详情（含 rulesHash） |
 | `workspace_delete` | 删除工作区 |
 | `workspace_status` | 状态概览 |
 | `workspace_update_rules` | 动态更新规则 |
+| `workspace_archive` | 归档工作区 |
+| `workspace_restore` | 恢复归档的工作区 |
+| `workspace_import_guide` | OpenSpec 导入引导 |
+| `workspace_import_list` | 列出可导入的 OpenSpec 变更 |
 
 ### 节点
 | 工具 | 说明 |
@@ -388,14 +392,14 @@ web/
 
 ### 功能
 
-- [ ] **归档功能完善** - 目前仅有 UI 界面，需实现后端归档逻辑
+- [x] **归档功能完善** - ~~目前仅有 UI 界面，需实现后端归档逻辑~~ 已实现：workspace_archive/restore MCP 工具 + HTTP API + WebUI 归档/恢复按钮
 - [ ] **删除优化** - 增加删除确认提示，支持软删除/回收站机制，允许找回误删数据
 - [ ] **工作区模板** - 支持将工作区保存为模板，快速创建相似结构的新工作区
 - [ ] **文档生命周期管理** - 基于继承生命周期的文档管理和派发机制，支持自动清理过期文档
 - [ ] **对话恢复增强** - 更稳定的会话恢复机制，支持工作区 UUID 匹配，避免 ID 变化导致恢复失败
 - [ ] **AI 任务派发** - 支持主 AI 将执行节点派发给其他 AI 执行，根据返回结果进行下一步操作（多 Agent 协作）
 - [ ] **MCP 权限自动配置** - 自动化 MCP 权限配置流程，减少手动编辑配置文件的步骤
-- [ ] **OpenSpec 集成** - 接管 OpenSpec 流程、导入 OpenSpec 结果、同步生成 OpenSpec 跟踪，提供开关启用/禁用
+- [x] **OpenSpec 集成** - ~~接管 OpenSpec 流程、导入 OpenSpec 结果、同步生成 OpenSpec 跟踪，提供开关启用/禁用~~ 已实现导入功能：workspace_import_guide/list + openspec-import.cjs 脚本
 - [ ] **智能验证节点** - 加强验证节点能力，让 AI 能更智能地判断是否需要验证，并自动执行验证流程
 - [ ] **Prompt 扩展为 Hook** - 将部分静态 prompt 改为 Hook 动态注入，实现更智能的上下文感知提醒
 - [ ] **WebUI 编辑与 AI 同步** - 实现 WebUI 中的节点编辑功能（需求、结论等），变更能实时同步给 AI 会话
@@ -406,7 +410,7 @@ web/
 - [ ] **已完成工作区追加需求处理不当** - 根节点完成后补充/更新需求时，AI 倾向于直接修改代码而非 reopen 工作区继续跟踪
 - [ ] **并发安全** - 多个 API 调用同时到达时可能导致数据不一致，缺少乐观锁机制
 - [ ] **completed 节点自动 reopen** - 在已完成节点下创建子节点会自动 reopen 并清空 conclusion，应改为显式操作
-- [x] **聚焦节点不同步** - ~~`context_focus` 和 `session_bind` 的 focusedNodeId 可能不一致~~ 已修复：统一以 graph.currentFocus 为权威来源
+- [x] **聚焦节点不同步** - ~~`context_focus` 和 `session_bind` 的 focusedNodeId 可能不一致~~ 已修复：统一以 graph.currentFocus 为权威来源（含 Hook 智能提醒）
 - [x] **并发执行控制缺失** - ~~同级执行节点可同时启动~~ 已修复：start 时检查同级节点状态，阻止并发执行
 - [ ] **规则提醒改用 Hook 实现** - 弃用 rulesHash 验证机制，改用 PreToolUse Hook（Claude Code）或 beforeMCPExecution（Cursor）在 node_create 前主动注入规则
 - [ ] **操作幂等性缺失** - 网络重试时同一操作可能失败，缺少 request ID 去重机制

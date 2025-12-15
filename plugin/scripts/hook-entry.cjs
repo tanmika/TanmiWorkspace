@@ -20,7 +20,8 @@ const {
   analyzeNodeStatus,
   shouldThrottle,
   updateLastReminder,
-  logHook
+  logHook,
+  getNodeGraph
 } = require('./shared/index.cjs');
 
 // ============================================================================
@@ -87,7 +88,9 @@ function handleUserPromptSubmit(sessionId, binding, input) {
 
   // 已绑定：进行智能提醒分析
   if (binding && binding.workspaceId) {
-    const focusNodeId = binding.focusedNodeId;
+    // 优先从 graph.currentFocus 获取焦点节点（权威来源）
+    const graph = getNodeGraph(binding.workspaceId);
+    const focusNodeId = graph?.currentFocus || binding.focusedNodeId;
     if (focusNodeId) {
       // 分析节点状态
       const reminderInfo = analyzeNodeStatus(binding.workspaceId, focusNodeId);
