@@ -14,6 +14,12 @@ import { ensureBaseSetup } from "./services.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// 服务启动时间（模块加载时记录）
+const SERVER_START_TIME = new Date().toISOString();
+
+// 判断是否为开发模式
+const IS_DEV = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
+
 // 导入路由
 import { workspaceRoutes } from "./routes/workspace.js";
 import { nodeRoutes } from "./routes/node.js";
@@ -53,6 +59,44 @@ export async function createServer(): Promise<FastifyInstance> {
     status: "ok",
     timestamp: new Date().toISOString(),
   }));
+
+  // 开发信息接口（仅开发模式）
+  server.get("/api/dev-info", async () => {
+    if (!IS_DEV) {
+      return { available: false };
+    }
+
+    // 获取代码编译时间（dist/index.js 的修改时间）
+    let codeBuildTime: string | null = null;
+    const distIndexPath = path.resolve(__dirname, "../index.js");
+    try {
+      const stat = fs.statSync(distIndexPath);
+      codeBuildTime = stat.mtime.toISOString();
+    } catch {
+      // 忽略错误
+    }
+
+    // 读取 package.json 版本
+    let packageVersion: string | null = null;
+    const packageJsonPath = path.resolve(__dirname, "../../package.json");
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+      packageVersion = packageJson.version;
+    } catch {
+      // 忽略错误
+    }
+
+    return {
+      available: true,
+      isDev: IS_DEV,
+      serverStartTime: SERVER_START_TIME,
+      codeBuildTime,
+      packageVersion,
+      nodeVersion: process.version,
+      platform: process.platform,
+      dataDir: ".tanmi-workspace-dev",
+    };
+  });
 
   // 注册 API 路由
   await server.register(workspaceRoutes, { prefix: "/api" });
@@ -95,20 +139,12 @@ export async function createServer(): Promise<FastifyInstance> {
 }
 
 /**
- * 判断是否为开发模式
- */
-function isDevelopment(): boolean {
-  return process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
-}
-
-/**
  * 启动服务器
  */
 export async function startServer(port: number = 3000): Promise<FastifyInstance> {
   const server = await createServer();
-  const isDev = isDevelopment();
-  const modeLabel = isDev ? "[DEV]" : "[PROD]";
-  const dataDir = isDev ? ".tanmi-workspace-dev" : ".tanmi-workspace";
+  const modeLabel = IS_DEV ? "[DEV]" : "[PROD]";
+  const dataDir = IS_DEV ? ".tanmi-workspace-dev" : ".tanmi-workspace";
   // 默认只监听本地地址（安全），可通过 TANMI_HOST 环境变量覆盖
   const host = process.env.TANMI_HOST || "127.0.0.1";
 

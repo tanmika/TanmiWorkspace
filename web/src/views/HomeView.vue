@@ -2,8 +2,9 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, ArrowRight } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowRight, Box, RefreshRight } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@/stores'
+import { workspaceApi, type DevInfoResult } from '@/api/workspace'
 import type { WorkspaceInitParams } from '@/types'
 
 const router = useRouter()
@@ -19,14 +20,37 @@ const createForm = ref<WorkspaceInitParams>({
 })
 const statusFilter = ref<'all' | 'active' | 'archived'>('all')
 
-// 加载工作区列表
+// 开发信息
+const devInfo = ref<DevInfoResult | null>(null)
+
+// 加载工作区列表和开发信息
 onMounted(async () => {
   try {
     await workspaceStore.fetchWorkspaces()
   } catch {
     ElMessage.error('加载工作区列表失败')
   }
+
+  // 加载开发信息（静默失败）
+  try {
+    devInfo.value = await workspaceApi.getDevInfo()
+  } catch {
+    // 忽略
+  }
 })
+
+// 格式化开发信息时间
+function formatDevTime(isoString?: string | null) {
+  if (!isoString) return '-'
+  const date = new Date(isoString)
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
 
 // 创建工作区
 async function handleCreate() {
@@ -54,6 +78,32 @@ async function handleDelete(id: string, name: string) {
     ElMessage.success('删除成功')
   } catch {
     // 用户取消或删除失败
+  }
+}
+
+// 归档工作区
+async function handleArchive(id: string, name: string) {
+  try {
+    await ElMessageBox.confirm(`确定要归档工作区「${name}」吗？`, '归档确认', {
+      type: 'info',
+    })
+    await workspaceStore.archiveWorkspace(id)
+    ElMessage.success('归档成功')
+  } catch {
+    // 用户取消或归档失败
+  }
+}
+
+// 恢复工作区
+async function handleRestore(id: string, name: string) {
+  try {
+    await ElMessageBox.confirm(`确定要恢复工作区「${name}」吗？`, '恢复确认', {
+      type: 'info',
+    })
+    await workspaceStore.restoreWorkspace(id)
+    ElMessage.success('恢复成功')
+  } catch {
+    // 用户取消或恢复失败
   }
 }
 
@@ -132,6 +182,24 @@ function getFilteredWorkspaces() {
             <el-button type="primary" text :icon="ArrowRight" @click="handleEnter(ws.id)">
               进入
             </el-button>
+            <el-button
+              v-if="ws.status === 'active'"
+              type="info"
+              text
+              :icon="Box"
+              @click="handleArchive(ws.id, ws.name)"
+            >
+              归档
+            </el-button>
+            <el-button
+              v-else
+              type="success"
+              text
+              :icon="RefreshRight"
+              @click="handleRestore(ws.id, ws.name)"
+            >
+              恢复
+            </el-button>
             <el-button type="danger" text :icon="Delete" @click="handleDelete(ws.id, ws.name)">
               删除
             </el-button>
@@ -162,6 +230,23 @@ function getFilteredWorkspaces() {
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 开发模式调试信息 -->
+    <div v-if="devInfo?.available" class="dev-info">
+      <div class="dev-info-title">DEV MODE</div>
+      <div class="dev-info-item">
+        <span class="label">启动时间:</span>
+        <span class="value">{{ formatDevTime(devInfo.serverStartTime) }}</span>
+      </div>
+      <div class="dev-info-item">
+        <span class="label">编译时间:</span>
+        <span class="value">{{ formatDevTime(devInfo.codeBuildTime) }}</span>
+      </div>
+      <div class="dev-info-item">
+        <span class="label">版本:</span>
+        <span class="value">v{{ devInfo.packageVersion }} | Node {{ devInfo.nodeVersion }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -221,5 +306,43 @@ function getFilteredWorkspaces() {
   margin-top: 12px;
   display: flex;
   gap: 8px;
+}
+
+/* 开发模式调试信息 */
+.dev-info {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  z-index: 9999;
+  max-width: 320px;
+}
+
+.dev-info-title {
+  color: #f59e0b;
+  font-weight: bold;
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+.dev-info-item {
+  display: flex;
+  gap: 8px;
+  line-height: 1.6;
+}
+
+.dev-info-item .label {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.dev-info-item .value {
+  color: #e5e7eb;
 }
 </style>

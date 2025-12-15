@@ -138,9 +138,12 @@ export class MarkdownStorage {
 
   /**
    * 读取 Workspace.md
+   * @param isArchived 是否为归档工作区
    */
-  async readWorkspaceMd(projectRoot: string, workspaceId: string): Promise<WorkspaceMdData> {
-    const mdPath = this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
+  async readWorkspaceMd(projectRoot: string, workspaceId: string, isArchived = false): Promise<WorkspaceMdData> {
+    const mdPath = isArchived
+      ? this.fs.getWorkspaceMdPathWithArchive(projectRoot, workspaceId, true)
+      : this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
     const content = await this.fs.readFile(mdPath);
     const parsed = this.parse(content);
 
@@ -238,8 +241,10 @@ ${data.goal}
   /**
    * 读取节点 Info.md
    */
-  async readNodeInfo(projectRoot: string, workspaceId: string, nodeId: string): Promise<NodeInfoData> {
-    const infoPath = this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
+  async readNodeInfo(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean = false): Promise<NodeInfoData> {
+    const infoPath = isArchived
+      ? this.fs.getNodeInfoPathWithArchive(projectRoot, workspaceId, nodeId, true)
+      : this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
     const content = await this.fs.readFile(infoPath);
     const parsed = this.parse(content);
 
@@ -407,12 +412,34 @@ ${data.conclusion}
   }
 
   /**
-   * 追加日志
+   * 获取日志文件路径（支持归档目录）
    */
-  async appendLog(projectRoot: string, workspaceId: string, entry: LogEntry, nodeId?: string): Promise<void> {
-    const logPath = nodeId
-      ? this.fs.getNodeLogPath(projectRoot, workspaceId, nodeId)
-      : this.fs.getWorkspaceLogPath(projectRoot, workspaceId);
+  private getLogPath(projectRoot: string, workspaceId: string, nodeId?: string, isArchived = false): string {
+    const basePath = isArchived
+      ? this.fs.getArchivePath(projectRoot, workspaceId)
+      : this.fs.getWorkspacePath(projectRoot, workspaceId);
+
+    if (nodeId) {
+      return `${basePath}/nodes/${nodeId}/Log.md`;
+    }
+    return `${basePath}/Log.md`;
+  }
+
+  /**
+   * 追加日志
+   * @param isArchived 是否写入归档目录（当 nodeId 为 true 时表示 isArchived）
+   */
+  async appendLog(projectRoot: string, workspaceId: string, entry: LogEntry, nodeIdOrIsArchived?: string | boolean, isArchived = false): Promise<void> {
+    // 处理参数重载：appendLog(projectRoot, workspaceId, entry, isArchived) 或 appendLog(projectRoot, workspaceId, entry, nodeId, isArchived)
+    let nodeId: string | undefined;
+    let archived = isArchived;
+    if (typeof nodeIdOrIsArchived === "boolean") {
+      archived = nodeIdOrIsArchived;
+    } else if (typeof nodeIdOrIsArchived === "string") {
+      nodeId = nodeIdOrIsArchived;
+    }
+
+    const logPath = this.getLogPath(projectRoot, workspaceId, nodeId, archived);
 
     let content: string;
     if (await this.fs.exists(logPath)) {
@@ -516,27 +543,38 @@ ${data.nextStep}
 
   /**
    * 读取 Workspace.md 原始内容
+   * @param isArchived 是否为归档工作区
    */
-  async readWorkspaceMdRaw(projectRoot: string, workspaceId: string): Promise<string> {
-    const mdPath = this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
+  async readWorkspaceMdRaw(projectRoot: string, workspaceId: string, isArchived = false): Promise<string> {
+    const mdPath = isArchived
+      ? this.fs.getWorkspaceMdPathWithArchive(projectRoot, workspaceId, true)
+      : this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
     return await this.fs.readFile(mdPath);
   }
 
   /**
    * 读取节点 Info.md 原始内容
    */
-  async readNodeInfoRaw(projectRoot: string, workspaceId: string, nodeId: string): Promise<string> {
-    const infoPath = this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
+  async readNodeInfoRaw(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean = false): Promise<string> {
+    const infoPath = isArchived
+      ? this.fs.getNodeInfoPathWithArchive(projectRoot, workspaceId, nodeId, true)
+      : this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
     return await this.fs.readFile(infoPath);
   }
 
   /**
    * 读取日志原始内容
    */
-  async readLogRaw(projectRoot: string, workspaceId: string, nodeId?: string): Promise<string> {
-    const logPath = nodeId
-      ? this.fs.getNodeLogPath(projectRoot, workspaceId, nodeId)
-      : this.fs.getWorkspaceLogPath(projectRoot, workspaceId);
+  async readLogRaw(projectRoot: string, workspaceId: string, nodeId?: string, isArchived: boolean = false): Promise<string> {
+    let logPath: string;
+    if (nodeId) {
+      logPath = isArchived
+        ? this.fs.getNodeLogPathWithArchive(projectRoot, workspaceId, nodeId, true)
+        : this.fs.getNodeLogPath(projectRoot, workspaceId, nodeId);
+    } else {
+      // 工作区级别日志暂不支持归档路径（归档工作区通常只读取节点）
+      logPath = this.fs.getWorkspaceLogPath(projectRoot, workspaceId);
+    }
 
     if (!(await this.fs.exists(logPath))) {
       return "";
@@ -547,10 +585,16 @@ ${data.nextStep}
   /**
    * 读取问题原始内容
    */
-  async readProblemRaw(projectRoot: string, workspaceId: string, nodeId?: string): Promise<string> {
-    const problemPath = nodeId
-      ? this.fs.getNodeProblemPath(projectRoot, workspaceId, nodeId)
-      : this.fs.getWorkspaceProblemPath(projectRoot, workspaceId);
+  async readProblemRaw(projectRoot: string, workspaceId: string, nodeId?: string, isArchived: boolean = false): Promise<string> {
+    let problemPath: string;
+    if (nodeId) {
+      problemPath = isArchived
+        ? this.fs.getNodeProblemPathWithArchive(projectRoot, workspaceId, nodeId, true)
+        : this.fs.getNodeProblemPath(projectRoot, workspaceId, nodeId);
+    } else {
+      // 工作区级别问题暂不支持归档路径
+      problemPath = this.fs.getWorkspaceProblemPath(projectRoot, workspaceId);
+    }
 
     if (!(await this.fs.exists(problemPath))) {
       return "";

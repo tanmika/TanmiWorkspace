@@ -26,6 +26,7 @@ import { TanmiError } from "../types/errors.js";
 import { generateNodeId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { validateNodeTitle } from "../utils/validation.js";
+import { devLog } from "../utils/devLog.js";
 
 /**
  * 节点服务
@@ -47,6 +48,27 @@ export class NodeService {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
     return projectRoot;
+  }
+
+  /**
+   * 根据 workspaceId 获取工作区信息（包括归档状态）
+   */
+  private async resolveWorkspaceInfo(workspaceId: string): Promise<{ projectRoot: string; isArchived: boolean }> {
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (!wsEntry) {
+      devLog.workspaceLookup(workspaceId, false);
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+    const isArchived = wsEntry.status === "archived";
+    devLog.workspaceLookup(workspaceId, true, wsEntry.status);
+    if (isArchived) {
+      devLog.archivePath(workspaceId, isArchived, this.fs.getWorkspaceBasePath(wsEntry.projectRoot, workspaceId, true));
+    }
+    return {
+      projectRoot: wsEntry.projectRoot,
+      isArchived,
+    };
   }
 
   /**
@@ -233,19 +255,19 @@ export class NodeService {
   async get(params: NodeGetParams): Promise<NodeGetResult> {
     const { workspaceId, nodeId } = params;
 
-    // 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 获取工作区信息（包括归档状态）
+    const { projectRoot, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
 
     // 验证节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
 
     const meta = graph.nodes[nodeId];
-    const infoMd = await this.md.readNodeInfoRaw(projectRoot, workspaceId, nodeId);
-    const logMd = await this.md.readLogRaw(projectRoot, workspaceId, nodeId);
-    const problemMd = await this.md.readProblemRaw(projectRoot, workspaceId, nodeId);
+    const infoMd = await this.md.readNodeInfoRaw(projectRoot, workspaceId, nodeId, isArchived);
+    const logMd = await this.md.readLogRaw(projectRoot, workspaceId, nodeId, isArchived);
+    const problemMd = await this.md.readProblemRaw(projectRoot, workspaceId, nodeId, isArchived);
 
     return {
       meta,
@@ -261,11 +283,11 @@ export class NodeService {
   async list(params: NodeListParams): Promise<NodeListResult> {
     const { workspaceId, rootId, depth } = params;
 
-    // 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 获取工作区信息（包括归档状态）
+    const { projectRoot, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
 
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
 
     // 确定根节点
     const startId = rootId || config.rootNodeId;
@@ -274,7 +296,7 @@ export class NodeService {
     }
 
     // 构建树
-    const tree = await this.buildNodeTree(projectRoot, workspaceId, graph, startId, 0, depth);
+    const tree = await this.buildNodeTree(projectRoot, workspaceId, graph, startId, 0, depth, isArchived);
 
     return { tree };
   }
@@ -288,10 +310,11 @@ export class NodeService {
     graph: { nodes: Record<string, NodeMeta> },
     nodeId: string,
     currentDepth: number,
-    maxDepth?: number
+    maxDepth?: number,
+    isArchived: boolean = false
   ): Promise<NodeTreeItem> {
     const node = graph.nodes[nodeId];
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId, isArchived);
 
     const item: NodeTreeItem = {
       id: nodeId,
@@ -315,7 +338,8 @@ export class NodeService {
         graph,
         childId,
         currentDepth + 1,
-        maxDepth
+        maxDepth,
+        isArchived
       );
       item.children.push(childTree);
     }

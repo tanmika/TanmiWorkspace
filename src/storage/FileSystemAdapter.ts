@@ -3,6 +3,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { devLog } from "../utils/devLog.js";
 
 /**
  * 判断是否为开发模式
@@ -148,6 +149,72 @@ export class FileSystemAdapter {
     return path.join(projectRoot, this.localDirName, workspaceId, "nodes");
   }
 
+  // ========== 归档路径方法 ==========
+
+  /**
+   * 获取归档目录路径
+   */
+  getArchiveDir(projectRoot: string): string {
+    return path.join(projectRoot, this.localDirName, "archive");
+  }
+
+  /**
+   * 获取归档工作区目录路径
+   */
+  getArchivePath(projectRoot: string, workspaceId: string): string {
+    return path.join(projectRoot, this.localDirName, "archive", workspaceId);
+  }
+
+  /**
+   * 获取工作区基础路径（根据归档状态返回正确路径）
+   */
+  getWorkspaceBasePath(projectRoot: string, workspaceId: string, isArchived: boolean): string {
+    if (isArchived) {
+      return this.getArchivePath(projectRoot, workspaceId);
+    }
+    return this.getWorkspacePath(projectRoot, workspaceId);
+  }
+
+  /**
+   * 获取节点图文件路径（支持归档）
+   */
+  getGraphPathWithArchive(projectRoot: string, workspaceId: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+    return path.join(basePath, "graph.json");
+  }
+
+  /**
+   * 获取工作区 Markdown 文件路径（支持归档）
+   */
+  getWorkspaceMdPathWithArchive(projectRoot: string, workspaceId: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+    return path.join(basePath, "Workspace.md");
+  }
+
+  /**
+   * 获取节点 Info.md 文件路径（支持归档）
+   */
+  getNodeInfoPathWithArchive(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+    return path.join(basePath, "nodes", nodeId, "Info.md");
+  }
+
+  /**
+   * 获取节点日志文件路径（支持归档）
+   */
+  getNodeLogPathWithArchive(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+    return path.join(basePath, "nodes", nodeId, "Log.md");
+  }
+
+  /**
+   * 获取节点问题文件路径（支持归档）
+   */
+  getNodeProblemPathWithArchive(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+    return path.join(basePath, "nodes", nodeId, "Problem.md");
+  }
+
   // ========== 文件操作 ==========
 
   /**
@@ -180,7 +247,12 @@ export class FileSystemAdapter {
    * 读取文件内容
    */
   async readFile(filePath: string): Promise<string> {
-    return await fs.readFile(filePath, "utf-8");
+    try {
+      return await fs.readFile(filePath, "utf-8");
+    } catch (error) {
+      devLog.fileError("readFile", filePath, error);
+      throw error;
+    }
   }
 
   /**
@@ -223,6 +295,20 @@ export class FileSystemAdapter {
    */
   async ensureWorkspaceDir(projectRoot: string, workspaceId: string): Promise<void> {
     await this.mkdir(this.getWorkspacePath(projectRoot, workspaceId));
+  }
+
+  /**
+   * 确保归档目录存在
+   */
+  async ensureArchiveDir(projectRoot: string): Promise<void> {
+    await this.mkdir(this.getArchiveDir(projectRoot));
+  }
+
+  /**
+   * 移动目录
+   */
+  async moveDir(src: string, dest: string): Promise<void> {
+    await fs.rename(src, dest);
   }
 
   /**

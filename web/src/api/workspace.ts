@@ -35,4 +35,31 @@ export const workspaceApi = {
   delete(id: string, force?: boolean): Promise<WorkspaceDeleteResult> {
     return client.delete(`/workspaces/${id}`, { params: { force: force ? 'true' : undefined } })
   },
+
+  // 归档工作区
+  archive(id: string): Promise<{ success: boolean; archivePath: string }> {
+    return client.post(`/workspaces/${id}/archive`)
+  },
+
+  // 恢复归档的工作区
+  restore(id: string): Promise<{ success: boolean; restoredPath: string }> {
+    return client.post(`/workspaces/${id}/restore`)
+  },
+
+  // 获取开发调试信息
+  getDevInfo(): Promise<DevInfoResult> {
+    return client.get('/dev-info')
+  },
+}
+
+// 开发信息结果类型
+export interface DevInfoResult {
+  available: boolean
+  isDev?: boolean
+  serverStartTime?: string
+  codeBuildTime?: string | null
+  packageVersion?: string | null
+  nodeVersion?: string
+  platform?: string
+  dataDir?: string
 }

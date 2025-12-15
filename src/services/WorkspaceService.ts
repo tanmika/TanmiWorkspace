@@ -18,6 +18,10 @@ import type {
   WorkspaceStatusResult,
   WorkspaceUpdateRulesParams,
   WorkspaceUpdateRulesResult,
+  WorkspaceArchiveParams,
+  WorkspaceArchiveResult,
+  WorkspaceRestoreParams,
+  WorkspaceRestoreResult,
   WorkspaceConfig,
 } from "../types/workspace.js";
 import type { NodeGraph, NodeMeta } from "../types/node.js";
@@ -25,6 +29,7 @@ import { TanmiError } from "../types/errors.js";
 import { generateWorkspaceId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { validateWorkspaceName, validateProjectRoot } from "../utils/validation.js";
+import { devLog } from "../utils/devLog.js";
 
 /**
  * 获取 HTTP 服务端口
@@ -202,26 +207,34 @@ export class WorkspaceService {
   async get(params: WorkspaceGetParams): Promise<WorkspaceGetResult> {
     const { workspaceId } = params;
 
-    // 通过索引查找 projectRoot
-    const projectRoot = await this.json.getProjectRoot(workspaceId);
-    if (!projectRoot) {
+    // 通过索引查找工作区条目（获取 projectRoot 和 status）
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (!wsEntry) {
+      devLog.workspaceLookup(workspaceId, false);
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
 
-    // 验证项目目录存在
-    const workspacePath = this.fs.getWorkspacePath(projectRoot, workspaceId);
+    const { projectRoot, status } = wsEntry;
+    const isArchived = status === "archived";
+    devLog.workspaceLookup(workspaceId, true, status);
+
+    // 验证项目目录存在（根据归档状态选择正确路径）
+    const workspacePath = this.fs.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+    devLog.archivePath(workspaceId, isArchived, workspacePath);
     if (!(await this.fs.exists(workspacePath))) {
+      devLog.fileError("exists", workspacePath, new Error("目录不存在"));
       // 清理无效索引
       await this.json.cleanupInvalidEntries();
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在`);
     }
 
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
-    const workspaceMd = await this.md.readWorkspaceMdRaw(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
+    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
+    const workspaceMd = await this.md.readWorkspaceMdRaw(projectRoot, workspaceId, isArchived);
 
     // 解析规则并计算哈希
-    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId, isArchived);
     const rulesCount = workspaceMdData.rules.length;
     const rulesHash = rulesCount > 0
       ? crypto.createHash("md5").update(workspaceMdData.rules.join("\n")).digest("hex").substring(0, 8)
@@ -277,22 +290,26 @@ export class WorkspaceService {
   async status(params: WorkspaceStatusParams): Promise<WorkspaceStatusResult> {
     const { workspaceId, format = "box" } = params;
 
-    // 通过索引查找 projectRoot
-    const projectRoot = await this.json.getProjectRoot(workspaceId);
-    if (!projectRoot) {
+    // 通过索引查找工作区条目（获取 projectRoot 和 status）
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (!wsEntry) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
 
-    // 验证项目目录存在
-    const workspacePath = this.fs.getWorkspacePath(projectRoot, workspaceId);
+    const { projectRoot, status } = wsEntry;
+    const isArchived = status === "archived";
+
+    // 验证项目目录存在（根据归档状态选择正确路径）
+    const workspacePath = this.fs.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
     if (!(await this.fs.exists(workspacePath))) {
       await this.json.cleanupInvalidEntries();
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在`);
     }
 
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
-    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
+    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId, isArchived);
 
     // 计算统计信息（终态 = completed + failed + cancelled）
     const nodes = Object.values(graph.nodes);
@@ -312,9 +329,9 @@ export class WorkspaceService {
     // 生成输出
     let output: string;
     if (format === "markdown") {
-      output = await this.generateMarkdownStatus(projectRoot, workspaceId, config, graph, workspaceMdData, summary);
+      output = await this.generateMarkdownStatus(projectRoot, workspaceId, config, graph, workspaceMdData, summary, isArchived);
     } else {
-      output = await this.generateBoxStatus(projectRoot, workspaceId, config, graph, workspaceMdData, summary);
+      output = await this.generateBoxStatus(projectRoot, workspaceId, config, graph, workspaceMdData, summary, isArchived);
     }
 
     return {
@@ -344,7 +361,8 @@ export class WorkspaceService {
     config: WorkspaceConfig,
     graph: NodeGraph,
     workspaceMdData: { goal: string },
-    summary: { totalNodes: number; completedNodes: number; currentFocus: string | null }
+    summary: { totalNodes: number; completedNodes: number; currentFocus: string | null },
+    isArchived: boolean = false
   ): Promise<string> {
     const lines: string[] = [];
     const width = 60;
@@ -361,7 +379,7 @@ export class WorkspaceService {
     lines.push("│" + " 节点树:".padEnd(width - 2) + "│");
 
     // 生成节点树
-    const treeLines = await this.generateNodeTree(projectRoot, workspaceId, graph, config.rootNodeId, 0);
+    const treeLines = await this.generateNodeTree(projectRoot, workspaceId, graph, config.rootNodeId, 0, isArchived);
     for (const treeLine of treeLines) {
       const truncated = treeLine.length > width - 4 ? treeLine.substring(0, width - 7) + "..." : treeLine;
       lines.push("│" + ` ${truncated}`.padEnd(width - 2) + "│");
@@ -381,7 +399,8 @@ export class WorkspaceService {
     config: WorkspaceConfig,
     graph: NodeGraph,
     workspaceMdData: { goal: string },
-    summary: { totalNodes: number; completedNodes: number; currentFocus: string | null }
+    summary: { totalNodes: number; completedNodes: number; currentFocus: string | null },
+    isArchived: boolean = false
   ): Promise<string> {
     const lines: string[] = [];
 
@@ -398,7 +417,7 @@ export class WorkspaceService {
     lines.push("## 节点树");
     lines.push("");
 
-    const treeLines = await this.generateNodeTreeMd(projectRoot, workspaceId, graph, config.rootNodeId, 0);
+    const treeLines = await this.generateNodeTreeMd(projectRoot, workspaceId, graph, config.rootNodeId, 0, isArchived);
     lines.push(...treeLines);
 
     return lines.join("\n");
@@ -412,7 +431,8 @@ export class WorkspaceService {
     workspaceId: string,
     graph: NodeGraph,
     nodeId: string,
-    depth: number
+    depth: number,
+    isArchived: boolean = false
   ): Promise<string[]> {
     const node = graph.nodes[nodeId];
     if (!node) return [];
@@ -423,13 +443,13 @@ export class WorkspaceService {
     const focusIndicator = graph.currentFocus === nodeId ? " ◄" : "";
 
     // 读取节点标题
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId, isArchived);
     const title = nodeInfo.title || nodeId;
 
     lines.push(`${indent}${statusIcon} ${title}${focusIndicator}`);
 
     for (const childId of node.children) {
-      lines.push(...await this.generateNodeTree(projectRoot, workspaceId, graph, childId, depth + 1));
+      lines.push(...await this.generateNodeTree(projectRoot, workspaceId, graph, childId, depth + 1, isArchived));
     }
 
     return lines;
@@ -443,7 +463,8 @@ export class WorkspaceService {
     workspaceId: string,
     graph: NodeGraph,
     nodeId: string,
-    depth: number
+    depth: number,
+    isArchived: boolean = false
   ): Promise<string[]> {
     const node = graph.nodes[nodeId];
     if (!node) return [];
@@ -454,13 +475,13 @@ export class WorkspaceService {
     const focusIndicator = graph.currentFocus === nodeId ? " **◄ 当前聚焦**" : "";
 
     // 读取节点标题
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId, isArchived);
     const title = nodeInfo.title || nodeId;
 
     lines.push(`${indent}- ${statusIcon} ${title}${focusIndicator}`);
 
     for (const childId of node.children) {
-      lines.push(...await this.generateNodeTreeMd(projectRoot, workspaceId, graph, childId, depth + 1));
+      lines.push(...await this.generateNodeTreeMd(projectRoot, workspaceId, graph, childId, depth + 1, isArchived));
     }
 
     return lines;
@@ -552,6 +573,120 @@ export class WorkspaceService {
       rulesCount: currentRules.length,
       rulesHash,
       rules: currentRules,
+    };
+  }
+
+  /**
+   * 归档工作区
+   */
+  async archive(params: WorkspaceArchiveParams): Promise<WorkspaceArchiveResult> {
+    const { workspaceId } = params;
+
+    // 1. 通过索引查找工作区
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (!wsEntry) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+
+    // 2. 验证状态为 active
+    if (wsEntry.status !== "active") {
+      throw new TanmiError("WORKSPACE_ARCHIVED", `工作区 "${workspaceId}" 已经处于归档状态`);
+    }
+
+    const { projectRoot } = wsEntry;
+    const currentTime = now();
+
+    // 3. 验证源目录存在
+    const srcPath = this.fs.getWorkspacePath(projectRoot, workspaceId);
+    if (!(await this.fs.exists(srcPath))) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区目录不存在: ${srcPath}`);
+    }
+
+    // 4. 确保归档目录存在
+    await this.fs.ensureArchiveDir(projectRoot);
+
+    // 5. 移动目录到归档位置
+    const archivePath = this.fs.getArchivePath(projectRoot, workspaceId);
+    await this.fs.moveDir(srcPath, archivePath);
+
+    // 6. 更新索引状态
+    wsEntry.status = "archived";
+    wsEntry.updatedAt = currentTime;
+    await this.json.writeIndex(index);
+
+    // 7. 更新 workspace.json 状态
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, true);
+    config.status = "archived";
+    config.updatedAt = currentTime;
+    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config, true);
+
+    // 8. 追加日志
+    await this.md.appendLog(projectRoot, workspaceId, {
+      time: currentTime,
+      operator: "system",
+      event: `工作区已归档`,
+    }, true);
+
+    return {
+      success: true,
+      archivePath,
+    };
+  }
+
+  /**
+   * 恢复归档的工作区
+   */
+  async restore(params: WorkspaceRestoreParams): Promise<WorkspaceRestoreResult> {
+    const { workspaceId } = params;
+
+    // 1. 通过索引查找工作区
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (!wsEntry) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+
+    // 2. 验证状态为 archived
+    if (wsEntry.status !== "archived") {
+      throw new TanmiError("WORKSPACE_ACTIVE", `工作区 "${workspaceId}" 不是归档状态，无需恢复`);
+    }
+
+    const { projectRoot } = wsEntry;
+    const currentTime = now();
+
+    // 3. 验证归档目录存在
+    const archivePath = this.fs.getArchivePath(projectRoot, workspaceId);
+    if (!(await this.fs.exists(archivePath))) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `归档工作区目录不存在: ${archivePath}`);
+    }
+
+    // 4. 移动目录回原位置
+    const destPath = this.fs.getWorkspacePath(projectRoot, workspaceId);
+    await this.fs.moveDir(archivePath, destPath);
+
+    // 5. 更新索引状态
+    wsEntry.status = "active";
+    wsEntry.updatedAt = currentTime;
+    await this.json.writeIndex(index);
+
+    // 6. 更新 workspace.json 状态
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    config.status = "active";
+    config.updatedAt = currentTime;
+    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+
+    // 7. 追加日志
+    await this.md.appendLog(projectRoot, workspaceId, {
+      time: currentTime,
+      operator: "system",
+      event: `工作区已从归档恢复`,
+    });
+
+    return {
+      success: true,
+      path: destPath,
+      webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
     };
   }
 }
