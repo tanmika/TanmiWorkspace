@@ -46,14 +46,22 @@ export const workspaceInitTool: Tool = {
  */
 export const workspaceListTool: Tool = {
   name: "workspace_list",
-  description: "列出所有工作区，支持按状态过滤。",
+  description: `列出所有工作区,支持按状态过滤。
+
+**排序规则**：
+- 如果提供了 cwd 参数，匹配当前路径的工作区优先显示
+- 同级别按更新时间降序排列`,
   inputSchema: {
     type: "object",
     properties: {
       status: {
         type: "string",
         enum: ["active", "archived", "all"],
-        description: "筛选状态（默认 all）",
+        description: "筛选状态(默认 active)",
+      },
+      cwd: {
+        type: "string",
+        description: "当前工作目录，匹配的工作区优先显示",
       },
     },
   },

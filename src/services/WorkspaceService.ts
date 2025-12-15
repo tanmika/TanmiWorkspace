@@ -184,11 +184,24 @@ export class WorkspaceService {
    */
   async list(params: WorkspaceListParams): Promise<WorkspaceListResult> {
     const index = await this.json.readIndex();
-    const statusFilter = params.status || "all";
+    const statusFilter = params.status || "active";
+    const cwd = params.cwd;
 
     let filteredWorkspaces = index.workspaces;
     if (statusFilter !== "all") {
       filteredWorkspaces = filteredWorkspaces.filter(ws => ws.status === statusFilter);
+    }
+
+    // 如果提供了 cwd，优先显示匹配的工作区
+    if (cwd) {
+      filteredWorkspaces = [...filteredWorkspaces].sort((a, b) => {
+        const aMatch = a.projectRoot === cwd || cwd.startsWith(a.projectRoot + "/");
+        const bMatch = b.projectRoot === cwd || cwd.startsWith(b.projectRoot + "/");
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        // 同级别按更新时间降序
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
     }
 
     // 为每个工作区添加 webUrl

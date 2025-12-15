@@ -104,6 +104,7 @@ export interface WorkspaceInitResult {
  */
 export interface WorkspaceListParams {
   status?: "active" | "archived" | "all";
+  cwd?: string;  // 当前工作目录，匹配的工作区优先显示
 }
 
 /**
