@@ -110,9 +110,10 @@ export interface ProjectDocsScanResult {
  * AI 必须执行的行为类型
  */
 export type ActionRequiredType =
-  | "ask_user"      // 询问用户（如：是否有相关文档）
-  | "show_plan"     // 向用户展示计划并等待确认
-  | "check_docs";   // 提醒用户检查文档是否需要更新
+  | "ask_user"          // 询问用户（如：是否有相关文档）
+  | "show_plan"         // 向用户展示计划并等待确认
+  | "check_docs"        // 提醒用户检查文档是否需要更新
+  | "review_structure"; // reopen 时先查看现有结构再决定下一步
 
 /**
  * AI 必须执行的行为

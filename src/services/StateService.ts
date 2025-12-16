@@ -274,6 +274,27 @@ export class StateService {
       };
     }
 
+    // 14. 添加 actionRequired（reopen 时，如果有子节点则需要先查看结构）
+    if (action === "reopen" && nodeMeta.children.length > 0) {
+      // 收集子节点概览信息
+      const childrenOverview = nodeMeta.children.map(childId => {
+        const child = graph.nodes[childId];
+        return {
+          nodeId: childId,
+          status: child?.status || "unknown",
+          type: child?.type || "unknown",
+        };
+      });
+      result.actionRequired = {
+        type: "review_structure",
+        message: "节点已重开，存在已有子节点。请先调用 node_list 或 workspace_status 查看现有结构，评估是否需要调整现有节点而非创建新节点。",
+        data: {
+          childCount: nodeMeta.children.length,
+          childrenOverview,
+        },
+      };
+    }
+
     return result;
   }
 

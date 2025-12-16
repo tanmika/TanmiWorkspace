@@ -14,6 +14,7 @@ src/prompts/
 
 | 导出名称 | 类型 | 用途 | 使用场景 |
 |---------|------|------|----------|
+| `CRITICAL_PROTOCOLS` | string | 关键协议（最高优先级） | tanmi_prompt（置顶） |
 | `SYSTEM_OVERVIEW` | string | 系统概述 | AI 首次连接、tanmi_help("overview") |
 | `CORE_WORKFLOW` | string | 核心工作流程 | tanmi_prompt、tanmi_help("workflow") |
 | `TOOLS_QUICK_REFERENCE` | string | 工具速查表 | tanmi_prompt、tanmi_help("tools") |
@@ -24,6 +25,17 @@ src/prompts/
 
 ## 详细说明
 
+### 0. CRITICAL_PROTOCOLS（新增）
+
+关键协议，最高优先级指令，AI 必须无条件遵守。
+
+**包含 5 项关键协议：**
+1. actionRequired 必须立即执行
+2. workspace_init 后必须告知 webUrl
+3. 根节点 start 前必须完成信息收集
+4. 禁止跳步
+5. 子节点不继承文档（必须显式派发）
+
 ### 1. SYSTEM_OVERVIEW
 
 系统概述，介绍 TanmiWorkspace 的核心价值和 AI 角色定位。
@@ -31,7 +43,7 @@ src/prompts/
 **内容要点：**
 - 系统是什么：分形任务跟踪系统
 - 核心价值：分形结构、聚焦上下文、过程可追溯、动态管理、可视化界面
-- Web UI 说明
+- Web UI 说明 + **边界说明**（AI 无法看到/控制浏览器）
 - AI 角色定义
 
 ### 2. CORE_WORKFLOW
@@ -41,13 +53,14 @@ src/prompts/
 **主要章节：**
 1. 创建工作区流程
 2. 节点类型与执行流程
-   - 执行节点流程
+   - 执行节点流程（含 context_get 建议）
    - 规划节点流程
    - 禁止跳步行为
-3. **actionRequired 必须执行指令**（v1.0 新增）
-4. 结论记录原则
-5. 状态流转规则
-6. 任务分解原则
+3. **工具调用错误处理**（新增，5 步策略）
+4. **actionRequired 必须执行指令**（v1.0 新增）
+5. 结论记录原则
+6. 状态流转规则
+7. 任务分解原则
 
 ### 3. TOOLS_QUICK_REFERENCE
 
@@ -75,6 +88,7 @@ src/prompts/
 | `check_progress` | 查看进度 | 获取和展示工作区状态 |
 | `docs_management` | 文档管理 | 文档引用的管理和派发机制 |
 | `user_guide` | 用户引导 | 向不熟悉系统的用户介绍 |
+| `reopen_task` | 重开任务 | 重开节点/追加需求时的处理流程 |
 
 ### 5. USER_PROMPTS
 
@@ -105,15 +119,17 @@ tanmi_help 工具的帮助主题映射，将主题名映射到对应的内容。
 - `progress` → SCENARIO_GUIDES["check_progress"]
 - `guide` → SCENARIO_GUIDES["user_guide"]
 - `docs` → SCENARIO_GUIDES["docs_management"]
+- `reopen` → SCENARIO_GUIDES["reopen_task"]
 
 ### 7. getFullInstructions()
 
-返回完整的 AI 指令，包含：
-- SYSTEM_OVERVIEW
-- CORE_WORKFLOW
-- TOOLS_QUICK_REFERENCE
-- 重要原则（10 条）
-- tanmi_help 使用说明
+返回完整的 AI 指令，包含（按顺序）：
+1. **CRITICAL_PROTOCOLS**（最高优先级，置顶）
+2. SYSTEM_OVERVIEW
+3. CORE_WORKFLOW
+4. TOOLS_QUICK_REFERENCE
+5. 工作原则（8 条，精简版）
+6. 获取帮助（tanmi_help 强化提示）
 
 ## actionRequired 机制（v1.0 新增）
 
@@ -123,9 +139,10 @@ tanmi_help 工具的帮助主题映射，将主题名映射到对应的内容。
 
 ```typescript
 type ActionRequiredType =
-  | "ask_user"      // 询问用户
-  | "show_plan"     // 展示计划并等待确认
-  | "check_docs";   // 提醒检查文档更新
+  | "ask_user"          // 询问用户
+  | "show_plan"         // 展示计划并等待确认
+  | "check_docs"        // 提醒检查文档更新
+  | "review_structure"; // reopen 时先查看现有结构
 
 interface ActionRequired {
   type: ActionRequiredType;
@@ -141,6 +158,7 @@ interface ActionRequired {
 | `ask_user` | workspace_init | 项目无文档 | 询问用户是否有需求/设计/API 文档 |
 | `show_plan` | node_create | 在根节点下创建非信息收集的子节点 | 向用户展示计划，等待确认后再执行 |
 | `check_docs` | node_transition | 执行节点完成且有文档引用 | 向用户确认文档是否需要更新 |
+| `review_structure` | node_transition | reopen 且有子节点 | 先查看现有结构，评估是否调整现有节点而非创建新节点 |
 
 ### 相关文件
 

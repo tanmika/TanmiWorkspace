@@ -2,6 +2,43 @@
 // TanmiWorkspace AI Instructions - 提供给 AI 的完整使用指南
 
 /**
+ * 关键协议 - 最高优先级指令，必须无条件遵守
+ */
+export const CRITICAL_PROTOCOLS = `
+# 关键协议（最高优先级）
+
+以下规则必须无条件遵守，违反将导致任务失败：
+
+## 1. actionRequired 必须立即执行
+每次工具调用返回后，**首先**检查返回值中是否存在 \`actionRequired\` 字段。
+如果存在，**必须**立即中断当前逻辑，优先执行指定行为：
+- \`ask_user\`: 询问用户
+- \`show_plan\`: 展示计划并等待确认
+- \`check_docs\`: 确认文档是否需要更新
+- \`review_structure\`: 查看现有结构再决定下一步
+
+**忽略 actionRequired 是严重错误。**
+
+## 2. workspace_init 后必须告知 webUrl
+创建工作区后，**必须**将返回的 \`webUrl\` 告知用户，让用户可以在浏览器中查看进度。
+
+## 3. 根节点 start 前必须完成信息收集
+根节点进入 planning 状态后，**必须**先创建 \`role: "info_collection"\` 的信息收集节点。
+直接创建执行任务会触发 INFO_COLLECTION_REQUIRED 错误。
+
+## 4. 禁止跳步
+- ❌ 未 start 就直接 complete
+- ❌ 在执行节点 A 时顺便完成节点 B
+- ❌ 批量将多个节点标记为 completed
+- ❌ 在执行节点中创建子节点
+- ❌ 创建完计划后未经用户确认就直接执行
+
+## 5. 子节点不继承文档
+创建子节点时，**必须**通过 \`docs\` 参数显式派发文档。
+子节点就像新加入的员工，如果你不把文档传给它，它就什么都看不到。
+`;
+
+/**
  * 系统概述 - AI 首次连接时应获取的核心信息
  */
 export const SYSTEM_OVERVIEW = `
@@ -25,7 +62,11 @@ TanmiWorkspace 提供可视化 Web 界面。所有 workspace 相关的工具返�
 - 正式环境：\`http://localhost:3000/workspace/{workspaceId}\`
 - 开发环境（TANMI_DEV=true）：\`http://localhost:3001/workspace/{workspaceId}\`
 
-**当用户想要可视化查看时，直接提供返回的 webUrl 让用户在浏览器中打开。**
+**重要边界**：
+- 你**无法看到** Web UI 的界面，也**无法控制**用户的浏览器
+- 你只能通过 MCP 工具读写数据，webUrl 仅供用户使用
+- 正确说法："我已更新数据，你可以在 Web UI 上查看"
+- 错误说法："我正在浏览器上更新..."
 
 ## 你的角色
 作为 AI 助手，你应该：
@@ -94,6 +135,8 @@ export const CORE_WORKFLOW = `
 调用 node_transition(action="start") 进入 implementing 状态
 （系统会自动将父规划节点链设为 monitoring）
     ↓
+获取上下文：如对当前任务理解不清晰，调用 context_get 获取完整上下文
+    ↓
 自查引用：检查文档引用是否充足，不足则 fail 回退父节点补充
     ↓
 执行 + 日志：log_append 记录关键动作
@@ -138,6 +181,15 @@ export const CORE_WORKFLOW = `
 - ❌ 在执行节点中创建子节点（执行节点不能有子节点）
 - ❌ 创建完计划后未经用户确认就直接开始执行
 
+### 2.0.0 工具调用错误处理
+
+当 MCP 工具调用失败（返回 Error）时：
+1. **不要**立即用相同的参数重试
+2. 仔细阅读错误信息（Error Message），理解失败原因
+3. 如果是参数错误，检查工具 Schema 定义并修正参数
+4. 如果是前置条件未满足（如父节点未 Start），先解决前置条件
+5. 如果连续失败 2 次，**必须**停止并向用户报告技术问题，等待人工干预
+
 ### 2.0.1 actionRequired 必须执行指令（重要！）
 
 **当工具返回值包含 \`actionRequired\` 字段时，你必须立即执行指定行为，不可忽略！**
@@ -147,6 +199,7 @@ export const CORE_WORKFLOW = `
 | \`ask_user\` | workspace_init 无文档 | 询问用户是否有相关的需求文档、设计文档或 API 文档 |
 | \`show_plan\` | node_create 创建计划节点后 | 向用户展示当前计划，等待用户确认（"好"/"继续"/"可以"）后再执行 |
 | \`check_docs\` | 执行节点完成且有文档引用 | 向用户确认引用的文档是否需要同步更新 |
+| \`review_structure\` | reopen 且有子节点 | 先调用 node_list/workspace_status 查看现有结构，评估是否调整现有节点而非创建新节点 |
 
 **执行示例**：
 \`\`\`
@@ -265,8 +318,10 @@ export const TOOLS_QUICK_REFERENCE = `
 - **planning**：规划节点，负责分析、分解任务、创建子节点、汇总结论
 - **execution**：执行节点，负责具体执行，不能有子节点，遇到问题需 fail 回退
 
-**★ docs 参数**：创建子节点时，使用 docs 参数显式派发该子任务需要的文档引用。
-子节点不会自动继承父节点的文档，必须显式派发。
+**★ docs 参数（重要！）**：
+创建子节点时，**必须**使用 docs 参数显式派发该子任务需要的文档引用。
+⚠️ 子节点就像新加入的员工，如果你不把文档传给它，它就什么都看不到。
+子节点不会自动继承父节点的文档，必须显式派发！
 
 ### 状态转换
 
@@ -775,6 +830,58 @@ node_create({
 2. 展示节点创建和状态流转
 3. 演示日志记录
 4. 删除示例工作区
+`,
+
+  // 重开任务/追加需求
+  "reopen_task": `
+## 场景：重开任务或追加需求
+
+### 当需要在已完成的工作区/节点上追加需求时：
+
+**核心原则**：先了解现有结构，再决定是调整还是新建。
+
+**步骤 1：重开节点**
+\`\`\`typescript
+node_transition({
+  workspaceId: "xxx",
+  nodeId: "target-node",
+  action: "reopen"
+})
+\`\`\`
+
+**步骤 2：★★★ 必须先查看现有结构 ★★★**
+
+当返回 \`actionRequired: { type: "review_structure" }\` 时，你必须：
+\`\`\`typescript
+// 查看节点树
+node_list({ workspaceId: "xxx", rootId: "target-node" })
+
+// 或查看工作区状态
+workspace_status({ workspaceId: "xxx", format: "markdown" })
+\`\`\`
+
+**步骤 3：评估并决定**
+
+| 情况 | 正确做法 | 错误做法 |
+|------|----------|----------|
+| 原有节点可复用 | node_update 修改需求后 reopen | 创建重复的新节点 |
+| 需要补充子任务 | 在原结构上添加新节点 | 重建整个结构 |
+| 原结构不适用 | 先 cancel/delete 旧节点再创建 | 保留旧节点又创建新的 |
+
+**步骤 4：向用户说明**
+\`\`\`
+"我查看了现有结构，发现：
+- 已有 X 个子节点，其中 Y 个已完成
+- [节点A] 可以复用，只需补充 XXX
+- 需要新增一个节点处理 YYY
+
+是否按此方案调整？"
+\`\`\`
+
+**禁止行为**：
+- ❌ reopen 后不看结构直接创建新节点
+- ❌ 创建与现有节点功能重复的新节点
+- ❌ 忽略 actionRequired 的 review_structure 指令
 `
 };
 
@@ -881,6 +988,10 @@ export const HELP_TOPICS: Record<string, { title: string; content: string }> = {
   "docs": {
     title: "文档引用管理",
     content: SCENARIO_GUIDES["docs_management"]
+  },
+  "reopen": {
+    title: "重开任务/追加需求",
+    content: SCENARIO_GUIDES["reopen_task"]
   }
 };
 
@@ -889,40 +1000,29 @@ export const HELP_TOPICS: Record<string, { title: string; content: string }> = {
  */
 export function getFullInstructions(): string {
   return [
+    CRITICAL_PROTOCOLS,
     SYSTEM_OVERVIEW,
     CORE_WORKFLOW,
     TOOLS_QUICK_REFERENCE,
     `
-## 重要原则
+## 工作原则
 
 1. **主动分解**：规划节点应主动分解任务为子节点，不要等用户要求
 2. **结论不丢**：每形成一个结论就记录，创建子节点前先记录当前发现
 3. **及时记录**：每个关键动作都应追加日志
 4. **主动推进**：AI 应主动推进流程，减少不必要的选择询问
-5. **错误重试**：MCP 调用失败时，分析原因并自动重试或调整参数
-6. **节点粒度**：节点代表"需要独立追踪的工作单元"，日志代表"执行过程的细节记录"
-7. **用户引导**：当用户不熟悉时，主动解释概念和流程
-8. **一次一个节点（重要！防止跳步）**：
-   - 每个节点必须独立经历完整生命周期：start → 执行 → complete
-   - **禁止**：在执行节点 A 时"顺便"完成节点 B 的工作
-   - **禁止**：同时将多个节点标记为 completed（除非它们确实同时完成）
-   - **正确做法**：完成当前节点后，再 start 下一个节点，依次处理
-   - 如果发现需要同时处理多个任务，应该创建一个父节点来统筹
-
-9. **需求变化时更新节点（重要！保持信息同步）**：
+5. **节点粒度**：节点代表"需要独立追踪的工作单元"，日志代表"执行过程的细节记录"
+6. **用户引导**：当用户不熟悉时，主动解释概念和流程
+7. **需求变化时更新节点**：
    - 当调研发现问题本质与最初理解不同时，用 \`node_update\` 更新节点标题和需求描述
    - 当方案需要调整时，更新节点信息并用 \`log_append\` 记录变更原因
-   - **示例**：最初以为是"UI 不显示需求"，调研后发现是"AI 创建节点时未填写 requirement"，此时应更新节点信息
+8. **调研过程记录日志**：
+   - 发现问题根因时，立即用 \`log_append\` 记录分析过程和关键发现
+   - 不要只在最后 complete 时才写结论，中间的分析过程同样重要
 
-10. **调研过程记录日志（重要！知识沉淀）**：
-    - 发现问题根因时，立即用 \`log_append\` 记录分析过程和关键发现
-    - 不要只在最后 complete 时才写结论，中间的分析过程同样重要
-    - **应记录**：查看了哪些文件、发现了什么问题、为什么是这个原因
-    - **示例**："查看 node.ts 工具定义，发现 node_create 的 requirement 字段为可选，这是导致需求缺失的根因"
+## 获取帮助
 
-## 使用 tanmi_help 工具
-
-当你需要查询特定场景的指导时，可以调用 tanmi_help 工具：
+**遇到不确定的场景时，必须先调用 tanmi_help 查询指南，不要猜测！**
 
 可用主题：
 - overview: 系统概述
@@ -937,6 +1037,7 @@ export function getFullInstructions(): string {
 - progress: 如何查看进度
 - guide: 用户引导话术
 - docs: 文档引用管理
+- reopen: 重开任务/追加需求
 `
   ].join('\n\n');
 }
