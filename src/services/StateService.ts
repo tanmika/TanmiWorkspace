@@ -263,6 +263,17 @@ export class StateService {
     // 12. 添加工作流提示（根据节点类型）
     result.hint = this.generateHint(nodeType, action, nodeMeta, graph, archiveResult, infoCollectionWarning, nodeDocRefs);
 
+    // 13. 添加 actionRequired（执行节点完成且有文档引用时）
+    if (nodeType === "execution" && action === "complete" && nodeDocRefs && nodeDocRefs.length > 0) {
+      result.actionRequired = {
+        type: "check_docs",
+        message: "执行任务已完成，请向用户确认引用的文档是否需要同步更新。",
+        data: {
+          docs: nodeDocRefs,
+        },
+      };
+    }
+
     return result;
   }
 
@@ -321,6 +332,7 @@ export class StateService {
           for (const doc of nodeDocRefs) {
             hint += `\n- ${doc.path}${doc.description ? ` (${doc.description})` : ""}`;
           }
+          hint += `\n\n💡 提示：如果文档没有元文件(frontmatter)，建议添加 YAML 格式的元数据头(以 --- 开头和结尾)，便于文档管理和检索。`;
         }
         return hint;
       } else if (action === "fail") {

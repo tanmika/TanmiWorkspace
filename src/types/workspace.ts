@@ -88,6 +88,43 @@ export interface WorkspaceInitParams {
 }
 
 /**
+ * 项目文档信息（用于 workspace_init 扫描结果）
+ */
+export interface ProjectDocInfo {
+  path: string;                     // 相对于 projectRoot 的路径
+  hasFrontmatter: boolean;          // 是否有元文件（frontmatter）
+  isFolder?: boolean;               // 是否为文档文件夹（3级目录全是.md）
+}
+
+/**
+ * 项目文档扫描结果
+ */
+export interface ProjectDocsScanResult {
+  files: ProjectDocInfo[];          // 文档文件列表
+  folders: string[];                // 文档文件夹列表（当文件数超过限制时退化）
+  totalFound: number;               // 实际找到的文件总数
+  degraded: boolean;                // 是否退化为文件夹模式
+}
+
+/**
+ * AI 必须执行的行为类型
+ */
+export type ActionRequiredType =
+  | "ask_user"      // 询问用户（如：是否有相关文档）
+  | "show_plan"     // 向用户展示计划并等待确认
+  | "check_docs";   // 提醒用户检查文档是否需要更新
+
+/**
+ * AI 必须执行的行为
+ * 当此字段存在时，AI 必须执行相应行为，不可忽略
+ */
+export interface ActionRequired {
+  type: ActionRequiredType;
+  message: string;                  // 给 AI 的指令说明
+  data?: Record<string, unknown>;   // 附加数据（如节点列表、文档列表等）
+}
+
+/**
  * workspace_init 输出
  */
 export interface WorkspaceInitResult {
@@ -97,6 +134,8 @@ export interface WorkspaceInitResult {
   rootNodeId: string;
   webUrl?: string;                  // Web 访问地址（如果服务运行中）
   hint?: string;                    // 工作流提示
+  projectDocs?: ProjectDocsScanResult;  // 项目文档扫描结果
+  actionRequired?: ActionRequired;  // AI 必须执行的行为
 }
 
 /**

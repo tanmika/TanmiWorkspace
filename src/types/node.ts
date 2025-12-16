@@ -1,6 +1,6 @@
 // src/types/node.ts
 
-import type { DocRef } from "./workspace.js";
+import type { DocRef, ActionRequired } from "./workspace.js";
 
 /**
  * 节点类型
@@ -155,6 +155,7 @@ export interface NodeCreateResult {
   path: string;
   autoReopened?: string; // 如果父节点被自动 reopen，返回父节点 ID
   hint?: string;
+  actionRequired?: ActionRequired;  // AI 必须执行的行为
 }
 
 /**
@@ -230,6 +231,7 @@ export interface NodeTransitionResult {
   conclusion: string | null;
   cascadeUpdates?: string[];  // 级联更新的父节点状态变化
   hint?: string;              // 工作流提示，提醒 AI 下一步应做什么
+  actionRequired?: ActionRequired;  // AI 必须执行的行为
 }
 
 // ========== Phase 3: 节点更新 ==========

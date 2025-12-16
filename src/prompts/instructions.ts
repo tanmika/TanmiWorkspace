@@ -51,7 +51,7 @@ export const CORE_WORKFLOW = `
   - rules: 初始规则（可选，后续会通过信息收集补充）
   - docs: 初始文档（可选，后续会通过信息收集补充）
     ↓
-★ 告知用户 webUrl（可视化界面地址）
+★ 告知用户 webUrl
     ↓
 ★★★ 必须先创建信息收集节点 ★★★
     ↓
@@ -59,8 +59,8 @@ export const CORE_WORKFLOW = `
     ↓
 在信息收集节点中：
   - 扫描项目根目录一级菜单，分析结构
-  - 查找文档文件夹（./Doc/, ./docs/, ./documentation/）
-  - 查找规则文件夹（./RULE/, ./rules/）
+  - 查找文档文件夹(./Doc/, ./docs/, ./documentation/)
+  - 查找规则文件夹(./RULE/, ./rules/)
   - 阅读 README 和项目配置
   - 收集环境配置、路径信息等
     ↓
@@ -137,6 +137,36 @@ export const CORE_WORKFLOW = `
 - ❌ 批量将多个节点标记为 completed
 - ❌ 在执行节点中创建子节点（执行节点不能有子节点）
 - ❌ 创建完计划后未经用户确认就直接开始执行
+
+### 2.0.1 actionRequired 必须执行指令（重要！）
+
+**当工具返回值包含 \`actionRequired\` 字段时，你必须立即执行指定行为，不可忽略！**
+
+| type | 触发场景 | 你必须做什么 |
+|------|----------|-------------|
+| \`ask_user\` | workspace_init 无文档 | 询问用户是否有相关的需求文档、设计文档或 API 文档 |
+| \`show_plan\` | node_create 创建计划节点后 | 向用户展示当前计划，等待用户确认（"好"/"继续"/"可以"）后再执行 |
+| \`check_docs\` | 执行节点完成且有文档引用 | 向用户确认引用的文档是否需要同步更新 |
+
+**执行示例**：
+\`\`\`
+// 工具返回
+{
+  "nodeId": "...",
+  "actionRequired": {
+    "type": "show_plan",
+    "message": "已创建计划节点，请向用户展示当前计划并等待确认后再开始执行。"
+  }
+}
+
+// 你应该立即向用户展示计划：
+"我已创建以下执行计划：
+1. 任务A - ...
+2. 任务B - ...
+确认开始执行吗？"
+
+// 等待用户回复后再继续
+\`\`\`
 
 ### 2.1 结论记录原则（重要！）
 
@@ -900,11 +930,13 @@ export function getFullInstructions(): string {
 - tools: 工具速查表
 - start: 如何开始新任务
 - resume: 如何继续任务
+- session_restore: 会话恢复（从摘要恢复）
 - blocked: 任务受阻时怎么办
 - split: 何时分解任务
 - complete: 如何完成任务
 - progress: 如何查看进度
 - guide: 用户引导话术
+- docs: 文档引用管理
 `
   ].join('\n\n');
 }

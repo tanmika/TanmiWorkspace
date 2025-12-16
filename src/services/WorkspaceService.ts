@@ -2,6 +2,7 @@
 
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import * as fs from "node:fs/promises";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
@@ -23,6 +24,8 @@ import type {
   WorkspaceRestoreParams,
   WorkspaceRestoreResult,
   WorkspaceConfig,
+  ProjectDocInfo,
+  ProjectDocsScanResult,
 } from "../types/workspace.js";
 import type { NodeGraph, NodeMeta } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
@@ -169,14 +172,50 @@ export class WorkspaceService {
       event: `工作区 "${params.name}" 已创建`,
     });
 
-    return {
+    // 14. 扫描项目文档
+    const projectDocs = await this.scanProjectDocs(projectRoot);
+
+    // 15. 生成 hint（包含项目文档信息）
+    let hint = "💡 工作区已创建。根节点是规划节点。下一步：调用 node_transition(action=\"start\") 进入规划状态，分析需求后使用 node_create 创建执行节点或子规划节点。";
+
+    if (projectDocs.totalFound > 0) {
+      hint += `\n\n📚 项目文档扫描结果：发现 ${projectDocs.totalFound} 个 .md 文件`;
+      if (projectDocs.degraded) {
+        hint += `（超过限制，仅显示部分）`;
+      }
+      // 统计无元文件的文档
+      const noFrontmatter = projectDocs.files.filter(f => !f.hasFrontmatter);
+      if (noFrontmatter.length > 0) {
+        hint += `\n⚠️ 其中 ${noFrontmatter.length} 个文档缺少元文件(frontmatter)，建议在相关任务中补充。`;
+      }
+      if (projectDocs.folders.length > 0) {
+        hint += `\n📁 文档文件夹: ${projectDocs.folders.join(", ")}`;
+      }
+      hint += `\n💡 使用 node_reference 引用相关文档，便于任务跟踪和文档同步。`;
+    } else {
+      hint += `\n\n📭 未在项目中发现 .md 文档文件。`;
+    }
+
+    // 构建返回结果
+    const result: WorkspaceInitResult = {
       workspaceId,
       path: this.fs.getWorkspacePath(projectRoot, workspaceId),
       projectRoot,
       rootNodeId,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
-      hint: "💡 工作区已创建。根节点是规划节点。下一步：调用 node_transition(action=\"start\") 进入规划状态，分析需求后使用 node_create 创建执行节点或子规划节点。",
+      hint,
+      projectDocs,
     };
+
+    // 无文档时添加 actionRequired
+    if (projectDocs.totalFound === 0) {
+      result.actionRequired = {
+        type: "ask_user",
+        message: "项目中未发现文档文件，请询问用户是否有相关的需求文档、设计文档或 API 文档可供参考。",
+      };
+    }
+
+    return result;
   }
 
   /**
@@ -701,5 +740,190 @@ export class WorkspaceService {
       path: destPath,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
     };
+  }
+
+  // ========== 项目文档扫描 ==========
+
+  /** 排除的目录名 */
+  private static readonly EXCLUDED_DIRS = new Set([
+    "node_modules",
+    ".git",
+    ".tanmi-workspace",
+    ".tanmi-workspace-dev",
+    "dist",
+    "build",
+    "coverage",
+    ".next",
+    ".nuxt",
+    ".output",
+    "__pycache__",
+    ".venv",
+    "venv",
+  ]);
+
+  /** 文件数量限制 */
+  private static readonly MAX_FILES = 50;
+
+  /**
+   * 扫描项目文档
+   * 扫描 1-2 级目录的 .md 文件，检测元文件，限制文件数
+   */
+  async scanProjectDocs(projectRoot: string): Promise<ProjectDocsScanResult> {
+    const files: ProjectDocInfo[] = [];
+    const folders: string[] = [];
+    let totalFound = 0;
+
+    try {
+      // 扫描根目录的 .md 文件
+      const rootEntries = await fs.readdir(projectRoot, { withFileTypes: true });
+
+      for (const entry of rootEntries) {
+        if (entry.name.startsWith(".") && entry.name !== ".") continue;
+        if (WorkspaceService.EXCLUDED_DIRS.has(entry.name)) continue;
+
+        const entryPath = path.join(projectRoot, entry.name);
+
+        if (entry.isFile() && entry.name.endsWith(".md")) {
+          // 根目录 .md 文件
+          totalFound++;
+          if (files.length < WorkspaceService.MAX_FILES) {
+            const hasFrontmatter = await this.checkFrontmatter(entryPath);
+            files.push({ path: entry.name, hasFrontmatter });
+          }
+        } else if (entry.isDirectory()) {
+          // 扫描一级子目录
+          await this.scanSubDirectory(
+            projectRoot,
+            entry.name,
+            1,
+            files,
+            folders,
+            { total: totalFound }
+          ).then(count => { totalFound = count; });
+        }
+      }
+    } catch {
+      // 扫描失败时返回空结果
+      return { files: [], folders: [], totalFound: 0, degraded: false };
+    }
+
+    const degraded = totalFound > WorkspaceService.MAX_FILES;
+
+    // 如果退化模式，只保留文件夹信息
+    if (degraded) {
+      return {
+        files: files.slice(0, 10), // 保留少量示例文件
+        folders,
+        totalFound,
+        degraded: true,
+      };
+    }
+
+    return { files, folders, totalFound, degraded: false };
+  }
+
+  /**
+   * 扫描子目录
+   */
+  private async scanSubDirectory(
+    projectRoot: string,
+    relativePath: string,
+    depth: number,
+    files: ProjectDocInfo[],
+    folders: string[],
+    counter: { total: number }
+  ): Promise<number> {
+    if (depth > 2) return counter.total;
+
+    const fullPath = path.join(projectRoot, relativePath);
+
+    try {
+      const entries = await fs.readdir(fullPath, { withFileTypes: true });
+      let allMd = true;
+      let hasMd = false;
+
+      for (const entry of entries) {
+        if (entry.name.startsWith(".")) continue;
+        if (WorkspaceService.EXCLUDED_DIRS.has(entry.name)) continue;
+
+        const entryRelPath = path.join(relativePath, entry.name);
+        const entryFullPath = path.join(fullPath, entry.name);
+
+        if (entry.isFile()) {
+          if (entry.name.endsWith(".md")) {
+            hasMd = true;
+            counter.total++;
+            if (files.length < WorkspaceService.MAX_FILES) {
+              const hasFrontmatter = await this.checkFrontmatter(entryFullPath);
+              files.push({ path: entryRelPath, hasFrontmatter });
+            }
+          } else {
+            allMd = false;
+          }
+        } else if (entry.isDirectory()) {
+          allMd = false;
+          // 检查 3 级目录是否全是 .md
+          if (depth === 2) {
+            const isDocFolder = await this.isDocFolder(entryFullPath);
+            if (isDocFolder) {
+              folders.push(entryRelPath);
+            }
+          } else {
+            // 继续扫描下一级
+            await this.scanSubDirectory(
+              projectRoot,
+              entryRelPath,
+              depth + 1,
+              files,
+              folders,
+              counter
+            );
+          }
+        }
+      }
+
+      // 如果当前目录全是 .md 文件且有文件，标记为文档文件夹
+      if (depth === 2 && allMd && hasMd && !folders.includes(relativePath)) {
+        folders.push(relativePath);
+      }
+    } catch {
+      // 目录读取失败，跳过
+    }
+
+    return counter.total;
+  }
+
+  /**
+   * 检查文件是否有 frontmatter（以 --- 开头）
+   */
+  private async checkFrontmatter(filePath: string): Promise<boolean> {
+    try {
+      const fd = await fs.open(filePath, "r");
+      const buffer = Buffer.alloc(4);
+      await fd.read(buffer, 0, 4, 0);
+      await fd.close();
+      return buffer.toString("utf-8").startsWith("---");
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 检查目录是否为文档文件夹（全是 .md 文件）
+   */
+  private async isDocFolder(dirPath: string): Promise<boolean> {
+    try {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      if (entries.length === 0) return false;
+
+      for (const entry of entries) {
+        if (entry.name.startsWith(".")) continue;
+        if (entry.isDirectory()) return false;
+        if (entry.isFile() && !entry.name.endsWith(".md")) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

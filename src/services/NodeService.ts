@@ -249,12 +249,28 @@ export class NodeService {
       hint += `\n\n⚠️ **重要**：完成所有计划节点创建后，请向用户展示完整计划并等待确认，再开始执行第一个任务。`;
     }
 
-    return {
+    // 构建返回结果
+    const result: NodeCreateResult = {
       nodeId,
       path: nodePath,
       autoReopened: autoReopened ? parentId : undefined,
       hint,
     };
+
+    // 如果在根节点下创建非信息收集的子节点，添加 show_plan actionRequired
+    if (parentId === "root" && role !== "info_collection") {
+      result.actionRequired = {
+        type: "show_plan",
+        message: "已创建计划节点，请向用户展示当前计划并等待确认后再开始执行。",
+        data: {
+          nodeId,
+          title,
+          type,
+        },
+      };
+    }
+
+    return result;
   }
 
   /**

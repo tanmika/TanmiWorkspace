@@ -10,6 +10,7 @@
 - **过程可追溯**：完整操作历史和试错路径，支持回溯复盘
 - **规则防护**：rulesHash 验证 + hint 提醒，确保 AI 遵守工作区规则
 - **信息收集机制**：根节点启动前强制完成信息收集，自动归档到工作区规则和文档
+- **actionRequired 指令**：结构化字段强制 AI 执行特定行为（询问用户、展示计划、检查文档）
 - **项目级存储隔离**：数据写入项目内 `.tanmi-workspace`，支持多项目并行
 - **AI 引导**：内置使用指南和话术模板，可引导不熟悉的用户
 
@@ -410,6 +411,7 @@ web/
 - [docs/core-layer.md](docs/core-layer.md) - 核心服务层
 - [docs/storage-layer.md](docs/storage-layer.md) - 存储层
 - [docs/reference-system.md](docs/reference-system.md) - 引用系统
+- [docs/prompts-reference.md](docs/prompts-reference.md) - Prompts 参考文档
 - [docs/tanmi-workspace-hook-design.md](docs/tanmi-workspace-hook-design.md) - Hook 系统设计
 
 ## TODO
