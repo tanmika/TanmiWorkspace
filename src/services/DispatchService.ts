@@ -24,10 +24,23 @@ import {
   resetToCommit,
   mergeProcessBranch,
   deleteAllWorkspaceBranches,
+  deleteProcessBranch,
+  deleteBackupBranch,
   getActiveDispatchWorkspace,
   getProcessBranchName,
   isOnProcessBranch,
+  getCommitsBetween,
+  getUncommittedChangesSummary,
+  squashMergeProcessBranch,
+  rebaseMergeProcessBranch,
+  cherryPickToWorkingTree,
+  getLatestBackupBranch,
 } from "../utils/git.js";
+
+/**
+ * 合并策略类型
+ */
+export type MergeStrategy = "sequential" | "squash" | "cherry-pick" | "skip";
 
 /**
  * 派发准备结果
@@ -56,6 +69,32 @@ export interface GitStatusInfo {
   currentBranch: string;
   hasUncommittedChanges: boolean;
   isDispatchBranch: boolean;
+}
+
+/**
+ * 禁用派发询问结果
+ */
+export interface DisableDispatchQueryResult {
+  actionRequired: ActionRequired;
+  status: {
+    originalBranch: string;
+    processBranch: string;
+    backupBranch: string | null;
+    hasBackupChanges: boolean;
+    processCommits: Array<{ hash: string; message: string }>;
+    startCommit: string;
+  };
+}
+
+/**
+ * 执行禁用选择的参数
+ */
+export interface ExecuteDisableParams {
+  workspaceId: string;
+  mergeStrategy: MergeStrategy;
+  keepBackupBranch: boolean;
+  keepProcessBranch: boolean;
+  commitMessage?: string;  // 用于 squash 时的提交信息
 }
 
 /**
@@ -139,31 +178,120 @@ export class DispatchService {
   }
 
   /**
-   * 禁用派发模式
+   * 查询禁用派发状态（返回 actionRequired 让用户选择）
    */
-  async disableDispatch(
+  async queryDisableDispatch(
     workspaceId: string,
-    projectRoot: string,
-    merge: boolean = false
-  ): Promise<{ success: boolean }> {
+    projectRoot: string
+  ): Promise<DisableDispatchQueryResult | { success: boolean }> {
     // 1. 读取配置
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
     if (!config.dispatch?.enabled) {
       return { success: true }; // 已经禁用
     }
 
-    const { originalBranch, processBranch } = config.dispatch;
+    const { originalBranch, processBranch, backupBranches } = config.dispatch;
+    const startCommit = config.dispatch.backupBranches?.[0]
+      ? await getCurrentCommit(projectRoot) // 会在后面获取正确的 startCommit
+      : (await this.getOriginalBranchCommit(originalBranch!, projectRoot));
 
-    // 2. 如果需要合并，执行合并
-    if (merge && originalBranch && processBranch) {
-      await mergeProcessBranch(workspaceId, originalBranch, projectRoot);
-    } else if (originalBranch) {
-      // 否则直接切回原分支
-      await checkoutBranch(originalBranch, projectRoot);
+    // 2. 获取派发分支上的提交列表
+    const processCommits = await getCommitsBetween(
+      startCommit,
+      processBranch!,
+      projectRoot
+    );
+
+    // 3. 获取备份分支信息
+    const backupBranch = backupBranches?.[0] || null;
+    const hasBackupChanges = backupBranch !== null;
+
+    // 4. 构建状态摘要
+    const status = {
+      originalBranch: originalBranch!,
+      processBranch: processBranch!,
+      backupBranch,
+      hasBackupChanges,
+      processCommits,
+      startCommit,
+    };
+
+    // 5. 构建 actionRequired
+    const actionRequired: ActionRequired = {
+      type: "dispatch_complete_choice",
+      message: "派发任务完成，请选择合并策略和分支保留选项",
+      data: {
+        workspaceId,
+        originalBranch: originalBranch!,
+        backupBranch,
+        hasBackupChanges,
+        processCommits: processCommits.map(c => `${c.hash.substring(0, 7)} ${c.message}`),
+        mergeOptions: [
+          { value: "sequential", label: "按顺序合并", description: "保留每个任务的独立提交，线性历史" },
+          { value: "squash", label: "squash 合并", description: "压缩为一个提交，最干净" },
+          { value: "cherry-pick", label: "遴选到本地", description: "应用修改到工作区但不提交，可手动调整" },
+          { value: "skip", label: "暂不合并", description: "保留分支，稍后手动处理" },
+        ],
+        branchOptions: {
+          keepBackupBranch: { default: false, description: "保留备份分支（可用于查看历史）" },
+          keepProcessBranch: { default: false, description: "保留派发分支（可用于对比）" },
+        },
+      },
+    };
+
+    return { actionRequired, status };
+  }
+
+  /**
+   * 执行用户选择的禁用操作
+   */
+  async executeDisableChoice(
+    projectRoot: string,
+    params: ExecuteDisableParams
+  ): Promise<{ success: boolean; message: string }> {
+    const { workspaceId, mergeStrategy, keepBackupBranch, keepProcessBranch, commitMessage } = params;
+
+    // 1. 读取配置
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    if (!config.dispatch?.enabled) {
+      return { success: true, message: "派发模式已禁用" };
     }
 
-    // 3. 清理分支
-    await deleteAllWorkspaceBranches(workspaceId, projectRoot);
+    const { originalBranch, processBranch, backupBranches } = config.dispatch;
+    const startCommit = await this.getOriginalBranchCommit(originalBranch!, projectRoot);
+
+    // 2. 根据策略执行合并
+    let resultMessage = "";
+    switch (mergeStrategy) {
+      case "sequential":
+        await rebaseMergeProcessBranch(workspaceId, originalBranch!, projectRoot);
+        resultMessage = "已按顺序合并所有提交";
+        break;
+
+      case "squash":
+        const msg = commitMessage || `tanmi: 完成工作区 ${workspaceId} 派发任务`;
+        await squashMergeProcessBranch(workspaceId, originalBranch!, msg, projectRoot);
+        resultMessage = "已 squash 合并为一个提交";
+        break;
+
+      case "cherry-pick":
+        await cherryPickToWorkingTree(workspaceId, originalBranch!, startCommit, projectRoot);
+        resultMessage = "已将修改应用到工作区（未提交），请手动调整后提交";
+        break;
+
+      case "skip":
+        await checkoutBranch(originalBranch!, projectRoot);
+        resultMessage = "已切回原分支，派发分支保留";
+        break;
+    }
+
+    // 3. 清理分支（根据用户选择）
+    if (!keepProcessBranch && mergeStrategy !== "skip") {
+      await deleteProcessBranch(workspaceId, projectRoot);
+    }
+    if (!keepBackupBranch && backupBranches?.length) {
+      await deleteBackupBranch(workspaceId, undefined, projectRoot);
+    }
 
     // 4. 更新配置
     config.dispatch = undefined;
@@ -174,10 +302,52 @@ export class DispatchService {
     await this.md.appendLog(projectRoot, workspaceId, {
       time: now(),
       operator: "system",
-      event: merge ? "派发模式已禁用，更改已合并到原分支" : "派发模式已禁用",
+      event: `派发模式已禁用: ${resultMessage}`,
     });
 
-    return { success: true };
+    return { success: true, message: resultMessage };
+  }
+
+  /**
+   * 获取原分支的起始 commit（用于确定派发提交范围）
+   */
+  private async getOriginalBranchCommit(
+    originalBranch: string,
+    projectRoot: string
+  ): Promise<string> {
+    // 获取原分支的 HEAD commit
+    const { stdout } = await import("child_process").then(cp =>
+      import("util").then(util =>
+        util.promisify(cp.exec)(`git rev-parse "${originalBranch}"`, { cwd: projectRoot })
+      )
+    );
+    return stdout.trim();
+  }
+
+  /**
+   * 禁用派发模式（兼容旧接口，直接合并）
+   * @deprecated 使用 queryDisableDispatch + executeDisableChoice 代替
+   */
+  async disableDispatch(
+    workspaceId: string,
+    projectRoot: string,
+    merge: boolean = false
+  ): Promise<{ success: boolean }> {
+    if (merge) {
+      return this.executeDisableChoice(projectRoot, {
+        workspaceId,
+        mergeStrategy: "squash",
+        keepBackupBranch: false,
+        keepProcessBranch: false,
+      });
+    } else {
+      return this.executeDisableChoice(projectRoot, {
+        workspaceId,
+        mergeStrategy: "skip",
+        keepBackupBranch: false,
+        keepProcessBranch: false,
+      });
+    }
   }
 
   /**

@@ -290,3 +290,163 @@ export async function isOnProcessBranch(
   const currentBranch = await getCurrentBranch(cwd);
   return currentBranch === `${PROCESS_PREFIX}/${workspaceId}`;
 }
+
+/**
+ * 获取两个提交之间的提交列表
+ * @returns 提交列表，每项包含 hash 和 message
+ */
+export async function getCommitsBetween(
+  fromCommit: string,
+  toCommit: string,
+  cwd?: string
+): Promise<Array<{ hash: string; message: string }>> {
+  try {
+    const { stdout } = await execGit(
+      `log --oneline ${fromCommit}..${toCommit}`,
+      cwd
+    );
+    return stdout
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const [hash, ...messageParts] = line.split(" ");
+        return { hash, message: messageParts.join(" ") };
+      });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 获取未提交修改的摘要
+ */
+export async function getUncommittedChangesSummary(
+  cwd?: string
+): Promise<{ files: number; insertions: number; deletions: number } | null> {
+  try {
+    const { stdout: statusOutput } = await execGit("status --porcelain", cwd);
+    if (!statusOutput.trim()) {
+      return null;
+    }
+
+    const files = statusOutput.trim().split("\n").length;
+
+    // 尝试获取 diff 统计，但对于未跟踪文件可能不准确
+    try {
+      const { stdout: diffOutput } = await execGit("diff --stat HEAD", cwd);
+      const match = diffOutput.match(/(\d+) insertions?.*?(\d+) deletions?/);
+      if (match) {
+        return {
+          files,
+          insertions: parseInt(match[1], 10),
+          deletions: parseInt(match[2], 10),
+        };
+      }
+    } catch {
+      // 忽略 diff 错误
+    }
+
+    return { files, insertions: 0, deletions: 0 };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Squash 合并派发分支到目标分支
+ * @returns 新的 commit hash
+ */
+export async function squashMergeProcessBranch(
+  workspaceId: string,
+  targetBranch: string,
+  commitMessage: string,
+  cwd?: string
+): Promise<string> {
+  const processBranch = `${PROCESS_PREFIX}/${workspaceId}`;
+
+  // 切换到目标分支
+  await execGit(`checkout "${targetBranch}"`, cwd);
+
+  // Squash 合并（不自动提交）
+  await execGit(`merge --squash "${processBranch}"`, cwd);
+
+  // 提交
+  await execGit(`commit -m "${commitMessage}"`, cwd);
+
+  return getCurrentCommit(cwd);
+}
+
+/**
+ * Rebase 合并派发分支（保留独立提交，线性历史）
+ */
+export async function rebaseMergeProcessBranch(
+  workspaceId: string,
+  targetBranch: string,
+  cwd?: string
+): Promise<void> {
+  const processBranch = `${PROCESS_PREFIX}/${workspaceId}`;
+
+  // 切换到目标分支
+  await execGit(`checkout "${targetBranch}"`, cwd);
+
+  // Fast-forward 合并（如果可能）或 rebase
+  try {
+    await execGit(`merge --ff-only "${processBranch}"`, cwd);
+  } catch {
+    // 如果不能 fast-forward，使用 rebase
+    await execGit(`rebase "${processBranch}"`, cwd);
+  }
+}
+
+/**
+ * Cherry-pick 派发分支的提交到工作区（不提交）
+ * @param fromCommit - 起始提交（不包含）
+ */
+export async function cherryPickToWorkingTree(
+  workspaceId: string,
+  targetBranch: string,
+  fromCommit: string,
+  cwd?: string
+): Promise<void> {
+  const processBranch = `${PROCESS_PREFIX}/${workspaceId}`;
+
+  // 切换到目标分支
+  await execGit(`checkout "${targetBranch}"`, cwd);
+
+  // 获取要 cherry-pick 的提交
+  const commits = await getCommitsBetween(fromCommit, processBranch, cwd);
+
+  if (commits.length === 0) {
+    return;
+  }
+
+  // 从旧到新 cherry-pick（不提交）
+  const commitHashes = commits.map((c) => c.hash).reverse();
+  for (const hash of commitHashes) {
+    try {
+      await execGit(`cherry-pick --no-commit ${hash}`, cwd);
+    } catch {
+      // 如果有冲突，保持当前状态让用户处理
+      break;
+    }
+  }
+}
+
+/**
+ * 获取备份分支名（最新的一个）
+ */
+export async function getLatestBackupBranch(
+  workspaceId: string,
+  cwd?: string
+): Promise<string | null> {
+  const pattern = `${BACKUP_PREFIX}/${workspaceId}/*`;
+  const branches = await listBranches(pattern, cwd);
+
+  if (branches.length === 0) {
+    return null;
+  }
+
+  // 按时间戳排序，返回最新的
+  return branches.sort().reverse()[0];
+}

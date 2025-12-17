@@ -146,21 +146,28 @@ export const dispatchEnableTool: Tool = {
 
 /**
  * dispatch_disable 工具定义
- * 禁用派发模式
+ * 禁用派发模式（第一步：查询状态，返回选项）
  */
 export const dispatchDisableTool: Tool = {
   name: "dispatch_disable",
-  description: `禁用工作区的派发模式。
+  description: `禁用派发模式第一步：查询当前状态并返回合并选项。
 
-**选项**：
-- merge=true: 将派发分支的更改合并到原分支
-- merge=false: 直接切回原分支，丢弃派发分支的更改
+**返回内容**：
+- 原分支名称
+- 备份分支信息（如有未提交修改）
+- 派发分支上的提交列表
+- actionRequired: 包含合并策略选项和分支保留选项
 
-**执行内容**：
-- 切换回原分支
-- 可选：合并派发分支
-- 清理派发相关分支
-- 更新工作区配置`,
+**合并策略**：
+- sequential: 按顺序合并，保留每个任务的独立提交（线性历史）
+- squash: 压缩为一个提交，最干净的历史
+- cherry-pick: 遴选到工作区但不提交，方便用户手动调整
+- skip: 暂不合并，保留分支稍后处理
+
+**使用流程**：
+1. 调用 dispatch_disable 获取状态和选项
+2. 根据 actionRequired 向用户展示选项
+3. 调用 dispatch_disable_execute 执行用户选择`,
   inputSchema: {
     type: "object",
     properties: {
@@ -168,12 +175,58 @@ export const dispatchDisableTool: Tool = {
         type: "string",
         description: "工作区 ID",
       },
-      merge: {
-        type: "boolean",
-        description: "是否将派发分支合并到原分支（默认 false）",
-      },
     },
     required: ["workspaceId"],
+  },
+};
+
+/**
+ * dispatch_disable_execute 工具定义
+ * 执行禁用派发（第二步：根据用户选择执行）
+ */
+export const dispatchDisableExecuteTool: Tool = {
+  name: "dispatch_disable_execute",
+  description: `禁用派发模式第二步：执行用户选择的合并策略。
+
+**参数说明**：
+- mergeStrategy: 合并策略
+  - "sequential": 按顺序合并（rebase/fast-forward）
+  - "squash": 压缩合并为单一提交
+  - "cherry-pick": 遴选修改到工作区（不提交）
+  - "skip": 不合并，仅切回原分支
+- keepBackupBranch: 是否保留备份分支
+- keepProcessBranch: 是否保留派发分支
+- commitMessage: squash 合并时的提交信息（可选）
+
+**注意**：
+- cherry-pick 策略会将所有修改应用到工作区但不提交，用户可手动调整后提交
+- skip 策略会自动保留派发分支，忽略 keepProcessBranch 设置`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+      mergeStrategy: {
+        type: "string",
+        enum: ["sequential", "squash", "cherry-pick", "skip"],
+        description: "合并策略",
+      },
+      keepBackupBranch: {
+        type: "boolean",
+        description: "是否保留备份分支（默认 false）",
+      },
+      keepProcessBranch: {
+        type: "boolean",
+        description: "是否保留派发分支（默认 false）",
+      },
+      commitMessage: {
+        type: "string",
+        description: "squash 合并时的提交信息（可选）",
+      },
+    },
+    required: ["workspaceId", "mergeStrategy"],
   },
 };
 
@@ -186,4 +239,5 @@ export const dispatchTools: Tool[] = [
   dispatchCleanupTool,
   dispatchEnableTool,
   dispatchDisableTool,
+  dispatchDisableExecuteTool,
 ];

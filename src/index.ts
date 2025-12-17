@@ -198,6 +198,8 @@ function createMcpServer(services: Services): Server {
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
             rulesHash: args?.rulesHash as string | undefined,
             role: args?.role as "info_collection" | "validation" | "summary" | undefined,
+            createTestNode: args?.createTestNode as { title: string; requirement: string } | undefined,
+            pairWithExecNode: args?.pairWithExecNode as string | undefined,
           });
           break;
 
@@ -388,9 +390,25 @@ function createMcpServer(services: Services): Server {
 
         case "dispatch_disable": {
           const workspaceId = args?.workspaceId as string;
-          const merge = args?.merge as boolean | undefined;
           const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
-          result = await services.dispatch.disableDispatch(workspaceId, projectRoot, merge);
+          result = await services.dispatch.queryDisableDispatch(workspaceId, projectRoot);
+          break;
+        }
+
+        case "dispatch_disable_execute": {
+          const workspaceId = args?.workspaceId as string;
+          const mergeStrategy = args?.mergeStrategy as "sequential" | "squash" | "cherry-pick" | "skip";
+          const keepBackupBranch = args?.keepBackupBranch as boolean | undefined;
+          const keepProcessBranch = args?.keepProcessBranch as boolean | undefined;
+          const commitMessage = args?.commitMessage as string | undefined;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.executeDisableChoice(projectRoot, {
+            workspaceId,
+            mergeStrategy,
+            keepBackupBranch: keepBackupBranch ?? false,
+            keepProcessBranch: keepProcessBranch ?? false,
+            commitMessage,
+          });
           break;
         }
 

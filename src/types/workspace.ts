@@ -131,12 +131,13 @@ export interface ProjectDocsScanResult {
  * AI 必须执行的行为类型
  */
 export type ActionRequiredType =
-  | "ask_user"          // 询问用户（如：是否有相关文档）
-  | "show_plan"         // 向用户展示计划并等待确认
-  | "check_docs"        // 提醒用户检查文档是否需要更新
-  | "review_structure"  // reopen 时先查看现有结构再决定下一步
-  | "ask_dispatch"      // 询问用户是否启用派发模式
-  | "dispatch_task";    // 指示 AI 使用 Task tool 派发任务
+  | "ask_user"                 // 询问用户（如：是否有相关文档）
+  | "show_plan"                // 向用户展示计划并等待确认
+  | "check_docs"               // 提醒用户检查文档是否需要更新
+  | "review_structure"         // reopen 时先查看现有结构再决定下一步
+  | "ask_dispatch"             // 询问用户是否启用派发模式
+  | "dispatch_task"            // 指示 AI 使用 Task tool 派发任务
+  | "dispatch_complete_choice";// 派发完成，让用户选择合并策略
 
 /**
  * AI 必须执行的行为
