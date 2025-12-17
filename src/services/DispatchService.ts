@@ -99,14 +99,14 @@ export class DispatchService {
 
     // 4. 检查是否有未提交内容
     if (await hasUncommittedChanges(projectRoot)) {
-      // 创建备份分支
+      // 创建备份分支（包含未提交修改）
       const backupBranch = await createBackupBranch(workspaceId, projectRoot);
       backupBranches.push(backupBranch);
-      // 切回原分支
-      await checkoutBranch(originalBranch, projectRoot);
+      // 注意：不切回原分支，直接从 backup（包含修改）创建 process 分支
+      // 这样 process 分支会包含所有未提交的修改
     }
 
-    // 5. 创建派发分支
+    // 5. 从当前 HEAD 创建派发分支（如果有备份，则基于备份；否则基于原分支）
     const processBranch = await createProcessBranch(workspaceId, projectRoot);
 
     // 6. 构建派发配置
