@@ -23,20 +23,15 @@
 ### 安装
 
 ```bash
-git clone https://github.com/tanmika/TanmiWorkspace.git
+git clone <this project url>
 cd TanmiWorkspace
 npm install
 npm run build
 ```
 
-### 配置 Claude Code（推荐）
+### 配置MCP
 
-1. 运行配置脚本添加 MCP 权限：
-```bash
-./scripts/setup-claude-code.sh
-```
-
-2. 编辑 `~/.claude/settings.json`，添加 MCP 服务器：
+编辑 `~/{AI_TOOL_NAME}/settings.json`，添加 MCP 服务器：
 ```json
 {
   "mcpServers": {
@@ -51,42 +46,36 @@ npm run build
 }
 ```
 
-3. 启动 Claude Code：
-```bash
-claude
-```
-
 > 详细配置说明见 [配置方式.md](配置方式.md)
 
 ### 验证安装
 
-```
-调用 tanmi_help(topic="overview") 获取系统概述
-```
+向 AI 说：
+
+> "使用工作台，介绍一下你自己。"
+
+如果返回 TanmiWorkspace 的介绍信息，说明配置成功。
 
 ## 基本用法
 
-```typescript
-// 1. 创建工作区
-workspace_init({ name: "实现登录功能", goal: "添加用户名密码登录" })
+向 AI 发出指令即可开始使用：
 
-// 2. 创建信息收集节点（根节点启动前必须）
-node_create({ workspaceId: "ws-xxx", parentId: "root", type: "planning",
-              title: "需求调研", role: "info_collection", rulesHash: "xxx" })
+> **你**："使用工作台，帮我实现用户登录功能。"
+>
+> **AI**："工作区已创建。正在分析项目结构...
+>
+> 计划如下：
+> 1. 设计 users 表
+> 2. 实现登录接口
+> 3. 添加 JWT 认证
+>
+> 确认后开始执行。"
+>
+> **你**："开始。"
+>
+> **AI**："正在执行'设计 users 表'..."
 
-// 3. 完成信息收集后，创建执行任务
-node_create({ workspaceId: "ws-xxx", parentId: "root", type: "execution",
-              title: "实现登录接口", requirement: "使用 JWT 认证", rulesHash: "xxx" })
-
-// 4. 开始执行
-node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "start" })
-
-// 5. 记录过程
-log_append({ workspaceId: "ws-xxx", nodeId: "node-xxx", operator: "AI", event: "创建表结构" })
-
-// 6. 完成任务
-node_transition({ workspaceId: "ws-xxx", nodeId: "node-xxx", action: "complete", conclusion: "完成" })
-```
+AI 会自动处理工作区创建、节点管理、日志记录等操作。你只需通过自然语言与 AI 对话即可。
 
 ## 节点类型与状态
 
@@ -187,19 +176,17 @@ pending → planning → monitoring → completed
 
 ## AI 使用指南
 
-```typescript
-// 获取完整指南
-tanmi_help({ topic: "all" })
+AI 内置使用指南，可通过自然语言查询：
 
-// 场景指导
-tanmi_help({ topic: "start" })           // 开始新任务
-tanmi_help({ topic: "resume" })          // 继续任务
-tanmi_help({ topic: "session_restore" }) // 会话恢复
-tanmi_help({ topic: "blocked" })         // 任务受阻
-tanmi_help({ topic: "split" })           // 分裂任务
-tanmi_help({ topic: "complete" })        // 完成任务
-tanmi_help({ topic: "docs" })            // 文档引用管理
-```
+| 场景 | 示例指令 |
+|------|---------|
+| 开始新任务 | "使用工作台，帮我实现 xxx 功能" |
+| 继续任务 | "继续之前的登录功能任务" |
+| 查看进度 | "当前任务状态如何？" |
+| 任务受阻 | "这个步骤遇到问题了" |
+| 拆分任务 | "这个任务太大了，拆分一下" |
+| 完成任务 | "这个步骤已完成" |
+| 归档任务 | "把这个任务归档" |
 
 ## Web 界面
 
@@ -314,20 +301,14 @@ beforeSubmitPrompt 触发
 |------|---------|------|
 | 错误检测 | AI 响应中包含错误/阻碍关键词 | 30秒 |
 
-### 使用示例
+### 使用流程
 
-```typescript
-// 1. AI 收到 Hook 注入的会话 ID 后，查看可用工作区
-session_status({ sessionId: "abc123" })
+1. **会话开始**：Hook 自动注入会话 ID
+2. **绑定工作区**：AI 根据用户指令自动绑定到对应工作区
+3. **智能提醒**：执行过程中 Hook 自动注入上下文和提醒
+4. **任务完成**：工作区归档后自动解绑
 
-// 2. 绑定到指定工作区
-session_bind({ sessionId: "abc123", workspaceId: "ws-xxx" })
-
-// 3. 之后正常使用工作区工具，Hook 会自动注入上下文
-
-// 4. 完成后解绑
-session_unbind({ sessionId: "abc123" })
-```
+用户无需手动操作，AI 会根据对话内容自动处理绑定和解绑。
 
 ### 注意事项
 
