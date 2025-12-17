@@ -188,6 +188,41 @@ AI 内置使用指南，可通过自然语言查询：
 | 完成任务 | "这个步骤已完成" |
 | 归档任务 | "把这个任务归档" |
 
+## OpenSpec 导入
+
+支持将 [OpenSpec](https://github.com/anthropics/openspec) 变更规范导入为 TanmiWorkspace 工作区，便于跟踪和执行已规划的任务。
+
+### 使用方式
+
+向 AI 说：
+
+> "导入 OpenSpec 变更到工作台"
+
+AI 会引导你完成以下流程：
+
+1. **列出可用变更**：展示 OpenSpec 目录中的所有变更及进度
+2. **获取导入引导**：读取变更的 proposal、tasks、design 等文件
+3. **确认导入**：向你展示理解的内容，确认后执行导入
+4. **核对结果**：检查导入的节点结构，补充缺失的细节
+
+### 导入内容映射
+
+| OpenSpec | TanmiWorkspace |
+|----------|----------------|
+| `proposal.md` | 工作区目标、规则 |
+| `tasks.md` 任务组 | 规划节点 |
+| `tasks.md` 任务项 | 执行节点 |
+| `design.md` | 工作区文档 |
+| `specs/*.md` | 工作区文档 |
+| 任务完成状态 | 节点 completed 状态 |
+
+### 相关工具
+
+| 工具 | 说明 |
+|------|------|
+| `workspace_import_list` | 列出可导入的变更 |
+| `workspace_import_guide` | 获取导入引导和命令 |
+
 ## Web 界面
 
 TanmiWorkspace 提供可视化 Web 界面：
@@ -388,6 +423,7 @@ web/
 ## 文档
 
 - [配置方式.md](配置方式.md) - 详细配置指南
+- [docs/user-guide.md](docs/user-guide.md) - 用户指南
 - [docs/architecture.md](docs/architecture.md) - 系统架构
 - [docs/core-layer.md](docs/core-layer.md) - 核心服务层
 - [docs/storage-layer.md](docs/storage-layer.md) - 存储层
