@@ -44,6 +44,14 @@ export const ErrorCodes = {
   GRAPH_CORRUPTED: "GRAPH_CORRUPTED",
   NODE_DIR_MISSING: "NODE_DIR_MISSING",
   NODE_INFO_MISSING: "NODE_INFO_MISSING",
+
+  // 派发错误
+  GIT_NOT_FOUND: "GIT_NOT_FOUND",
+  DISPATCH_CONFLICT: "DISPATCH_CONFLICT",
+  DISPATCH_NOT_ENABLED: "DISPATCH_NOT_ENABLED",
+  INVALID_NODE_STATUS: "INVALID_NODE_STATUS",
+  INVALID_TEST_NODE: "INVALID_TEST_NODE",
+  EXEC_NODE_NOT_FOUND: "EXEC_NODE_NOT_FOUND",
 } as const;
 
 /**
@@ -95,4 +103,10 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   GRAPH_CORRUPTED: "节点图数据损坏",
   NODE_DIR_MISSING: "节点目录不存在",
   NODE_INFO_MISSING: "节点 Info.md 不存在",
+  GIT_NOT_FOUND: "当前项目不是 git 仓库",
+  DISPATCH_CONFLICT: "已有其他工作区正在派发中",
+  DISPATCH_NOT_ENABLED: "派发模式未启用",
+  INVALID_NODE_STATUS: "节点状态不符合操作要求",
+  INVALID_TEST_NODE: "无效的测试节点",
+  EXEC_NODE_NOT_FOUND: "关联的执行节点不存在",
 };

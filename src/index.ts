@@ -24,6 +24,7 @@ import { logTools } from "./tools/log.js";
 import { sessionTools } from "./tools/session.js";
 import { helpTools, type HelpTopic, type PromptTemplate } from "./tools/help.js";
 import { importTools } from "./tools/import.js";
+import { dispatchTools } from "./tools/dispatch.js";
 import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
@@ -110,6 +111,7 @@ function createMcpServer(services: Services): Server {
       ...sessionTools,
       ...helpTools,
       ...importTools,
+      ...dispatchTools,
     ],
   }));
 
@@ -373,6 +375,47 @@ function createMcpServer(services: Services): Server {
 
           const changes = listChanges(path);
           result = { type, changes };
+          break;
+        }
+
+        // Dispatch 工具
+        case "dispatch_enable": {
+          const workspaceId = args?.workspaceId as string;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.enableDispatch(workspaceId, projectRoot);
+          break;
+        }
+
+        case "dispatch_disable": {
+          const workspaceId = args?.workspaceId as string;
+          const merge = args?.merge as boolean | undefined;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.disableDispatch(workspaceId, projectRoot, merge);
+          break;
+        }
+
+        case "node_dispatch": {
+          const workspaceId = args?.workspaceId as string;
+          const nodeId = args?.nodeId as string;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.prepareDispatch(workspaceId, projectRoot, nodeId);
+          break;
+        }
+
+        case "node_dispatch_complete": {
+          const workspaceId = args?.workspaceId as string;
+          const nodeId = args?.nodeId as string;
+          const success = args?.success as boolean;
+          const conclusion = args?.conclusion as string | undefined;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.completeDispatch(workspaceId, projectRoot, nodeId, success, conclusion);
+          break;
+        }
+
+        case "dispatch_cleanup": {
+          const workspaceId = args?.workspaceId as string;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.cleanupBranches(workspaceId, projectRoot);
           break;
         }
 

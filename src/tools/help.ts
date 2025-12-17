@@ -27,6 +27,7 @@ export const helpTools: Tool[] = [
 - progress: 如何查看和报告进度
 - guide: 如何引导不熟悉的用户
 - docs: 文档引用管理（派发、查找、生命周期）
+- dispatch: 派发模式（subagent 执行、自动验证、失败回滚）
 - all: 获取完整指南
 
 **使用场景**：
@@ -38,8 +39,8 @@ export const helpTools: Tool[] = [
       properties: {
         topic: {
           type: "string",
-          description: "帮助主题：overview, workflow, tools, start, resume, session_restore, blocked, split, complete, progress, guide, docs, all",
-          enum: ["overview", "workflow", "tools", "start", "resume", "session_restore", "blocked", "split", "complete", "progress", "guide", "docs", "all"]
+          description: "帮助主题：overview, workflow, tools, start, resume, session_restore, blocked, split, complete, progress, guide, docs, dispatch, all",
+          enum: ["overview", "workflow", "tools", "start", "resume", "session_restore", "blocked", "split", "complete", "progress", "guide", "docs", "dispatch", "all"]
         }
       },
       required: ["topic"]
@@ -81,7 +82,7 @@ export const helpTools: Tool[] = [
 /**
  * 帮助主题类型
  */
-export type HelpTopic = "overview" | "workflow" | "tools" | "start" | "resume" | "session_restore" | "blocked" | "split" | "complete" | "progress" | "guide" | "docs" | "all";
+export type HelpTopic = "overview" | "workflow" | "tools" | "start" | "resume" | "session_restore" | "blocked" | "split" | "complete" | "progress" | "guide" | "docs" | "dispatch" | "all";
 
 /**
  * 提示模板类型

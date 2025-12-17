@@ -7,3 +7,11 @@ export { contextTools, contextGetTool, contextFocusTool, nodeIsolateTool, nodeRe
 export { logTools, logAppendTool, problemUpdateTool, problemClearTool } from "./log.js";
 export { sessionTools, sessionBindTool, sessionUnbindTool, sessionStatusTool } from "./session.js";
 export { importTools, workspaceImportGuideTool, workspaceImportListTool } from "./import.js";
+export {
+  dispatchTools,
+  nodeDispatchTool,
+  nodeDispatchCompleteTool,
+  dispatchCleanupTool,
+  dispatchEnableTool,
+  dispatchDisableTool,
+} from "./dispatch.js";

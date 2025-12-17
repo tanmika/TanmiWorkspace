@@ -294,6 +294,69 @@ cleanup_shared_if_unused() {
 }
 
 # ============================================================================
+# Dispatch Agent 安装（项目级）
+# ============================================================================
+
+# 安装派发 Agent 到当前项目
+install_dispatch_agents() {
+    info "安装派发 Agent 模板..."
+
+    # 检查是否有模板文件
+    if [ ! -f "$PROJECT_ROOT/templates/tanmi-executor.md" ]; then
+        error "模板文件不存在: $PROJECT_ROOT/templates/tanmi-executor.md"
+        return 1
+    fi
+
+    if [ ! -f "$PROJECT_ROOT/templates/tanmi-tester.md" ]; then
+        error "模板文件不存在: $PROJECT_ROOT/templates/tanmi-tester.md"
+        return 1
+    fi
+
+    # 获取目标项目目录（当前工作目录）
+    local target_dir="${TARGET_PROJECT:-$(pwd)}"
+    local agents_dir="$target_dir/.claude/agents"
+
+    # 创建 agents 目录
+    mkdir -p "$agents_dir"
+
+    # 复制模板文件
+    cp "$PROJECT_ROOT/templates/tanmi-executor.md" "$agents_dir/"
+    cp "$PROJECT_ROOT/templates/tanmi-tester.md" "$agents_dir/"
+
+    success "派发 Agent 已安装到 $agents_dir/"
+    info "  - tanmi-executor.md (任务执行者)"
+    info "  - tanmi-tester.md (任务测试者)"
+}
+
+# 卸载派发 Agent
+uninstall_dispatch_agents() {
+    info "卸载派发 Agent 模板..."
+
+    # 获取目标项目目录
+    local target_dir="${TARGET_PROJECT:-$(pwd)}"
+    local agents_dir="$target_dir/.claude/agents"
+
+    # 删除模板文件
+    if [ -f "$agents_dir/tanmi-executor.md" ]; then
+        rm "$agents_dir/tanmi-executor.md"
+        success "已删除 $agents_dir/tanmi-executor.md"
+    fi
+
+    if [ -f "$agents_dir/tanmi-tester.md" ]; then
+        rm "$agents_dir/tanmi-tester.md"
+        success "已删除 $agents_dir/tanmi-tester.md"
+    fi
+
+    # 如果 agents 目录为空，删除目录
+    if [ -d "$agents_dir" ] && [ -z "$(ls -A "$agents_dir")" ]; then
+        rmdir "$agents_dir"
+        success "已删除空目录 $agents_dir"
+    fi
+
+    success "派发 Agent 模板已卸载"
+}
+
+# ============================================================================
 # 交互式菜单
 # ============================================================================
 
@@ -306,14 +369,20 @@ show_menu() {
     echo "项目路径: $PROJECT_ROOT"
     echo "安装目录: $TANMI_HOME"
     echo ""
-    echo "可安装的功能："
+    echo "Hook 功能（全局）："
     echo ""
     echo "  1) Claude Code Hook - 自动注入工作区上下文"
     echo "  2) Cursor Hook      - 自动注入工作区上下文"
-    echo "  3) 全部安装 (Claude Code + Cursor)"
+    echo "  3) 全部 Hook 安装 (Claude Code + Cursor)"
     echo "  4) 卸载 Claude Code Hook"
     echo "  5) 卸载 Cursor Hook"
-    echo "  6) 全部卸载"
+    echo "  6) 全部 Hook 卸载"
+    echo ""
+    echo "派发功能（项目级，安装到当前目录）："
+    echo ""
+    echo "  7) 安装派发 Agent 模板"
+    echo "  8) 卸载派发 Agent 模板"
+    echo ""
     echo "  0) 退出"
     echo ""
 }
@@ -376,16 +445,28 @@ main() {
                 uninstall_cursor_hooks
                 cleanup_shared_if_unused
                 ;;
+            --dispatch-agents)
+                install_dispatch_agents
+                ;;
+            --uninstall-dispatch-agents)
+                uninstall_dispatch_agents
+                ;;
             --help)
                 echo "用法: $0 [选项]"
                 echo ""
-                echo "选项:"
+                echo "Hook 选项（全局）:"
                 echo "  --claude-hooks           安装 Claude Code Hook 系统"
                 echo "  --cursor-hooks           安装 Cursor Hook 系统"
                 echo "  --hooks, --all           安装所有 Hook 系统"
                 echo "  --uninstall-claude-hooks 卸载 Claude Code Hook 系统"
                 echo "  --uninstall-cursor-hooks 卸载 Cursor Hook 系统"
                 echo "  --uninstall-hooks        卸载所有 Hook 系统"
+                echo ""
+                echo "派发 Agent 选项（项目级，安装到当前目录）:"
+                echo "  --dispatch-agents        安装派发 Agent 模板"
+                echo "  --uninstall-dispatch-agents 卸载派发 Agent 模板"
+                echo ""
+                echo "其他:"
                 echo "  --help                   显示帮助"
                 echo ""
                 echo "不带参数运行将显示交互式菜单"
@@ -402,7 +483,7 @@ main() {
     # 交互式菜单
     while true; do
         show_menu
-        read -p "请选择 [0-6]: " choice
+        read -p "请选择 [0-8]: " choice
         echo ""
 
         case $choice in
@@ -438,6 +519,12 @@ main() {
                 uninstall_cursor_hooks
                 cleanup_shared_if_unused
                 success "所有 Hook 系统已卸载"
+                ;;
+            7)
+                install_dispatch_agents
+                ;;
+            8)
+                uninstall_dispatch_agents
                 ;;
             0)
                 info "退出安装脚本"

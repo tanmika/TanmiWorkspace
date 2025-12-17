@@ -19,6 +19,7 @@ import type {
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
 import type { DocRef } from "../types/workspace.js";
+import { isGitRepo } from "../utils/git.js";
 
 /**
  * 执行节点状态转换规则表
@@ -263,6 +264,15 @@ export class StateService {
     // 12. 添加工作流提示（根据节点类型）
     result.hint = this.generateHint(nodeType, action, nodeMeta, graph, archiveResult, infoCollectionWarning, nodeDocRefs);
 
+    // 12.1 如果派发模式启用，追加派发相关提示
+    if (config.dispatch?.enabled && nodeType === "execution") {
+      if (action === "start") {
+        result.hint += "\n\n🚀 **派发模式已启用**：请使用 node_dispatch 将任务派发给 subagent 执行，而非直接执行。派发后根据返回的 actionRequired 调用 Task tool。";
+      } else if (action === "complete" && nodeMeta.testNodeId) {
+        result.hint += `\n\n🧪 **测试验证**：执行节点完成，配对的测试节点 ${nodeMeta.testNodeId} 将自动触发验证。`;
+      }
+    }
+
     // 13. 添加 actionRequired（执行节点完成且有文档引用时）
     if (nodeType === "execution" && action === "complete" && nodeDocRefs && nodeDocRefs.length > 0) {
       result.actionRequired = {
@@ -295,7 +305,62 @@ export class StateService {
       };
     }
 
+    // 15. 添加 actionRequired（ask_dispatch - 首次执行节点启动时询问是否启用派发）
+    if (nodeType === "execution" && action === "start" && !result.actionRequired) {
+      // 检查是否应该询问派发：
+      // 1. 工作区尚未启用派发
+      // 2. 项目是 git 仓库
+      // 3. 这是第一个开始执行的非信息收集节点
+      if (!config.dispatch?.enabled) {
+        const isFirstExecution = this.isFirstNonInfoCollectionExecution(graph.nodes, nodeMeta, nodeId);
+        if (isFirstExecution) {
+          try {
+            const isGit = await isGitRepo(projectRoot);
+            if (isGit) {
+              result.actionRequired = {
+                type: "ask_dispatch",
+                message: "检测到项目是 Git 仓库，是否启用派发模式？派发模式允许将执行节点任务交给独立的 subagent 执行，支持自动测试验证和失败回滚。",
+                data: {
+                  projectRoot,
+                  workspaceId,
+                },
+              };
+            }
+          } catch {
+            // 检测失败，跳过派发询问
+          }
+        }
+      }
+    }
+
     return result;
+  }
+
+  /**
+   * 检查是否是第一个非信息收集的执行节点启动
+   */
+  private isFirstNonInfoCollectionExecution(
+    nodes: Record<string, NodeMeta>,
+    currentNode: NodeMeta,
+    currentNodeId: string
+  ): boolean {
+    // 如果当前节点有 info_collection 角色，不算
+    if (currentNode.role === "info_collection") {
+      return false;
+    }
+
+    // 检查是否有其他非信息收集的执行节点已经启动过
+    for (const [nodeId, node] of Object.entries(nodes)) {
+      if (nodeId === currentNodeId) continue;
+      if (node.type !== "execution") continue;
+      if (node.role === "info_collection") continue;
+      // 如果有其他执行节点不是 pending 状态，说明已经开始过
+      if (node.status !== "pending") {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
