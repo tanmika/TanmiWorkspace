@@ -50,7 +50,13 @@
       "mcp__tanmi-workspace__workspace_import_guide",
       "Bash(npx tsc:*)",
       "Bash(git merge:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(for ws in ws-mj73w8f7-cx0zn4 ws-mj75nd5a-mr02zx ws-mj6y5i82-rravb9)",
+      "Bash(do echo '=== $ws ===' find ~/.tanmi-workspace-dev/$ws/nodes -name Info.md)",
+      "Bash(while read f)",
+      "Bash(do echo '--- $(basename $(dirname $f)) ---' grep -A 10 '## 文档引用' $f)",
+      "mcp__tanmi-workspace__workspace_restore",
+      "mcp__tanmi-workspace__tanmi_prompt"
     ]
   }
 }

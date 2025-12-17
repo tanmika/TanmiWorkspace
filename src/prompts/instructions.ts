@@ -196,7 +196,7 @@ export const CORE_WORKFLOW = `
 
 | type | 触发场景 | 你必须做什么 |
 |------|----------|-------------|
-| \`ask_user\` | workspace_init 无文档 | 询问用户是否有相关的需求文档、设计文档或 API 文档 |
+| \`ask_user\` | workspace_init 完成 | 有文档时询问是否使用；无文档时询问用户是否有其他文档可提供 |
 | \`show_plan\` | node_create 创建计划节点后 | 向用户展示当前计划，等待用户确认（"好"/"继续"/"可以"）后再执行 |
 | \`check_docs\` | 执行节点完成且有文档引用 | 向用户确认引用的文档是否需要同步更新 |
 | \`review_structure\` | reopen 且有子节点 | 先调用 node_list/workspace_status 查看现有结构，评估是否调整现有节点而非创建新节点 |

@@ -207,11 +207,27 @@ export class WorkspaceService {
       projectDocs,
     };
 
-    // 无文档时添加 actionRequired
-    if (projectDocs.totalFound === 0) {
+    // 文档相关的 actionRequired
+    if (projectDocs.totalFound > 0) {
+      // 有文档：询问是否使用
+      result.actionRequired = {
+        type: "ask_user",
+        message: "项目中发现了文档文件，请询问用户是否需要将这些文档添加到工作区的文档引用中，以便后续任务参考。",
+        data: {
+          found: true,
+          totalFound: projectDocs.totalFound,
+          files: projectDocs.files.slice(0, 10),
+          hasMore: projectDocs.totalFound > 10,
+        },
+      };
+    } else {
+      // 无文档：询问用户是否有其他文档
       result.actionRequired = {
         type: "ask_user",
         message: "项目中未发现文档文件，请询问用户是否有相关的需求文档、设计文档或 API 文档可供参考。",
+        data: {
+          found: false,
+        },
       };
     }
 
