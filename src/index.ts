@@ -129,14 +129,40 @@ function createMcpServer(services: Services): Server {
 
       switch (name) {
         // Workspace 工具
-        case "workspace_init":
+        case "workspace_init": {
+          // 参数验证：检测常见的错误参数名
+          const wrongParamMapping: Record<string, string> = {
+            description: "goal",
+            desc: "goal",
+            objective: "goal",
+            target: "goal",
+            purpose: "goal",
+          };
+          const wrongParams = Object.keys(wrongParamMapping).filter(wrong => args?.[wrong] !== undefined);
+          if (wrongParams.length > 0) {
+            const corrections = wrongParams.map(wrong => `"${wrong}" → "${wrongParamMapping[wrong]}"`).join(", ");
+            throw new TanmiError(
+              "INVALID_PARAMS",
+              `参数名错误: ${corrections}。请使用正确的参数名重新调用。`
+            );
+          }
+
+          // 验证必填参数
+          if (!args?.name) {
+            throw new TanmiError("INVALID_PARAMS", "缺少必填参数 'name'（工作区名称）");
+          }
+          if (!args?.goal) {
+            throw new TanmiError("INVALID_PARAMS", "缺少必填参数 'goal'（工作区目标描述）");
+          }
+
           result = await services.workspace.init({
-            name: args?.name as string,
-            goal: args?.goal as string,
+            name: args.name as string,
+            goal: args.goal as string,
             rules: args?.rules as string[] | undefined,
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
           });
           break;
+        }
 
         case "workspace_list":
           result = await services.workspace.list({

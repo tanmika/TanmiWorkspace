@@ -230,7 +230,7 @@ ${docsContent}
 
 ## 目标
 
-${data.goal}
+${data.goal ?? ""}
 `;
 
     await this.fs.writeFile(mdPath, content);
@@ -329,7 +329,7 @@ ${typeLabel}节点
 
 ## 需求
 
-${data.requirement}
+${data.requirement ?? ""}
 
 ## 文档引用
 
@@ -909,7 +909,7 @@ ${typeLabel}节点
 
 ## 需求
 
-${data.requirement}
+${data.requirement ?? ""}
 
 ## 文档引用
 
