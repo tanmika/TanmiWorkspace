@@ -7,6 +7,8 @@ import { useWorkspaceStore, useNodeStore } from '@/stores'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
+import EnableDispatchDialog from '@/components/dispatch/EnableDispatchDialog.vue'
+import DisableDispatchDialog from '@/components/dispatch/DisableDispatchDialog.vue'
 
 // 视图模式
 type ViewMode = 'list' | 'graph'
@@ -190,6 +192,22 @@ async function handleCreateNode() {
     ElMessage.error('创建失败')
   }
 }
+
+// 派发模式控制
+const showEnableDispatchDialog = ref(false)
+const showDisableDispatchDialog = ref(false)
+
+function handleEnableDispatch() {
+  showEnableDispatchDialog.value = true
+}
+
+function handleDisableDispatch() {
+  showDisableDispatchDialog.value = true
+}
+
+async function handleDispatchSuccess() {
+  await loadWorkspace()
+}
 </script>
 
 <template>
@@ -250,6 +268,36 @@ async function handleCreateNode() {
               <span class="progress-text">
                 {{ workspaceStore.currentStatus.completedNodes }}/{{ workspaceStore.currentStatus.totalNodes }}
               </span>
+            </div>
+          </div>
+          <div class="info-item dispatch">
+            <span class="label">派发</span>
+            <div class="dispatch-content">
+              <span v-if="workspaceStore.dispatchStatus === 'disabled'" class="dispatch-status disabled">
+                未启用
+              </span>
+              <span v-else-if="workspaceStore.dispatchStatus === 'enabled'" class="dispatch-status enabled">
+                已启用
+              </span>
+              <span v-else class="dispatch-status enabled-git">
+                已启用(Git)
+              </span>
+              <el-button
+                v-if="workspaceStore.dispatchStatus === 'disabled'"
+                size="small"
+                type="primary"
+                @click="handleEnableDispatch"
+              >
+                启用
+              </el-button>
+              <el-button
+                v-else
+                size="small"
+                type="danger"
+                @click="handleDisableDispatch"
+              >
+                关闭
+              </el-button>
             </div>
           </div>
           <el-button
@@ -391,6 +439,18 @@ async function handleCreateNode() {
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 启用派发对话框 -->
+    <EnableDispatchDialog
+      v-model="showEnableDispatchDialog"
+      @success="handleDispatchSuccess"
+    />
+
+    <!-- 禁用派发对话框 -->
+    <DisableDispatchDialog
+      v-model="showDisableDispatchDialog"
+      @success="handleDispatchSuccess"
+    />
   </div>
 </template>
 
@@ -473,6 +533,34 @@ async function handleCreateNode() {
   font-size: 13px;
   color: #606266;
   font-weight: 500;
+}
+
+.info-item.dispatch .dispatch-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-item.dispatch .dispatch-status {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.info-item.dispatch .dispatch-status.disabled {
+  color: #909399;
+  background: #f4f4f5;
+}
+
+.info-item.dispatch .dispatch-status.enabled {
+  color: #67c23a;
+  background: #f0f9ff;
+}
+
+.info-item.dispatch .dispatch-status.enabled-git {
+  color: #e6a23c;
+  background: #fdf6ec;
 }
 
 /* 工作区详情浮层 */

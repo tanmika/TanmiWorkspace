@@ -135,13 +135,18 @@ export class ContextService {
       ? crypto.createHash("md5").update(workspaceData.rules.join("\n")).digest("hex").substring(0, 8)
       : "";
 
-    // 9. 返回结果
+    // 9. 读取派发配置（如果存在）
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
+    const dispatch = config.dispatch?.enabled ? config.dispatch : undefined;
+
+    // 10. 返回结果
     return {
       workspace: {
         goal: workspaceData.goal,
         rules: workspaceData.rules,
         rulesHash,
         docs: activeDocs,
+        dispatch,
       },
       chain,
       references,

@@ -200,6 +200,8 @@ export const CORE_WORKFLOW = `
 | \`show_plan\` | node_create 创建计划节点后 | 向用户展示当前计划，等待用户确认（"好"/"继续"/"可以"）后再执行 |
 | \`check_docs\` | 执行节点完成且有文档引用 | 向用户确认引用的文档是否需要同步更新 |
 | \`review_structure\` | reopen 且有子节点 | 先调用 node_list/workspace_status 查看现有结构，评估是否调整现有节点而非创建新节点 |
+| \`ask_dispatch\` | 首个执行节点启动且项目是 Git 仓库 | 询问用户是否启用派发模式（subagent 执行 + 自动验证 + 失败回滚） |
+| \`dispatch_task\` | node_dispatch 准备完成 | 使用 Task tool 调用 subagent 执行任务，按返回的 prompt 和参数调用 |
 
 **执行示例**：
 \`\`\`
@@ -357,6 +359,21 @@ export const TOOLS_QUICK_REFERENCE = `
 | log_append | 追加日志 | workspaceId, nodeId?, operator, event |
 | problem_update | 更新问题 | workspaceId, nodeId?, problem, nextStep? |
 | problem_clear | 清除问题 | workspaceId, nodeId? |
+
+### 派发模式（可选）
+| 工具 | 用途 | 关键参数 |
+|------|------|----------|
+| dispatch_enable | 启用派发模式 | workspaceId |
+| dispatch_disable | 禁用派发模式 | workspaceId, merge? |
+| node_dispatch | 准备派发任务 | workspaceId, nodeId |
+| node_dispatch_complete | 处理派发结果 | workspaceId, nodeId, success, conclusion? |
+| dispatch_cleanup | 清理派发分支 | workspaceId, cleanupType? |
+
+**派发模式说明**：
+- 派发模式允许将执行节点任务交给独立的 subagent 执行
+- 启用后自动创建 Git 分支，支持失败回滚
+- 可配合测试节点实现自动验证
+- 使用 node_create 的 createTestNode 参数创建配对测试节点
 `;
 
 /**
@@ -832,6 +849,143 @@ node_create({
 4. 删除示例工作区
 `,
 
+  // 派发模式
+  "dispatch_mode": `
+## 场景：使用派发模式
+
+### 什么是派发模式？
+
+派发模式允许将执行节点任务交给独立的 subagent 执行。提供两种模式：
+
+| 模式 | 定位 | 推荐度 | 特性 |
+|------|------|--------|------|
+| **无 Git 模式** | 标准模式 | ✅ 推荐（默认） | 仅更新元数据，不影响代码，安全 |
+| **Git 模式** | 实验功能 | ⚠️ 谨慎使用 | 自动分支、提交、回滚，有一定风险 |
+
+**共同特性**：
+- **自动测试验证**：配对测试节点验证执行结果
+- **任务隔离**：将任务交给专门的 subagent 执行
+- **并发保护**：同一项目同时只允许一个工作区启用派发
+
+**模式差异**：
+
+| 场景 | 无 Git 模式 | Git 模式 |
+|------|------------|----------|
+| 启用派发 | 仅更新配置 | 创建派发分支 |
+| 有未提交内容 | 警告用户手动备份 | 自动创建备份分支 |
+| 执行任务 | 直接在当前目录执行 | 在派发分支执行 |
+| 任务完成 | 记录时间戳 | 自动 commit |
+| 测试失败 | 无法回滚，需手动处理 | 自动 git reset 回滚 |
+| 禁用派发 | 仅清理配置 | 4 种合并策略 |
+
+### 何时启用派发？
+
+系统会在首个执行节点启动时询问（actionRequired: ask_dispatch）。
+
+**模式选择建议**：
+
+| 场景 | 推荐模式 | 原因 |
+|------|----------|------|
+| 简单任务 | 无 Git 模式 | 轻量、安全、无副作用 |
+| 需要测试验证 | 无 Git 模式 | 测试验证不需要 git 分支隔离 |
+| 需要失败回滚 | Git 模式 | 自动回滚机制 |
+| 非 git 项目 | 无 Git 模式（自动） | 唯一可用模式 |
+| 学习探索 | 无 Git 模式 | 降低出错风险 |
+
+**无 Git 模式限制**：
+- ⚠️ 测试失败时无法自动回滚（需手动恢复代码）
+- ⚠️ 建议执行前手动备份重要文件
+- ⚠️ 并发检测通过配置文件（而非 git 分支）
+
+### 派发流程
+
+\`\`\`
+1. 用户确认启用派发
+    ↓
+dispatch_enable({ workspaceId, useGit: true/false })
+  - useGit: false（默认）→ 无 Git 模式
+  - useGit: true → Git 模式（需要项目是 git 仓库）
+    ↓
+2. 创建执行节点（可带配对测试节点）
+node_create({
+  type: "execution",
+  createTestNode: { title: "验证xxx", requirement: "验收标准" }
+})
+    ↓
+3. 启动执行节点
+node_transition({ action: "start" })
+    ↓
+4. 准备派发
+node_dispatch({ workspaceId, nodeId })
+  → 返回 actionRequired: { type: "dispatch_task", prompt: "..." }
+  → 返回 startMarker（Git 模式=commit hash，无 Git 模式=时间戳）
+    ↓
+5. 调用 Task tool 执行
+Task({ subagent_type: "tanmi-executor", prompt: "..." })
+    ↓
+6. 处理执行结果
+node_dispatch_complete({ success: true/false, conclusion: "..." })
+  → 成功时返回 endMarker（Git 模式=commit hash，无 Git 模式=时间戳）
+    ↓
+7. 如果有测试节点，自动触发测试
+    ↓
+8. 完成后禁用派发
+dispatch_disable({ workspaceId })
+  → 返回 actionRequired: { type: "dispatch_complete_choice", ... }
+  ⚠️ **必须询问用户**：使用 AskUserQuestion 让用户选择：
+  - Git 模式：合并策略（sequential/squash/cherry-pick/skip）、是否保留分支
+  - 无 Git 模式：确认禁用即可
+dispatch_disable_execute({ workspaceId, mergeStrategy, ... })  // 参数来自用户选择
+\`\`\`
+
+### 测试节点验证
+
+\`\`\`typescript
+// 创建执行节点时同时创建测试节点
+node_create({
+  workspaceId: "xxx",
+  parentId: "parent",
+  type: "execution",
+  title: "实现登录功能",
+  requirement: "实现用户名密码登录",
+  createTestNode: {
+    title: "验证登录功能",
+    requirement: "1. 正确用户名密码能登录成功\\n2. 错误密码返回401"
+  }
+})
+// 返回 { nodeId: "exec-xxx", testNodeId: "test-xxx" }
+\`\`\`
+
+### 失败回滚
+
+**Git 模式**：
+当 node_dispatch_complete 传入 success: false 时：
+- 自动执行 git reset --hard 到 startMarker（commit hash）
+- 代码恢复到执行前状态
+- 可修复问题后 retry
+
+**无 Git 模式**：
+- ⚠️ 无法自动回滚
+- 需要手动恢复代码
+- 可通过 startMarker（时间戳）追溯执行时间点
+
+### 常见问题
+
+**Q: 不启用派发模式也能正常使用吗？**
+A: 可以。派发模式是可选功能，普通模式下 AI 直接执行任务。
+
+**Q: 派发失败会影响代码吗？**
+A:
+- Git 模式：不会。在独立分支执行，失败会回滚，只有测试通过才会合并。
+- 无 Git 模式：可能会。直接在当前目录执行，失败需手动恢复。
+
+**Q: 如何选择模式？**
+A: 优先使用无 Git 模式（安全、简单）。只在明确需要自动回滚时使用 Git 模式。
+
+**Q: 启用后可以切换模式吗？**
+A: 不可以。派发启用后模式不可变更，如需切换必须先 disable 再重新 enable。
+`,
+
   // 重开任务/追加需求
   "reopen_task": `
 ## 场景：重开任务或追加需求
@@ -992,6 +1146,10 @@ export const HELP_TOPICS: Record<string, { title: string; content: string }> = {
   "reopen": {
     title: "重开任务/追加需求",
     content: SCENARIO_GUIDES["reopen_task"]
+  },
+  "dispatch": {
+    title: "派发模式",
+    content: SCENARIO_GUIDES["dispatch_mode"]
   }
 };
 

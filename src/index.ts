@@ -24,6 +24,8 @@ import { logTools } from "./tools/log.js";
 import { sessionTools } from "./tools/session.js";
 import { helpTools, type HelpTopic, type PromptTemplate } from "./tools/help.js";
 import { importTools } from "./tools/import.js";
+import { dispatchTools } from "./tools/dispatch.js";
+import { configTools } from "./tools/config.js";
 import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
@@ -110,6 +112,8 @@ function createMcpServer(services: Services): Server {
       ...sessionTools,
       ...helpTools,
       ...importTools,
+      ...dispatchTools,
+      ...configTools,
     ],
   }));
 
@@ -222,6 +226,8 @@ function createMcpServer(services: Services): Server {
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
             rulesHash: args?.rulesHash as string | undefined,
             role: args?.role as "info_collection" | "validation" | "summary" | undefined,
+            createTestNode: args?.createTestNode as { title: string; requirement: string } | undefined,
+            pairWithExecNode: args?.pairWithExecNode as string | undefined,
           });
           break;
 
@@ -399,6 +405,76 @@ function createMcpServer(services: Services): Server {
 
           const changes = listChanges(path);
           result = { type, changes };
+          break;
+        }
+
+        // Dispatch 工具
+        case "dispatch_enable": {
+          const workspaceId = args?.workspaceId as string;
+          const useGit = args?.useGit as boolean | undefined;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.enableDispatch(workspaceId, projectRoot, { useGit });
+          break;
+        }
+
+        case "dispatch_disable": {
+          const workspaceId = args?.workspaceId as string;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.queryDisableDispatch(workspaceId, projectRoot);
+          break;
+        }
+
+        case "dispatch_disable_execute": {
+          const workspaceId = args?.workspaceId as string;
+          const mergeStrategy = args?.mergeStrategy as "sequential" | "squash" | "cherry-pick" | "skip";
+          const keepBackupBranch = args?.keepBackupBranch as boolean | undefined;
+          const keepProcessBranch = args?.keepProcessBranch as boolean | undefined;
+          const commitMessage = args?.commitMessage as string | undefined;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.executeDisableChoice(projectRoot, {
+            workspaceId,
+            mergeStrategy,
+            keepBackupBranch: keepBackupBranch ?? false,
+            keepProcessBranch: keepProcessBranch ?? false,
+            commitMessage,
+          });
+          break;
+        }
+
+        case "node_dispatch": {
+          const workspaceId = args?.workspaceId as string;
+          const nodeId = args?.nodeId as string;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.prepareDispatch(workspaceId, projectRoot, nodeId);
+          break;
+        }
+
+        case "node_dispatch_complete": {
+          const workspaceId = args?.workspaceId as string;
+          const nodeId = args?.nodeId as string;
+          const success = args?.success as boolean;
+          const conclusion = args?.conclusion as string | undefined;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.completeDispatch(workspaceId, projectRoot, nodeId, success, conclusion);
+          break;
+        }
+
+        case "dispatch_cleanup": {
+          const workspaceId = args?.workspaceId as string;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.cleanupBranches(workspaceId, projectRoot);
+          break;
+        }
+
+        // Config 工具
+        case "config_get": {
+          result = await services.config.get();
+          break;
+        }
+
+        case "config_set": {
+          const defaultDispatchMode = args?.defaultDispatchMode as "none" | "git" | "no-git" | undefined;
+          result = await services.config.set({ defaultDispatchMode });
           break;
         }
 

@@ -26,6 +26,27 @@ export interface WorkspaceEntry {
 export type WorkspaceStatus = "active" | "archived";
 
 /**
+ * 派发资源限制配置
+ */
+export interface DispatchLimits {
+  timeoutMs?: number;               // 单节点执行超时，默认 300000 (5分钟)
+  maxRetries?: number;              // 最大重试次数，默认 3
+}
+
+/**
+ * 派发配置 - 存储在 workspace.json 中
+ */
+export interface DispatchConfig {
+  enabled: boolean;                 // 是否启用派发模式
+  useGit: boolean;                  // 是否使用 Git 功能
+  enabledAt: number;                // 启用时间戳
+  originalBranch?: string;          // 派发前的原分支（Git 模式才有）
+  processBranch?: string;           // 当前派发分支（Git 模式才有）
+  backupBranches?: string[];        // 备份分支列表（Git 模式才有）
+  limits?: DispatchLimits;          // 资源限制
+}
+
+/**
  * 工作区配置 - 存储在 .tanmi-workspace/[workspace-id]/workspace.json
  */
 export interface WorkspaceConfig {
@@ -35,6 +56,7 @@ export interface WorkspaceConfig {
   createdAt: string;
   updatedAt: string;
   rootNodeId: string;               // 默认 "root"
+  dispatch?: DispatchConfig;        // 派发配置（可选）
 }
 
 /**
@@ -110,10 +132,13 @@ export interface ProjectDocsScanResult {
  * AI 必须执行的行为类型
  */
 export type ActionRequiredType =
-  | "ask_user"          // 询问用户（如：是否有相关文档）
-  | "show_plan"         // 向用户展示计划并等待确认
-  | "check_docs"        // 提醒用户检查文档是否需要更新
-  | "review_structure"; // reopen 时先查看现有结构再决定下一步
+  | "ask_user"                 // 询问用户（如：是否有相关文档）
+  | "show_plan"                // 向用户展示计划并等待确认
+  | "check_docs"               // 提醒用户检查文档是否需要更新
+  | "review_structure"         // reopen 时先查看现有结构再决定下一步
+  | "ask_dispatch"             // 询问用户是否启用派发模式
+  | "dispatch_task"            // 指示 AI 使用 Task tool 派发任务
+  | "dispatch_complete_choice";// 派发完成，让用户选择合并策略
 
 /**
  * AI 必须执行的行为

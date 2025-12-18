@@ -6,6 +6,7 @@ import * as fs from "node:fs/promises";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
+import { deleteAllWorkspaceBranches } from "../utils/git.js";
 import type {
   WorkspaceInitParams,
   WorkspaceInitResult,
@@ -339,6 +340,13 @@ export class WorkspaceService {
       );
     }
 
+    // 清理派发相关的 git 分支（如果存在）
+    try {
+      await deleteAllWorkspaceBranches(workspaceId, wsEntry.projectRoot);
+    } catch {
+      // 分支清理失败不阻塞删除流程
+    }
+
     // 删除项目内目录
     const workspacePath = this.fs.getWorkspacePath(wsEntry.projectRoot, workspaceId);
     if (await this.fs.exists(workspacePath)) {
@@ -443,6 +451,15 @@ export class WorkspaceService {
     lines.push("├" + "─".repeat(width - 2) + "┤");
     lines.push("│" + ` 节点统计: ${summary.completedNodes}/${summary.totalNodes} 已处理`.padEnd(width - 2) + "│");
     lines.push("│" + ` 当前聚焦: ${summary.currentFocus || "无"}`.padEnd(width - 2) + "│");
+
+    // 派发模式信息
+    if (config.dispatch?.enabled) {
+      const dispatchMode = config.dispatch.useGit ? "Git 模式" : "无 Git 模式";
+      lines.push("│" + ` 派发: 已启用 (${dispatchMode})`.padEnd(width - 2) + "│");
+    } else {
+      lines.push("│" + ` 派发: 未启用`.padEnd(width - 2) + "│");
+    }
+
     lines.push("├" + "─".repeat(width - 2) + "┤");
     lines.push("│" + " 节点树:".padEnd(width - 2) + "│");
 
@@ -476,6 +493,15 @@ export class WorkspaceService {
     lines.push("");
     lines.push(`**状态**: ${config.status}`);
     lines.push(`**目标**: ${workspaceMdData.goal}`);
+
+    // 派发模式信息
+    if (config.dispatch?.enabled) {
+      const dispatchMode = config.dispatch.useGit ? "Git 模式" : "无 Git 模式";
+      lines.push(`**派发模式**: 已启用 (${dispatchMode})`);
+    } else {
+      lines.push(`**派发模式**: 未启用`);
+    }
+
     lines.push("");
     lines.push("## 统计");
     lines.push(`- 节点总数: ${summary.totalNodes}`);
@@ -669,6 +695,13 @@ export class WorkspaceService {
     const srcPath = this.fs.getWorkspacePath(projectRoot, workspaceId);
     if (!(await this.fs.exists(srcPath))) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区目录不存在: ${srcPath}`);
+    }
+
+    // 3.1 清理派发相关的 git 分支（如果存在）
+    try {
+      await deleteAllWorkspaceBranches(workspaceId, projectRoot);
+    } catch {
+      // 分支清理失败不阻塞归档流程
     }
 
     // 4. 确保归档目录存在

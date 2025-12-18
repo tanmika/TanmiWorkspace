@@ -18,6 +18,25 @@ export type NodeRole =
   | "summary";         // 汇总：预留，用于汇总类任务
 
 /**
+ * 节点派发状态 - 用于跟踪派发执行进度
+ */
+export type NodeDispatchStatus =
+  | "pending"          // 等待派发
+  | "executing"        // subagent 执行中
+  | "testing"          // 测试节点验证中
+  | "passed"           // 测试通过
+  | "failed";          // 执行失败或测试失败
+
+/**
+ * 节点派发信息 - 仅执行节点使用
+ */
+export interface NodeDispatchInfo {
+  startMarker: string;              // Git 模式=commit hash，无 Git 模式=时间戳
+  endMarker?: string;               // Git 模式=commit hash，无 Git 模式=时间戳
+  status: NodeDispatchStatus;       // 派发状态
+}
+
+/**
  * 节点执行者 - 预留字段，用于未来子 agent 派发
  * @reserved 暂不实现，仅作设计预留
  */
@@ -101,6 +120,11 @@ export interface NodeMeta {
   // executor?: NodeExecutor;       // 执行者（预留，用于子 agent 派发）
   createdAt: string;
   updatedAt: string;
+
+  // ===== 派发相关字段（可选）=====
+  testNodeId?: string;              // 执行节点专用：关联的测试节点 ID
+  execNodeId?: string;              // 测试节点专用：关联的执行节点 ID
+  dispatch?: NodeDispatchInfo;      // 派发信息（仅执行节点使用）
 }
 
 /**
@@ -134,6 +158,14 @@ export interface NodeTreeItem {
 // ========== API 输入输出类型 ==========
 
 /**
+ * 创建测试节点的参数（随执行节点一起创建）
+ */
+export interface CreateTestNodeParams {
+  title: string;                    // 测试节点标题
+  requirement: string;              // 验收标准
+}
+
+/**
  * node_create 输入
  */
 export interface NodeCreateParams {
@@ -145,6 +177,10 @@ export interface NodeCreateParams {
   docs?: DocRef[];
   rulesHash?: string;               // 规则哈希（用于验证 AI 已阅读规则）
   role?: NodeRole;                  // 节点角色（可选）
+
+  // ===== 派发相关参数（可选）=====
+  createTestNode?: CreateTestNodeParams;  // 同时创建配对的测试节点
+  pairWithExecNode?: string;        // 与指定执行节点配对（用于单独创建测试节点）
 }
 
 /**
@@ -153,7 +189,8 @@ export interface NodeCreateParams {
 export interface NodeCreateResult {
   nodeId: string;
   path: string;
-  autoReopened?: string; // 如果父节点被自动 reopen，返回父节点 ID
+  testNodeId?: string;              // 如果使用 createTestNode，返回测试节点 ID
+  autoReopened?: string;            // 如果父节点被自动 reopen，返回父节点 ID
   hint?: string;
   actionRequired?: ActionRequired;  // AI 必须执行的行为
 }
