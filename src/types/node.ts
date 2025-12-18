@@ -31,8 +31,8 @@ export type NodeDispatchStatus =
  * 节点派发信息 - 仅执行节点使用
  */
 export interface NodeDispatchInfo {
-  startCommit: string;              // 执行前的 commit hash
-  endCommit?: string;               // 执行后的 commit hash
+  startMarker: string;              // Git 模式=commit hash，无 Git 模式=时间戳
+  endMarker?: string;               // Git 模式=commit hash，无 Git 模式=时间戳
   status: NodeDispatchStatus;       // 派发状态
 }
 

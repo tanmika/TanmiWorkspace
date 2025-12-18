@@ -25,6 +25,7 @@ import { sessionTools } from "./tools/session.js";
 import { helpTools, type HelpTopic, type PromptTemplate } from "./tools/help.js";
 import { importTools } from "./tools/import.js";
 import { dispatchTools } from "./tools/dispatch.js";
+import { configTools } from "./tools/config.js";
 import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
@@ -112,6 +113,7 @@ function createMcpServer(services: Services): Server {
       ...helpTools,
       ...importTools,
       ...dispatchTools,
+      ...configTools,
     ],
   }));
 
@@ -383,8 +385,9 @@ function createMcpServer(services: Services): Server {
         // Dispatch 工具
         case "dispatch_enable": {
           const workspaceId = args?.workspaceId as string;
+          const useGit = args?.useGit as boolean | undefined;
           const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
-          result = await services.dispatch.enableDispatch(workspaceId, projectRoot);
+          result = await services.dispatch.enableDispatch(workspaceId, projectRoot, { useGit });
           break;
         }
 
@@ -434,6 +437,18 @@ function createMcpServer(services: Services): Server {
           const workspaceId = args?.workspaceId as string;
           const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
           result = await services.dispatch.cleanupBranches(workspaceId, projectRoot);
+          break;
+        }
+
+        // Config 工具
+        case "config_get": {
+          result = await services.config.get();
+          break;
+        }
+
+        case "config_set": {
+          const defaultDispatchMode = args?.defaultDispatchMode as "none" | "git" | "no-git" | undefined;
+          result = await services.config.set({ defaultDispatchMode });
           break;
         }
 

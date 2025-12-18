@@ -38,10 +38,11 @@ export interface DispatchLimits {
  */
 export interface DispatchConfig {
   enabled: boolean;                 // 是否启用派发模式
+  useGit: boolean;                  // 是否使用 Git 功能
   enabledAt: number;                // 启用时间戳
-  originalBranch?: string;          // 派发前的原分支
-  processBranch?: string;           // 当前派发分支
-  backupBranches?: string[];        // 备份分支列表
+  originalBranch?: string;          // 派发前的原分支（Git 模式才有）
+  processBranch?: string;           // 当前派发分支（Git 模式才有）
+  backupBranches?: string[];        // 备份分支列表（Git 模式才有）
   limits?: DispatchLimits;          // 资源限制
 }
 

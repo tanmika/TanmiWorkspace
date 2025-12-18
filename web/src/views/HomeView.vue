@@ -2,16 +2,18 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, ArrowRight, Box, RefreshRight, Search, Sort } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowRight, Box, RefreshRight, Search, Sort, Setting } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@/stores'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
+import SettingsModal from '@/components/SettingsModal.vue'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
 
 // 状态
 const showCreateDialog = ref(false)
+const showSettingsModal = ref(false)
 const createForm = ref<WorkspaceInitParams>({
   name: '',
   goal: '',
@@ -216,9 +218,14 @@ function toggleSortOrder() {
     <!-- 头部 -->
     <header class="header">
       <h1>TanmiWorkspace</h1>
-      <el-button type="primary" :icon="Plus" @click="showCreateDialog = true">
-        新建工作区
-      </el-button>
+      <div class="header-actions">
+        <el-button :icon="Setting" @click="showSettingsModal = true" title="设置">
+          设置
+        </el-button>
+        <el-button type="primary" :icon="Plus" @click="showCreateDialog = true">
+          新建工作区
+        </el-button>
+      </div>
     </header>
 
     <!-- 筛选栏 -->
@@ -329,6 +336,9 @@ function toggleSortOrder() {
       </template>
     </el-dialog>
 
+    <!-- 设置弹窗 -->
+    <SettingsModal v-model:visible="showSettingsModal" />
+
     <!-- 开发模式调试信息 -->
     <div v-if="devInfo?.available" class="dev-info">
       <div class="dev-info-title">DEV MODE</div>
@@ -365,6 +375,12 @@ function toggleSortOrder() {
 .header h1 {
   margin: 0;
   font-size: 24px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .filter-bar {

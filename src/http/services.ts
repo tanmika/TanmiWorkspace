@@ -13,6 +13,7 @@ import { ReferenceService } from "../services/ReferenceService.js";
 import { LogService } from "../services/LogService.js";
 import { SessionService } from "../services/SessionService.js";
 import { DispatchService } from "../services/DispatchService.js";
+import { ConfigService } from "../services/ConfigService.js";
 import { HelpService } from "../tools/help.js";
 
 export interface Services {
@@ -28,6 +29,7 @@ export interface Services {
   log: LogService;
   session: SessionService;
   dispatch: DispatchService;
+  config: ConfigService;
   help: HelpService;
 }
 
@@ -61,6 +63,7 @@ export function createServices(): Services {
     log: new LogService(json, md, fs),
     session: new SessionService(sessionStorage, json, md, fs),
     dispatch: new DispatchService(json, md, fs),
+    config: new ConfigService(),
     help: new HelpService(),
   };
 

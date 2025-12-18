@@ -15,3 +15,4 @@ export {
   dispatchEnableTool,
   dispatchDisableTool,
 } from "./dispatch.js";
+export { configTools, configGetTool, configSetTool } from "./config.js";

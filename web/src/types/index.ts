@@ -51,6 +51,23 @@ export interface WorkspaceEntry {
   updatedAt: string
 }
 
+// 派发资源限制配置
+export interface DispatchLimits {
+  timeoutMs?: number
+  maxRetries?: number
+}
+
+// 派发配置
+export interface DispatchConfig {
+  enabled: boolean
+  useGit: boolean
+  enabledAt: number
+  originalBranch?: string
+  processBranch?: string
+  backupBranches?: string[]
+  limits?: DispatchLimits
+}
+
 export interface WorkspaceConfig {
   id: string
   name: string
@@ -58,6 +75,7 @@ export interface WorkspaceConfig {
   createdAt: string
   updatedAt: string
   rootNodeId: string
+  dispatch?: DispatchConfig
 }
 
 // ========== 节点类型 ==========
@@ -246,6 +264,41 @@ export interface ProblemUpdateResult {
 
 export interface ProblemClearResult {
   success: boolean
+}
+
+// ========== 派发相关类型 ==========
+
+export type MergeStrategy = 'sequential' | 'squash' | 'cherry-pick' | 'skip'
+
+export interface DisableDispatchOptions {
+  mergeStrategy: MergeStrategy
+  keepBackupBranch?: boolean
+  keepProcessBranch?: boolean
+  commitMessage?: string
+}
+
+export interface DisableDispatchQueryResult {
+  success: boolean
+  status: {
+    originalBranch?: string
+    processBranch?: string
+    backupBranch?: string | null
+    hasBackupChanges: boolean
+    processCommits?: Array<{ hash: string; message: string }>
+    useGit: boolean
+  }
+  hint?: string
+}
+
+export interface EnableDispatchResult {
+  success: boolean
+  config: DispatchConfig
+  hint?: string
+}
+
+export interface DisableDispatchExecuteResult {
+  success: boolean
+  hint?: string
 }
 
 // ========== 前端扩展类型 ==========

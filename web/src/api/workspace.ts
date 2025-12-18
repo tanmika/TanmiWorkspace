@@ -50,6 +50,21 @@ export const workspaceApi = {
   getDevInfo(): Promise<DevInfoResult> {
     return client.get('/dev-info')
   },
+
+  // 启用派发模式
+  enableDispatch(id: string, useGit?: boolean): Promise<import('@/types').EnableDispatchResult> {
+    return client.post(`/workspaces/${id}/dispatch/enable`, { useGit })
+  },
+
+  // 查询禁用派发选项
+  queryDisableDispatch(id: string): Promise<import('@/types').DisableDispatchQueryResult> {
+    return client.post(`/workspaces/${id}/dispatch/disable`)
+  },
+
+  // 执行禁用派发
+  executeDisableDispatch(id: string, options: import('@/types').DisableDispatchOptions): Promise<import('@/types').DisableDispatchExecuteResult> {
+    return client.post(`/workspaces/${id}/dispatch/disable/execute`, options)
+  },
 }
 
 // 开发信息结果类型

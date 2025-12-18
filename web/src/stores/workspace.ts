@@ -75,6 +75,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const currentFocus = computed(() => currentGraph.value?.currentFocus || null)
 
+  // 派发状态计算属性
+  const dispatchStatus = computed(() => {
+    const dispatch = currentWorkspace.value?.dispatch
+    if (!dispatch?.enabled) return 'disabled'
+    return dispatch.useGit ? 'enabled-git' : 'enabled'
+  })
+
   // 方法
   async function fetchWorkspaces(status?: 'active' | 'archived' | 'all') {
     loading.value = true
@@ -191,6 +198,44 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentDocs.value = []
   }
 
+  async function enableDispatch(useGit?: boolean) {
+    if (!currentWorkspace.value) {
+      throw new Error('当前没有选中的工作区')
+    }
+    loading.value = true
+    error.value = null
+    try {
+      const result = await workspaceApi.enableDispatch(currentWorkspace.value.id, useGit)
+      // 刷新工作区配置
+      await fetchWorkspace(currentWorkspace.value.id)
+      return result
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '启用派发失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function disableDispatch(options: import('@/types').DisableDispatchOptions) {
+    if (!currentWorkspace.value) {
+      throw new Error('当前没有选中的工作区')
+    }
+    loading.value = true
+    error.value = null
+    try {
+      const result = await workspaceApi.executeDisableDispatch(currentWorkspace.value.id, options)
+      // 刷新工作区配置
+      await fetchWorkspace(currentWorkspace.value.id)
+      return result
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '禁用派发失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     // 状态
     workspaces,
@@ -205,6 +250,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     activeWorkspaces,
     archivedWorkspaces,
     currentFocus,
+    dispatchStatus,
     // 方法
     fetchWorkspaces,
     fetchWorkspace,
@@ -214,5 +260,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     archiveWorkspace,
     restoreWorkspace,
     clearCurrent,
+    enableDispatch,
+    disableDispatch,
   }
 })

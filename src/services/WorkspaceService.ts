@@ -451,6 +451,15 @@ export class WorkspaceService {
     lines.push("├" + "─".repeat(width - 2) + "┤");
     lines.push("│" + ` 节点统计: ${summary.completedNodes}/${summary.totalNodes} 已处理`.padEnd(width - 2) + "│");
     lines.push("│" + ` 当前聚焦: ${summary.currentFocus || "无"}`.padEnd(width - 2) + "│");
+
+    // 派发模式信息
+    if (config.dispatch?.enabled) {
+      const dispatchMode = config.dispatch.useGit ? "Git 模式" : "无 Git 模式";
+      lines.push("│" + ` 派发: 已启用 (${dispatchMode})`.padEnd(width - 2) + "│");
+    } else {
+      lines.push("│" + ` 派发: 未启用`.padEnd(width - 2) + "│");
+    }
+
     lines.push("├" + "─".repeat(width - 2) + "┤");
     lines.push("│" + " 节点树:".padEnd(width - 2) + "│");
 
@@ -484,6 +493,15 @@ export class WorkspaceService {
     lines.push("");
     lines.push(`**状态**: ${config.status}`);
     lines.push(`**目标**: ${workspaceMdData.goal}`);
+
+    // 派发模式信息
+    if (config.dispatch?.enabled) {
+      const dispatchMode = config.dispatch.useGit ? "Git 模式" : "无 Git 模式";
+      lines.push(`**派发模式**: 已启用 (${dispatchMode})`);
+    } else {
+      lines.push(`**派发模式**: 未启用`);
+    }
+
     lines.push("");
     lines.push("## 统计");
     lines.push(`- 节点总数: ${summary.totalNodes}`);

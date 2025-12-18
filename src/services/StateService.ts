@@ -309,25 +309,45 @@ export class StateService {
     if (nodeType === "execution" && action === "start" && !result.actionRequired) {
       // 检查是否应该询问派发：
       // 1. 工作区尚未启用派发
-      // 2. 项目是 git 仓库
-      // 3. 这是第一个开始执行的非信息收集节点
+      // 2. 这是第一个开始执行的非信息收集节点
       if (!config.dispatch?.enabled) {
         const isFirstExecution = this.isFirstNonInfoCollectionExecution(graph.nodes, nodeMeta, nodeId);
         if (isFirstExecution) {
           try {
             const isGit = await isGitRepo(projectRoot);
+            // 无论是否 git 仓库都询问，但提示不同模式
             if (isGit) {
               result.actionRequired = {
                 type: "ask_dispatch",
-                message: "检测到项目是 Git 仓库，是否启用派发模式？派发模式允许将执行节点任务交给独立的 subagent 执行，支持自动测试验证和失败回滚。",
+                message: "检测到项目是 Git 仓库，是否启用派发模式？\n\n派发模式允许将执行节点任务交给独立的 subagent 执行。提供两种模式：\n- **无 Git 模式**（默认，推荐）：仅更新元数据，不影响代码，安全\n- **Git 模式**（实验功能）：自动创建分支、提交、回滚，支持失败自动恢复，但有一定风险",
                 data: {
                   projectRoot,
                   workspaceId,
+                  isGitRepo: true,
+                },
+              };
+            } else {
+              result.actionRequired = {
+                type: "ask_dispatch",
+                message: "是否启用派发模式（无 Git 模式）？\n\n派发模式允许将执行节点任务交给独立的 subagent 执行。\n当前项目不是 git 仓库，将使用无 Git 模式（仅更新元数据，不影响代码）。",
+                data: {
+                  projectRoot,
+                  workspaceId,
+                  isGitRepo: false,
                 },
               };
             }
           } catch {
-            // 检测失败，跳过派发询问
+            // 检测失败，按非 git 仓库处理
+            result.actionRequired = {
+              type: "ask_dispatch",
+              message: "是否启用派发模式（无 Git 模式）？\n\n派发模式允许将执行节点任务交给独立的 subagent 执行。\n将使用无 Git 模式（仅更新元数据，不影响代码）。",
+              data: {
+                projectRoot,
+                workspaceId,
+                isGitRepo: false,
+              },
+            };
           }
         }
       }
