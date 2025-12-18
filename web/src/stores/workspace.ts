@@ -9,6 +9,7 @@ import type {
   NodeGraph,
   WorkspaceStatusResult,
   DocRef,
+  TypedLogEntry,
 } from '@/types'
 
 // 解析 Workspace.md 提取规则和文档
@@ -30,6 +31,7 @@ function parseWorkspaceMd(md: string): { rules: string[]; docs: DocRef[] } {
   }
 
   // 提取文档部分
+  // 实际格式: - [name](path) - description 或 - [description](path)
   const docsMatch = md.match(/## 文档[\s\S]*?(?=##|$)/)
   if (docsMatch) {
     const docsSection = docsMatch[0]
@@ -37,13 +39,12 @@ function parseWorkspaceMd(md: string): { rules: string[]; docs: DocRef[] } {
     for (const line of lines) {
       const trimmed = line.trim()
       if (trimmed.startsWith('- ')) {
-        // 格式: - path: description 或 - [path](url): description
-        const content = trimmed.slice(2)
-        const colonIdx = content.indexOf(':')
-        if (colonIdx > 0) {
+        // 匹配 Markdown 链接格式: - [name](path) - description 或 - [name](path)
+        const docMatch = trimmed.match(/^- \[(.+?)\]\((.+?)\)(?: - (.+))?$/)
+        if (docMatch && docMatch[1] && docMatch[2]) {
           docs.push({
-            path: content.slice(0, colonIdx).trim(),
-            description: content.slice(colonIdx + 1).trim(),
+            path: docMatch[2],
+            description: docMatch[3] || docMatch[1],
           })
         }
       }
@@ -51,6 +52,40 @@ function parseWorkspaceMd(md: string): { rules: string[]; docs: DocRef[] } {
   }
 
   return { rules, docs }
+}
+
+// 解析 Log.md 提取日志条目
+function parseLogMd(md: string): TypedLogEntry[] {
+  const logs: TypedLogEntry[] = []
+  if (!md) return logs
+
+  // 日志格式是 Markdown 表格:
+  // | 时间 | 操作者 | 事件 |
+  // |------|--------|------|
+  // | 2024-01-01 12:00:00 | AI | 事件描述 |
+  const lines = md.split('\n')
+  for (const line of lines) {
+    const trimmed = line.trim()
+    // 跳过标题行和分隔行
+    if (!trimmed.startsWith('|') || trimmed.includes('---') || trimmed.includes('时间')) {
+      continue
+    }
+    // 解析表格行: | timestamp | operator | event |
+    const parts = trimmed.split('|').map(p => p.trim()).filter(p => p)
+    if (parts.length >= 3) {
+      const timestamp = parts[0]
+      const operator = parts[1]
+      const event = parts[2]
+      if (timestamp && event && (operator === 'AI' || operator === 'Human' || operator === 'system')) {
+        logs.push({
+          timestamp,
+          operator,
+          event,
+        })
+      }
+    }
+  }
+  return logs
 }
 
 export const useWorkspaceStore = defineStore('workspace', () => {
@@ -61,6 +96,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const currentStatus = ref<WorkspaceStatusResult['summary'] | null>(null)
   const currentRules = ref<string[]>([])
   const currentDocs = ref<DocRef[]>([])
+  const currentLogs = ref<TypedLogEntry[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -108,6 +144,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const { rules, docs } = parseWorkspaceMd(result.workspaceMd || '')
       currentRules.value = rules
       currentDocs.value = docs
+      // 解析 logMd 获取日志条目
+      currentLogs.value = parseLogMd(result.logMd || '')
       // 同时获取状态摘要
       const statusResult = await workspaceApi.status(id)
       currentStatus.value = statusResult.summary
@@ -196,6 +234,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentStatus.value = null
     currentRules.value = []
     currentDocs.value = []
+    currentLogs.value = []
   }
 
   async function enableDispatch(useGit?: boolean) {
@@ -244,6 +283,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentStatus,
     currentRules,
     currentDocs,
+    currentLogs,
     loading,
     error,
     // 计算属性

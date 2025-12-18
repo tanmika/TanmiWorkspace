@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Setting } from '@element-plus/icons-vue'
+import { Setting, InfoFilled } from '@element-plus/icons-vue'
 import { useSettingsStore } from '@/stores/settings'
+import { workspaceApi, type DevInfoResult } from '@/api/workspace'
 
 const settingsStore = useSettingsStore()
+
+// 版本信息
+const devInfo = ref<DevInfoResult | null>(null)
+const frontendBuildTime = __BUILD_TIME__
 
 // Props
 interface Props {
@@ -26,8 +31,27 @@ watch(() => props.visible, async (isVisible) => {
   if (isVisible) {
     await settingsStore.loadSettings()
     localMode.value = settingsStore.settings.defaultDispatchMode
+    // 加载版本信息
+    try {
+      devInfo.value = await workspaceApi.getDevInfo()
+    } catch {
+      // 忽略
+    }
   }
 })
+
+// 格式化时间
+function formatTime(isoString?: string | null) {
+  if (!isoString) return '-'
+  const date = new Date(isoString)
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
 
 // 关闭弹窗
 function handleClose() {
@@ -146,6 +170,48 @@ async function handleSave() {
               <li>测试失败时无法自动回滚</li>
               <li>建议在执行前手动备份重要文件</li>
             </ul>
+          </div>
+        </el-alert>
+      </div>
+
+      <!-- 版本信息 -->
+      <div class="setting-section version-section">
+        <div class="section-header">
+          <el-icon :size="18" style="margin-right: 8px">
+            <InfoFilled />
+          </el-icon>
+          <h3>版本信息</h3>
+        </div>
+        <div class="version-grid">
+          <div class="version-item">
+            <span class="version-label">后端版本</span>
+            <span class="version-value">v{{ devInfo?.packageVersion || '-' }}</span>
+          </div>
+          <div class="version-item">
+            <span class="version-label">Node 版本</span>
+            <span class="version-value">{{ devInfo?.nodeVersion || '-' }}</span>
+          </div>
+          <div class="version-item">
+            <span class="version-label">后端编译</span>
+            <span class="version-value">{{ formatTime(devInfo?.codeBuildTime) }}</span>
+          </div>
+          <div class="version-item">
+            <span class="version-label">前端编译</span>
+            <span class="version-value">{{ formatTime(frontendBuildTime) }}</span>
+          </div>
+          <div class="version-item">
+            <span class="version-label">服务启动</span>
+            <span class="version-value">{{ formatTime(devInfo?.serverStartTime) }}</span>
+          </div>
+        </div>
+        <el-alert
+          v-if="devInfo?.codeBuildTime && frontendBuildTime && devInfo.codeBuildTime !== frontendBuildTime"
+          type="warning"
+          :closable="false"
+          class="version-mismatch-warning"
+        >
+          <div class="warning-content">
+            前端和后端编译时间不一致，可能需要重新编译前端或刷新页面。
           </div>
         </el-alert>
       </div>
@@ -278,5 +344,41 @@ async function handleSave() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* 版本信息样式 */
+.version-section {
+  border-top: 1px solid #ebeef5;
+  padding-top: 20px;
+}
+
+.version-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  background: #f5f7fa;
+  padding: 16px;
+  border-radius: 6px;
+}
+
+.version-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.version-label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.version-value {
+  font-size: 14px;
+  color: #303133;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.version-mismatch-warning {
+  margin-top: 12px;
 }
 </style>

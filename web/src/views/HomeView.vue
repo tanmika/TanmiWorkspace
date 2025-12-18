@@ -84,19 +84,6 @@ watch([statusFilter, sortBy, sortOrder], () => {
   savePreferences()
 })
 
-// 格式化开发信息时间
-function formatDevTime(isoString?: string | null) {
-  if (!isoString) return '-'
-  const date = new Date(isoString)
-  return date.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-}
-
 // 创建工作区
 async function handleCreate() {
   if (!createForm.value.name || !createForm.value.goal) {
@@ -339,21 +326,9 @@ function toggleSortOrder() {
     <!-- 设置弹窗 -->
     <SettingsModal v-model:visible="showSettingsModal" />
 
-    <!-- 开发模式调试信息 -->
-    <div v-if="devInfo?.available" class="dev-info">
-      <div class="dev-info-title">DEV MODE</div>
-      <div class="dev-info-item">
-        <span class="label">启动时间:</span>
-        <span class="value">{{ formatDevTime(devInfo.serverStartTime) }}</span>
-      </div>
-      <div class="dev-info-item">
-        <span class="label">编译时间:</span>
-        <span class="value">{{ formatDevTime(devInfo.codeBuildTime) }}</span>
-      </div>
-      <div class="dev-info-item">
-        <span class="label">版本:</span>
-        <span class="value">v{{ devInfo.packageVersion }} | Node {{ devInfo.nodeVersion }}</span>
-      </div>
+    <!-- 开发模式标识 -->
+    <div v-if="devInfo?.available" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">
+      DEV
     </div>
   </div>
 </template>
@@ -461,41 +436,20 @@ function toggleSortOrder() {
   gap: 8px;
 }
 
-/* 开发模式调试信息 */
-.dev-info {
+/* 开发模式标识 */
+.dev-badge {
   position: fixed;
   bottom: 12px;
   right: 12px;
-  background: rgba(0, 0, 0, 0.75);
+  background: #f59e0b;
   color: #fff;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-family: 'Monaco', 'Menlo', monospace;
-  z-index: 9999;
-  max-width: 320px;
-}
-
-.dev-info-title {
-  color: #f59e0b;
-  font-weight: bold;
-  margin-bottom: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
   font-size: 10px;
+  font-weight: bold;
+  font-family: 'Monaco', 'Menlo', monospace;
   letter-spacing: 1px;
-}
-
-.dev-info-item {
-  display: flex;
-  gap: 8px;
-  line-height: 1.6;
-}
-
-.dev-info-item .label {
-  color: #9ca3af;
-  flex-shrink: 0;
-}
-
-.dev-info-item .value {
-  color: #e5e7eb;
+  z-index: 9999;
+  cursor: default;
 }
 </style>

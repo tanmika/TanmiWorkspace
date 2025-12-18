@@ -113,7 +113,7 @@ export interface NodeTreeItem {
 
 export interface TypedLogEntry {
   timestamp: string
-  operator: 'AI' | 'Human'
+  operator: 'AI' | 'Human' | 'system'
   event: string
 }
 
@@ -176,6 +176,7 @@ export interface WorkspaceGetResult {
   config: WorkspaceConfig
   graph: NodeGraph
   workspaceMd: string
+  logMd: string
 }
 
 export interface WorkspaceDeleteResult {

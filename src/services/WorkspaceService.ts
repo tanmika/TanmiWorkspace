@@ -301,6 +301,7 @@ export class WorkspaceService {
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
     const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
     const workspaceMd = await this.md.readWorkspaceMdRaw(projectRoot, workspaceId, isArchived);
+    const logMd = await this.md.readLogRaw(projectRoot, workspaceId, undefined, isArchived);
 
     // 解析规则并计算哈希
     const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId, isArchived);
@@ -313,6 +314,7 @@ export class WorkspaceService {
       config,
       graph,
       workspaceMd,
+      logMd,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
       rulesCount,
       rulesHash,

@@ -200,6 +200,7 @@ export interface WorkspaceGetResult {
   config: WorkspaceConfig;
   graph: import("./node.js").NodeGraph;
   workspaceMd: string;
+  logMd: string;                      // 工作区日志 Markdown
   webUrl: string;                     // Web UI 访问地址
   rulesCount: number;                 // 规则条数
   rulesHash: string;                  // 规则内容哈希（用于验证）

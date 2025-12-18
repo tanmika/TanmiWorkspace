@@ -5,8 +5,10 @@ defineProps<{
   entries: TypedLogEntry[]
 }>()
 
-function getOperatorColor(operator: 'AI' | 'Human') {
-  return operator === 'AI' ? '#409EFF' : '#67C23A'
+function getOperatorColor(operator: 'AI' | 'Human' | 'system') {
+  if (operator === 'AI') return '#409EFF'
+  if (operator === 'Human') return '#67C23A'
+  return '#909399'
 }
 </script>
 
