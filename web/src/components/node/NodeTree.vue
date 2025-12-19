@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { NodeTreeItem, NodeStatus, NodeRole } from '@/types'
-import { STATUS_CONFIG, NODE_ROLE_CONFIG } from '@/types'
+import type { NodeTreeItem, NodeStatus, NodeRole, NodeDispatchStatus } from '@/types'
+import { STATUS_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG } from '@/types'
 
 const props = defineProps<{
   tree: NodeTreeItem | null
@@ -33,6 +33,12 @@ function getStatusEmoji(status: NodeStatus) {
 function getRoleEmoji(role?: NodeRole) {
   if (!role) return ''
   return NODE_ROLE_CONFIG[role]?.emoji || ''
+}
+
+// 获取派发状态配置
+function getDispatchConfig(status?: NodeDispatchStatus) {
+  if (!status) return null
+  return DISPATCH_STATUS_CONFIG[status] || null
 }
 
 // 选择节点
@@ -75,6 +81,18 @@ function isSelected(id: string) {
             {{ getRoleEmoji(data.role as NodeRole) }}
           </span>
           <span class="node-title">{{ data.title }}</span>
+          <span
+            v-if="data.dispatch"
+            class="dispatch-badge"
+            :style="{
+              color: getDispatchConfig(data.dispatch.status)?.color,
+              backgroundColor: getDispatchConfig(data.dispatch.status)?.bgColor
+            }"
+            :title="getDispatchConfig(data.dispatch.status)?.description"
+          >
+            {{ getDispatchConfig(data.dispatch.status)?.emoji }}
+            {{ getDispatchConfig(data.dispatch.status)?.label }}
+          </span>
           <span v-if="isFocus(data.id)" class="focus-indicator">◄</span>
         </span>
       </template>
@@ -119,5 +137,16 @@ function isSelected(id: string) {
   color: #409eff;
   font-size: 12px;
   margin-left: 4px;
+}
+
+.dispatch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-left: 4px;
+  flex-shrink: 0;
 }
 </style>

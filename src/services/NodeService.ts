@@ -505,6 +505,7 @@ export class NodeService {
       title: nodeInfo.title,
       status: node.status,
       role: node.role,
+      dispatch: node.dispatch,
       children: [],
     };
 

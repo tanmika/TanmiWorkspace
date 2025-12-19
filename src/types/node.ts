@@ -150,6 +150,7 @@ export interface NodeTreeItem {
   title: string;
   status: NodeStatus;
   role?: NodeRole;
+  dispatch?: NodeDispatchInfo;
   children: NodeTreeItem[];
 }
 
