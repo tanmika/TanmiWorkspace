@@ -14,14 +14,14 @@ category: core
 ┌──────────────────────────────────────────────────────────────┐
 │                     MCP Handler                               │
 └──────────────────────────────────────────────────────────────┘
-     │         │         │         │         │         │
-     ▼         ▼         ▼         ▼         ▼         ▼
-┌─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐
-│Workspace│  Node   │  State  │ Context │   Log   │Reference│
-│ Service │ Service │ Service │ Service │ Service │ Service │
-└─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘
-     │         │         │         │         │         │
-     └─────────┴─────────┴─────────┴─────────┴─────────┘
+     │         │         │         │         │         │         │
+     ▼         ▼         ▼         ▼         ▼         ▼         ▼
+┌─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐
+│Workspace│  Node   │  State  │ Context │   Log   │Reference│Guidance │
+│ Service │ Service │ Service │ Service │ Service │ Service │ Service │
+└─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘
+     │         │         │         │         │         │         │
+     └─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘
                               │
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
@@ -232,6 +232,40 @@ category: core
 
 **隔离机制**: `isolate=true` 时，上下文链在该节点截断，不继承父节点信息
 
+### GuidanceService
+
+**文件**: `src/services/GuidanceService.ts`
+
+**职责**: 场景感知引导系统，根据当前状态自动生成操作引导
+
+**核心方法**:
+
+| 方法 | 说明 |
+|------|------|
+| `detectScenario(params)` | 检测当前场景（22 个场景类型） |
+| `generateGuidance(params)` | 生成三级引导内容（L0/L1/L2） |
+
+**引导级别**:
+
+| 级别 | 说明 | Token 消耗 |
+|------|------|-----------|
+| L0 | 提示词（总是返回） | ~20 token |
+| L1 | 简要引导（按需展开） | ~50 token |
+| L2 | 详细引导（按需展开） | ~100 token |
+
+**支持场景**: 包括节点创建后、状态转换后、上下文获取等 22 个核心场景
+
+**Confirmation Token 机制**:
+
+StateService 内置 Confirmation Token 机制，用于防止 AI 编造用户确认：
+
+| 方法 | 说明 |
+|------|------|
+| `generateToken(params)` | 生成一次性确认 token（30分钟过期） |
+| `validateToken(params)` | 验证并消耗 token |
+
+**触发点**: actionRequired 返回时自动生成 token，node_transition 支持 confirmation 参数验证
+
 ## 依赖关系
 
 ```
@@ -257,6 +291,8 @@ category: core
 | 日志 | Log.md | LogService |
 | 问题 | Problem.md | LogService |
 | 引用状态 | Info.md/Workspace.md | ReferenceService |
+| 场景引导 | guidanceContent.ts | GuidanceService |
+| 确认 Token | 内存（StateService） | StateService |
 
 ## 使用示例
 
