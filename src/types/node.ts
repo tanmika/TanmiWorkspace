@@ -122,8 +122,6 @@ export interface NodeMeta {
   updatedAt: string;
 
   // ===== 派发相关字段（可选）=====
-  testNodeId?: string;              // 执行节点专用：关联的测试节点 ID
-  execNodeId?: string;              // 测试节点专用：关联的执行节点 ID
   dispatch?: NodeDispatchInfo;      // 派发信息（仅执行节点使用）
 }
 
@@ -158,14 +156,6 @@ export interface NodeTreeItem {
 // ========== API 输入输出类型 ==========
 
 /**
- * 创建测试节点的参数（随执行节点一起创建）
- */
-export interface CreateTestNodeParams {
-  title: string;                    // 测试节点标题
-  requirement: string;              // 验收标准
-}
-
-/**
  * node_create 输入
  */
 export interface NodeCreateParams {
@@ -178,9 +168,9 @@ export interface NodeCreateParams {
   rulesHash?: string;               // 规则哈希（用于验证 AI 已阅读规则）
   role?: NodeRole;                  // 节点角色（可选）
 
-  // ===== 派发相关参数（可选）=====
-  createTestNode?: CreateTestNodeParams;  // 同时创建配对的测试节点
-  pairWithExecNode?: string;        // 与指定执行节点配对（用于单独创建测试节点）
+  // ===== 测试节点附属化参数（可选）=====
+  isNeedTest?: boolean;             // 是否需要测试（仅执行节点有效）
+  testRequirement?: string;         // 测试验收标准（isNeedTest=true 时使用）
 }
 
 /**
@@ -189,10 +179,14 @@ export interface NodeCreateParams {
 export interface NodeCreateResult {
   nodeId: string;
   path: string;
-  testNodeId?: string;              // 如果使用 createTestNode，返回测试节点 ID
   autoReopened?: string;            // 如果父节点被自动 reopen，返回父节点 ID
   hint?: string;
   actionRequired?: ActionRequired;  // AI 必须执行的行为
+
+  // ===== 测试节点附属化输出（isNeedTest=true 时返回）=====
+  upgradedToPlanning?: boolean;     // 是否已升级为管理节点（planning）
+  execNodeId?: string;              // 自动创建的执行子节点 ID
+  testNodeId?: string;              // 自动创建的测试子节点 ID
 }
 
 /**

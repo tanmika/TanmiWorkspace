@@ -487,11 +487,18 @@ export class DispatchService {
     if (node.type !== "execution") {
       throw new TanmiError("INVALID_NODE_TYPE", "只有执行节点可以派发");
     }
-    if (node.status !== "implementing") {
+    // 支持 pending 和 implementing 状态的节点派发
+    if (node.status !== "pending" && node.status !== "implementing") {
       throw new TanmiError(
         "INVALID_NODE_STATUS",
-        `节点状态必须为 implementing，当前为 ${node.status}`
+        `节点状态必须为 pending 或 implementing，当前为 ${node.status}`
       );
+    }
+
+    // 如果是 pending 状态，自动转为 implementing
+    const needsTransition = node.status === "pending";
+    if (needsTransition) {
+      node.status = "implementing";
     }
 
     // 3. 记录 startMarker
@@ -526,7 +533,6 @@ export class DispatchService {
       data: {
         workspaceId,
         nodeId,
-        testNodeId: node.testNodeId,
         subagentType: "tanmi-executor",
         prompt: this.buildExecutorPrompt(workspaceId, nodeId, nodeInfo.title),
         timeout,
@@ -593,23 +599,13 @@ export class DispatchService {
         event: `节点 ${nodeId} 执行完成，${markerInfo}`,
       }, nodeId);
 
-      // 返回下一步：派发测试节点
-      if (node.testNodeId) {
-        return {
-          success: true,
-          endMarker,
-          nextAction: "dispatch_test",
-          testNodeId: node.testNodeId,
-          hint: `执行完成，请派发测试节点 ${node.testNodeId} 进行验证`,
-        };
-      } else {
-        return {
-          success: true,
-          endMarker,
-          nextAction: "return_parent",
-          hint: "执行完成，无配对测试节点，返回父节点",
-        };
-      }
+      // 返回下一步：返回父节点（测试节点现在作为兄弟节点存在，由父节点管理）
+      return {
+        success: true,
+        endMarker,
+        nextAction: "return_parent",
+        hint: "执行完成，返回父节点继续处理（如有测试节点，父节点会安排执行）",
+      };
     } else {
       // 2b. 执行失败：更新状态
       if (node.dispatch) {
@@ -635,13 +631,15 @@ export class DispatchService {
 
   /**
    * 处理测试结果
+   * 注：在新的附属化设计中，测试节点和执行节点是兄弟关系，由父管理节点统一管理。
+   * 此方法简化为记录测试结果，不再操作关联的执行节点。
    */
   async handleTestResult(
     workspaceId: string,
     projectRoot: string,
     testNodeId: string,
     passed: boolean,
-    conclusion?: string
+    _conclusion?: string
   ): Promise<{ success: boolean; hint?: string }> {
     // 1. 读取配置和测试节点
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
@@ -652,75 +650,34 @@ export class DispatchService {
     const graph = await this.json.readGraph(projectRoot, workspaceId);
     const testNode = graph.nodes[testNodeId];
 
-    if (!testNode || !testNode.execNodeId) {
-      throw new TanmiError("INVALID_TEST_NODE", "无效的测试节点或未关联执行节点");
+    if (!testNode) {
+      throw new TanmiError("INVALID_TEST_NODE", "无效的测试节点");
     }
-
-    // 2. 获取关联的执行节点
-    const execNode = graph.nodes[testNode.execNodeId];
-    if (!execNode || !execNode.dispatch) {
-      throw new TanmiError("EXEC_NODE_NOT_FOUND", "关联的执行节点不存在或未派发");
-    }
-
-    const useGit = config.dispatch?.useGit ?? false;
 
     if (passed) {
-      // 3a. 测试通过
-      execNode.dispatch.status = "passed";
-      execNode.updatedAt = now();
-      await this.json.writeGraph(projectRoot, workspaceId, graph);
-
+      // 测试通过：记录日志
       await this.md.appendLog(projectRoot, workspaceId, {
         time: now(),
         operator: "tanmi-tester",
-        event: `测试通过，节点 ${testNode.execNodeId} 验证成功`,
+        event: `测试节点 ${testNodeId} 验证通过`,
       }, testNodeId);
 
       return {
         success: true,
-        hint: "测试通过，继续下一个执行节点",
+        hint: "测试通过，返回父节点继续处理",
       };
     } else {
-      // 3b. 测试失败
-      const startMarker = execNode.dispatch.startMarker;
+      // 测试失败：记录日志
+      await this.md.appendLog(projectRoot, workspaceId, {
+        time: now(),
+        operator: "tanmi-tester",
+        event: `测试节点 ${testNodeId} 验证失败`,
+      }, testNodeId);
 
-      if (useGit) {
-        // Git 模式：回滚到 startCommit
-        await resetToCommit(startMarker, projectRoot);
-
-        execNode.dispatch.status = "failed";
-        execNode.dispatch.endMarker = undefined;
-        execNode.updatedAt = now();
-        await this.json.writeGraph(projectRoot, workspaceId, graph);
-
-        await this.md.appendLog(projectRoot, workspaceId, {
-          time: now(),
-          operator: "tanmi-tester",
-          event: `测试失败，已回滚到 ${startMarker.substring(0, 7)}`,
-        }, testNodeId);
-
-        return {
-          success: false,
-          hint: `测试失败，已回滚更改，返回父节点决策`,
-        };
-      } else {
-        // 无 Git 模式：无法回滚，返回警告
-        execNode.dispatch.status = "failed";
-        execNode.dispatch.endMarker = undefined;
-        execNode.updatedAt = now();
-        await this.json.writeGraph(projectRoot, workspaceId, graph);
-
-        await this.md.appendLog(projectRoot, workspaceId, {
-          time: now(),
-          operator: "tanmi-tester",
-          event: `测试失败（无 Git 模式，无法自动回滚，startMarker: ${startMarker}）`,
-        }, testNodeId);
-
-        return {
-          success: false,
-          hint: `⚠️ 测试失败（无 Git 模式，无法自动回滚），请手动处理更改后返回父节点决策`,
-        };
-      }
+      return {
+        success: false,
+        hint: "测试失败，返回父节点决策",
+      };
     }
   }
 

@@ -131,7 +131,27 @@ export class StateService {
       }
     }
 
-    // 4.3 执行节点 start 时检查同级节点并发（一次只能有一个执行中的节点）
+    // 4.3 派发模式下的权限检查
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    if (config.dispatch?.enabled && nodeType === "execution") {
+      // 4.3.1 派发执行中（executing）时阻止状态变更（除非是系统内部调用）
+      if (nodeMeta.dispatch?.status === "executing") {
+        throw new TanmiError(
+          "DISPATCH_IN_PROGRESS",
+          `节点 ${nodeId} 正在派发执行中，请等待 subagent 完成后由系统更新状态。如需强制终止，请使用 dispatch_cleanup。`
+        );
+      }
+
+      // 4.3.2 执行节点 start 时，必须先调用 node_dispatch
+      if (action === "start" && !nodeMeta.dispatch) {
+        throw new TanmiError(
+          "DISPATCH_REQUIRED",
+          `派发模式已启用，执行节点必须通过 node_dispatch 派发执行，不能直接 start。请先调用 node_dispatch(workspaceId="${workspaceId}", nodeId="${nodeId}")。`
+        );
+      }
+    }
+
+    // 4.4 执行节点 start 时检查同级节点并发（一次只能有一个执行中的节点）
     if (nodeType === "execution" && action === "start" && nodeMeta.parentId) {
       const parentNode = graph.nodes[nodeMeta.parentId];
       if (parentNode) {
@@ -235,8 +255,7 @@ export class StateService {
         .map(d => ({ path: d.path, description: d.description }));
     }
 
-    // 9. 更新工作区配置的 updatedAt
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    // 9. 更新工作区配置的 updatedAt（使用前面已读取的 config）
     config.updatedAt = currentTime;
     await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
 
@@ -268,9 +287,8 @@ export class StateService {
     if (config.dispatch?.enabled && nodeType === "execution") {
       if (action === "start") {
         result.hint += "\n\n🚀 **派发模式已启用**：请使用 node_dispatch 将任务派发给 subagent 执行，而非直接执行。派发后根据返回的 actionRequired 调用 Task tool。";
-      } else if (action === "complete" && nodeMeta.testNodeId) {
-        result.hint += `\n\n🧪 **测试验证**：执行节点完成，配对的测试节点 ${nodeMeta.testNodeId} 将自动触发验证。`;
       }
+      // 注：测试节点附属化后，测试节点作为兄弟节点存在，由父管理节点统一调度
     }
 
     // 13. 添加 actionRequired（执行节点完成且有文档引用时）
