@@ -48,5 +48,7 @@ function getOperatorColor(operator: 'AI' | 'Human' | 'system') {
 .event {
   flex: 1;
   line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>
