@@ -1,7 +1,7 @@
 {
   "name": "tanmi-workspace",
   "version": "1.4.0",
-  "description": "TanmiWorkspace MCP Server - 工作区和节点管理",
+  "description": "TanmiWorkspace MCP Server - 面向 AI 编程助手的分形任务跟踪系统",
   "type": "module",
   "main": "dist/check-node-version.js",
   "bin": {
@@ -10,6 +10,24 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "files": [
+    "dist/",
+    "web/dist/",
+    "hooks/",
+    "scripts/",
+    "README.md",
+    "CHANGELOG.md",
+    "配置方式.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tanmika/TanmiWorkspace.git"
+  },
+  "homepage": "https://github.com/tanmika/TanmiWorkspace#readme",
+  "bugs": {
+    "url": "https://github.com/tanmika/TanmiWorkspace/issues"
+  },
+  "author": "Tanmi <tanmika0106@gmail.com>",
   "scripts": {
     "build": "tsc",
     "build:all": "tsc && cd web && npm run build",
@@ -26,9 +44,11 @@
   "keywords": [
     "mcp",
     "workspace",
-    "task-management"
+    "task-management",
+    "ai",
+    "claude",
+    "model-context-protocol"
   ],
-  "author": "",
   "license": "MIT",
   "dependencies": {
     "@fastify/cors": "^11.1.0",
