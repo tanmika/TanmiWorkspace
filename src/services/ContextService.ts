@@ -18,17 +18,23 @@ import type {
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
 import { devLog } from "../utils/devLog.js";
+import { GuidanceService } from "./GuidanceService.js";
+import type { GuidanceContext } from "../types/guidance.js";
 
 /**
  * 上下文服务
  * 处理上下文获取和焦点管理
  */
 export class ContextService {
+  private guidanceService: GuidanceService;
+
   constructor(
     private json: JsonStorage,
     private md: MarkdownStorage,
     private fs: FileSystemAdapter
-  ) {}
+  ) {
+    this.guidanceService = new GuidanceService();
+  }
 
   /**
    * 根据 workspaceId 获取 projectRoot
@@ -135,6 +141,16 @@ export class ContextService {
       ? crypto.createHash("md5").update(workspaceData.rules.join("\n")).digest("hex").substring(0, 8)
       : "";
 
+    // 8.1 生成引导内容
+    const guidanceContext: GuidanceContext = {
+      toolName: "context_get",
+      nodeType: nodeMeta.type,
+      nodeStatus: nodeMeta.status,
+      hasChildren: nodeMeta.children.length > 0,
+      hasDocs: activeDocs.length > 0,
+    };
+    const guidance = this.guidanceService.generateFromContext(guidanceContext, 0);
+
     // 9. 返回结果
     return {
       workspace: {
@@ -147,6 +163,7 @@ export class ContextService {
       references,
       childConclusions,
       hint,
+      guidance: guidance.content,
     };
   }
 

@@ -48,6 +48,21 @@ export const nodeTransitionTool: Tool = {
         type: "string",
         description: "结论/产出摘要（complete/fail/cancel 时必填）",
       },
+      confirmation: {
+        type: "object",
+        description: "Confirmation Token 验证数据（当 actionRequired 返回 confirmationToken 时必须提供）",
+        properties: {
+          token: {
+            type: "string",
+            description: "待验证的 confirmation token",
+          },
+          userInput: {
+            type: "string",
+            description: "用户的真实输入",
+          },
+        },
+        required: ["token", "userInput"],
+      },
     },
     required: ["workspaceId", "nodeId", "action"],
   },

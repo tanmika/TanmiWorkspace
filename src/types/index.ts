@@ -4,3 +4,5 @@ export * from "./workspace.js";
 export * from "./node.js";
 export * from "./context.js";
 export * from "./errors.js";
+export * from "./confirmation.js";
+export * from "./guidance.js";
