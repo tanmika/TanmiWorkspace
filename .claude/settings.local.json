@@ -56,7 +56,8 @@
       "Bash(while read f)",
       "Bash(do echo '--- $(basename $(dirname $f)) ---' grep -A 10 '## 文档引用' $f)",
       "mcp__tanmi-workspace__workspace_restore",
-      "mcp__tanmi-workspace__tanmi_prompt"
+      "mcp__tanmi-workspace__tanmi_prompt",
+      "mcp__tanmi-workspace__dispatch_enable"
     ]
   }
 }

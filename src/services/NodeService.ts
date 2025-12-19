@@ -89,7 +89,7 @@ export class NodeService {
    * 创建节点
    */
   async create(params: NodeCreateParams): Promise<NodeCreateResult> {
-    const { workspaceId, parentId, type, title, requirement = "", docs = [], role } = params;
+    const { workspaceId, parentId, type, title, requirement = "", docs = [], role, createTestNode, pairWithExecNode } = params;
 
     // 1. 获取 projectRoot
     const projectRoot = await this.resolveProjectRoot(workspaceId);
@@ -201,6 +201,76 @@ export class NodeService {
     graph.nodes[parentId].children.push(nodeId);
     graph.nodes[parentId].updatedAt = currentTime;
 
+    // 11.1 处理节点配对（派发模式）
+    let createdTestNodeId: string | undefined;
+
+    // 处理 pairWithExecNode：将当前节点与已有执行节点配对
+    if (pairWithExecNode) {
+      const execNode = graph.nodes[pairWithExecNode];
+      if (!execNode) {
+        throw new TanmiError("EXEC_NODE_NOT_FOUND", `执行节点 "${pairWithExecNode}" 不存在`);
+      }
+      if (execNode.type !== "execution") {
+        throw new TanmiError("INVALID_NODE_TYPE", `节点 "${pairWithExecNode}" 不是执行节点`);
+      }
+      // 建立双向关联
+      newNode.execNodeId = pairWithExecNode;
+      execNode.testNodeId = nodeId;
+      execNode.updatedAt = currentTime;
+    }
+
+    // 处理 createTestNode：同时创建配对的测试节点
+    if (createTestNode && type === "execution") {
+      const testNodeId = generateNodeId();
+
+      // 创建测试节点目录
+      const testNodePath = this.fs.getNodePath(projectRoot, workspaceId, testNodeId);
+      await this.fs.mkdir(testNodePath);
+
+      // 写入测试节点 Info.md
+      const testNodeInfo: NodeInfoData = {
+        id: testNodeId,
+        type: "execution",
+        title: createTestNode.title,
+        status: "pending",
+        createdAt: currentTime,
+        updatedAt: currentTime,
+        requirement: createTestNode.requirement.replace(/\\n/g, "\n"),
+        docs: [],
+        notes: "",
+        conclusion: "",
+      };
+      await this.md.writeNodeInfo(projectRoot, workspaceId, testNodeId, testNodeInfo);
+
+      // 创建测试节点的 Log.md 和 Problem.md
+      await this.md.createEmptyLog(projectRoot, workspaceId, testNodeId);
+      await this.md.createEmptyProblem(projectRoot, workspaceId, testNodeId);
+
+      // 创建测试节点元数据
+      const testNodeMeta: NodeMeta = {
+        id: testNodeId,
+        type: "execution",
+        parentId,
+        children: [],
+        status: "pending",
+        isolate: false,
+        references: [],
+        conclusion: null,
+        execNodeId: nodeId,  // 关联到执行节点
+        createdAt: currentTime,
+        updatedAt: currentTime,
+      };
+
+      // 添加到图中
+      graph.nodes[testNodeId] = testNodeMeta;
+      graph.nodes[parentId].children.push(testNodeId);
+
+      // 设置执行节点的 testNodeId
+      newNode.testNodeId = testNodeId;
+
+      createdTestNodeId = testNodeId;
+    }
+
     // 12. 自动状态转换：如果父节点是 pending/planning，创建第一个子节点时转为 monitoring
     const isFirstChild = graph.nodes[parentId].children.length === 1;
     if (isFirstChild && (parentMeta.status === "pending" || parentMeta.status === "planning")) {
@@ -226,10 +296,14 @@ export class NodeService {
 
     // 14. 追加日志
     const typeLabel = type === "planning" ? "规划" : "执行";
+    let logEvent = `${typeLabel}节点 "${title}" (${nodeId}) 已创建`;
+    if (createdTestNodeId) {
+      logEvent += `，配对测试节点 (${createdTestNodeId}) 已创建`;
+    }
     await this.md.appendLog(projectRoot, workspaceId, {
       time: currentTime,
       operator: "system",
-      event: `${typeLabel}节点 "${title}" (${nodeId}) 已创建`,
+      event: logEvent,
     });
 
     // 14. 生成提示
@@ -248,6 +322,11 @@ export class NodeService {
     // 如果自动 reopen 了父节点，追加提示
     if (autoReopened) {
       hint = `⚠️ 父节点 ${parentId} 已自动从 completed 重开为 planning。` + hint;
+    }
+
+    // 如果创建了配对测试节点，追加提示
+    if (createdTestNodeId) {
+      hint += `\n\n🧪 配对测试节点 (${createdTestNodeId}) 已创建，执行节点完成后将自动触发测试。`;
     }
 
     // 14.1 如果工作区有规则，在 hint 末尾追加规则提醒
@@ -279,6 +358,7 @@ export class NodeService {
       autoReopened: autoReopened ? parentId : undefined,
       hint,
       guidance: guidance.content,
+      testNodeId: createdTestNodeId,
     };
 
     // 如果在根节点下创建非信息收集的子节点，添加 show_plan actionRequired

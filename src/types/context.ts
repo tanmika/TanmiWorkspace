@@ -1,6 +1,7 @@
 // src/types/context.ts
 
 import type { NodeStatus } from "./node.js";
+import type { DispatchConfig } from "./workspace.js";
 
 /**
  * 文档引用（含状态）
@@ -53,6 +54,7 @@ export interface ContextGetResult {
     rules: string[];
     rulesHash: string;           // 规则哈希（用于 node_create 验证）
     docs: DocRefWithStatus[];  // 仅包含 status == 'active' 的引用
+    dispatch?: DispatchConfig;   // 派发配置（如果启用）
   };
   chain: ContextChainItem[];   // 从根到当前节点的上下文链
   references: ContextChainItem[]; // 跨节点引用（仅 active）

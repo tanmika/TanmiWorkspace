@@ -3,7 +3,14 @@
 
 // ========== 基础类型 ==========
 
-export type WorkspaceStatus = 'active' | 'archived'
+export type WorkspaceStatus = 'active' | 'archived' | 'error'
+
+// 工作区错误信息
+export interface WorkspaceErrorInfo {
+  message: string
+  detectedAt: string
+  type?: 'dir_missing' | 'config_corrupted' | 'graph_corrupted' | 'unknown'
+}
 
 // 节点类型
 export type NodeType = 'planning' | 'execution'
@@ -49,6 +56,24 @@ export interface WorkspaceEntry {
   status: WorkspaceStatus
   createdAt: string
   updatedAt: string
+  errorInfo?: WorkspaceErrorInfo
+}
+
+// 派发资源限制配置
+export interface DispatchLimits {
+  timeoutMs?: number
+  maxRetries?: number
+}
+
+// 派发配置
+export interface DispatchConfig {
+  enabled: boolean
+  useGit: boolean
+  enabledAt: number
+  originalBranch?: string
+  processBranch?: string
+  backupBranches?: string[]
+  limits?: DispatchLimits
 }
 
 export interface WorkspaceConfig {
@@ -58,6 +83,7 @@ export interface WorkspaceConfig {
   createdAt: string
   updatedAt: string
   rootNodeId: string
+  dispatch?: DispatchConfig
 }
 
 // ========== 节点类型 ==========
@@ -95,7 +121,7 @@ export interface NodeTreeItem {
 
 export interface TypedLogEntry {
   timestamp: string
-  operator: 'AI' | 'Human'
+  operator: 'AI' | 'Human' | 'system'
   event: string
 }
 
@@ -158,6 +184,7 @@ export interface WorkspaceGetResult {
   config: WorkspaceConfig
   graph: NodeGraph
   workspaceMd: string
+  logMd: string
 }
 
 export interface WorkspaceDeleteResult {
@@ -248,6 +275,41 @@ export interface ProblemClearResult {
   success: boolean
 }
 
+// ========== 派发相关类型 ==========
+
+export type MergeStrategy = 'sequential' | 'squash' | 'cherry-pick' | 'skip'
+
+export interface DisableDispatchOptions {
+  mergeStrategy: MergeStrategy
+  keepBackupBranch?: boolean
+  keepProcessBranch?: boolean
+  commitMessage?: string
+}
+
+export interface DisableDispatchQueryResult {
+  success: boolean
+  status: {
+    originalBranch?: string
+    processBranch?: string
+    backupBranch?: string | null
+    hasBackupChanges: boolean
+    processCommits?: Array<{ hash: string; message: string }>
+    useGit: boolean
+  }
+  hint?: string
+}
+
+export interface EnableDispatchResult {
+  success: boolean
+  config: DispatchConfig
+  hint?: string
+}
+
+export interface DisableDispatchExecuteResult {
+  success: boolean
+  hint?: string
+}
+
 // ========== 前端扩展类型 ==========
 
 // 状态配置
@@ -309,6 +371,28 @@ export const STATUS_CONFIG: Record<NodeStatus, StatusConfig> = {
     color: '#95A5A6',
     label: '已取消',
     emoji: '⊘',
+  },
+}
+
+// 工作区状态配置
+export const WORKSPACE_STATUS_CONFIG: Record<WorkspaceStatus, StatusConfig> = {
+  active: {
+    icon: 'CircleCheck',
+    color: '#67C23A',
+    label: '活跃',
+    emoji: '🟢',
+  },
+  archived: {
+    icon: 'Box',
+    color: '#909399',
+    label: '已归档',
+    emoji: '📦',
+  },
+  error: {
+    icon: 'WarningFilled',
+    color: '#F56C6C',
+    label: '错误',
+    emoji: '⚠️',
   },
 }
 

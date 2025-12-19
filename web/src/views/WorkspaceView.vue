@@ -2,11 +2,13 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Plus, List, Share, Refresh, InfoFilled, Aim, ArrowDown, ArrowUp, Close } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, List, Share, Refresh, InfoFilled, Aim, ArrowDown, Document } from '@element-plus/icons-vue'
 import { useWorkspaceStore, useNodeStore } from '@/stores'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
+import EnableDispatchDialog from '@/components/dispatch/EnableDispatchDialog.vue'
+import DisableDispatchDialog from '@/components/dispatch/DisableDispatchDialog.vue'
 
 // 视图模式
 type ViewMode = 'list' | 'graph'
@@ -84,7 +86,9 @@ async function loadWorkspace() {
 
 // 工作区信息栏展开状态
 const showInfoBar = ref(true)
-const infoExpanded = ref(false)
+
+// 工作区详情抽屉状态
+const showWorkspaceDetail = ref(false)
 
 // 是否有规则或文档可展开
 const hasRulesOrDocs = computed(() => {
@@ -190,6 +194,22 @@ async function handleCreateNode() {
     ElMessage.error('创建失败')
   }
 }
+
+// 派发模式控制
+const showEnableDispatchDialog = ref(false)
+const showDisableDispatchDialog = ref(false)
+
+function handleEnableDispatch() {
+  showEnableDispatchDialog.value = true
+}
+
+function handleDisableDispatch() {
+  showDisableDispatchDialog.value = true
+}
+
+async function handleDispatchSuccess() {
+  await loadWorkspace()
+}
 </script>
 
 <template>
@@ -252,57 +272,168 @@ async function handleCreateNode() {
               </span>
             </div>
           </div>
+          <div class="info-item dispatch">
+            <span class="label">派发</span>
+            <div class="dispatch-content">
+              <span v-if="workspaceStore.dispatchStatus === 'disabled'" class="dispatch-status disabled">
+                未启用
+              </span>
+              <span v-else-if="workspaceStore.dispatchStatus === 'enabled'" class="dispatch-status enabled">
+                已启用
+              </span>
+              <span v-else class="dispatch-status enabled-git">
+                已启用(Git)
+              </span>
+              <el-button
+                v-if="workspaceStore.dispatchStatus === 'disabled'"
+                size="small"
+                type="primary"
+                @click="handleEnableDispatch"
+              >
+                启用
+              </el-button>
+              <el-button
+                v-else
+                size="small"
+                type="danger"
+                @click="handleDisableDispatch"
+              >
+                关闭
+              </el-button>
+            </div>
+          </div>
+          <div class="info-item rules-docs" v-if="hasRulesOrDocs">
+            <el-tag
+              v-if="workspaceStore.currentRules.length"
+              type="warning"
+              size="small"
+              class="count-tag"
+              @click="showWorkspaceDetail = true"
+            >
+              {{ workspaceStore.currentRules.length }} 条规则
+            </el-tag>
+            <el-tag
+              v-if="workspaceStore.currentDocs.length"
+              type="info"
+              size="small"
+              class="count-tag"
+              @click="showWorkspaceDetail = true"
+            >
+              {{ workspaceStore.currentDocs.length }} 个文档
+            </el-tag>
+          </div>
           <el-button
             v-if="hasRulesOrDocs"
-            :icon="infoExpanded ? ArrowUp : ArrowDown"
-            text
+            :icon="ArrowDown"
+            type="primary"
             size="small"
-            @click="infoExpanded = !infoExpanded"
+            @click="showWorkspaceDetail = true"
           >
-            {{ infoExpanded ? '收起' : '详情' }}
+            查看详情
           </el-button>
         </div>
       </div>
     </transition>
 
-    <!-- 主内容区 -->
-    <div class="main-content">
-      <!-- 工作区详情浮层 -->
-      <transition name="fade">
-        <div v-if="infoExpanded" class="info-overlay" @click.self="infoExpanded = false">
-          <div class="info-panel">
-            <div class="info-panel-header">
-              <span>工作区详情</span>
-              <el-button :icon="Close" text size="small" @click="infoExpanded = false" />
-            </div>
-            <div class="info-panel-body">
-              <div v-if="workspaceStore.currentRules.length > 0" class="info-section">
-                <span class="section-label">规则</span>
-                <ul class="info-list">
-                  <li v-for="(rule, idx) in workspaceStore.currentRules" :key="idx">{{ rule }}</li>
-                </ul>
-              </div>
-              <div v-if="workspaceStore.currentDocs.length > 0" class="info-section">
-                <span class="section-label">文档</span>
-                <ul class="info-list">
-                  <li v-for="(doc, idx) in workspaceStore.currentDocs" :key="idx">
-                    <span class="doc-path">{{ doc.path }}</span>
-                    <span class="doc-desc">{{ doc.description }}</span>
-                  </li>
-                </ul>
-              </div>
-              <div v-if="workspaceStore.currentRules.length === 0 && workspaceStore.currentDocs.length === 0" class="empty-tip">
-                暂无规则和文档
-              </div>
-            </div>
+    <!-- 工作区详情抽屉 -->
+    <el-drawer
+      v-model="showWorkspaceDetail"
+      title="工作区详情"
+      direction="rtl"
+      size="450px"
+      :with-header="true"
+    >
+      <div class="workspace-detail-content">
+        <!-- 基本信息 -->
+        <div class="detail-section">
+          <div class="section-header">
+            <span class="section-label">目标</span>
+          </div>
+          <div class="goal-content">
+            {{ workspaceStore.currentStatus?.goal || '暂无目标' }}
           </div>
         </div>
-      </transition>
+
+        <!-- 规则 -->
+        <div v-if="workspaceStore.currentRules.length > 0" class="detail-section">
+          <div class="section-header">
+            <span class="section-label">规则</span>
+            <el-tag type="warning" size="small">{{ workspaceStore.currentRules.length }}</el-tag>
+          </div>
+          <ul class="info-list rules-list">
+            <li v-for="(rule, idx) in workspaceStore.currentRules" :key="idx">{{ rule }}</li>
+          </ul>
+        </div>
+
+        <!-- 文档 -->
+        <div v-if="workspaceStore.currentDocs.length > 0" class="detail-section">
+          <div class="section-header">
+            <span class="section-label">文档</span>
+            <el-tag type="info" size="small">{{ workspaceStore.currentDocs.length }}</el-tag>
+          </div>
+          <ul class="info-list docs-list">
+            <li v-for="(doc, idx) in workspaceStore.currentDocs" :key="idx">
+              <span class="doc-path">{{ doc.path }}</span>
+              <span class="doc-desc">{{ doc.description }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 日志 -->
+        <div class="detail-section logs-section">
+          <div class="section-header">
+            <span class="section-label">工作区日志</span>
+            <el-tag type="success" size="small">{{ workspaceStore.currentLogs.length }}</el-tag>
+          </div>
+          <div v-if="workspaceStore.currentLogs.length > 0" class="log-list">
+            <div
+              v-for="(log, idx) in workspaceStore.currentLogs"
+              :key="idx"
+              class="log-item"
+              :class="{
+                'log-ai': log.operator === 'AI',
+                'log-human': log.operator === 'Human',
+                'log-system': log.operator === 'system'
+              }"
+            >
+              <div class="log-meta">
+                <span class="log-time">{{ log.timestamp }}</span>
+                <el-tag
+                  :type="log.operator === 'AI' ? 'primary' : log.operator === 'Human' ? 'success' : 'info'"
+                  size="small"
+                >
+                  {{ log.operator }}
+                </el-tag>
+              </div>
+              <div class="log-event">{{ log.event }}</div>
+            </div>
+          </div>
+          <div v-else class="empty-tip">
+            暂无日志记录
+          </div>
+        </div>
+      </div>
+    </el-drawer>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
 
       <!-- 左侧：节点树 -->
       <aside class="sidebar" :style="{ width: sidebarWidth + 'px' }">
         <div class="sidebar-header">
-          <h3>任务树</h3>
+          <div class="sidebar-header-left">
+            <h3>任务树</h3>
+            <el-tooltip content="查看工作区详情（目标、规则、文档、日志）" placement="top">
+              <el-button
+                :icon="Document"
+                type="warning"
+                size="small"
+                circle
+                class="workspace-detail-btn"
+                @click="showWorkspaceDetail = true"
+              />
+            </el-tooltip>
+          </div>
           <div class="view-toggle">
             <el-tooltip content="列表视图" placement="top">
               <el-button
@@ -391,6 +522,18 @@ async function handleCreateNode() {
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 启用派发对话框 -->
+    <EnableDispatchDialog
+      v-model="showEnableDispatchDialog"
+      @success="handleDispatchSuccess"
+    />
+
+    <!-- 禁用派发对话框 -->
+    <DisableDispatchDialog
+      v-model="showDisableDispatchDialog"
+      @success="handleDispatchSuccess"
+    />
   </div>
 </template>
 
@@ -475,99 +618,117 @@ async function handleCreateNode() {
   font-weight: 500;
 }
 
-/* 工作区详情浮层 */
-.info-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.3);
-  z-index: 100;
+.info-item.dispatch .dispatch-content {
   display: flex;
-  justify-content: center;
-  padding-top: 40px;
-}
-
-.info-panel {
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  width: 600px;
-  max-width: 90%;
-  max-height: calc(100% - 80px);
-  display: flex;
-  flex-direction: column;
-}
-
-.info-panel-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e4e7ed;
-  font-weight: 600;
-  font-size: 15px;
+  gap: 8px;
 }
 
-.info-panel-body {
-  flex: 1;
-  overflow: auto;
-  padding: 16px;
+.info-item.dispatch .dispatch-status {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.info-item.dispatch .dispatch-status.disabled {
+  color: #909399;
+  background: #f4f4f5;
+}
+
+.info-item.dispatch .dispatch-status.enabled {
+  color: #67c23a;
+  background: #f0f9ff;
+}
+
+.info-item.dispatch .dispatch-status.enabled-git {
+  color: #e6a23c;
+  background: #fdf6ec;
+}
+
+/* 规则文档标签 */
+.info-item.rules-docs {
+  display: flex;
+  gap: 8px;
+}
+
+.count-tag {
+  cursor: pointer;
+}
+
+.count-tag:hover {
+  opacity: 0.8;
+}
+
+/* 抽屉内容样式 */
+.drawer-content {
+  padding: 0 8px;
 }
 
 .info-section {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .info-section:last-child {
   margin-bottom: 0;
 }
 
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .section-label {
-  font-size: 13px;
-  color: #909399;
-  font-weight: 500;
-  display: block;
-  margin-bottom: 8px;
+  font-size: 15px;
+  color: #303133;
+  font-weight: 600;
 }
 
 .info-list {
   margin: 0;
-  padding-left: 20px;
-  font-size: 14px;
-  color: #303133;
-  line-height: 1.8;
+  padding: 0;
+  list-style: none;
 }
 
-.info-list li {
-  margin-bottom: 4px;
+.rules-list li {
+  padding: 10px 12px;
+  background: #fdf6ec;
+  border-left: 3px solid #e6a23c;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #303133;
+  line-height: 1.6;
+}
+
+.docs-list li {
+  padding: 10px 12px;
+  background: #f0f9ff;
+  border-left: 3px solid #409eff;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .doc-path {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 13px;
   color: #409eff;
-  margin-right: 8px;
 }
 
 .doc-desc {
-  color: #909399;
+  font-size: 13px;
+  color: #606266;
 }
 
 .empty-tip {
   color: #909399;
   text-align: center;
-  padding: 20px;
-}
-
-/* 浮层动画 */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+  padding: 40px 20px;
 }
 
 /* 信息栏展开/收起动画 */
@@ -655,5 +816,96 @@ async function handleCreateNode() {
   font-size: 12px;
   color: #909399;
   margin-top: 4px;
+}
+
+/* 侧边栏头部左侧 */
+.sidebar-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 工作区详情按钮高亮动画 */
+.workspace-detail-btn {
+  animation: pulse-highlight 2s ease-in-out infinite;
+}
+
+@keyframes pulse-highlight {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(230, 162, 60, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(230, 162, 60, 0.2);
+  }
+}
+
+/* 工作区详情抽屉内容 */
+.workspace-detail-content {
+  padding: 0 8px;
+}
+
+.detail-section {
+  margin-bottom: 20px;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.goal-content {
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #303133;
+  line-height: 1.6;
+}
+
+/* 日志区域 */
+.logs-section {
+  flex: 1;
+}
+
+.log-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.log-item {
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: #f5f7fa;
+}
+
+.log-item.log-ai {
+  border-left: 3px solid #409eff;
+}
+
+.log-item.log-human {
+  border-left: 3px solid #67c23a;
+}
+
+.log-item.log-system {
+  border-left: 3px solid #909399;
+}
+
+.log-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.log-time {
+  font-size: 12px;
+  color: #909399;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.log-event {
+  font-size: 13px;
+  color: #303133;
+  line-height: 1.5;
 }
 </style>

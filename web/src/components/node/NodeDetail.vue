@@ -224,6 +224,28 @@ function formatTime(isoString: string) {
       <MarkdownContent :content="currentNode.requirement || '暂无描述'" />
     </el-card>
 
+    <!-- 文档引用 -->
+    <el-card v-if="currentNode.docs?.length" class="section-card docs-card">
+      <template #header>
+        <span>文档引用</span>
+      </template>
+      <ul class="doc-list">
+        <li v-for="doc in currentNode.docs" :key="doc.path" class="doc-item">
+          <span class="doc-path">{{ doc.path }}</span>
+          <span class="doc-desc">{{ doc.description }}</span>
+          <el-tag v-if="doc.status === 'expired'" type="info" size="small">已过期</el-tag>
+        </li>
+      </ul>
+    </el-card>
+
+    <!-- 备注 -->
+    <el-card v-if="currentNode.note" class="section-card">
+      <template #header>
+        <span>备注</span>
+      </template>
+      <MarkdownContent :content="currentNode.note" />
+    </el-card>
+
     <!-- 结论（已完成节点） -->
     <el-card v-if="nodeMeta.conclusion" class="section-card">
       <template #header>
@@ -390,5 +412,43 @@ function formatTime(isoString: string) {
   color: #606266;
   line-height: 1.5;
   padding-left: 20px;
+}
+
+.docs-card :deep(.el-card__header) {
+  background: #f0f9ff;
+  color: #409eff;
+}
+
+.doc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.doc-item:last-child {
+  border-bottom: none;
+}
+
+.doc-path {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 13px;
+  color: #409eff;
+  background: #f5f7fa;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.doc-desc {
+  font-size: 13px;
+  color: #606266;
+  flex: 1;
 }
 </style>

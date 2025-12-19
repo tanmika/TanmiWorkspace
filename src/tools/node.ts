@@ -87,6 +87,25 @@ export const nodeCreateTool: Tool = {
         enum: ["info_collection", "validation", "summary"],
         description: "节点角色（可选）：info_collection=信息收集节点，完成时自动归档规则和文档到工作区",
       },
+      createTestNode: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "测试节点标题",
+          },
+          requirement: {
+            type: "string",
+            description: "验收标准",
+          },
+        },
+        required: ["title", "requirement"],
+        description: "同时创建配对的测试节点（派发模式用）",
+      },
+      pairWithExecNode: {
+        type: "string",
+        description: "与指定执行节点配对（用于单独创建测试节点时，指定关联的执行节点 ID）",
+      },
     },
     required: ["workspaceId", "parentId", "type", "title", "requirement"],
   },
