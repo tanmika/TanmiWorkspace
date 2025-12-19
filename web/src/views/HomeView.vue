@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, ArrowRight, Box, RefreshRight, Search, Sort, Setting } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowRight, Box, RefreshRight, Search, Sort, Setting, WarningFilled } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@/stores'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
@@ -25,7 +25,7 @@ const PREFERENCES_KEY = 'tanmi-workspace-home-preferences'
 
 // 偏好设置类型
 interface HomePreferences {
-  statusFilter: 'all' | 'active' | 'archived'
+  statusFilter: 'all' | 'active' | 'archived' | 'error'
   sortBy: 'updatedAt' | 'createdAt'
   sortOrder: 'desc' | 'asc'
 }
@@ -55,7 +55,7 @@ function savePreferences() {
 
 // 初始化偏好设置
 const savedPrefs = loadPreferences()
-const statusFilter = ref<'all' | 'active' | 'archived'>(savedPrefs.statusFilter)
+const statusFilter = ref<'all' | 'active' | 'archived' | 'error'>(savedPrefs.statusFilter)
 const searchQuery = ref('')
 const sortBy = ref<'updatedAt' | 'createdAt'>(savedPrefs.sortBy)
 const sortOrder = ref<'desc' | 'asc'>(savedPrefs.sortOrder)
@@ -140,8 +140,27 @@ async function handleRestore(id: string, name: string) {
 }
 
 // 进入工作区
-function handleEnter(id: string) {
-  router.push(`/workspace/${id}`)
+function handleEnter(ws: WorkspaceEntry) {
+  if (ws.status === 'error') {
+    // 错误状态的工作区显示错误信息弹窗
+    showErrorInfo(ws)
+    return
+  }
+  router.push(`/workspace/${ws.id}`)
+}
+
+// 显示错误信息
+function showErrorInfo(ws: WorkspaceEntry) {
+  const errorInfo = ws.errorInfo
+  const message = errorInfo
+    ? `错误类型：${errorInfo.type || '未知'}\n错误信息：${errorInfo.message}\n检测时间：${formatTime(errorInfo.detectedAt)}`
+    : '未知错误'
+
+  ElMessageBox.alert(message, `工作区「${ws.name}」出错`, {
+    type: 'error',
+    confirmButtonText: '知道了',
+    dangerouslyUseHTMLString: false,
+  })
 }
 
 // 格式化时间
@@ -164,6 +183,8 @@ const filteredWorkspaces = computed(() => {
     list = [...workspaceStore.activeWorkspaces]
   } else if (statusFilter.value === 'archived') {
     list = [...workspaceStore.archivedWorkspaces]
+  } else if (statusFilter.value === 'error') {
+    list = workspaceStore.workspaces.filter(ws => ws.status === 'error')
   } else {
     list = [...workspaceStore.workspaces]
   }
@@ -222,6 +243,7 @@ function toggleSortOrder() {
           <el-radio-button value="all">全部</el-radio-button>
           <el-radio-button value="active">活跃</el-radio-button>
           <el-radio-button value="archived">已归档</el-radio-button>
+          <el-radio-button value="error">错误</el-radio-button>
         </el-radio-group>
         <el-input
           v-model="searchQuery"
@@ -251,13 +273,17 @@ function toggleSortOrder() {
           v-for="ws in filteredWorkspaces"
           :key="ws.id"
           class="workspace-card"
+          :class="{ 'error-card': ws.status === 'error' }"
           shadow="hover"
         >
           <template #header>
             <div class="card-header">
               <span class="name">{{ ws.name }}</span>
-              <el-tag :type="ws.status === 'active' ? 'success' : 'info'" size="small">
-                {{ ws.status === 'active' ? '活跃' : '已归档' }}
+              <el-tag
+                :type="ws.status === 'active' ? 'success' : ws.status === 'error' ? 'danger' : 'info'"
+                size="small"
+              >
+                {{ ws.status === 'active' ? '活跃' : ws.status === 'error' ? '错误' : '已归档' }}
               </el-tag>
             </div>
           </template>
@@ -271,30 +297,42 @@ function toggleSortOrder() {
             </div>
           </div>
           <div class="card-actions">
-            <el-button type="primary" text :icon="ArrowRight" @click="handleEnter(ws.id)">
-              进入
-            </el-button>
-            <el-button
-              v-if="ws.status === 'active'"
-              type="info"
-              text
-              :icon="Box"
-              @click="handleArchive(ws.id, ws.name)"
-            >
-              归档
-            </el-button>
-            <el-button
-              v-else
-              type="success"
-              text
-              :icon="RefreshRight"
-              @click="handleRestore(ws.id, ws.name)"
-            >
-              恢复
-            </el-button>
-            <el-button type="danger" text :icon="Delete" @click="handleDelete(ws.id, ws.name)">
-              删除
-            </el-button>
+            <!-- 错误状态的工作区 -->
+            <template v-if="ws.status === 'error'">
+              <el-button type="warning" text :icon="WarningFilled" @click="showErrorInfo(ws)">
+                查看错误
+              </el-button>
+              <el-button type="danger" text :icon="Delete" @click="handleDelete(ws.id, ws.name)">
+                删除
+              </el-button>
+            </template>
+            <!-- 正常状态的工作区 -->
+            <template v-else>
+              <el-button type="primary" text :icon="ArrowRight" @click="handleEnter(ws)">
+                进入
+              </el-button>
+              <el-button
+                v-if="ws.status === 'active'"
+                type="info"
+                text
+                :icon="Box"
+                @click="handleArchive(ws.id, ws.name)"
+              >
+                归档
+              </el-button>
+              <el-button
+                v-else
+                type="success"
+                text
+                :icon="RefreshRight"
+                @click="handleRestore(ws.id, ws.name)"
+              >
+                恢复
+              </el-button>
+              <el-button type="danger" text :icon="Delete" @click="handleDelete(ws.id, ws.name)">
+                删除
+              </el-button>
+            </template>
           </div>
         </el-card>
       </div>
@@ -396,6 +434,15 @@ function toggleSortOrder() {
 
 .workspace-card {
   cursor: pointer;
+}
+
+.workspace-card.error-card {
+  border-color: #F56C6C;
+  background: linear-gradient(135deg, #fff 0%, #fef0f0 100%);
+}
+
+.workspace-card.error-card:hover {
+  border-color: #f56c6c;
 }
 
 .card-header {

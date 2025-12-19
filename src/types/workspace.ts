@@ -18,12 +18,22 @@ export interface WorkspaceEntry {
   status: WorkspaceStatus;          // 状态
   createdAt: string;                // ISO 8601 时间戳
   updatedAt: string;                // ISO 8601 时间戳
+  errorInfo?: WorkspaceErrorInfo;   // 错误信息（仅 status="error" 时存在）
 }
 
 /**
  * 工作区状态
  */
-export type WorkspaceStatus = "active" | "archived";
+export type WorkspaceStatus = "active" | "archived" | "error";
+
+/**
+ * 工作区错误信息
+ */
+export interface WorkspaceErrorInfo {
+  message: string;                    // 错误描述
+  detectedAt: string;                 // 检测到错误的时间 (ISO 8601)
+  type?: "dir_missing" | "config_corrupted" | "graph_corrupted" | "unknown";  // 错误类型
+}
 
 /**
  * 派发资源限制配置
@@ -184,6 +194,7 @@ export interface WorkspaceListItem extends WorkspaceEntry {
  */
 export interface WorkspaceListResult {
   workspaces: WorkspaceListItem[];
+  hint?: string;                      // 提示信息（如存在错误工作区时的排查建议）
 }
 
 /**

@@ -3,7 +3,14 @@
 
 // ========== 基础类型 ==========
 
-export type WorkspaceStatus = 'active' | 'archived'
+export type WorkspaceStatus = 'active' | 'archived' | 'error'
+
+// 工作区错误信息
+export interface WorkspaceErrorInfo {
+  message: string
+  detectedAt: string
+  type?: 'dir_missing' | 'config_corrupted' | 'graph_corrupted' | 'unknown'
+}
 
 // 节点类型
 export type NodeType = 'planning' | 'execution'
@@ -49,6 +56,7 @@ export interface WorkspaceEntry {
   status: WorkspaceStatus
   createdAt: string
   updatedAt: string
+  errorInfo?: WorkspaceErrorInfo
 }
 
 // 派发资源限制配置
@@ -363,6 +371,28 @@ export const STATUS_CONFIG: Record<NodeStatus, StatusConfig> = {
     color: '#95A5A6',
     label: '已取消',
     emoji: '⊘',
+  },
+}
+
+// 工作区状态配置
+export const WORKSPACE_STATUS_CONFIG: Record<WorkspaceStatus, StatusConfig> = {
+  active: {
+    icon: 'CircleCheck',
+    color: '#67C23A',
+    label: '活跃',
+    emoji: '🟢',
+  },
+  archived: {
+    icon: 'Box',
+    color: '#909399',
+    label: '已归档',
+    emoji: '📦',
+  },
+  error: {
+    icon: 'WarningFilled',
+    color: '#F56C6C',
+    label: '错误',
+    emoji: '⚠️',
   },
 }
 

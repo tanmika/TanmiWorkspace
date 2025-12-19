@@ -27,7 +27,9 @@ import type {
   WorkspaceConfig,
   ProjectDocInfo,
   ProjectDocsScanResult,
+  WorkspaceErrorInfo,
 } from "../types/workspace.js";
+import { logError } from "../utils/errorLogger.js";
 import type { NodeGraph, NodeMeta } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { generateWorkspaceId } from "../utils/id.js";
@@ -267,7 +269,20 @@ export class WorkspaceService {
       webUrl: `http://localhost:${port}/workspace/${ws.id}`,
     }));
 
-    return { workspaces };
+    // 检查是否有错误状态的工作区，添加排查提示
+    const errorWorkspaces = workspaces.filter(ws => ws.status === "error");
+    let hint: string | undefined;
+    if (errorWorkspaces.length > 0) {
+      const errorIds = errorWorkspaces.map(ws => ws.id).join(", ");
+      hint = `⚠️ 发现 ${errorWorkspaces.length} 个错误状态的工作区（${errorIds}）。\n\n` +
+        "**排查建议**：\n" +
+        "1. 检查工作区目录是否存在（可能被误删或移动）\n" +
+        "2. 检查 workspace.json 和 graph.json 文件是否完整\n" +
+        "3. 查看 error.log 获取详细错误信息：~/.tanmi-workspace[-dev]/error.log\n" +
+        "4. 如果无法修复，可使用 workspace_delete(force=true) 删除错误工作区";
+    }
+
+    return { workspaces, hint };
   }
 
   /**
@@ -293,9 +308,9 @@ export class WorkspaceService {
     devLog.archivePath(workspaceId, isArchived, workspacePath);
     if (!(await this.fs.exists(workspacePath))) {
       devLog.fileError("exists", workspacePath, new Error("目录不存在"));
-      // 清理无效索引
-      await this.json.cleanupInvalidEntries();
-      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在`);
+      // 标记为 error 状态而不是删除
+      await this.markAsError(workspaceId, "dir_missing", `工作区目录不存在: ${workspacePath}`);
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在（已标记为错误状态，可通过 workspace_list 查看）`);
     }
 
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
@@ -381,8 +396,9 @@ export class WorkspaceService {
     // 验证项目目录存在（根据归档状态选择正确路径）
     const workspacePath = this.fs.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
     if (!(await this.fs.exists(workspacePath))) {
-      await this.json.cleanupInvalidEntries();
-      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在`);
+      // 标记为 error 状态而不是删除
+      await this.markAsError(workspaceId, "dir_missing", `工作区目录不存在: ${workspacePath}`);
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在（已标记为错误状态）`);
     }
 
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
@@ -975,6 +991,54 @@ export class WorkspaceService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * 将工作区标记为错误状态
+   * @param workspaceId 工作区 ID
+   * @param errorType 错误类型
+   * @param message 错误信息
+   */
+  async markAsError(
+    workspaceId: string,
+    errorType: WorkspaceErrorInfo["type"],
+    message: string
+  ): Promise<WorkspaceErrorInfo> {
+    const errorInfo: WorkspaceErrorInfo = {
+      message,
+      detectedAt: now(),
+      type: errorType,
+    };
+
+    // 更新索引中的状态
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (wsEntry) {
+      wsEntry.status = "error";
+      wsEntry.errorInfo = errorInfo;
+      wsEntry.updatedAt = now();
+      await this.json.writeIndex(index);
+    }
+
+    // 记录到 error.log
+    logError(errorType || "unknown", workspaceId, message);
+
+    return errorInfo;
+  }
+
+  /**
+   * 清除工作区的错误状态（用于修复后）
+   * @param workspaceId 工作区 ID
+   */
+  async clearError(workspaceId: string): Promise<void> {
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (wsEntry && wsEntry.status === "error") {
+      wsEntry.status = "active";
+      delete wsEntry.errorInfo;
+      wsEntry.updatedAt = now();
+      await this.json.writeIndex(index);
     }
   }
 }
