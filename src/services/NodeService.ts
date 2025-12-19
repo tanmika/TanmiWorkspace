@@ -111,15 +111,25 @@ export class NodeService {
 
     // 4. 如果父节点是 completed 状态，自动 reopen 到 planning
     let autoReopened = false;
+    let archivedConclusion: string | null = null;
     if (parentMeta.status === "completed") {
       parentMeta.status = "planning";
       parentMeta.updatedAt = now();
-      // 清空结论（reopen 语义）
+      // 保留原有结论作为历史引用（不清空）
       const oldConclusion = parentMeta.conclusion;
-      parentMeta.conclusion = null;
+      if (oldConclusion) {
+        // 将原有结论转换为引用格式，标注为历史结论
+        const timestamp = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+        const quotedConclusion = oldConclusion.split("\n").map(line => `> ${line}`).join("\n");
+        archivedConclusion = `**[历史结论 - ${timestamp}]**\n${quotedConclusion}\n\n---\n\n`;
+        parentMeta.conclusion = archivedConclusion;
+      }
       autoReopened = true;
-      // 同步更新 Info.md 中的状态
+      // 同步更新 Info.md 中的状态和结论
       await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "planning");
+      if (archivedConclusion) {
+        await this.md.updateConclusion(projectRoot, workspaceId, parentId, archivedConclusion);
+      }
     }
 
     // 5. 验证父节点状态允许创建子节点（pending/planning/monitoring 状态）

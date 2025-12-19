@@ -467,7 +467,7 @@ web/
 
 - [ ] **已完成工作区追加需求处理不当** - 根节点完成后补充/更新需求时，AI 倾向于直接修改代码而非 reopen 工作区继续跟踪
 - [ ] **并发安全** - 多个 API 调用同时到达时可能导致数据不一致，缺少乐观锁机制
-- [ ] **completed 节点自动 reopen** - 在已完成节点下创建子节点会自动 reopen 并清空 conclusion，应改为显式操作
+- [x] **completed 节点自动 reopen** - ~~在已完成节点下创建子节点会自动 reopen 并清空 conclusion~~ 已修复：保留原有结论作为历史引用（引用格式 + 时间戳标注）
 - [x] **聚焦节点不同步** - ~~`context_focus` 和 `session_bind` 的 focusedNodeId 可能不一致~~ 已修复：统一以 graph.currentFocus 为权威来源（含 Hook 智能提醒）
 - [x] **并发执行控制缺失** - ~~同级执行节点可同时启动~~ 已修复：start 时检查同级节点状态，阻止并发执行
 - [ ] **规则提醒改用 Hook 实现** - 弃用 rulesHash 验证机制，改用 PreToolUse Hook（Claude Code）或 beforeMCPExecution（Cursor）在 node_create 前主动注入规则
