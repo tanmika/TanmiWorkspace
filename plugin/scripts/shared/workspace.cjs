@@ -264,6 +264,48 @@ function getNodeProblem(workspaceId, nodeId) {
   }
 }
 
+/**
+ * 获取与指定 cwd 匹配的活跃工作区列表
+ * @param {string} cwd - 当前工作目录
+ * @returns {Array<object>} 匹配的工作区列表 [{ id, name, projectRoot, goal }]
+ */
+function getWorkspacesByCwd(cwd) {
+  const index = readJsonFile(INDEX_PATH);
+  if (!index || !index.workspaces) {
+    return [];
+  }
+
+  // 规范化 cwd 路径
+  const normalizedCwd = path.resolve(cwd);
+
+  // 查找匹配的活跃工作区
+  const matchedWorkspaces = index.workspaces
+    .filter(ws => {
+      // 只匹配活跃工作区
+      if (ws.status !== 'active') return false;
+
+      // 检查 projectRoot 是否匹配
+      if (!ws.projectRoot) return false;
+      const normalizedRoot = path.resolve(ws.projectRoot);
+
+      // cwd 等于或是 projectRoot 的子目录
+      return normalizedCwd === normalizedRoot ||
+             normalizedCwd.startsWith(normalizedRoot + path.sep);
+    })
+    .map(ws => {
+      // 获取工作区目标
+      const mdData = getWorkspaceMdData(ws.id);
+      return {
+        id: ws.id,
+        name: ws.name,
+        projectRoot: ws.projectRoot,
+        goal: mdData?.goal || ''
+      };
+    });
+
+  return matchedWorkspaces;
+}
+
 module.exports = {
   getWorkspaceEntry,
   getWorkspaceConfig,
@@ -275,5 +317,6 @@ module.exports = {
   parseWorkspaceMd,
   parseNodeInfo,
   parseLogMd,
-  parseProblemMd
+  parseProblemMd,
+  getWorkspacesByCwd
 };
