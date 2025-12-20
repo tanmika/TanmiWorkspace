@@ -25,14 +25,17 @@ export class ReferenceService {
   ) {}
 
   /**
-   * 根据 workspaceId 获取 projectRoot
+   * 根据 workspaceId 获取工作区信息
    */
-  private async resolveProjectRoot(workspaceId: string): Promise<string> {
-    const projectRoot = await this.json.getProjectRoot(workspaceId);
-    if (!projectRoot) {
+  private async resolveWorkspaceInfo(workspaceId: string): Promise<{ projectRoot: string; wsDirName: string }> {
+    const entry = await this.json.findWorkspaceEntry(workspaceId);
+    if (!entry) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
-    return projectRoot;
+    return {
+      projectRoot: entry.projectRoot,
+      wsDirName: entry.dirName || entry.id,  // 向后兼容
+    };
   }
 
   /**
@@ -41,11 +44,11 @@ export class ReferenceService {
   async isolate(params: NodeIsolateParams): Promise<NodeIsolateResult> {
     const { workspaceId, nodeId, isolate } = params;
 
-    // 1. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 1. 获取工作区信息
+    const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
 
     // 2. 验证节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
@@ -55,6 +58,7 @@ export class ReferenceService {
 
     // 3. 更新节点的 isolate 字段
     const nodeMeta = graph.nodes[nodeId];
+    const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
     const previousIsolate = nodeMeta.isolate;
     nodeMeta.isolate = isolate;
 
@@ -62,16 +66,16 @@ export class ReferenceService {
     nodeMeta.updatedAt = currentTime;
 
     // 5. 写入 graph.json
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 6. 追加日志
     if (previousIsolate !== isolate) {
       const event = isolate ? "设置节点隔离（切断上下文继承）" : "取消节点隔离";
-      await this.md.appendTypedLogEntry(projectRoot, workspaceId, {
+      await this.md.appendTypedLogEntry(projectRoot, wsDirName, {
         timestamp,
         operator: "AI",
         event,
-      }, nodeId);
+      }, nodeDirName);
     }
 
     // 7. 返回结果
@@ -86,20 +90,22 @@ export class ReferenceService {
   async reference(params: NodeReferenceParams): Promise<NodeReferenceResult> {
     const { workspaceId, nodeId, targetIdOrPath, action, description } = params;
 
-    // 1. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 1. 获取工作区信息
+    const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
 
     // 2. 验证节点存在
-      const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
 
     const currentTime = now();
     const timestamp = formatShort(currentTime);
+    const nodeMeta = graph.nodes[nodeId];
+    const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
 
     // 3. 读取节点 Info.md
-    const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, workspaceId, nodeId);
+    const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, wsDirName, nodeDirName);
     let docs = nodeInfo.docsWithStatus;
 
     // 4. 判断是节点引用还是文档引用
@@ -110,8 +116,8 @@ export class ReferenceService {
       case "add":
         docs = this.addReference(docs, targetIdOrPath, description || "", isNodeReference);
         // 如果是节点引用，同步更新 graph.json 的 references 数组
-        if (isNodeReference && !graph.nodes[nodeId].references.includes(targetIdOrPath)) {
-          graph.nodes[nodeId].references.push(targetIdOrPath);
+        if (isNodeReference && !nodeMeta.references.includes(targetIdOrPath)) {
+          nodeMeta.references.push(targetIdOrPath);
         }
         break;
 
@@ -119,7 +125,7 @@ export class ReferenceService {
         docs = this.removeReference(docs, targetIdOrPath);
         // 如果是节点引用，同步更新 graph.json 的 references 数组
         if (isNodeReference) {
-          graph.nodes[nodeId].references = graph.nodes[nodeId].references.filter(
+          nodeMeta.references = nodeMeta.references.filter(
             id => id !== targetIdOrPath
           );
         }
@@ -135,15 +141,15 @@ export class ReferenceService {
     }
 
     // 6. 写入 Info.md
-    await this.md.writeNodeInfoWithStatus(projectRoot, workspaceId, nodeId, {
+    await this.md.writeNodeInfoWithStatus(projectRoot, wsDirName, nodeDirName, {
       ...nodeInfo,
       updatedAt: currentTime,
       docsWithStatus: docs,
     });
 
     // 7. 更新 graph.json
-    graph.nodes[nodeId].updatedAt = currentTime;
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    nodeMeta.updatedAt = currentTime;
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 8. 追加日志
     const actionDescriptions: Record<string, string> = {
@@ -152,11 +158,11 @@ export class ReferenceService {
       expire: "标记引用过期",
       activate: "激活引用",
     };
-    await this.md.appendTypedLogEntry(projectRoot, workspaceId, {
+    await this.md.appendTypedLogEntry(projectRoot, wsDirName, {
       timestamp,
       operator: "AI",
       event: `${actionDescriptions[action]}: ${targetIdOrPath}`,
-    }, nodeId);
+    }, nodeDirName);
 
     // 9. 返回更新后的引用列表
     return {

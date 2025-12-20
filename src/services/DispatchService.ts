@@ -795,28 +795,24 @@ export class DispatchService {
     excludeWorkspaceId?: string
   ): Promise<{ workspaceId: string; useGit: boolean } | null> {
     try {
-      const { readdir } = await import("node:fs/promises");
-
-      // 获取所有工作区配置文件
-      const workspacesDir = this.fs.getWorkspaceRootPath(projectRoot);
-      const entries = await readdir(workspacesDir, { withFileTypes: true });
+      // 通过 index.json 获取所有工作区（支持新的可读目录名格式）
+      const index = await this.json.readIndex();
+      const workspacesInProject = index.workspaces.filter(ws =>
+        ws.projectRoot === projectRoot && ws.status !== "archived"
+      );
 
       // 遍历所有工作区配置
-      for (const entry of entries) {
-        if (!entry.name.startsWith("ws-") || !entry.isDirectory()) {
-          continue;
-        }
-
-        const workspaceId = entry.name;
-        if (workspaceId === excludeWorkspaceId) {
+      for (const wsEntry of workspacesInProject) {
+        if (wsEntry.id === excludeWorkspaceId) {
           continue;
         }
 
         try {
-          const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+          const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
+          const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
           if (config.dispatch?.enabled) {
             return {
-              workspaceId,
+              workspaceId: wsEntry.id,
               useGit: config.dispatch.useGit ?? false,
             };
           }
@@ -840,27 +836,23 @@ export class DispatchService {
     excludeWorkspaceId?: string
   ): Promise<string | null> {
     try {
-      const { readdir } = await import("node:fs/promises");
-
-      // 获取所有工作区配置文件
-      const workspacesDir = this.fs.getWorkspaceRootPath(projectRoot);
-      const entries = await readdir(workspacesDir, { withFileTypes: true });
+      // 通过 index.json 获取所有工作区（支持新的可读目录名格式）
+      const index = await this.json.readIndex();
+      const workspacesInProject = index.workspaces.filter(ws =>
+        ws.projectRoot === projectRoot && ws.status !== "archived"
+      );
 
       // 遍历所有工作区配置
-      for (const entry of entries) {
-        if (!entry.name.startsWith("ws-") || !entry.isDirectory()) {
-          continue;
-        }
-
-        const workspaceId = entry.name;
-        if (workspaceId === excludeWorkspaceId) {
+      for (const wsEntry of workspacesInProject) {
+        if (wsEntry.id === excludeWorkspaceId) {
           continue;
         }
 
         try {
-          const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+          const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
+          const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
           if (config.dispatch?.enabled) {
-            return workspaceId;
+            return wsEntry.id;
           }
         } catch {
           // 忽略读取失败的工作区

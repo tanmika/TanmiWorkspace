@@ -37,31 +37,22 @@ export class ContextService {
   }
 
   /**
-   * 根据 workspaceId 获取 projectRoot
+   * 根据 workspaceId 获取工作区信息（包括归档状态和目录名）
    */
-  private async resolveProjectRoot(workspaceId: string): Promise<string> {
-    const projectRoot = await this.json.getProjectRoot(workspaceId);
-    if (!projectRoot) {
-      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
-    }
-    return projectRoot;
-  }
-
-  /**
-   * 根据 workspaceId 获取工作区信息（包括归档状态）
-   */
-  private async resolveWorkspaceInfo(workspaceId: string): Promise<{ projectRoot: string; isArchived: boolean }> {
+  private async resolveWorkspaceInfo(workspaceId: string): Promise<{ projectRoot: string; wsDirName: string; isArchived: boolean }> {
     const index = await this.json.readIndex();
     const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
     if (!wsEntry) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
     const isArchived = wsEntry.status === "archived";
+    const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
     if (isArchived) {
-      devLog.archivePath(workspaceId, isArchived, this.fs.getWorkspaceBasePath(wsEntry.projectRoot, workspaceId, true));
+      devLog.archivePath(workspaceId, isArchived, this.fs.getWorkspaceBasePath(wsEntry.projectRoot, wsDirName, true));
     }
     return {
       projectRoot: wsEntry.projectRoot,
+      wsDirName,
       isArchived,
     };
   }
@@ -80,20 +71,20 @@ export class ContextService {
     } = params;
 
     // 1. 获取工作区信息（包括归档状态）
-    const { projectRoot, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
+    const { projectRoot, wsDirName, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
 
     // 2. 验证节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
+    const graph = await this.json.readGraph(projectRoot, wsDirName, isArchived);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
 
     // 3. 读取工作区 Workspace.md，提取 goal/rules/docs（仅 active）
-    const workspaceData = await this.md.readWorkspaceMdWithStatus(projectRoot, workspaceId, isArchived);
+    const workspaceData = await this.md.readWorkspaceMdWithStatus(projectRoot, wsDirName, isArchived);
     const activeDocs = this.filterActiveRefs(workspaceData.docsWithStatus);
 
     // 4. 构建上下文链（从根到当前节点）
-    const chain = await this.buildContextChain(projectRoot, workspaceId, nodeId, graph, {
+    const chain = await this.buildContextChain(projectRoot, wsDirName, nodeId, graph, {
       includeLog,
       maxLogEntries,
       includeProblem,
@@ -105,7 +96,7 @@ export class ContextService {
     const references: ContextChainItem[] = [];
     for (const refNodeId of nodeMeta.references) {
       if (graph.nodes[refNodeId]) {
-        const refItem = await this.buildSingleContextItem(projectRoot, workspaceId, refNodeId, graph, {
+        const refItem = await this.buildSingleContextItem(projectRoot, wsDirName, refNodeId, graph, {
           includeLog,
           maxLogEntries,
           includeProblem,
@@ -121,7 +112,8 @@ export class ContextService {
     for (const childId of nodeMeta.children) {
       const childMeta = graph.nodes[childId];
       if (childMeta && (childMeta.status === "completed" || childMeta.status === "failed")) {
-        const childInfo = await this.md.readNodeInfo(projectRoot, workspaceId, childId, isArchived);
+        const childDirName = childMeta.dirName || childId;  // 向后兼容
+        const childInfo = await this.md.readNodeInfo(projectRoot, wsDirName, childDirName, isArchived);
         if (childInfo.conclusion) {
           childConclusions.push({
             nodeId: childId,
@@ -152,7 +144,7 @@ export class ContextService {
     const guidance = this.guidanceService.generateFromContext(guidanceContext, 0);
 
     // 9. 读取派发配置（如果存在）
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
     const dispatch = config.dispatch?.enabled ? config.dispatch : undefined;
 
     // 10. 返回结果
@@ -265,11 +257,11 @@ export class ContextService {
   async focus(params: ContextFocusParams): Promise<ContextFocusResult> {
     const { workspaceId, nodeId } = params;
 
-    // 1. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 1. 获取工作区信息
+    const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
 
     // 2. 验证节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
@@ -281,13 +273,13 @@ export class ContextService {
     graph.currentFocus = nodeId;
 
     // 5. 写入 graph.json
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 6. 更新工作区配置的 updatedAt
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
     const currentTime = now();
     config.updatedAt = currentTime;
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, wsDirName, config);
 
     // 7. 同步更新索引中的 updatedAt
     const index = await this.json.readIndex();
@@ -310,7 +302,7 @@ export class ContextService {
    */
   private async buildContextChain(
     projectRoot: string,
-    workspaceId: string,
+    wsDirName: string,
     nodeId: string,
     graph: NodeGraph,
     options: {
@@ -328,7 +320,7 @@ export class ContextService {
       const nodeMeta: NodeMeta | undefined = graph.nodes[currentId];
       if (!nodeMeta) break;
 
-      const item = await this.buildSingleContextItem(projectRoot, workspaceId, currentId, graph, options, isArchived);
+      const item = await this.buildSingleContextItem(projectRoot, wsDirName, currentId, graph, options, isArchived);
       chain.unshift(item); // 从根开始
 
       // 检查隔离标记
@@ -345,7 +337,7 @@ export class ContextService {
    */
   private async buildSingleContextItem(
     projectRoot: string,
-    workspaceId: string,
+    wsDirName: string,
     nodeId: string,
     graph: NodeGraph,
     options: {
@@ -357,7 +349,8 @@ export class ContextService {
     isArchived: boolean = false
   ): Promise<ContextChainItem> {
     const nodeMeta = graph.nodes[nodeId];
-    const info = await this.md.readNodeInfoWithStatus(projectRoot, workspaceId, nodeId, isArchived);
+    const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
+    const info = await this.md.readNodeInfoWithStatus(projectRoot, wsDirName, nodeDirName, isArchived);
     const docs = this.filterActiveRefs(info.docsWithStatus);
 
     const item: ContextChainItem = {
@@ -372,7 +365,7 @@ export class ContextService {
 
     // 包含日志
     if (options.includeLog) {
-      const logContent = await this.md.readLogRaw(projectRoot, workspaceId, nodeId, isArchived);
+      const logContent = await this.md.readLogRaw(projectRoot, wsDirName, nodeDirName, isArchived);
       let logs = this.md.parseLogTable(logContent);
       logs = this.tailLogs(logs, options.maxLogEntries);
       if (options.reverseLog) {
@@ -383,7 +376,7 @@ export class ContextService {
 
     // 包含问题
     if (options.includeProblem) {
-      const problem = await this.md.readProblem(projectRoot, workspaceId, nodeId, isArchived);
+      const problem = await this.md.readProblem(projectRoot, wsDirName, nodeDirName, isArchived);
       if (problem.currentProblem && problem.currentProblem !== "（暂无）") {
         item.problem = problem.currentProblem;
       }
