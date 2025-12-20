@@ -2,8 +2,15 @@
 
 import { exec } from "child_process";
 import { promisify } from "util";
+import { promises as fs } from "fs";
+import path from "path";
 
 const execAsync = promisify(exec);
+
+/**
+ * 需要从 git 跟踪中排除的目录
+ */
+const EXCLUDED_DIRS = [".tanmi-workspace/", ".tanmi-workspace-dev/"];
 
 /**
  * 分支命名常量
@@ -32,6 +39,47 @@ export async function isGitRepo(cwd?: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * 确保 TanmiWorkspace 目录被 git 排除
+ * 通过添加到 .git/info/exclude（不影响项目的 .gitignore）
+ */
+export async function ensureGitExclude(cwd?: string): Promise<void> {
+  const workDir = cwd || process.cwd();
+
+  try {
+    // 获取 git 仓库根目录
+    const { stdout } = await execGit("rev-parse --git-dir", workDir);
+    const gitDir = path.resolve(workDir, stdout.trim());
+    const excludePath = path.join(gitDir, "info", "exclude");
+
+    // 读取现有内容
+    let content = "";
+    try {
+      content = await fs.readFile(excludePath, "utf-8");
+    } catch {
+      // 文件不存在，使用空内容
+    }
+
+    // 检查并添加缺失的排除项
+    const lines = content.split("\n");
+    let modified = false;
+
+    for (const dir of EXCLUDED_DIRS) {
+      if (!lines.includes(dir)) {
+        lines.push(dir);
+        modified = true;
+      }
+    }
+
+    // 只在有修改时写入
+    if (modified) {
+      await fs.writeFile(excludePath, lines.join("\n"), "utf-8");
+    }
+  } catch {
+    // 忽略错误（可能不是 git 仓库）
   }
 }
 
@@ -112,6 +160,20 @@ export async function createProcessBranch(
   cwd?: string
 ): Promise<string> {
   const branchName = `${PROCESS_PREFIX}/${workspaceId}`;
+
+  // 检查分支是否已存在
+  const existingBranches = await listBranches(branchName, cwd);
+  if (existingBranches.length > 0) {
+    // 检查是否当前在该分支上
+    const currentBranch = await getCurrentBranch(cwd);
+    if (currentBranch === branchName) {
+      // 当前在目标分支上，先切换到 detached HEAD
+      await execGit("checkout --detach", cwd);
+    }
+    // 删除已存在的分支
+    await execGit(`branch -D "${branchName}"`, cwd);
+  }
+
   await execGit(`checkout -b "${branchName}"`, cwd);
   return branchName;
 }

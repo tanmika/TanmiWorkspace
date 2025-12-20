@@ -14,6 +14,7 @@ import { now } from "../utils/time.js";
 import type { ConfigService } from "./ConfigService.js";
 import {
   isGitRepo,
+  ensureGitExclude,
   getCurrentBranch,
   hasUncommittedChanges,
   createBackupBranch,
@@ -130,6 +131,11 @@ export class DispatchService {
 
     // 1. 检测是否 git 仓库
     const isGit = await isGitRepo(projectRoot);
+
+    // 1.1 确保工作区目录被 git 排除（无论是否使用 Git 模式）
+    if (isGit) {
+      await ensureGitExclude(projectRoot);
+    }
 
     // 2. 确定 useGit 值
     let useGit: boolean;
