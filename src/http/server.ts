@@ -61,6 +61,50 @@ export async function createServer(): Promise<FastifyInstance> {
     timestamp: new Date().toISOString(),
   }));
 
+  // 版本检查接口（公开）
+  server.get("/api/version", async () => {
+    // 读取当前版本
+    let currentVersion: string = "unknown";
+    const packageJsonPath = path.resolve(__dirname, "../../package.json");
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+      currentVersion = packageJson.version;
+    } catch {
+      // 忽略错误
+    }
+
+    // 从 npm registry 获取最新版本（带缓存）
+    let latestVersion: string | null = null;
+    let updateAvailable = false;
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+
+      const response = await fetch(
+        "https://registry.npmjs.org/tanmi-workspace/latest",
+        { signal: controller.signal }
+      );
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        const data = await response.json() as { version?: string };
+        latestVersion = data.version || null;
+        if (latestVersion && currentVersion !== "unknown") {
+          updateAvailable = latestVersion !== currentVersion;
+        }
+      }
+    } catch {
+      // 网络错误时静默处理
+    }
+
+    return {
+      currentVersion,
+      latestVersion,
+      updateAvailable,
+    };
+  });
+
   // 开发信息接口（仅开发模式）
   server.get("/api/dev-info", async () => {
     if (!IS_DEV) {
