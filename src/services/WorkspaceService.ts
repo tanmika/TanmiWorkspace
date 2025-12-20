@@ -28,6 +28,7 @@ import type {
   ProjectDocInfo,
   ProjectDocsScanResult,
   WorkspaceErrorInfo,
+  ManualChange,
 } from "../types/workspace.js";
 import { logError } from "../utils/errorLogger.js";
 import type { NodeGraph, NodeMeta } from "../types/node.js";
@@ -353,6 +354,17 @@ export class WorkspaceService {
     const rulesHash = rulesCount > 0
       ? crypto.createHash("md5").update(workspaceMdData.rules.join("\n")).digest("hex").substring(0, 8)
       : "";
+
+    // 清除手动变更清单（AI 已获取工作区详情，无需再提醒历史变更）
+    // 注意：只在非归档状态下清除，归档工作区为只读
+    if (!isArchived) {
+      try {
+        await this.clearManualChanges(workspaceId);
+      } catch (error) {
+        // 清除失败不影响主流程
+        devLog.warn("清除手动变更失败", { workspaceId, error });
+      }
+    }
 
     return {
       config,
@@ -1069,5 +1081,65 @@ export class WorkspaceService {
       wsEntry.updatedAt = now();
       await this.json.writeIndex(index);
     }
+  }
+
+  // ========== 手动变更清单管理 ==========
+
+  /**
+   * 添加手动变更记录
+   * @param workspaceId 工作区 ID
+   * @param change 变更记录（不含 id，由方法生成）
+   */
+  async addManualChange(
+    workspaceId: string,
+    change: Omit<ManualChange, "id">
+  ): Promise<void> {
+    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+
+    // 初始化变更清单
+    if (!config.pendingManualChanges) {
+      config.pendingManualChanges = [];
+    }
+
+    // 生成 ID 并添加变更
+    const newChange: ManualChange = {
+      id: `change-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      ...change,
+    };
+
+    config.pendingManualChanges.push(newChange);
+
+    // 保持上限 20 条（移除最旧的）
+    if (config.pendingManualChanges.length > 20) {
+      config.pendingManualChanges = config.pendingManualChanges.slice(-20);
+    }
+
+    config.updatedAt = now();
+    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+  }
+
+  /**
+   * 获取手动变更清单
+   * @param workspaceId 工作区 ID
+   * @returns 变更清单（按时间顺序）
+   */
+  async getManualChanges(workspaceId: string): Promise<ManualChange[]> {
+    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    return config.pendingManualChanges || [];
+  }
+
+  /**
+   * 清除手动变更清单
+   * @param workspaceId 工作区 ID
+   */
+  async clearManualChanges(workspaceId: string): Promise<void> {
+    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+
+    config.pendingManualChanges = [];
+    config.updatedAt = now();
+    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
   }
 }

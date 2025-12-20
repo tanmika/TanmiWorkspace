@@ -88,10 +88,46 @@ export const sessionStatusTool: Tool = {
 };
 
 /**
+ * get_pending_changes 工具定义
+ */
+export const getPendingChangesTool: Tool = {
+  name: "get_pending_changes",
+  description: `获取工作区的待处理手动变更记录（供 Hook 脚本调用）。
+
+返回：
+- 如果有变更：格式化的提醒文本
+- 如果无变更：空字符串
+
+**使用场景**：
+- Hook 脚本在 UserPromptSubmit 时检查变更
+- Hook 脚本在 PreToolUse 时检查变更
+- 通过 session_status 获取绑定的工作区 ID
+
+**注意**：
+- 此工具不会清除变更记录（由 context_get/workspace_get 负责清除）
+- 建议在 Hook 脚本中使用，不建议 AI 直接调用`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      sessionId: {
+        type: "string",
+        description: "Claude Code 会话 ID（用于获取绑定的工作区）",
+      },
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID（可选，如果不提供则使用 session 绑定的工作区）",
+      },
+    },
+    required: ["sessionId"],
+  },
+};
+
+/**
  * 所有 session 工具
  */
 export const sessionTools: Tool[] = [
   sessionBindTool,
   sessionUnbindTool,
   sessionStatusTool,
+  getPendingChangesTool,
 ];

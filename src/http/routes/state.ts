@@ -33,7 +33,30 @@ export async function stateRoutes(fastify: FastifyInstance): Promise<void> {
         reason: request.body.reason,
         conclusion: request.body.conclusion,
       };
-      return services.state.transition(params);
+      const result = await services.state.transition(params);
+
+      // 记录手动变更（WebUI 操作）
+      let manualOperationRecorded = false;
+      try {
+        const projectRoot = await services.workspace.resolveProjectRoot(request.params.wid);
+        const nodeInfo = await services.md.readNodeInfo(projectRoot, request.params.wid, request.params.nid);
+
+        await services.workspace.addManualChange(request.params.wid, {
+          timestamp: new Date().toISOString(),
+          type: "transition",
+          nodeId: request.params.nid,
+          nodeName: nodeInfo.title,
+          fromStatus: result.previousStatus,
+          toStatus: result.currentStatus,
+          description: `节点「${nodeInfo.title}」从 ${result.previousStatus} 变为 ${result.currentStatus}`,
+          source: "webui",
+        });
+        manualOperationRecorded = true;
+      } catch {
+        // 记录失败不阻塞主流程
+      }
+
+      return { ...result, manualOperationRecorded };
     }
   );
 }

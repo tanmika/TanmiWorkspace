@@ -1,6 +1,7 @@
 // API 客户端配置
 import axios from 'axios'
 import { useServiceStore } from '@/stores/service'
+import { useToastStore } from '@/stores/toast'
 
 const client = axios.create({
   baseURL: '/api',
@@ -16,6 +17,13 @@ client.interceptors.response.use(
     // 请求成功，标记服务可用
     const serviceStore = useServiceStore()
     serviceStore.markAvailable()
+
+    // 检查是否有手动操作标记，如有则显示提示
+    if (response.data?.manualOperationRecorded === true) {
+      const toastStore = useToastStore()
+      toastStore.showToast()
+    }
+
     return response.data
   },
   (error) => {

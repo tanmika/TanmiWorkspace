@@ -80,6 +80,22 @@ export interface SessionStatusUnboundResult {
 export type SessionStatusResult = SessionStatusBoundResult | SessionStatusUnboundResult;
 
 /**
+ * get_pending_changes 参数
+ */
+export interface GetPendingChangesParams {
+  sessionId: string;
+  workspaceId?: string;
+}
+
+/**
+ * get_pending_changes 返回值
+ */
+export interface GetPendingChangesResult {
+  hasChanges: boolean;
+  reminderText: string;
+}
+
+/**
  * 会话服务
  * 管理 Claude Code 会话与工作区的绑定关系
  */
@@ -267,5 +283,64 @@ export class SessionService {
    */
   async cleanupByWorkspace(workspaceId: string): Promise<string[]> {
     return this.sessionStorage.cleanupByWorkspace(workspaceId);
+  }
+
+  /**
+   * 获取待处理的手动变更提醒（供 Hook 脚本调用）
+   */
+  async getPendingChanges(params: GetPendingChangesParams): Promise<GetPendingChangesResult> {
+    const { sessionId, workspaceId: explicitWorkspaceId } = params;
+
+    // 确定工作区 ID：优先使用显式传入的，否则从 session 绑定获取
+    let workspaceId = explicitWorkspaceId;
+    if (!workspaceId) {
+      const binding = await this.sessionStorage.getBinding(sessionId);
+      if (!binding) {
+        // 未绑定且未提供工作区 ID，返回空结果
+        return {
+          hasChanges: false,
+          reminderText: ""
+        };
+      }
+      workspaceId = binding.workspaceId;
+    }
+
+    // 获取项目根目录
+    const projectRoot = await this.json.getProjectRoot(workspaceId);
+    if (!projectRoot) {
+      // 工作区不存在，返回空结果
+      return {
+        hasChanges: false,
+        reminderText: ""
+      };
+    }
+
+    // 读取工作区配置
+    try {
+      const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+      const manualChanges = config.pendingManualChanges || [];
+
+      if (manualChanges.length === 0) {
+        return {
+          hasChanges: false,
+          reminderText: ""
+        };
+      }
+
+      // 导入 formatter 并格式化提醒文本
+      const { formatManualChangeReminder } = await import("../utils/manualChangeFormatter.js");
+      const reminderText = formatManualChangeReminder(manualChanges);
+
+      return {
+        hasChanges: true,
+        reminderText
+      };
+    } catch {
+      // 读取失败时返回空结果
+      return {
+        hasChanges: false,
+        reminderText: ""
+      };
+    }
   }
 }

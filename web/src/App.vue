@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { useServiceStore } from '@/stores/service'
+import { useServiceStore, useToastStore } from '@/stores'
 import ServiceUnavailable from '@/components/ServiceUnavailable.vue'
 import VersionUpdateNotification from '@/components/VersionUpdateNotification.vue'
+import ManualOperationToast from '@/components/ManualOperationToast.vue'
 
 const serviceStore = useServiceStore()
+const toastStore = useToastStore()
 
 // 启动时检查服务状态
 onMounted(() => {
@@ -17,6 +19,10 @@ onMounted(() => {
     <VersionUpdateNotification />
     <router-view />
     <ServiceUnavailable />
+    <ManualOperationToast
+      :visible="toastStore.showManualOperationToast"
+      @close="toastStore.closeToast"
+    />
   </el-config-provider>
 </template>
 

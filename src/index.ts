@@ -31,6 +31,8 @@ import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
 import type { TransitionAction, ReferenceAction } from "./types/index.js";
 import { logMcpStart, logMcpEnd, logMcpError } from "./utils/sessionLogger.js";
+import { formatManualChangeReminder } from "./utils/manualChangeFormatter.js";
+import { devLog } from "./utils/devLog.js";
 
 // ============================================================================
 // 配置
@@ -368,6 +370,13 @@ function createMcpServer(services: Services): Server {
           });
           break;
 
+        case "get_pending_changes":
+          result = await services.session.getPendingChanges({
+            sessionId: args?.sessionId as string,
+            workspaceId: args?.workspaceId as string | undefined,
+          });
+          break;
+
         // Help 工具
         case "tanmi_help":
           result = services.help.getHelp(args?.topic as HelpTopic);
@@ -486,11 +495,33 @@ function createMcpServer(services: Services): Server {
       const duration = Date.now() - startTime;
       logMcpEnd(name, true, result, duration);
 
+      // 检查并附加手动变更提醒（针对工作区相关工具）
+      let responseText = JSON.stringify(result, null, 2);
+      const workspaceId = args?.workspaceId as string | undefined;
+
+      // 排除 context_get 和 workspace_get（它们会清除变更，所以不需要提醒）
+      const shouldCheckManualChanges = workspaceId &&
+        name !== "context_get" &&
+        name !== "workspace_get";
+
+      if (shouldCheckManualChanges) {
+        try {
+          const manualChanges = await services.workspace.getManualChanges(workspaceId);
+          if (manualChanges.length > 0) {
+            const reminder = formatManualChangeReminder(manualChanges);
+            responseText = responseText + "\n\n" + reminder;
+          }
+        } catch (error) {
+          // 静默失败：如果获取变更失败，不影响主响应
+          devLog.warn("获取手动变更失败", { error });
+        }
+      }
+
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: responseText,
           },
         ],
       };
