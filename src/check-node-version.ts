@@ -69,5 +69,13 @@ async function checkForUpdates() {
 // 执行更新检查（不等待结果）
 checkForUpdates();
 
-// 版本检查通过，加载主模块
-import("./index.js");
+// 检查子命令
+const subcommand = process.argv[2];
+
+if (subcommand === "setup") {
+  // 执行 setup 命令
+  import("./cli/setup.js").then((m) => m.default());
+} else {
+  // 版本检查通过，加载主模块
+  import("./index.js");
+}

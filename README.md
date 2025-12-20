@@ -24,28 +24,27 @@
 
 ### 方式一：npm 安装（推荐）
 
-适用于 Claude Code 用户，三步完成配置：
+适用于 Claude Code / Cursor 用户：
 
 ```bash
 # 1. 安装
 npm install -g tanmi-workspace
 
-# 2. 添加到 Claude Code（全局可用）
-claude mcp add tanmi-workspace -s user -- npx tanmi-workspace
-
-# 3. 配置权限（编辑 ~/.claude/settings.json，添加到 permissions.allow 数组）
-"mcp__tanmi-workspace"
+# 2. 运行配置向导
+tanmi-workspace setup
 ```
 
-完整的 `~/.claude/settings.json` 示例：
-```json
-{
-  "permissions": {
-    "allow": [
-      "mcp__tanmi-workspace"
-    ]
-  }
-}
+或使用快速配置：
+
+```bash
+# Claude Code 一键配置
+tanmi-workspace setup --claude-code
+
+# Cursor 一键配置
+tanmi-workspace setup --cursor
+
+# 查看当前配置状态
+tanmi-workspace setup --status
 ```
 
 ### 方式二：源码安装
