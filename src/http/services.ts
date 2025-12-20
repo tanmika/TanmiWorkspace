@@ -50,6 +50,7 @@ export function createServices(): Services {
   const sessionStorage = new SessionBindingStorage(fs);
 
   // 初始化服务层
+  const config = new ConfigService();
   servicesInstance = {
     fs,
     json,
@@ -62,8 +63,8 @@ export function createServices(): Services {
     reference: new ReferenceService(json, md, fs),
     log: new LogService(json, md, fs),
     session: new SessionService(sessionStorage, json, md, fs),
-    dispatch: new DispatchService(json, md, fs),
-    config: new ConfigService(),
+    dispatch: new DispatchService(json, md, fs, config),
+    config,
     help: new HelpService(),
   };
 

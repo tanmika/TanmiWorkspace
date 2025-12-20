@@ -275,6 +275,25 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  async function switchDispatchMode(useGit: boolean) {
+    if (!currentWorkspace.value) {
+      throw new Error('当前没有选中的工作区')
+    }
+    loading.value = true
+    error.value = null
+    try {
+      const result = await workspaceApi.switchDispatchMode(currentWorkspace.value.id, useGit)
+      // 刷新工作区配置
+      await fetchWorkspace(currentWorkspace.value.id)
+      return result
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '切换派发模式失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     // 状态
     workspaces,
@@ -302,5 +321,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     clearCurrent,
     enableDispatch,
     disableDispatch,
+    switchDispatchMode,
   }
 })

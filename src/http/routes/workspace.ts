@@ -272,4 +272,18 @@ export async function workspaceRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
   );
+
+  /**
+   * POST /api/workspaces/:id/dispatch/switch - 切换派发模式
+   */
+  fastify.post<{ Params: WorkspaceIdParams; Body: { useGit: boolean } }>(
+    "/workspaces/:id/dispatch/switch",
+    { schema: workspaceIdParamsSchema },
+    async (request: FastifyRequest<{ Params: WorkspaceIdParams; Body: { useGit: boolean } }>) => {
+      return services.dispatch.switchMode({
+        workspaceId: request.params.id,
+        useGit: request.body.useGit,
+      });
+    }
+  );
 }

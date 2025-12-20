@@ -65,6 +65,11 @@ export const workspaceApi = {
   executeDisableDispatch(id: string, options: import('@/types').DisableDispatchOptions): Promise<import('@/types').DisableDispatchExecuteResult> {
     return client.post(`/workspaces/${id}/dispatch/disable/execute`, options)
   },
+
+  // 切换派发模式
+  switchDispatchMode(id: string, useGit: boolean): Promise<{ success: boolean; hint?: string }> {
+    return client.post(`/workspaces/${id}/dispatch/switch`, { useGit })
+  },
 }
 
 // 开发信息结果类型

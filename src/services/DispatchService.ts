@@ -11,6 +11,7 @@ import type {
 import type { NodeMeta, NodeDispatchStatus } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
+import type { ConfigService } from "./ConfigService.js";
 import {
   isGitRepo,
   getCurrentBranch,
@@ -106,7 +107,8 @@ export class DispatchService {
   constructor(
     private json: JsonStorage,
     private md: MarkdownStorage,
-    private fs: FileSystemAdapter
+    private fs: FileSystemAdapter,
+    private configService?: ConfigService
   ) {}
 
   /**
@@ -138,22 +140,23 @@ export class DispatchService {
       }
       useGit = options.useGit;
     } else {
-      // 默认为无 Git 模式（安全）
-      useGit = false;
+      // 从全局配置读取默认派发模式
+      const defaultMode = await this.configService?.getDefaultDispatchMode() ?? "none";
+      if (defaultMode === "git") {
+        if (!isGit) {
+          throw new TanmiError("GIT_NOT_FOUND", "全局配置为 Git 模式，但当前项目不是 git 仓库。请修改全局配置或显式指定 useGit=false");
+        }
+        useGit = true;
+      } else {
+        // none 或 no-git 都使用无 Git 模式
+        useGit = false;
+      }
     }
 
-    // 3. 检查混合模式（11.3 混合场景禁止）
+    // 3. 检查派发并发冲突（允许不同工作区使用不同模式）
     const activeWorkspaceInfo = await this.getActiveDispatchWorkspaceWithMode(projectRoot, workspaceId);
     if (activeWorkspaceInfo) {
-      if (activeWorkspaceInfo.useGit !== useGit) {
-        const existingMode = activeWorkspaceInfo.useGit ? "Git 模式" : "无 Git 模式";
-        const requestedMode = useGit ? "Git 模式" : "无 Git 模式";
-        throw new TanmiError(
-          "DISPATCH_MODE_CONFLICT",
-          `同一项目只能使用一种派发模式。工作区 ${activeWorkspaceInfo.workspaceId} 正在使用 ${existingMode}，当前请求为 ${requestedMode}。请先完成或取消该派发。`
-        );
-      }
-      // 同模式并发冲突
+      // 只检查并发冲突，不再检查模式冲突
       throw new TanmiError(
         "DISPATCH_CONFLICT",
         `已有工作区 ${activeWorkspaceInfo.workspaceId} 正在派发中，请先完成或取消该派发`
@@ -227,6 +230,23 @@ export class DispatchService {
     const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
     if (!config.dispatch?.enabled) {
       return { success: true }; // 已经禁用
+    }
+
+    // 1.1 检查是否有正在执行的派发任务
+    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const activeDispatchNodes: string[] = [];
+
+    for (const [nodeId, node] of Object.entries(graph.nodes)) {
+      if (node.dispatch && (node.dispatch.status === "executing" || node.dispatch.status === "testing")) {
+        activeDispatchNodes.push(nodeId);
+      }
+    }
+
+    if (activeDispatchNodes.length > 0) {
+      throw new TanmiError(
+        "DISPATCH_IN_PROGRESS",
+        `无法关闭派发：当前有 ${activeDispatchNodes.length} 个节点正在派发执行中 (${activeDispatchNodes.join(", ")})`
+      );
     }
 
     // 1.1 验证 Git 环境（11.2 环境变化检测）
@@ -867,11 +887,10 @@ Instructions:
 2. Assess task scope and information completeness
 3. Execute the task within defined boundaries
 4. Report progress via log_append
-5. Complete with node_transition(action="complete") and conclusion
+5. On success: Call node_dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=true, conclusion="...")
+6. On failure: Call node_dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=false, conclusion="...")
 
-If task cannot be completed:
-- Call node_transition(action="fail") with reason
-- Reasons: "info_insufficient", "scope_too_large", "execution_error"`;
+IMPORTANT: You MUST call node_dispatch_complete to finalize the dispatch. Do NOT use node_transition directly.`;
   }
 
   // ========== HTTP API 包装方法 ==========
@@ -884,7 +903,7 @@ If task cannot be completed:
     useGit?: boolean;
   }): Promise<{ success: boolean; config: DispatchConfig; hint?: string }> {
     const projectRoot = await this.getProjectRoot(params.workspaceId);
-    const result = await this.enableDispatch(projectRoot, params.workspaceId, {
+    const result = await this.enableDispatch(params.workspaceId, projectRoot, {
       useGit: params.useGit,
     });
 
@@ -938,6 +957,66 @@ If task cannot be completed:
     return {
       success: result.success,
       hint: result.message,
+    };
+  }
+
+  /**
+   * 切换派发模式 (HTTP API 包装)
+   * 仅支持在已启用派发模式时切换 useGit 值
+   */
+  async switchMode(params: {
+    workspaceId: string;
+    useGit: boolean;
+  }): Promise<{ success: boolean; hint?: string }> {
+    const projectRoot = await this.getProjectRoot(params.workspaceId);
+
+    // 1. 读取当前配置
+    const config = await this.json.readWorkspaceConfig(projectRoot, params.workspaceId);
+
+    if (!config.dispatch?.enabled) {
+      throw new TanmiError("DISPATCH_NOT_ENABLED", "派发模式未启用，无法切换模式");
+    }
+
+    // 2. 检查是否有正在执行的派发任务
+    const graph = await this.json.readGraph(projectRoot, params.workspaceId);
+    const activeDispatchNodes: string[] = [];
+
+    for (const [nodeId, node] of Object.entries(graph.nodes)) {
+      if (node.dispatch && (node.dispatch.status === "executing" || node.dispatch.status === "testing")) {
+        activeDispatchNodes.push(nodeId);
+      }
+    }
+
+    if (activeDispatchNodes.length > 0) {
+      throw new TanmiError(
+        "DISPATCH_IN_PROGRESS",
+        `无法切换模式：当前有 ${activeDispatchNodes.length} 个节点正在派发执行中 (${activeDispatchNodes.join(", ")})`
+      );
+    }
+
+    // 3. 如果要切换到 Git 模式，检查 Git 环境
+    if (params.useGit && !(await isGitRepo(projectRoot))) {
+      throw new TanmiError("GIT_NOT_FOUND", "当前项目不是 git 仓库，无法切换到 Git 模式");
+    }
+
+    // 4. 更新配置
+    const oldMode = config.dispatch.useGit;
+    config.dispatch.useGit = params.useGit;
+    config.updatedAt = now();
+    await this.json.writeWorkspaceConfig(projectRoot, params.workspaceId, config);
+
+    // 5. 记录日志
+    const fromMode = oldMode ? "Git 模式" : "无 Git 模式";
+    const toMode = params.useGit ? "Git 模式" : "无 Git 模式";
+    await this.md.appendLog(projectRoot, params.workspaceId, {
+      time: now(),
+      operator: "system",
+      event: `派发模式已切换: ${fromMode} → ${toMode}`,
+    });
+
+    return {
+      success: true,
+      hint: `派发模式已从 ${fromMode} 切换到 ${toMode}`,
     };
   }
 
