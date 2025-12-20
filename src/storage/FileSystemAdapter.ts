@@ -18,7 +18,12 @@ function isDevelopment(): boolean {
  *
  * 架构：
  * - 全局索引：~/.tanmi-workspace[-dev]/index.json
- * - 项目数据：{projectRoot}/.tanmi-workspace[-dev]/{workspaceId}/
+ * - 项目数据：{projectRoot}/.tanmi-workspace[-dev]/{wsDirName}/
+ *
+ * 目录命名规范（v2）：
+ * - 工作区目录：{名称}_{短ID}，如 "UI优化_mjb65az5"
+ * - 节点目录：{标题}_{短ID}，如 "功能分析_mjb6mj4h"
+ * - 根节点目录固定为 "root"
  */
 export class FileSystemAdapter {
   private globalBasePath: string;
@@ -74,79 +79,94 @@ export class FileSystemAdapter {
 
   /**
    * 获取特定工作区目录路径
+   * @param wsDirName 工作区目录名（如 "UI优化_mjb65az5"）
    */
-  getWorkspacePath(projectRoot: string, workspaceId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId);
+  getWorkspacePath(projectRoot: string, wsDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName);
   }
 
   /**
    * 获取工作区配置文件路径
+   * @param wsDirName 工作区目录名
    */
-  getWorkspaceConfigPath(projectRoot: string, workspaceId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "workspace.json");
+  getWorkspaceConfigPath(projectRoot: string, wsDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "workspace.json");
   }
 
   /**
    * 获取节点图文件路径
+   * @param wsDirName 工作区目录名
    */
-  getGraphPath(projectRoot: string, workspaceId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "graph.json");
+  getGraphPath(projectRoot: string, wsDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "graph.json");
   }
 
   /**
    * 获取工作区 Markdown 文件路径
+   * @param wsDirName 工作区目录名
    */
-  getWorkspaceMdPath(projectRoot: string, workspaceId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "Workspace.md");
+  getWorkspaceMdPath(projectRoot: string, wsDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "Workspace.md");
   }
 
   /**
    * 获取工作区日志文件路径
+   * @param wsDirName 工作区目录名
    */
-  getWorkspaceLogPath(projectRoot: string, workspaceId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "Log.md");
+  getWorkspaceLogPath(projectRoot: string, wsDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "Log.md");
   }
 
   /**
    * 获取工作区问题文件路径
+   * @param wsDirName 工作区目录名
    */
-  getWorkspaceProblemPath(projectRoot: string, workspaceId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "Problem.md");
+  getWorkspaceProblemPath(projectRoot: string, wsDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "Problem.md");
   }
 
   /**
    * 获取节点目录路径
+   * @param wsDirName 工作区目录名
+   * @param nodeDirName 节点目录名（如 "功能分析_mjb6mj4h" 或 "root"）
    */
-  getNodePath(projectRoot: string, workspaceId: string, nodeId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "nodes", nodeId);
+  getNodePath(projectRoot: string, wsDirName: string, nodeDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "nodes", nodeDirName);
   }
 
   /**
    * 获取节点 Info.md 文件路径
+   * @param wsDirName 工作区目录名
+   * @param nodeDirName 节点目录名
    */
-  getNodeInfoPath(projectRoot: string, workspaceId: string, nodeId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "nodes", nodeId, "Info.md");
+  getNodeInfoPath(projectRoot: string, wsDirName: string, nodeDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "nodes", nodeDirName, "Info.md");
   }
 
   /**
    * 获取节点日志文件路径
+   * @param wsDirName 工作区目录名
+   * @param nodeDirName 节点目录名
    */
-  getNodeLogPath(projectRoot: string, workspaceId: string, nodeId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "nodes", nodeId, "Log.md");
+  getNodeLogPath(projectRoot: string, wsDirName: string, nodeDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "nodes", nodeDirName, "Log.md");
   }
 
   /**
    * 获取节点问题文件路径
+   * @param wsDirName 工作区目录名
+   * @param nodeDirName 节点目录名
    */
-  getNodeProblemPath(projectRoot: string, workspaceId: string, nodeId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "nodes", nodeId, "Problem.md");
+  getNodeProblemPath(projectRoot: string, wsDirName: string, nodeDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "nodes", nodeDirName, "Problem.md");
   }
 
   /**
    * 获取节点目录路径 (nodes/)
+   * @param wsDirName 工作区目录名
    */
-  getNodesDir(projectRoot: string, workspaceId: string): string {
-    return path.join(projectRoot, this.localDirName, workspaceId, "nodes");
+  getNodesDir(projectRoot: string, wsDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "nodes");
   }
 
   // ========== 归档路径方法 ==========
@@ -160,66 +180,77 @@ export class FileSystemAdapter {
 
   /**
    * 获取归档工作区目录路径
+   * @param wsDirName 工作区目录名
    */
-  getArchivePath(projectRoot: string, workspaceId: string): string {
-    return path.join(projectRoot, this.localDirName, "archive", workspaceId);
+  getArchivePath(projectRoot: string, wsDirName: string): string {
+    return path.join(projectRoot, this.localDirName, "archive", wsDirName);
   }
 
   /**
    * 获取工作区基础路径（根据归档状态返回正确路径）
+   * @param wsDirName 工作区目录名
    */
-  getWorkspaceBasePath(projectRoot: string, workspaceId: string, isArchived: boolean): string {
+  getWorkspaceBasePath(projectRoot: string, wsDirName: string, isArchived: boolean): string {
     if (isArchived) {
-      return this.getArchivePath(projectRoot, workspaceId);
+      return this.getArchivePath(projectRoot, wsDirName);
     }
-    return this.getWorkspacePath(projectRoot, workspaceId);
+    return this.getWorkspacePath(projectRoot, wsDirName);
   }
 
   /**
    * 获取节点图文件路径（支持归档）
+   * @param wsDirName 工作区目录名
    */
-  getGraphPathWithArchive(projectRoot: string, workspaceId: string, isArchived: boolean): string {
-    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+  getGraphPathWithArchive(projectRoot: string, wsDirName: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
     return path.join(basePath, "graph.json");
   }
 
   /**
    * 获取工作区 Markdown 文件路径（支持归档）
+   * @param wsDirName 工作区目录名
    */
-  getWorkspaceMdPathWithArchive(projectRoot: string, workspaceId: string, isArchived: boolean): string {
-    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+  getWorkspaceMdPathWithArchive(projectRoot: string, wsDirName: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
     return path.join(basePath, "Workspace.md");
   }
 
   /**
    * 获取节点 Info.md 文件路径（支持归档）
+   * @param wsDirName 工作区目录名
+   * @param nodeDirName 节点目录名
    */
-  getNodeInfoPathWithArchive(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean): string {
-    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
-    return path.join(basePath, "nodes", nodeId, "Info.md");
+  getNodeInfoPathWithArchive(projectRoot: string, wsDirName: string, nodeDirName: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
+    return path.join(basePath, "nodes", nodeDirName, "Info.md");
   }
 
   /**
    * 获取节点日志文件路径（支持归档）
+   * @param wsDirName 工作区目录名
+   * @param nodeDirName 节点目录名
    */
-  getNodeLogPathWithArchive(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean): string {
-    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
-    return path.join(basePath, "nodes", nodeId, "Log.md");
+  getNodeLogPathWithArchive(projectRoot: string, wsDirName: string, nodeDirName: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
+    return path.join(basePath, "nodes", nodeDirName, "Log.md");
   }
 
   /**
    * 获取节点问题文件路径（支持归档）
+   * @param wsDirName 工作区目录名
+   * @param nodeDirName 节点目录名
    */
-  getNodeProblemPathWithArchive(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean): string {
-    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
-    return path.join(basePath, "nodes", nodeId, "Problem.md");
+  getNodeProblemPathWithArchive(projectRoot: string, wsDirName: string, nodeDirName: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
+    return path.join(basePath, "nodes", nodeDirName, "Problem.md");
   }
 
   /**
    * 获取工作区问题文件路径（支持归档）
+   * @param wsDirName 工作区目录名
    */
-  getWorkspaceProblemPathWithArchive(projectRoot: string, workspaceId: string, isArchived: boolean): string {
-    const basePath = this.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+  getWorkspaceProblemPathWithArchive(projectRoot: string, wsDirName: string, isArchived: boolean): string {
+    const basePath = this.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
     return path.join(basePath, "Problem.md");
   }
 
@@ -300,9 +331,10 @@ export class FileSystemAdapter {
 
   /**
    * 确保特定工作区目录存在
+   * @param wsDirName 工作区目录名
    */
-  async ensureWorkspaceDir(projectRoot: string, workspaceId: string): Promise<void> {
-    await this.mkdir(this.getWorkspacePath(projectRoot, workspaceId));
+  async ensureWorkspaceDir(projectRoot: string, wsDirName: string): Promise<void> {
+    await this.mkdir(this.getWorkspacePath(projectRoot, wsDirName));
   }
 
   /**

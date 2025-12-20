@@ -109,6 +109,7 @@ export interface NodeGraph {
  */
 export interface NodeMeta {
   id: string;
+  dirName: string;                  // 目录名（可读格式：标题_短ID，root 节点为 "root"）
   type: NodeType;                   // 节点类型：planning 或 execution
   parentId: string | null;          // 根节点为 null
   children: string[];               // 子节点 ID 列表（execution 节点永远为空）

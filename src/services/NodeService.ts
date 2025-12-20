@@ -23,7 +23,7 @@ import type {
   NodeType,
 } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
-import { generateNodeId } from "../utils/id.js";
+import { generateNodeId, generateNodeDirName } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { validateNodeTitle } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
@@ -54,20 +54,23 @@ export class NodeService {
   }
 
   /**
-   * 根据 workspaceId 获取 projectRoot
+   * 根据 workspaceId 获取 projectRoot 和 wsDirName
    */
-  private async resolveProjectRoot(workspaceId: string): Promise<string> {
-    const projectRoot = await this.json.getProjectRoot(workspaceId);
-    if (!projectRoot) {
+  private async resolveProjectRoot(workspaceId: string): Promise<{ projectRoot: string; wsDirName: string }> {
+    const entry = await this.json.findWorkspaceEntry(workspaceId);
+    if (!entry) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
-    return projectRoot;
+    return {
+      projectRoot: entry.projectRoot,
+      wsDirName: entry.dirName || entry.id  // 向后兼容
+    };
   }
 
   /**
-   * 根据 workspaceId 获取工作区信息（包括归档状态）
+   * 根据 workspaceId 获取工作区信息（包括归档状态和目录名）
    */
-  private async resolveWorkspaceInfo(workspaceId: string): Promise<{ projectRoot: string; isArchived: boolean }> {
+  private async resolveWorkspaceInfo(workspaceId: string): Promise<{ projectRoot: string; wsDirName: string; isArchived: boolean }> {
     const index = await this.json.readIndex();
     const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
     if (!wsEntry) {
@@ -75,12 +78,14 @@ export class NodeService {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
     const isArchived = wsEntry.status === "archived";
+    const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容：旧数据没有 dirName
     devLog.workspaceLookup(workspaceId, true, wsEntry.status);
     if (isArchived) {
-      devLog.archivePath(workspaceId, isArchived, this.fs.getWorkspaceBasePath(wsEntry.projectRoot, workspaceId, true));
+      devLog.archivePath(workspaceId, isArchived, this.fs.getWorkspaceBasePath(wsEntry.projectRoot, wsDirName, true));
     }
     return {
       projectRoot: wsEntry.projectRoot,
+      wsDirName,
       isArchived,
     };
   }
@@ -91,11 +96,11 @@ export class NodeService {
   async create(params: NodeCreateParams): Promise<NodeCreateResult> {
     const { workspaceId, parentId, type, title, requirement = "", docs = [], role, isNeedTest, testRequirement } = params;
 
-    // 1. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 1. 获取 projectRoot 和 wsDirName
+    const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
 
     // 2. 验证父节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     const parentMeta = graph.nodes[parentId];
     if (!parentMeta) {
       throw new TanmiError("PARENT_NOT_FOUND", `父节点 "${parentId}" 不存在`);
@@ -125,10 +130,11 @@ export class NodeService {
         parentMeta.conclusion = archivedConclusion;
       }
       autoReopened = true;
-      // 同步更新 Info.md 中的状态和结论
-      await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "planning");
+      // 同步更新 Info.md 中的状态和结论（使用父节点的 dirName）
+      const parentDirName = parentMeta.dirName || parentId;  // 向后兼容
+      await this.md.updateNodeStatus(projectRoot, wsDirName, parentDirName, "planning");
       if (archivedConclusion) {
-        await this.md.updateConclusion(projectRoot, workspaceId, parentId, archivedConclusion);
+        await this.md.updateConclusion(projectRoot, wsDirName, parentDirName, archivedConclusion);
       }
     }
 
@@ -142,7 +148,7 @@ export class NodeService {
     }
 
     // 5.1 验证规则哈希（如果工作区有规则）
-    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName);
     if (workspaceMdData.rules.length > 0) {
       const expectedHash = crypto.createHash("md5").update(workspaceMdData.rules.join("\n")).digest("hex").substring(0, 8);
       if (params.rulesHash !== expectedHash) {
@@ -164,12 +170,13 @@ export class NodeService {
     // 6. 验证标题合法性
     validateNodeTitle(title);
 
-    // 7. 生成节点 ID
+    // 7. 生成节点 ID 和目录名
     const nodeId = generateNodeId();
+    const nodeDirName = generateNodeDirName(title, nodeId);
     const currentTime = now();
 
-    // 8. 创建节点目录
-    const nodePath = this.fs.getNodePath(projectRoot, workspaceId, nodeId);
+    // 8. 创建节点目录（使用可读目录名）
+    const nodePath = this.fs.getNodePath(projectRoot, wsDirName, nodeDirName);
     await this.fs.mkdir(nodePath);
 
     // 9. 写入 Info.md
@@ -187,15 +194,16 @@ export class NodeService {
       notes: "",
       conclusion: "",
     };
-    await this.md.writeNodeInfo(projectRoot, workspaceId, nodeId, nodeInfo);
+    await this.md.writeNodeInfo(projectRoot, wsDirName, nodeDirName, nodeInfo);
 
     // 10. 创建空的 Log.md 和 Problem.md
-    await this.md.createEmptyLog(projectRoot, workspaceId, nodeId);
-    await this.md.createEmptyProblem(projectRoot, workspaceId, nodeId);
+    await this.md.createEmptyLog(projectRoot, wsDirName, nodeDirName);
+    await this.md.createEmptyProblem(projectRoot, wsDirName, nodeDirName);
 
     // 11. 更新 graph.json
     const newNode: NodeMeta = {
       id: nodeId,
+      dirName: nodeDirName,
       type,
       parentId,
       children: [],
@@ -234,11 +242,12 @@ export class NodeService {
         notes: "",
         conclusion: "",
       };
-      await this.md.writeNodeInfo(projectRoot, workspaceId, nodeId, updatedNodeInfo);
+      await this.md.writeNodeInfo(projectRoot, wsDirName, nodeDirName, updatedNodeInfo);
 
       // 创建执行子节点
       const execNodeId = generateNodeId();
-      const execNodePath = this.fs.getNodePath(projectRoot, workspaceId, execNodeId);
+      const execNodeDirName = generateNodeDirName(`[执行] ${title}`, execNodeId);
+      const execNodePath = this.fs.getNodePath(projectRoot, wsDirName, execNodeDirName);
       await this.fs.mkdir(execNodePath);
 
       const execNodeInfo: NodeInfoData = {
@@ -253,12 +262,12 @@ export class NodeService {
         notes: "",
         conclusion: "",
       };
-      await this.md.writeNodeInfo(projectRoot, workspaceId, execNodeId, execNodeInfo);
-      await this.md.createEmptyLog(projectRoot, workspaceId, execNodeId);
-      await this.md.createEmptyProblem(projectRoot, workspaceId, execNodeId);
-
+      await this.md.writeNodeInfo(projectRoot, wsDirName, execNodeDirName, execNodeInfo);
+      await this.md.createEmptyLog(projectRoot, wsDirName, execNodeDirName);
+      await this.md.createEmptyProblem(projectRoot, wsDirName, execNodeDirName);
       const execNodeMeta: NodeMeta = {
         id: execNodeId,
+        dirName: execNodeDirName,
         type: "execution",
         parentId: nodeId,  // 父节点是管理节点
         children: [],
@@ -275,7 +284,8 @@ export class NodeService {
 
       // 创建测试子节点
       const testNodeId = generateNodeId();
-      const testNodePath = this.fs.getNodePath(projectRoot, workspaceId, testNodeId);
+      const testNodeDirName = generateNodeDirName(`[测试] ${title}`, testNodeId);
+      const testNodePath = this.fs.getNodePath(projectRoot, wsDirName, testNodeDirName);
       await this.fs.mkdir(testNodePath);
 
       const testNodeInfo: NodeInfoData = {
@@ -290,12 +300,12 @@ export class NodeService {
         notes: "",
         conclusion: "",
       };
-      await this.md.writeNodeInfo(projectRoot, workspaceId, testNodeId, testNodeInfo);
-      await this.md.createEmptyLog(projectRoot, workspaceId, testNodeId);
-      await this.md.createEmptyProblem(projectRoot, workspaceId, testNodeId);
-
+      await this.md.writeNodeInfo(projectRoot, wsDirName, testNodeDirName, testNodeInfo);
+      await this.md.createEmptyLog(projectRoot, wsDirName, testNodeDirName);
+      await this.md.createEmptyProblem(projectRoot, wsDirName, testNodeDirName);
       const testNodeMeta: NodeMeta = {
         id: testNodeId,
+        dirName: testNodeDirName,
         type: "execution",
         parentId: nodeId,  // 父节点是管理节点
         children: [],
@@ -312,7 +322,8 @@ export class NodeService {
     } else if (isNeedTest && type === "planning") {
       // 规划节点 + isNeedTest=true：创建测试子节点（集成测试）
       const testNodeId = generateNodeId();
-      const testNodePath = this.fs.getNodePath(projectRoot, workspaceId, testNodeId);
+      const integrationTestDirName = generateNodeDirName(`[集成测试] ${title}`, testNodeId);
+      const testNodePath = this.fs.getNodePath(projectRoot, wsDirName, integrationTestDirName);
       await this.fs.mkdir(testNodePath);
 
       const testNodeInfo: NodeInfoData = {
@@ -327,12 +338,12 @@ export class NodeService {
         notes: "",
         conclusion: "",
       };
-      await this.md.writeNodeInfo(projectRoot, workspaceId, testNodeId, testNodeInfo);
-      await this.md.createEmptyLog(projectRoot, workspaceId, testNodeId);
-      await this.md.createEmptyProblem(projectRoot, workspaceId, testNodeId);
-
+      await this.md.writeNodeInfo(projectRoot, wsDirName, integrationTestDirName, testNodeInfo);
+      await this.md.createEmptyLog(projectRoot, wsDirName, integrationTestDirName);
+      await this.md.createEmptyProblem(projectRoot, wsDirName, integrationTestDirName);
       const testNodeMeta: NodeMeta = {
         id: testNodeId,
+        dirName: integrationTestDirName,
         type: "execution",
         parentId: nodeId,  // 父节点是当前规划节点
         children: [],
@@ -352,16 +363,17 @@ export class NodeService {
     const isFirstChild = graph.nodes[parentId].children.length === 1;
     if (isFirstChild && (parentMeta.status === "pending" || parentMeta.status === "planning")) {
       graph.nodes[parentId].status = "monitoring";
-      // 同步更新 Info.md 中的状态
-      await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "monitoring");
+      // 同步更新 Info.md 中的状态（使用父节点的 dirName）
+      const pDirName = parentMeta.dirName || parentId;  // 向后兼容
+      await this.md.updateNodeStatus(projectRoot, wsDirName, pDirName, "monitoring");
     }
 
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 12. 更新工作区 updatedAt
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
     config.updatedAt = currentTime;
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, wsDirName, config);
 
     // 13. 同步更新索引中的 updatedAt
     const index = await this.json.readIndex();
@@ -381,7 +393,7 @@ export class NodeService {
       const typeLabel = newNode.type === "planning" ? "规划" : "执行";
       logEvent = `${typeLabel}节点 "${title}" (${nodeId}) 已创建`;
     }
-    await this.md.appendLog(projectRoot, workspaceId, {
+    await this.md.appendLog(projectRoot, wsDirName, {
       time: currentTime,
       operator: "system",
       event: logEvent,
@@ -484,19 +496,20 @@ export class NodeService {
   async get(params: NodeGetParams): Promise<NodeGetResult> {
     const { workspaceId, nodeId } = params;
 
-    // 获取工作区信息（包括归档状态）
-    const { projectRoot, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
+    // 获取工作区信息（包括归档状态和目录名）
+    const { projectRoot, wsDirName, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
 
     // 验证节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
+    const graph = await this.json.readGraph(projectRoot, wsDirName, isArchived);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
 
     const meta = graph.nodes[nodeId];
-    const infoMd = await this.md.readNodeInfoRaw(projectRoot, workspaceId, nodeId, isArchived);
-    const logMd = await this.md.readLogRaw(projectRoot, workspaceId, nodeId, isArchived);
-    const problemMd = await this.md.readProblemRaw(projectRoot, workspaceId, nodeId, isArchived);
+    const nodeDirName = meta.dirName || nodeId;  // 向后兼容
+    const infoMd = await this.md.readNodeInfoRaw(projectRoot, wsDirName, nodeDirName, isArchived);
+    const logMd = await this.md.readLogRaw(projectRoot, wsDirName, nodeDirName, isArchived);
+    const problemMd = await this.md.readProblemRaw(projectRoot, wsDirName, nodeDirName, isArchived);
 
     return {
       meta,
@@ -512,11 +525,11 @@ export class NodeService {
   async list(params: NodeListParams): Promise<NodeListResult> {
     const { workspaceId, rootId, depth } = params;
 
-    // 获取工作区信息（包括归档状态）
-    const { projectRoot, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
+    // 获取工作区信息（包括归档状态和目录名）
+    const { projectRoot, wsDirName, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
 
-    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
+    const graph = await this.json.readGraph(projectRoot, wsDirName, isArchived);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
 
     // 确定根节点
     const startId = rootId || config.rootNodeId;
@@ -525,7 +538,7 @@ export class NodeService {
     }
 
     // 构建树
-    const tree = await this.buildNodeTree(projectRoot, workspaceId, graph, startId, 0, depth, isArchived);
+    const tree = await this.buildNodeTree(projectRoot, wsDirName, graph, startId, 0, depth, isArchived);
 
     return { tree };
   }
@@ -535,7 +548,7 @@ export class NodeService {
    */
   private async buildNodeTree(
     projectRoot: string,
-    workspaceId: string,
+    wsDirName: string,
     graph: { nodes: Record<string, NodeMeta> },
     nodeId: string,
     currentDepth: number,
@@ -543,7 +556,8 @@ export class NodeService {
     isArchived: boolean = false
   ): Promise<NodeTreeItem> {
     const node = graph.nodes[nodeId];
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId, isArchived);
+    const nodeDirName = node.dirName || nodeId;  // 向后兼容
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName, isArchived);
 
     const item: NodeTreeItem = {
       id: nodeId,
@@ -564,7 +578,7 @@ export class NodeService {
     for (const childId of node.children) {
       const childTree = await this.buildNodeTree(
         projectRoot,
-        workspaceId,
+        wsDirName,
         graph,
         childId,
         currentDepth + 1,
@@ -583,12 +597,12 @@ export class NodeService {
   async delete(params: NodeDeleteParams): Promise<NodeDeleteResult> {
     const { workspaceId, nodeId } = params;
 
-    // 1. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 1. 获取 projectRoot 和 wsDirName
+    const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
 
     // 2. 验证节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
 
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
@@ -602,9 +616,10 @@ export class NodeService {
     // 4. 递归收集所有子节点 ID
     const deletedNodes = this.collectAllChildren(graph, nodeId);
 
-    // 5. 删除所有节点目录
+    // 5. 删除所有节点目录（使用节点的 dirName）
     for (const id of deletedNodes) {
-      const nodePath = this.fs.getNodePath(projectRoot, workspaceId, id);
+      const nodeDirName = graph.nodes[id]?.dirName || id;  // 向后兼容
+      const nodePath = this.fs.getNodePath(projectRoot, wsDirName, nodeDirName);
       await this.fs.rmdir(nodePath);
     }
 
@@ -645,11 +660,11 @@ export class NodeService {
       graph.currentFocus = config.rootNodeId;
     }
 
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 7. 更新工作区 updatedAt
     config.updatedAt = currentTime;
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, wsDirName, config);
 
     // 8. 同步更新索引中的 updatedAt
     const index = await this.json.readIndex();
@@ -699,11 +714,11 @@ export class NodeService {
   async update(params: NodeUpdateParams): Promise<NodeUpdateResult> {
     const { workspaceId, nodeId, title, requirement, note, conclusion } = params;
 
-    // 1. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 1. 获取 projectRoot 和 wsDirName
+    const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
 
     // 2. 验证节点存在
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
@@ -714,9 +729,10 @@ export class NodeService {
     }
 
     const currentTime = now();
+    const nodeDirName = graph.nodes[nodeId].dirName || nodeId;  // 向后兼容
 
     // 4. 读取现有 Info.md
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
     // 5. 更新指定字段
     const updates: string[] = [];
@@ -749,21 +765,21 @@ export class NodeService {
     nodeInfo.updatedAt = currentTime;
 
     // 7. 写入 Info.md
-    await this.md.writeNodeInfo(projectRoot, workspaceId, nodeId, nodeInfo);
+    await this.md.writeNodeInfo(projectRoot, wsDirName, nodeDirName, nodeInfo);
 
     // 8. 更新 graph.json 的 updatedAt 和 conclusion
     graph.nodes[nodeId].updatedAt = currentTime;
     if (conclusion !== undefined) {
       graph.nodes[nodeId].conclusion = conclusion || null;
     }
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 9. 追加日志
-    await this.md.appendLog(projectRoot, workspaceId, {
+    await this.md.appendLog(projectRoot, wsDirName, {
       time: currentTime,
       operator: "AI",
       event: `更新节点: ${updates.join(", ")}`,
-    }, nodeId);
+    }, nodeDirName);
 
     return {
       success: true,
@@ -777,11 +793,11 @@ export class NodeService {
   async move(params: NodeMoveParams): Promise<NodeMoveResult> {
     const { workspaceId, nodeId, newParentId } = params;
 
-    // 1. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 1. 获取 projectRoot 和 wsDirName
+    const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
 
     // 2. 读取图结构
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
 
     // 3. 验证节点存在
     const nodeMeta = graph.nodes[nodeId];
@@ -852,17 +868,18 @@ export class NodeService {
     nodeMeta.updatedAt = currentTime;
 
     // 11. 保存图结构
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 12. 读取节点 Info.md 获取标题用于日志
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+    const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
     // 13. 记录日志
-    await this.md.appendLog(projectRoot, workspaceId, {
+    await this.md.appendLog(projectRoot, wsDirName, {
       time: currentTime,
       operator: "AI",
       event: `移动节点 "${nodeInfo.title}" 到 ${newParentId === "root" ? "根节点" : newParentId}`,
-    }, nodeId);
+    }, nodeDirName);
 
     return {
       success: true,

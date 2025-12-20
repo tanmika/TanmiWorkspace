@@ -32,7 +32,7 @@ import type {
 import { logError } from "../utils/errorLogger.js";
 import type { NodeGraph, NodeMeta } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
-import { generateWorkspaceId } from "../utils/id.js";
+import { generateWorkspaceId, generateWorkspaceDirName, generateNodeDirName } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { validateWorkspaceName, validateProjectRoot } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
@@ -72,6 +72,32 @@ export class WorkspaceService {
   }
 
   /**
+   * 根据 workspaceId 获取工作区信息（包括 dirName 和归档状态）
+   * 用于从 workspaceId 查找 dirName 以访问文件系统
+   */
+  private async resolveWorkspaceInfo(workspaceId: string): Promise<{
+    projectRoot: string;
+    dirName: string;
+    isArchived: boolean;
+  }> {
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (!wsEntry) {
+      devLog.workspaceLookup(workspaceId, false);
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+    const isArchived = wsEntry.status === "archived";
+    // 如果旧工作区没有 dirName，回退到使用 id
+    const dirName = wsEntry.dirName || wsEntry.id;
+    devLog.workspaceLookup(workspaceId, true, wsEntry.status);
+    return {
+      projectRoot: wsEntry.projectRoot,
+      dirName,
+      isArchived,
+    };
+  }
+
+  /**
    * 初始化工作区
    */
   async init(params: WorkspaceInitParams): Promise<WorkspaceInitResult> {
@@ -91,31 +117,35 @@ export class WorkspaceService {
     // 4. 读取索引（后续更新用）
     const index = await this.json.readIndex();
 
-    // 5. 生成工作区 ID
+    // 5. 生成工作区 ID 和目录名
     const workspaceId = generateWorkspaceId();
+    const wsDirName = generateWorkspaceDirName(params.name, workspaceId);
     const currentTime = now();
     const rootNodeId = "root";
+    const rootNodeDirName = "root";  // 根节点目录名固定为 "root"
 
-    // 6. 创建项目内目录结构
+    // 6. 创建项目内目录结构（使用可读的目录名）
     await this.fs.ensureProjectDir(projectRoot);
-    await this.fs.ensureWorkspaceDir(projectRoot, workspaceId);
-    await this.fs.mkdir(this.fs.getNodesDir(projectRoot, workspaceId));
-    await this.fs.mkdir(this.fs.getNodePath(projectRoot, workspaceId, rootNodeId));
+    await this.fs.ensureWorkspaceDir(projectRoot, wsDirName);
+    await this.fs.mkdir(this.fs.getNodesDir(projectRoot, wsDirName));
+    await this.fs.mkdir(this.fs.getNodePath(projectRoot, wsDirName, rootNodeDirName));
 
     // 7. 写入 workspace.json
     const config: WorkspaceConfig = {
       id: workspaceId,
       name: params.name,
+      dirName: wsDirName,
       status: "active",
       createdAt: currentTime,
       updatedAt: currentTime,
       rootNodeId,
     };
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, wsDirName, config);
 
     // 8. 写入 graph.json（含根节点，类型为 planning）
     const rootNode: NodeMeta = {
       id: rootNodeId,
+      dirName: rootNodeDirName,
       type: "planning",  // 根节点固定为规划节点
       parentId: null,
       children: [],
@@ -127,16 +157,16 @@ export class WorkspaceService {
       updatedAt: currentTime,
     };
     const graph: NodeGraph = {
-      version: "3.0",  // 新版本支持节点类型
+      version: "4.0",  // 新版本支持 dirName
       currentFocus: rootNodeId,
       nodes: {
         [rootNodeId]: rootNode,
       },
     };
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 9. 写入 Workspace.md
-    await this.md.writeWorkspaceMd(projectRoot, workspaceId, {
+    await this.md.writeWorkspaceMd(projectRoot, wsDirName, {
       name: params.name,
       createdAt: currentTime,
       updatedAt: currentTime,
@@ -146,11 +176,11 @@ export class WorkspaceService {
     });
 
     // 10. 创建空的 Log.md 和 Problem.md (工作区级别)
-    await this.md.createEmptyLog(projectRoot, workspaceId);
-    await this.md.createEmptyProblem(projectRoot, workspaceId);
+    await this.md.createEmptyLog(projectRoot, wsDirName);
+    await this.md.createEmptyProblem(projectRoot, wsDirName);
 
     // 11. 创建根节点文件（规划节点）
-    await this.md.writeNodeInfo(projectRoot, workspaceId, rootNodeId, {
+    await this.md.writeNodeInfo(projectRoot, wsDirName, rootNodeDirName, {
       id: rootNodeId,
       type: "planning",  // 根节点固定为规划节点
       title: params.name,
@@ -162,14 +192,15 @@ export class WorkspaceService {
       notes: "",
       conclusion: "",
     });
-    await this.md.createEmptyLog(projectRoot, workspaceId, rootNodeId);
-    await this.md.createEmptyProblem(projectRoot, workspaceId, rootNodeId);
+    await this.md.createEmptyLog(projectRoot, wsDirName, rootNodeDirName);
+    await this.md.createEmptyProblem(projectRoot, wsDirName, rootNodeDirName);
 
     // 12. 更新全局索引
     await this.fs.ensureIndex();
     index.workspaces.push({
       id: workspaceId,
       name: params.name,
+      dirName: wsDirName,
       projectRoot,
       status: "active",
       createdAt: currentTime,
@@ -178,7 +209,7 @@ export class WorkspaceService {
     await this.json.writeIndex(index);
 
     // 13. 追加日志
-    await this.md.appendLog(projectRoot, workspaceId, {
+    await this.md.appendLog(projectRoot, wsDirName, {
       time: currentTime,
       operator: "system",
       event: `工作区 "${params.name}" 已创建`,
@@ -211,7 +242,7 @@ export class WorkspaceService {
     // 构建返回结果
     const result: WorkspaceInitResult = {
       workspaceId,
-      path: this.fs.getWorkspacePath(projectRoot, workspaceId),
+      path: this.fs.getWorkspacePath(projectRoot, wsDirName),
       projectRoot,
       rootNodeId,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
@@ -329,11 +360,12 @@ export class WorkspaceService {
     }
 
     const { projectRoot, status } = wsEntry;
+    const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
     const isArchived = status === "archived";
     devLog.workspaceLookup(workspaceId, true, status);
 
     // 验证项目目录存在（根据归档状态选择正确路径）
-    const workspacePath = this.fs.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+    const workspacePath = this.fs.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
     devLog.archivePath(workspaceId, isArchived, workspacePath);
     if (!(await this.fs.exists(workspacePath))) {
       devLog.fileError("exists", workspacePath, new Error("目录不存在"));
@@ -342,13 +374,13 @@ export class WorkspaceService {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在（已标记为错误状态，可通过 workspace_list 查看）`);
     }
 
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
-    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
-    const workspaceMd = await this.md.readWorkspaceMdRaw(projectRoot, workspaceId, isArchived);
-    const logMd = await this.md.readLogRaw(projectRoot, workspaceId, undefined, isArchived);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
+    const graph = await this.json.readGraph(projectRoot, wsDirName, isArchived);
+    const workspaceMd = await this.md.readWorkspaceMdRaw(projectRoot, wsDirName, isArchived);
+    const logMd = await this.md.readLogRaw(projectRoot, wsDirName, undefined, isArchived);
 
     // 解析规则并计算哈希
-    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId, isArchived);
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName, isArchived);
     const rulesCount = workspaceMdData.rules.length;
     const rulesHash = rulesCount > 0
       ? crypto.createHash("md5").update(workspaceMdData.rules.join("\n")).digest("hex").substring(0, 8)
@@ -393,8 +425,9 @@ export class WorkspaceService {
       // 分支清理失败不阻塞删除流程
     }
 
-    // 删除项目内目录
-    const workspacePath = this.fs.getWorkspacePath(wsEntry.projectRoot, workspaceId);
+    // 删除项目内目录（使用 dirName）
+    const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
+    const workspacePath = this.fs.getWorkspacePath(wsEntry.projectRoot, wsDirName);
     if (await this.fs.exists(workspacePath)) {
       await this.fs.rmdir(workspacePath);
     }
@@ -420,19 +453,20 @@ export class WorkspaceService {
     }
 
     const { projectRoot, status } = wsEntry;
+    const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
     const isArchived = status === "archived";
 
     // 验证项目目录存在（根据归档状态选择正确路径）
-    const workspacePath = this.fs.getWorkspaceBasePath(projectRoot, workspaceId, isArchived);
+    const workspacePath = this.fs.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
     if (!(await this.fs.exists(workspacePath))) {
       // 标记为 error 状态而不是删除
       await this.markAsError(workspaceId, "dir_missing", `工作区目录不存在: ${workspacePath}`);
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在（已标记为错误状态）`);
     }
 
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, isArchived);
-    const graph = await this.json.readGraph(projectRoot, workspaceId, isArchived);
-    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId, isArchived);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
+    const graph = await this.json.readGraph(projectRoot, wsDirName, isArchived);
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName, isArchived);
 
     // 计算统计信息（终态 = completed + failed + cancelled）
     const nodes = Object.values(graph.nodes);
@@ -452,9 +486,9 @@ export class WorkspaceService {
     // 生成输出
     let output: string;
     if (format === "markdown") {
-      output = await this.generateMarkdownStatus(projectRoot, workspaceId, config, graph, workspaceMdData, summary, isArchived);
+      output = await this.generateMarkdownStatus(projectRoot, wsDirName, config, graph, workspaceMdData, summary, isArchived);
     } else {
-      output = await this.generateBoxStatus(projectRoot, workspaceId, config, graph, workspaceMdData, summary, isArchived);
+      output = await this.generateBoxStatus(projectRoot, wsDirName, config, graph, workspaceMdData, summary, isArchived);
     }
 
     return {

@@ -10,7 +10,12 @@ import type { NodeGraph } from "../types/node.js";
  *
  * 架构：
  * - 全局索引：~/.tanmi-workspace[-dev]/index.json
- * - 项目数据：{projectRoot}/.tanmi-workspace[-dev]/{workspaceId}/
+ * - 项目数据：{projectRoot}/.tanmi-workspace[-dev]/{wsDirName}/
+ *
+ * 目录命名规范（v2）：
+ * - 工作区目录：{名称}_{短ID}，如 "UI优化_mjb65az5"
+ * - 节点目录：{标题}_{短ID}，如 "功能分析_mjb6mj4h"
+ * - 根节点目录固定为 "root"
  */
 export class JsonStorage {
   constructor(private fs: FileSystemAdapter) {}
@@ -81,7 +86,9 @@ export class JsonStorage {
         invalid.push(ws);
         continue;
       }
-      const configPath = this.fs.getWorkspaceConfigPath(ws.projectRoot, ws.id);
+      // 使用 dirName 来定位配置文件，如果没有 dirName 则回退到 id
+      const dirName = ws.dirName || ws.id;
+      const configPath = this.fs.getWorkspaceConfigPath(ws.projectRoot, dirName);
       if (!(await this.fs.exists(configPath))) {
         invalid.push(ws);
       }
@@ -119,22 +126,23 @@ export class JsonStorage {
 
   /**
    * 获取工作区配置文件路径（根据是否归档）
+   * @param wsDirName 工作区目录名
    */
-  private getConfigPath(projectRoot: string, workspaceId: string, isArchived = false): string {
+  private getConfigPath(projectRoot: string, wsDirName: string, isArchived = false): string {
     if (isArchived) {
-      return this.fs.getArchivePath(projectRoot, workspaceId) + "/workspace.json";
+      return this.fs.getArchivePath(projectRoot, wsDirName) + "/workspace.json";
     }
-    return this.fs.getWorkspaceConfigPath(projectRoot, workspaceId);
+    return this.fs.getWorkspaceConfigPath(projectRoot, wsDirName);
   }
 
   /**
    * 读取工作区配置
    * @param projectRoot 项目根目录
-   * @param workspaceId 工作区 ID
+   * @param wsDirName 工作区目录名
    * @param isArchived 是否从归档目录读取
    */
-  async readWorkspaceConfig(projectRoot: string, workspaceId: string, isArchived = false): Promise<WorkspaceConfig> {
-    const configPath = this.getConfigPath(projectRoot, workspaceId, isArchived);
+  async readWorkspaceConfig(projectRoot: string, wsDirName: string, isArchived = false): Promise<WorkspaceConfig> {
+    const configPath = this.getConfigPath(projectRoot, wsDirName, isArchived);
     const content = await this.fs.readFile(configPath);
     return JSON.parse(content) as WorkspaceConfig;
   }
@@ -142,20 +150,21 @@ export class JsonStorage {
   /**
    * 写入工作区配置
    * @param projectRoot 项目根目录
-   * @param workspaceId 工作区 ID
+   * @param wsDirName 工作区目录名
    * @param config 工作区配置
    * @param isArchived 是否写入归档目录
    */
-  async writeWorkspaceConfig(projectRoot: string, workspaceId: string, config: WorkspaceConfig, isArchived = false): Promise<void> {
-    const configPath = this.getConfigPath(projectRoot, workspaceId, isArchived);
+  async writeWorkspaceConfig(projectRoot: string, wsDirName: string, config: WorkspaceConfig, isArchived = false): Promise<void> {
+    const configPath = this.getConfigPath(projectRoot, wsDirName, isArchived);
     await this.fs.writeFile(configPath, JSON.stringify(config, null, 2));
   }
 
   /**
    * 检查特定工作区是否存在
+   * @param wsDirName 工作区目录名
    */
-  async hasWorkspace(projectRoot: string, workspaceId: string): Promise<boolean> {
-    const configPath = this.fs.getWorkspaceConfigPath(projectRoot, workspaceId);
+  async hasWorkspace(projectRoot: string, wsDirName: string): Promise<boolean> {
+    const configPath = this.fs.getWorkspaceConfigPath(projectRoot, wsDirName);
     return this.fs.exists(configPath);
   }
 
@@ -164,27 +173,27 @@ export class JsonStorage {
   /**
    * 当前 graph.json 版本
    */
-  static readonly GRAPH_VERSION = "3.0";
+  static readonly GRAPH_VERSION = "4.0";  // 升级版本号，支持 dirName
 
   /**
    * 读取节点图
    * @param projectRoot 项目根目录
-   * @param workspaceId 工作区 ID
+   * @param wsDirName 工作区目录名
    * @param isArchived 是否为归档工作区
    */
-  async readGraph(projectRoot: string, workspaceId: string, isArchived = false): Promise<NodeGraph> {
+  async readGraph(projectRoot: string, wsDirName: string, isArchived = false): Promise<NodeGraph> {
     const graphPath = isArchived
-      ? this.fs.getGraphPathWithArchive(projectRoot, workspaceId, true)
-      : this.fs.getGraphPath(projectRoot, workspaceId);
+      ? this.fs.getGraphPathWithArchive(projectRoot, wsDirName, true)
+      : this.fs.getGraphPath(projectRoot, wsDirName);
     const content = await this.fs.readFile(graphPath);
     const graph = JSON.parse(content) as NodeGraph;
 
-    // 版本迁移：1.0/2.0 -> 3.0（仅对活跃工作区执行迁移写入）
+    // 版本迁移：1.0/2.0/3.0 -> 4.0（仅对活跃工作区执行迁移写入）
     if (graph.version !== JsonStorage.GRAPH_VERSION) {
       this.migrateGraph(graph);
       if (!isArchived) {
         // 自动保存迁移后的数据
-        await this.writeGraph(projectRoot, workspaceId, graph);
+        await this.writeGraph(projectRoot, wsDirName, graph);
       }
     }
 
@@ -194,6 +203,7 @@ export class JsonStorage {
   /**
    * 迁移旧版本 graph 到当前版本
    * - 1.0/2.0 节点没有 type 字段，需要推断
+   * - 3.0 节点没有 dirName 字段，需要从 id 推导
    */
   private migrateGraph(graph: NodeGraph): void {
     const oldVersion = graph.version;
@@ -225,6 +235,11 @@ export class JsonStorage {
           node.type = "execution";
         }
       }
+
+      // 如果没有 dirName 字段，使用 nodeId 作为 dirName（向后兼容）
+      if (!node.dirName) {
+        node.dirName = nodeId;
+      }
     }
 
     // 更新版本号
@@ -236,11 +251,11 @@ export class JsonStorage {
   /**
    * 写入节点图
    * @param projectRoot 项目根目录
-   * @param workspaceId 工作区 ID
+   * @param wsDirName 工作区目录名
    * @param graph 节点图
    */
-  async writeGraph(projectRoot: string, workspaceId: string, graph: NodeGraph): Promise<void> {
-    const graphPath = this.fs.getGraphPath(projectRoot, workspaceId);
+  async writeGraph(projectRoot: string, wsDirName: string, graph: NodeGraph): Promise<void> {
+    const graphPath = this.fs.getGraphPath(projectRoot, wsDirName);
     await this.fs.writeFile(graphPath, JSON.stringify(graph, null, 2));
   }
 }

@@ -94,14 +94,17 @@ export class StateService {
   }
 
   /**
-   * 根据 workspaceId 获取 projectRoot
+   * 根据 workspaceId 获取 projectRoot 和 wsDirName
    */
-  private async resolveProjectRoot(workspaceId: string): Promise<string> {
-    const projectRoot = await this.json.getProjectRoot(workspaceId);
-    if (!projectRoot) {
+  private async resolveProjectRoot(workspaceId: string): Promise<{ projectRoot: string; wsDirName: string }> {
+    const entry = await this.json.findWorkspaceEntry(workspaceId);
+    if (!entry) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
-    return projectRoot;
+    return {
+      projectRoot: entry.projectRoot,
+      wsDirName: entry.dirName || entry.id  // 向后兼容
+    };
   }
 
   /**
@@ -129,19 +132,20 @@ export class StateService {
       }
 
       // Token 验证通过，记录用户输入到日志
+      const { projectRoot: pRoot, wsDirName: wDir } = await this.resolveProjectRoot(workspaceId);
       const timestamp = formatShort(now());
-      await this.md.appendTypedLogEntry(await this.resolveProjectRoot(workspaceId), workspaceId, {
+      await this.md.appendTypedLogEntry(pRoot, wDir, {
         timestamp,
         operator: "Human",
         event: `用户确认: ${confirmation.userInput}`,
-      }, nodeId);
+      }, nodeId);  // 这里 nodeId 需要后续改为 nodeDirName
     }
 
-    // 2. 获取 projectRoot
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
+    // 2. 获取 projectRoot 和 wsDirName
+    const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
 
     // 3. 验证节点存在并获取当前状态
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
@@ -193,7 +197,7 @@ export class StateService {
     }
 
     // 4.3 派发模式下的权限检查
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
     if (config.dispatch?.enabled && nodeType === "execution") {
       // 4.3.1 派发执行中（executing）时阻止状态变更（除非是系统内部调用）
       if (nodeMeta.dispatch?.status === "executing") {
@@ -255,17 +259,20 @@ export class StateService {
             parent.status = "monitoring";
             parent.updatedAt = currentTime;
             cascadeMessages.push(`父节点 ${parentId}: ${parent.status} → monitoring`);
-            await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "monitoring");
+            const parentDirName = parent.dirName || parentId;  // 向后兼容
+            await this.md.updateNodeStatus(projectRoot, wsDirName, parentDirName, "monitoring");
           } else if (parent.status === "completed" && action === "reopen") {
             parent.status = "monitoring";
             parent.updatedAt = currentTime;
             cascadeMessages.push(`父节点 ${parentId}: completed → monitoring (级联重开)`);
-            await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "monitoring");
+            const parentDirName = parent.dirName || parentId;
+            await this.md.updateNodeStatus(projectRoot, wsDirName, parentDirName, "monitoring");
           } else if (parent.status === "cancelled" && action === "reopen") {
             parent.status = "monitoring";
             parent.updatedAt = currentTime;
             cascadeMessages.push(`父节点 ${parentId}: cancelled → monitoring (级联重开)`);
-            await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "monitoring");
+            const parentDirName = parent.dirName || parentId;
+            await this.md.updateNodeStatus(projectRoot, wsDirName, parentDirName, "monitoring");
           }
         }
         parentId = parent.parentId;
@@ -277,40 +284,41 @@ export class StateService {
       graph.currentFocus = nodeId;
     }
 
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 7. 更新 Info.md 的 frontmatter 和结论部分
-    await this.md.updateNodeStatus(projectRoot, workspaceId, nodeId, newStatus);
+    const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
+    await this.md.updateNodeStatus(projectRoot, wsDirName, nodeDirName, newStatus);
     if (conclusion) {
-      await this.md.updateConclusion(projectRoot, workspaceId, nodeId, conclusion);
+      await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
     }
 
     // 8. 追加日志记录
     const logEvent = this.buildLogEvent(nodeType, action, currentStatus, newStatus, reason);
-    await this.md.appendTypedLogEntry(projectRoot, workspaceId, {
+    await this.md.appendTypedLogEntry(projectRoot, wsDirName, {
       timestamp,
       operator: "AI",
       event: logEvent,
-    }, nodeId);
+    }, nodeDirName);
 
     // 9. 如果是 complete/cancel，清空 Problem.md
     if (action === "complete" || action === "cancel") {
-      await this.md.writeProblem(projectRoot, workspaceId, {
+      await this.md.writeProblem(projectRoot, wsDirName, {
         currentProblem: "（暂无）",
         nextStep: "（暂无）",
-      }, nodeId);
+      }, nodeDirName);
     }
 
     // 9.1 信息收集节点 complete 时自动归档规则和文档
     let archiveResult: { rules: string[]; docs: DocRef[] } | null = null;
     if (nodeMeta.role === "info_collection" && action === "complete" && conclusion) {
-      archiveResult = await this.archiveInfoCollection(projectRoot, workspaceId, conclusion);
+      archiveResult = await this.archiveInfoCollection(projectRoot, wsDirName, conclusion);
     }
 
     // 9.2 complete 时获取节点的文档引用（用于提醒更新）
     let nodeDocRefs: DocRef[] = [];
     if (action === "complete") {
-      const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, workspaceId, nodeId);
+      const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, wsDirName, nodeDirName);
       nodeDocRefs = nodeInfo.docsWithStatus
         .filter(d => d.status === "active")
         .map(d => ({ path: d.path, description: d.description }));
@@ -318,7 +326,7 @@ export class StateService {
 
     // 9. 更新工作区配置的 updatedAt（使用前面已读取的 config）
     config.updatedAt = currentTime;
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, wsDirName, config);
 
     // 11. 同步更新索引中的 updatedAt（确保 workspace_list 返回正确时间）
     const index = await this.json.readIndex();
@@ -744,7 +752,7 @@ export class StateService {
    */
   private async archiveInfoCollection(
     projectRoot: string,
-    workspaceId: string,
+    wsDirName: string,
     conclusion: string
   ): Promise<{ rules: string[]; docs: DocRef[] }> {
     const result: { rules: string[]; docs: DocRef[] } = { rules: [], docs: [] };
@@ -793,7 +801,7 @@ export class StateService {
 
     // 如果有解析到内容，追加到工作区
     if (result.rules.length > 0 || result.docs.length > 0) {
-      const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
+      const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName);
 
       // 追加规则（去重）
       const existingRules = new Set(workspaceMdData.rules);
@@ -814,7 +822,7 @@ export class StateService {
       }
 
       // 写回工作区
-      await this.md.writeWorkspaceMd(projectRoot, workspaceId, workspaceMdData);
+      await this.md.writeWorkspaceMd(projectRoot, wsDirName, workspaceMdData);
     }
 
     return result;
