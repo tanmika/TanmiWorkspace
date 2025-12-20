@@ -417,7 +417,7 @@ ${colors.bold("3. 其他平台")}
     console.log("\n下一步:");
     console.log("  1. 重启 Claude Code");
     console.log("  2. 输入 /mcp 验证安装");
-    console.log('  3. 说「使用工作台，介绍一下你自己」开始使用\n');
+    console.log('  3. 说「介绍一下工作台的使用方式」开始使用\n');
   }
 
   if (platform === "cursor") {
@@ -436,6 +436,6 @@ ${colors.bold("3. 其他平台")}
     console.log("\n" + colors.green(colors.bold("✓ 配置完成！")));
     console.log("\n下一步:");
     console.log("  1. 重启 Cursor");
-    console.log('  2. 说「使用工作台，介绍一下你自己」开始使用\n');
+    console.log('  2. 说「介绍一下工作台的使用方式」开始使用\n');
   }
 }

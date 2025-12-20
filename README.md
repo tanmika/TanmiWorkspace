@@ -52,7 +52,7 @@ tanmi-workspace setup --status
 适用于需要自定义或其他 AI 工具：
 
 ```bash
-git clone https://github.com/anthropics/TanmiWorkspace.git
+git clone <仓库地址>
 cd TanmiWorkspace
 npm install
 npm run build
@@ -76,7 +76,7 @@ npm run build
 
 在 Claude Code 中输入 `/mcp` 查看已安装的 MCP 服务器，或向 AI 说：
 
-> "使用工作台，介绍一下你自己。"
+> "介绍一下工作台的使用方式"
 
 如果返回 TanmiWorkspace 的介绍信息，说明配置成功。
 
