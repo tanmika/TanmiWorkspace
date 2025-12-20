@@ -33,7 +33,7 @@ export type WorkspaceStatus = "active" | "archived" | "error";
 export interface WorkspaceErrorInfo {
   message: string;                    // 错误描述
   detectedAt: string;                 // 检测到错误的时间 (ISO 8601)
-  type?: "dir_missing" | "config_corrupted" | "graph_corrupted" | "unknown";  // 错误类型
+  type?: "dir_missing" | "config_corrupted" | "graph_corrupted" | "version_too_high" | "unknown";  // 错误类型
 }
 
 /**

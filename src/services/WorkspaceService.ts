@@ -375,7 +375,19 @@ export class WorkspaceService {
     }
 
     const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
-    const graph = await this.json.readGraph(projectRoot, wsDirName, isArchived);
+
+    // 读取 graph 时捕获版本过高错误
+    let graph;
+    try {
+      graph = await this.json.readGraph(projectRoot, wsDirName, isArchived);
+    } catch (e) {
+      if (e instanceof TanmiError && e.code === "VERSION_TOO_HIGH") {
+        await this.markAsError(workspaceId, "version_too_high", e.message);
+        throw e;
+      }
+      throw e;
+    }
+
     const workspaceMd = await this.md.readWorkspaceMdRaw(projectRoot, wsDirName, isArchived);
     const logMd = await this.md.readLogRaw(projectRoot, wsDirName, undefined, isArchived);
 

@@ -9,7 +9,7 @@ export type WorkspaceStatus = 'active' | 'archived' | 'error'
 export interface WorkspaceErrorInfo {
   message: string
   detectedAt: string
-  type?: 'dir_missing' | 'config_corrupted' | 'graph_corrupted' | 'unknown'
+  type?: 'dir_missing' | 'config_corrupted' | 'graph_corrupted' | 'version_too_high' | 'unknown'
 }
 
 // 节点类型
