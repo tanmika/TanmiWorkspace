@@ -29,9 +29,9 @@ client.interceptors.response.use(
       serviceStore.markAvailable()
     }
 
-    const message = error.response?.data?.error?.message || error.message || '请求失败'
+    const message = error.response?.data?.error?.message || error.response?.data?.message || error.message || '请求失败'
     console.error('API Error:', message)
-    return Promise.reject(error)
+    return Promise.reject(new Error(message))
   }
 )
 
