@@ -19,7 +19,23 @@ import type {
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
 import type { DocRef } from "../types/workspace.js";
+import { randomBytes } from "crypto";
+import { GuidanceService } from "./GuidanceService.js";
+import type { GuidanceContext } from "../types/guidance.js";
 import { isGitRepo } from "../utils/git.js";
+
+/**
+ * 待确认 Token 信息
+ */
+export interface PendingConfirmation {
+  token: string;
+  workspaceId: string;
+  nodeId: string;
+  actionType: string;
+  createdAt: number;
+  expiresAt: number;
+  metadata?: Record<string, unknown>;
+}
 
 /**
  * 执行节点状态转换规则表
@@ -53,11 +69,29 @@ const CONCLUSION_REQUIRED_ACTIONS: TransitionAction[] = ["complete", "fail", "ca
  * 处理节点状态转换
  */
 export class StateService {
+  /**
+   * Token 存储（内存中）
+   * key: token, value: PendingConfirmation
+   */
+  private pendingConfirmations: Map<string, PendingConfirmation> = new Map();
+
+  /**
+   * Token 有效期（毫秒）
+   */
+  private readonly TOKEN_VALIDITY_MS = 30 * 60 * 1000; // 30 分钟
+
+  /**
+   * 引导服务
+   */
+  private guidanceService: GuidanceService;
+
   constructor(
     private json: JsonStorage,
     private md: MarkdownStorage,
     private fs: FileSystemAdapter
-  ) {}
+  ) {
+    this.guidanceService = new GuidanceService();
+  }
 
   /**
    * 根据 workspaceId 获取 projectRoot
@@ -74,12 +108,39 @@ export class StateService {
    * 执行状态转换
    */
   async transition(params: NodeTransitionParams): Promise<NodeTransitionResult> {
-    const { workspaceId, nodeId, action, reason, conclusion } = params;
+    const { workspaceId, nodeId, action, reason, conclusion, confirmation } = params;
 
-    // 1. 获取 projectRoot
+    // 1. 如果提供了 confirmation，验证 token
+    if (confirmation) {
+      const validatedConfirmation = this.validateConfirmation(confirmation.token);
+      if (!validatedConfirmation) {
+        throw new TanmiError(
+          "INVALID_CONFIRMATION_TOKEN",
+          "提供的 confirmation token 无效或已过期。请使用最新的 token 重新提交。"
+        );
+      }
+
+      // 验证 token 对应的工作区和节点是否匹配
+      if (validatedConfirmation.workspaceId !== workspaceId || validatedConfirmation.nodeId !== nodeId) {
+        throw new TanmiError(
+          "CONFIRMATION_MISMATCH",
+          `confirmation token 对应的节点不匹配。Token 属于 ${validatedConfirmation.workspaceId}/${validatedConfirmation.nodeId}，但请求的是 ${workspaceId}/${nodeId}`
+        );
+      }
+
+      // Token 验证通过，记录用户输入到日志
+      const timestamp = formatShort(now());
+      await this.md.appendTypedLogEntry(await this.resolveProjectRoot(workspaceId), workspaceId, {
+        timestamp,
+        operator: "Human",
+        event: `用户确认: ${confirmation.userInput}`,
+      }, nodeId);
+    }
+
+    // 2. 获取 projectRoot
     const projectRoot = await this.resolveProjectRoot(workspaceId);
 
-    // 2. 验证节点存在并获取当前状态
+    // 3. 验证节点存在并获取当前状态
     const graph = await this.json.readGraph(projectRoot, workspaceId);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
@@ -89,7 +150,7 @@ export class StateService {
     const nodeType = nodeMeta.type;
     const currentStatus = nodeMeta.status;
 
-    // 3. 根据节点类型验证转换合法性
+    // 4. 根据节点类型验证转换合法性
     const newStatus = this.validateTransition(nodeType, currentStatus, action);
     if (!newStatus) {
       const suggestion = this.getTransitionSuggestion(nodeType, currentStatus, action);
@@ -99,7 +160,7 @@ export class StateService {
       );
     }
 
-    // 4. 验证 conclusion 要求
+    // 5. 验证 conclusion 要求
     if (CONCLUSION_REQUIRED_ACTIONS.includes(action) && !conclusion) {
       throw new TanmiError(
         "CONCLUSION_REQUIRED",
@@ -107,7 +168,7 @@ export class StateService {
       );
     }
 
-    // 4.1 根节点 start 时检查信息收集节点状态（不阻止，但记录用于后续提醒）
+    // 5.1 根节点 start 时检查信息收集节点状态（不阻止，但记录用于后续提醒）
     let infoCollectionWarning: string | null = null;
     if (nodeId === "root" && action === "start") {
       const infoCollectionCheck = this.checkInfoCollectionNode(graph.nodes, nodeMeta.children);
@@ -116,7 +177,7 @@ export class StateService {
       }
     }
 
-    // 4.2 规划节点 complete 时验证子节点状态（所有子节点必须处于终态）
+    // 5.2 规划节点 complete 时验证子节点状态（所有子节点必须处于终态）
     if (nodeType === "planning" && action === "complete") {
       const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
       const childStatuses = nodeMeta.children.map(cid => graph.nodes[cid]?.status);
@@ -174,7 +235,7 @@ export class StateService {
     const currentTime = now();
     const timestamp = formatShort(currentTime);
 
-    // 5. 更新 graph.json 中的节点状态和 conclusion
+    // 6. 更新 graph.json 中的节点状态和 conclusion
     nodeMeta.status = newStatus;
     nodeMeta.updatedAt = currentTime;
     if (conclusion) {
@@ -182,7 +243,7 @@ export class StateService {
       nodeMeta.conclusion = conclusion.replace(/\\n/g, "\n");
     }
 
-    // 5.1 父节点状态级联（仅执行节点 start/reopen 时）
+    // 6.1 父节点状态级联（仅执行节点 start/reopen 时）
     const cascadeMessages: string[] = [];
     if (nodeType === "execution" && (action === "start" || action === "reopen")) {
       // 当执行节点开始时，确保父规划节点处于 monitoring 状态
@@ -211,20 +272,20 @@ export class StateService {
       }
     }
 
-    // 5.2 自动切换焦点到当前节点（start/reopen 时）
+    // 6.2 自动切换焦点到当前节点（start/reopen 时）
     if (action === "start" || action === "reopen") {
       graph.currentFocus = nodeId;
     }
 
     await this.json.writeGraph(projectRoot, workspaceId, graph);
 
-    // 6. 更新 Info.md 的 frontmatter 和结论部分
+    // 7. 更新 Info.md 的 frontmatter 和结论部分
     await this.md.updateNodeStatus(projectRoot, workspaceId, nodeId, newStatus);
     if (conclusion) {
       await this.md.updateConclusion(projectRoot, workspaceId, nodeId, conclusion);
     }
 
-    // 7. 追加日志记录
+    // 8. 追加日志记录
     const logEvent = this.buildLogEvent(nodeType, action, currentStatus, newStatus, reason);
     await this.md.appendTypedLogEntry(projectRoot, workspaceId, {
       timestamp,
@@ -232,7 +293,7 @@ export class StateService {
       event: logEvent,
     }, nodeId);
 
-    // 8. 如果是 complete/cancel，清空 Problem.md
+    // 9. 如果是 complete/cancel，清空 Problem.md
     if (action === "complete" || action === "cancel") {
       await this.md.writeProblem(projectRoot, workspaceId, {
         currentProblem: "（暂无）",
@@ -240,13 +301,13 @@ export class StateService {
       }, nodeId);
     }
 
-    // 8.1 信息收集节点 complete 时自动归档规则和文档
+    // 9.1 信息收集节点 complete 时自动归档规则和文档
     let archiveResult: { rules: string[]; docs: DocRef[] } | null = null;
     if (nodeMeta.role === "info_collection" && action === "complete" && conclusion) {
       archiveResult = await this.archiveInfoCollection(projectRoot, workspaceId, conclusion);
     }
 
-    // 8.2 complete 时获取节点的文档引用（用于提醒更新）
+    // 9.2 complete 时获取节点的文档引用（用于提醒更新）
     let nodeDocRefs: DocRef[] = [];
     if (action === "complete") {
       const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, workspaceId, nodeId);
@@ -259,7 +320,7 @@ export class StateService {
     config.updatedAt = currentTime;
     await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
 
-    // 10. 同步更新索引中的 updatedAt（确保 workspace_list 返回正确时间）
+    // 11. 同步更新索引中的 updatedAt（确保 workspace_list 返回正确时间）
     const index = await this.json.readIndex();
     const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
     if (wsEntry) {
@@ -267,7 +328,7 @@ export class StateService {
       await this.json.writeIndex(index);
     }
 
-    // 11. 返回结果
+    // 12. 返回结果
     const result: NodeTransitionResult = {
       success: true,
       previousStatus: currentStatus,
@@ -280,10 +341,25 @@ export class StateService {
       result.cascadeUpdates = cascadeMessages;
     }
 
-    // 12. 添加工作流提示（根据节点类型）
+    // 13. 添加工作流提示（根据节点类型）
     result.hint = this.generateHint(nodeType, action, nodeMeta, graph, archiveResult, infoCollectionWarning, nodeDocRefs);
 
-    // 12.1 如果派发模式启用，追加派发相关提示
+    // 13.1 生成引导内容
+    const guidanceContext: GuidanceContext = {
+      toolName: "node_transition",
+      toolInput: { action },
+      nodeType,
+      nodeStatus: newStatus,
+      nodeRole: nodeMeta.role,
+      hasChildren: nodeMeta.children.length > 0,
+      extra: {
+        isRootNode: nodeId === "root",
+      },
+    };
+    const guidance = this.guidanceService.generateFromContext(guidanceContext, 0);
+    result.guidance = guidance.content;
+
+    // 13.2 如果派发模式启用，追加派发相关提示
     if (config.dispatch?.enabled && nodeType === "execution") {
       if (action === "start") {
         result.hint += "\n\n🚀 **派发模式已启用**：请使用 node_dispatch 将任务派发给 subagent 执行，而非直接执行。派发后根据返回的 actionRequired 调用 Task tool。";
@@ -291,18 +367,24 @@ export class StateService {
       // 注：测试节点附属化后，测试节点作为兄弟节点存在，由父管理节点统一调度
     }
 
-    // 13. 添加 actionRequired（执行节点完成且有文档引用时）
+    // 14. 添加 actionRequired（执行节点完成且有文档引用时）
     if (nodeType === "execution" && action === "complete" && nodeDocRefs && nodeDocRefs.length > 0) {
+      // 生成 confirmation token
+      const confirmation = this.createPendingConfirmation(workspaceId, nodeId, "check_docs", {
+        docs: nodeDocRefs,
+      });
+
       result.actionRequired = {
         type: "check_docs",
         message: "执行任务已完成，请向用户确认引用的文档是否需要同步更新。",
         data: {
           docs: nodeDocRefs,
         },
+        confirmationToken: confirmation.token,
       };
     }
 
-    // 14. 添加 actionRequired（reopen 时，如果有子节点则需要先查看结构）
+    // 15. 添加 actionRequired（reopen 时，如果有子节点则需要先查看结构）
     if (action === "reopen" && nodeMeta.children.length > 0) {
       // 收集子节点概览信息
       const childrenOverview = nodeMeta.children.map(childId => {
@@ -313,6 +395,13 @@ export class StateService {
           type: child?.type || "unknown",
         };
       });
+
+      // 生成 confirmation token
+      const confirmation = this.createPendingConfirmation(workspaceId, nodeId, "review_structure", {
+        childCount: nodeMeta.children.length,
+        childrenOverview,
+      });
+
       result.actionRequired = {
         type: "review_structure",
         message: "节点已重开，存在已有子节点。请先调用 node_list 或 workspace_status 查看现有结构，评估是否需要调整现有节点而非创建新节点。",
@@ -320,6 +409,7 @@ export class StateService {
           childCount: nodeMeta.children.length,
           childrenOverview,
         },
+        confirmationToken: confirmation.token,
       };
     }
 
@@ -441,9 +531,9 @@ export class StateService {
       } else if (action === "reopen") {
         const oldConclusion = nodeMeta.conclusion;
         if (oldConclusion) {
-          return `💡 执行任务已重开。旧结论：「${oldConclusion}」\n完成时请将新工作与旧结论合并。`;
+          return `💡 执行任务已重开。旧结论：「${oldConclusion}」\n如需修改需求描述，请使用 node_update({ requirement: "新需求" })。\n完成时请将新工作与旧结论合并。`;
         }
-        return "💡 执行任务已开始。请使用 log_append 记录执行过程，完成后调用 complete，如遇问题调用 fail。";
+        return "💡 执行任务已重开。如需修改需求描述，请使用 node_update({ requirement: \"新需求\" })。";
       } else if (action === "complete") {
         const parentId = nodeMeta.parentId;
         let hint = "💡 执行任务已完成。";
@@ -469,9 +559,9 @@ export class StateService {
       } else if (action === "reopen") {
         const oldConclusion = nodeMeta.conclusion;
         if (oldConclusion) {
-          return `💡 规划节点已重开。旧结论：「${oldConclusion}」\n完成时请将新工作与旧结论合并，确保结论完整反映所有已完成的工作。`;
+          return `💡 规划节点已重开。旧结论：「${oldConclusion}」\n如需修改需求描述，请使用 node_update({ requirement: "新需求" })。\n完成时请将新工作与旧结论合并，确保结论完整反映所有已完成的工作。`;
         }
-        return "💡 进入规划状态。请分析需求，使用 node_create 创建执行节点或子规划节点。";
+        return "💡 规划节点已重开。如需修改需求描述，请使用 node_update({ requirement: \"新需求\" })。";
       } else if (action === "complete") {
         const parentId = nodeMeta.parentId;
         let hint = "💡 规划节点已完成。工作区任务完成！";
@@ -728,5 +818,85 @@ export class StateService {
     }
 
     return result;
+  }
+
+  /**
+   * 创建待确认 Token
+   * @param workspaceId 工作区 ID
+   * @param nodeId 节点 ID
+   * @param actionType 动作类型（如 "check_docs"）
+   * @param metadata 附加元数据
+   * @returns PendingConfirmation 对象
+   */
+  createPendingConfirmation(
+    workspaceId: string,
+    nodeId: string,
+    actionType: string,
+    metadata?: Record<string, unknown>
+  ): PendingConfirmation {
+    // 生成随机 token（32 字节，hex 编码为 64 字符）
+    const token = randomBytes(32).toString("hex");
+    const currentTime = Date.now();
+    const confirmation: PendingConfirmation = {
+      token,
+      workspaceId,
+      nodeId,
+      actionType,
+      createdAt: currentTime,
+      expiresAt: currentTime + this.TOKEN_VALIDITY_MS,
+      metadata,
+    };
+
+    // 存储到内存
+    this.pendingConfirmations.set(token, confirmation);
+
+    // 清理过期 token（顺便执行）
+    this.clearExpiredTokens();
+
+    return confirmation;
+  }
+
+  /**
+   * 验证 Token
+   * @param token 待验证的 token
+   * @returns 如果 token 有效，返回 PendingConfirmation 对象；否则返回 null
+   */
+  validateConfirmation(token: string): PendingConfirmation | null {
+    const confirmation = this.pendingConfirmations.get(token);
+    if (!confirmation) {
+      return null;
+    }
+
+    // 检查是否过期
+    const currentTime = Date.now();
+    if (currentTime > confirmation.expiresAt) {
+      // 过期，删除并返回 null
+      this.pendingConfirmations.delete(token);
+      return null;
+    }
+
+    // 验证成功，删除 token（一次性使用）
+    this.pendingConfirmations.delete(token);
+    return confirmation;
+  }
+
+  /**
+   * 清理过期 Token
+   * 遍历所有 token，删除已过期的
+   */
+  clearExpiredTokens(): void {
+    const currentTime = Date.now();
+    const toDelete: string[] = [];
+
+    // 使用 Array.from 转换迭代器以兼容 ES5
+    for (const [token, confirmation] of Array.from(this.pendingConfirmations.entries())) {
+      if (currentTime > confirmation.expiresAt) {
+        toDelete.push(token);
+      }
+    }
+
+    for (const token of toDelete) {
+      this.pendingConfirmations.delete(token);
+    }
   }
 }

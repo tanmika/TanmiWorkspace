@@ -182,6 +182,7 @@ export interface NodeCreateResult {
   path: string;
   autoReopened?: string;            // 如果父节点被自动 reopen，返回父节点 ID
   hint?: string;
+  guidance?: string;  // 场景感知引导内容（L0 级别）
   actionRequired?: ActionRequired;  // AI 必须执行的行为
 
   // ===== 测试节点附属化输出（isNeedTest=true 时返回）=====
@@ -243,6 +244,14 @@ export interface NodeDeleteResult {
 // ========== 状态转换 API 类型 ==========
 
 /**
+ * Confirmation Token 验证数据
+ */
+export interface ConfirmationData {
+  token: string;           // 待验证的 token
+  userInput: string;       // 用户的真实输入
+}
+
+/**
  * node_transition 输入
  */
 export interface NodeTransitionParams {
@@ -251,6 +260,7 @@ export interface NodeTransitionParams {
   action: TransitionAction;
   reason?: string;
   conclusion?: string;    // complete/fail 时必填
+  confirmation?: ConfirmationData;  // Confirmation Token 验证数据（当 actionRequired 返回 token 时必须提供）
 }
 
 /**
@@ -263,6 +273,7 @@ export interface NodeTransitionResult {
   conclusion: string | null;
   cascadeUpdates?: string[];  // 级联更新的父节点状态变化
   hint?: string;              // 工作流提示，提醒 AI 下一步应做什么
+  guidance?: string;          // 场景感知引导内容（L0 级别）
   actionRequired?: ActionRequired;  // AI 必须执行的行为
 }
 

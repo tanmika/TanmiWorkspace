@@ -158,6 +158,7 @@ export interface ActionRequired {
   type: ActionRequiredType;
   message: string;                  // 给 AI 的指令说明
   data?: Record<string, unknown>;   // 附加数据（如节点列表、文档列表等）
+  confirmationToken?: string;       // Confirmation Token - AI 必须携带此 token + 用户真实输入才能继续
 }
 
 /**

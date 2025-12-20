@@ -1,6 +1,6 @@
 {
   "name": "tanmi-workspace",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "description": "TanmiWorkspace MCP Server - 工作区和节点管理",
   "type": "module",
   "main": "dist/check-node-version.js",

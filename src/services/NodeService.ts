@@ -27,17 +27,31 @@ import { generateNodeId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { validateNodeTitle } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
+import { GuidanceService } from "./GuidanceService.js";
+import type { GuidanceContext } from "../types/guidance.js";
 
 /**
  * 节点服务
  * 处理节点相关的业务逻辑
  */
 export class NodeService {
+  private stateService?: import("./StateService.js").StateService;
+  private guidanceService: GuidanceService;
+
   constructor(
     private json: JsonStorage,
     private md: MarkdownStorage,
     private fs: FileSystemAdapter
-  ) {}
+  ) {
+    this.guidanceService = new GuidanceService();
+  }
+
+  /**
+   * 设置 StateService 依赖（用于 token 生成）
+   */
+  setStateService(stateService: import("./StateService.js").StateService): void {
+    this.stateService = stateService;
+  }
 
   /**
    * 根据 workspaceId 获取 projectRoot
@@ -97,15 +111,25 @@ export class NodeService {
 
     // 4. 如果父节点是 completed 状态，自动 reopen 到 planning
     let autoReopened = false;
+    let archivedConclusion: string | null = null;
     if (parentMeta.status === "completed") {
       parentMeta.status = "planning";
       parentMeta.updatedAt = now();
-      // 清空结论（reopen 语义）
+      // 保留原有结论作为历史引用（不清空）
       const oldConclusion = parentMeta.conclusion;
-      parentMeta.conclusion = null;
+      if (oldConclusion) {
+        // 将原有结论转换为引用格式，标注为历史结论
+        const timestamp = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+        const quotedConclusion = oldConclusion.split("\n").map(line => `> ${line}`).join("\n");
+        archivedConclusion = `**[历史结论 - ${timestamp}]**\n${quotedConclusion}\n\n---\n\n`;
+        parentMeta.conclusion = archivedConclusion;
+      }
       autoReopened = true;
-      // 同步更新 Info.md 中的状态
+      // 同步更新 Info.md 中的状态和结论
       await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "planning");
+      if (archivedConclusion) {
+        await this.md.updateConclusion(projectRoot, workspaceId, parentId, archivedConclusion);
+      }
     }
 
     // 5. 验证父节点状态允许创建子节点（pending/planning/monitoring 状态）
@@ -404,6 +428,15 @@ export class NodeService {
       hint += `\n\n⚠️ **重要**：完成所有计划节点创建后，请向用户展示完整计划并等待确认，再开始执行第一个任务。`;
     }
 
+    // 生成引导内容
+    const guidanceContext: GuidanceContext = {
+      toolName: "node_create",
+      nodeType: type,
+      nodeRole: role,
+      toolInput: { type, role, parentId },
+    };
+    const guidance = this.guidanceService.generateFromContext(guidanceContext, 0);
+
     // 构建返回结果
     const result: NodeCreateResult = {
       nodeId,
@@ -413,11 +446,23 @@ export class NodeService {
       // 测试节点附属化输出
       upgradedToPlanning,
       execNodeId: createdExecNodeId,
+      guidance: guidance.content,
       testNodeId: createdTestNodeId,
     };
 
     // 如果在根节点下创建非信息收集的子节点，添加 show_plan actionRequired
     if (parentId === "root" && role !== "info_collection") {
+      // 生成 confirmation token（如果 StateService 可用）
+      let confirmationToken: string | undefined;
+      if (this.stateService) {
+        const confirmation = this.stateService.createPendingConfirmation(workspaceId, nodeId, "show_plan", {
+          nodeId,
+          title,
+          type,
+        });
+        confirmationToken = confirmation.token;
+      }
+
       result.actionRequired = {
         type: "show_plan",
         message: "已创建计划节点，请向用户展示当前计划并等待确认后再开始执行。",
@@ -426,6 +471,7 @@ export class NodeService {
           title,
           type,
         },
+        confirmationToken,
       };
     }
 
