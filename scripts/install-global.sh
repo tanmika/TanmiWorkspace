@@ -13,6 +13,15 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# 如果是 npm 全局安装，尝试从 npm 包位置获取
+if [ ! -d "$PROJECT_ROOT/plugin/scripts" ]; then
+    # 尝试通过 npm 查找包位置
+    NPM_PACKAGE_PATH=$(npm root -g 2>/dev/null)/tanmi-workspace
+    if [ -d "$NPM_PACKAGE_PATH/plugin/scripts" ]; then
+        PROJECT_ROOT="$NPM_PACKAGE_PATH"
+    fi
+fi
+
 # 全局安装目录
 TANMI_HOME="$HOME/.tanmi-workspace"
 TANMI_SCRIPTS="$TANMI_HOME/scripts"

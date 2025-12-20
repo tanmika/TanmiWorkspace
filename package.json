@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/check-node-version.js",
   "bin": {
-    "tanmi-workspace": "./dist/check-node-version.js"
+    "tanmi-workspace": "./dist/check-node-version.js",
+    "tanmi-workspace-hooks": "./scripts/install-global.sh"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -13,8 +14,9 @@
   "files": [
     "dist/",
     "web/dist/",
-    "hooks/",
+    "plugin/",
     "scripts/",
+    "templates/",
     "README.md",
     "CHANGELOG.md",
     "配置方式.md"

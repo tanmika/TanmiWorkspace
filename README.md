@@ -22,27 +22,50 @@
 
 - **Node.js >= 20.0.0**
 
-### 安装
+### 方式一：npm 安装（推荐）
+
+适用于 Claude Code 用户，三步完成配置：
 
 ```bash
-git clone <this project url>
+# 1. 安装
+npm install -g tanmi-workspace
+
+# 2. 添加到 Claude Code（全局可用）
+claude mcp add tanmi-workspace -s user -- npx tanmi-workspace
+
+# 3. 配置权限（编辑 ~/.claude/settings.json，添加到 permissions.allow 数组）
+"mcp__tanmi-workspace"
+```
+
+完整的 `~/.claude/settings.json` 示例：
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__tanmi-workspace"
+    ]
+  }
+}
+```
+
+### 方式二：源码安装
+
+适用于需要自定义或其他 AI 工具：
+
+```bash
+git clone https://github.com/anthropics/TanmiWorkspace.git
 cd TanmiWorkspace
 npm install
 npm run build
 ```
 
-### 配置MCP
-
-编辑 `~/{AI_TOOL_NAME}/settings.json`，添加 MCP 服务器：
+然后编辑 AI 工具的 MCP 配置（如 `~/.claude/settings.json`）：
 ```json
 {
   "mcpServers": {
     "tanmi-workspace": {
       "command": "node",
-      "args": ["/path/to/TanmiWorkspace/dist/index.js"],
-      "env": {
-        "TANMI_PROJECT_ROOT": "/path/to/TanmiWorkspace"
-      }
+      "args": ["/path/to/TanmiWorkspace/dist/index.js"]
     }
   }
 }
@@ -52,7 +75,7 @@ npm run build
 
 ### 验证安装
 
-向 AI 说：
+在 Claude Code 中输入 `/mcp` 查看已安装的 MCP 服务器，或向 AI 说：
 
 > "使用工作台，介绍一下你自己。"
 
