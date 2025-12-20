@@ -11,6 +11,12 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.6.4] - 2025-12-21
+
+### Fixed
+
+- **updateRules dirName 修复**: 修复 `workspace_update_rules` 方法中仍使用 workspaceId 导致的 WORKSPACE_NOT_FOUND 错误
+
 ## [1.6.3] - 2025-12-21
 
 ### Fixed

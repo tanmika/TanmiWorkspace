@@ -735,14 +735,11 @@ export class WorkspaceService {
   async updateRules(params: WorkspaceUpdateRulesParams): Promise<WorkspaceUpdateRulesResult> {
     const { workspaceId, action, rule, rules } = params;
 
-    // 获取 projectRoot
-    const projectRoot = await this.json.getProjectRoot(workspaceId);
-    if (!projectRoot) {
-      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
-    }
+    // 获取工作区位置信息
+    const { projectRoot, dirName: wsDirName } = await this.resolveWorkspaceLocation(workspaceId);
 
     // 读取当前工作区数据
-    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, workspaceId);
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName);
     let currentRules = [...workspaceMdData.rules];
 
     // 执行操作
@@ -774,7 +771,7 @@ export class WorkspaceService {
     // 更新 Workspace.md
     workspaceMdData.rules = currentRules;
     workspaceMdData.updatedAt = now();
-    await this.md.writeWorkspaceMd(projectRoot, workspaceId, workspaceMdData);
+    await this.md.writeWorkspaceMd(projectRoot, wsDirName, workspaceMdData);
 
     // 计算新的哈希
     const rulesHash = currentRules.length > 0
