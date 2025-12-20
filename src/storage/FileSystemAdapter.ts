@@ -352,6 +352,31 @@ export class FileSystemAdapter {
   }
 
   /**
+   * 安全重命名目录（处理名称冲突）
+   * @returns 实际使用的新目录名（可能带序号后缀）
+   */
+  async safeRenameDir(src: string, destDir: string, newName: string): Promise<string> {
+    let finalName = newName;
+    let destPath = path.join(destDir, finalName);
+    let counter = 1;
+
+    // 如果目标已存在且不是源目录本身，添加序号
+    while (await this.exists(destPath) && destPath !== src) {
+      finalName = `${newName}_${counter}`;
+      destPath = path.join(destDir, finalName);
+      counter++;
+    }
+
+    // 如果源和目标相同，无需操作
+    if (destPath === src) {
+      return finalName;
+    }
+
+    await fs.rename(src, destPath);
+    return finalName;
+  }
+
+  /**
    * 初始化空的全局索引文件（如果不存在）
    */
   async ensureIndex(): Promise<void> {

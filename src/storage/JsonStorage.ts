@@ -4,6 +4,7 @@ import type { FileSystemAdapter } from "./FileSystemAdapter.js";
 import type { WorkspaceIndex, WorkspaceConfig, WorkspaceEntry } from "../types/workspace.js";
 import type { NodeGraph } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
+import { generateWorkspaceDirName, generateNodeDirName, extractShortId } from "../utils/id.js";
 
 /**
  * JSON 存储封装
@@ -28,9 +29,10 @@ export class JsonStorage {
    * - 1.0: 初始版本
    * - 2.0: index 添加 projectRoot
    * - 3.0: 添加节点 type 字段
-   * - 4.0: 添加 dirName 字段（可读目录名）
+   * - 4.0: 添加 dirName 字段（UUID 格式）
+   * - 5.0: dirName 改为可读格式（名称_短ID）
    */
-  static readonly STORAGE_VERSION = "4.0";
+  static readonly STORAGE_VERSION = "5.0";
 
   /**
    * 读取全局工作区索引
@@ -104,7 +106,7 @@ export class JsonStorage {
   }
 
   /**
-   * 全量迁移：index + 所有工作区的 graph.json
+   * 全量迁移：index + 所有工作区的 graph.json + 目录重命名
    * 在 readIndex 时一次性完成，避免分散迁移导致遗漏
    */
   private async migrateAll(index: WorkspaceIndex): Promise<void> {
@@ -113,9 +115,16 @@ export class JsonStorage {
 
     console.error(`[migration] 开始全量迁移 (${oldVersion} → ${JsonStorage.STORAGE_VERSION})...`);
 
-    // 1. 先迁移所有工作区的 graph.json
+    // 1. 迁移所有工作区（目录重命名 + graph.json）
     for (const ws of index.workspaces) {
       try {
+        // 1.1 重命名工作区目录（如果需要）
+        const newDirName = await this.migrateWorkspaceDir(ws);
+        if (newDirName) {
+          ws.dirName = newDirName;
+        }
+
+        // 1.2 迁移 graph.json（包括节点目录重命名）
         await this.migrateWorkspaceGraph(ws);
       } catch (e) {
         errors.push({
@@ -126,7 +135,7 @@ export class JsonStorage {
       }
     }
 
-    // 2. 迁移 index 数据
+    // 2. 迁移 index 数据（更新版本号）
     this.migrateIndexData(index);
 
     // 3. 保存 index
@@ -145,41 +154,164 @@ export class JsonStorage {
   }
 
   /**
-   * 迁移单个工作区的 graph.json
+   * 迁移工作区目录名（UUID → 可读名称）
+   * @returns 新的目录名，如果无需迁移返回 undefined
    */
-  private async migrateWorkspaceGraph(ws: WorkspaceEntry): Promise<void> {
-    // 获取目录名（迁移前可能还没有 dirName 字段，使用 id）
-    const wsDirName = ws.dirName || ws.id;
+  private async migrateWorkspaceDir(ws: WorkspaceEntry): Promise<string | undefined> {
+    const oldDirName = ws.dirName || ws.id;
 
-    // 处理活跃工作区
-    if (ws.status !== "archived") {
-      const graphPath = this.fs.getGraphPath(ws.projectRoot, wsDirName);
-      if (await this.fs.exists(graphPath)) {
-        const content = await this.fs.readFile(graphPath);
-        const graph = JSON.parse(content) as NodeGraph;
-        if (graph.version !== JsonStorage.STORAGE_VERSION) {
-          this.migrateGraphData(graph);
-          await this.writeGraph(ws.projectRoot, wsDirName, graph);
-        }
-      }
+    // 如果目录名不是以 ws- 开头，说明已经是可读格式，跳过
+    if (!oldDirName.startsWith("ws-")) {
+      return undefined;
     }
 
-    // 处理归档工作区
-    if (ws.status === "archived") {
-      const archivePath = this.fs.getGraphPathWithArchive(ws.projectRoot, wsDirName, true);
-      if (await this.fs.exists(archivePath)) {
-        const content = await this.fs.readFile(archivePath);
-        const graph = JSON.parse(content) as NodeGraph;
-        if (graph.version !== JsonStorage.STORAGE_VERSION) {
-          this.migrateGraphData(graph);
-          await this.fs.writeFile(archivePath, JSON.stringify(graph, null, 2));
-        }
+    // 生成可读目录名
+    const newDirName = generateWorkspaceDirName(ws.name, ws.id);
+
+    // 如果新旧相同，跳过
+    if (newDirName === oldDirName) {
+      return undefined;
+    }
+
+    // 确定源目录和目标目录
+    const isArchived = ws.status === "archived";
+    const baseDir = isArchived
+      ? this.fs.getArchiveDir(ws.projectRoot)
+      : this.fs.getWorkspaceRootPath(ws.projectRoot);
+    const srcPath = isArchived
+      ? this.fs.getArchivePath(ws.projectRoot, oldDirName)
+      : this.fs.getWorkspacePath(ws.projectRoot, oldDirName);
+
+    // 检查源目录是否存在
+    if (!(await this.fs.exists(srcPath))) {
+      console.error(`[migration] 工作区目录不存在，跳过: ${srcPath}`);
+      return undefined;
+    }
+
+    // 安全重命名（处理冲突）
+    const actualDirName = await this.fs.safeRenameDir(srcPath, baseDir, newDirName);
+    console.error(`[migration] 工作区目录重命名: ${oldDirName} → ${actualDirName}`);
+
+    return actualDirName;
+  }
+
+  /**
+   * 迁移单个工作区的 graph.json（包括节点目录重命名）
+   */
+  private async migrateWorkspaceGraph(ws: WorkspaceEntry): Promise<void> {
+    // 获取目录名（此时 dirName 可能已被 migrateWorkspaceDir 更新）
+    const wsDirName = ws.dirName || ws.id;
+    const isArchived = ws.status === "archived";
+
+    // 获取 graph.json 路径
+    const graphPath = isArchived
+      ? this.fs.getGraphPathWithArchive(ws.projectRoot, wsDirName, true)
+      : this.fs.getGraphPath(ws.projectRoot, wsDirName);
+
+    if (!(await this.fs.exists(graphPath))) {
+      return;
+    }
+
+    const content = await this.fs.readFile(graphPath);
+    const graph = JSON.parse(content) as NodeGraph;
+
+    // 迁移节点目录名
+    await this.migrateNodeDirs(ws.projectRoot, wsDirName, graph, isArchived);
+
+    // 迁移 graph 数据结构
+    if (graph.version !== JsonStorage.STORAGE_VERSION) {
+      this.migrateGraphData(graph);
+    }
+
+    // 保存更新后的 graph.json
+    if (isArchived) {
+      await this.fs.writeFile(graphPath, JSON.stringify(graph, null, 2));
+    } else {
+      await this.writeGraph(ws.projectRoot, wsDirName, graph);
+    }
+  }
+
+  /**
+   * 迁移节点目录名（UUID → 可读名称）
+   */
+  private async migrateNodeDirs(
+    projectRoot: string,
+    wsDirName: string,
+    graph: NodeGraph,
+    isArchived: boolean
+  ): Promise<void> {
+    const nodesDir = isArchived
+      ? `${this.fs.getArchivePath(projectRoot, wsDirName)}/nodes`
+      : this.fs.getNodesDir(projectRoot, wsDirName);
+
+    // 检查 nodes 目录是否存在
+    if (!(await this.fs.exists(nodesDir))) {
+      return;
+    }
+
+    // 遍历所有节点
+    for (const [nodeId, node] of Object.entries(graph.nodes)) {
+      // 跳过根节点
+      if (nodeId === "root") {
+        continue;
       }
+
+      const oldDirName = node.dirName || nodeId;
+
+      // 如果目录名不是以 node- 开头，说明已经是可读格式，跳过
+      if (!oldDirName.startsWith("node-")) {
+        continue;
+      }
+
+      // 从 Info.md 读取标题
+      const title = await this.readNodeTitle(nodesDir, oldDirName);
+
+      // 生成可读目录名
+      const newDirName = generateNodeDirName(title, nodeId);
+
+      // 如果新旧相同，跳过
+      if (newDirName === oldDirName) {
+        continue;
+      }
+
+      const srcPath = `${nodesDir}/${oldDirName}`;
+
+      // 检查源目录是否存在
+      if (!(await this.fs.exists(srcPath))) {
+        continue;
+      }
+
+      // 安全重命名（处理冲突）
+      const actualDirName = await this.fs.safeRenameDir(srcPath, nodesDir, newDirName);
+      node.dirName = actualDirName;
+      console.error(`[migration] 节点目录重命名: ${oldDirName} → ${actualDirName}`);
+    }
+  }
+
+  /**
+   * 从 Info.md 读取节点标题
+   */
+  private async readNodeTitle(nodesDir: string, nodeDirName: string): Promise<string> {
+    const infoPath = `${nodesDir}/${nodeDirName}/Info.md`;
+    try {
+      if (!(await this.fs.exists(infoPath))) {
+        return "节点";  // 默认标题
+      }
+      const content = await this.fs.readFile(infoPath);
+      // 从 frontmatter 提取 title
+      const match = content.match(/^---\n[\s\S]*?title:\s*(.+?)\n[\s\S]*?---/);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+      return "节点";  // 默认标题
+    } catch {
+      return "节点";  // 读取失败使用默认标题
     }
   }
 
   /**
    * 迁移 index 数据（纯数据操作）
+   * 注意：dirName 已在 migrateWorkspaceDir 中设置为可读名称
    */
   private migrateIndexData(index: WorkspaceIndex): void {
     // 1.0 -> 2.0: 添加 projectRoot
@@ -191,13 +323,24 @@ export class JsonStorage {
       index.version = "2.0";
     }
 
-    // 2.0/3.0 -> 4.0: 添加 dirName
+    // 2.0/3.0 -> 4.0: 添加 dirName（兼容旧版本）
     if (index.version === "2.0" || index.version === "3.0") {
       index.workspaces = index.workspaces.map(ws => ({
         ...ws,
-        dirName: ws.dirName || ws.id  // 旧数据使用 id 作为 dirName
+        dirName: ws.dirName || ws.id
       }));
       index.version = "4.0";
+    }
+
+    // 4.0 -> 5.0: dirName 改为可读格式
+    // 实际的目录重命名已在 migrateWorkspaceDir 中完成
+    // 这里只做兜底处理（确保 dirName 存在）
+    if (index.version === "4.0") {
+      index.workspaces = index.workspaces.map(ws => ({
+        ...ws,
+        dirName: ws.dirName || generateWorkspaceDirName(ws.name, ws.id)
+      }));
+      index.version = "5.0";
     }
   }
 

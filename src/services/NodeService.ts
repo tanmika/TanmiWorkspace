@@ -729,16 +729,18 @@ export class NodeService {
     }
 
     const currentTime = now();
-    const nodeDirName = graph.nodes[nodeId].dirName || nodeId;  // 向后兼容
+    let nodeDirName = graph.nodes[nodeId].dirName || nodeId;  // 向后兼容
 
     // 4. 读取现有 Info.md
     const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
     // 5. 更新指定字段
     const updates: string[] = [];
+    let titleChanged = false;
     if (title !== undefined && title !== nodeInfo.title) {
       nodeInfo.title = title;
       updates.push(`标题: "${title}"`);
+      titleChanged = true;
     }
     if (requirement !== undefined && requirement !== nodeInfo.requirement) {
       nodeInfo.requirement = requirement;
@@ -761,20 +763,33 @@ export class NodeService {
       };
     }
 
-    // 6. 更新时间戳
+    // 6. 如果标题改变，同步更新目录名（非 root 节点）
+    if (titleChanged && nodeId !== "root") {
+      const newDirName = generateNodeDirName(title!, nodeId);
+      if (newDirName !== nodeDirName) {
+        const nodesDir = this.fs.getNodesDir(projectRoot, wsDirName);
+        const oldPath = this.fs.getNodePath(projectRoot, wsDirName, nodeDirName);
+        // 安全重命名（处理冲突）
+        const actualDirName = await this.fs.safeRenameDir(oldPath, nodesDir, newDirName);
+        nodeDirName = actualDirName;
+        graph.nodes[nodeId].dirName = actualDirName;
+      }
+    }
+
+    // 7. 更新时间戳
     nodeInfo.updatedAt = currentTime;
 
-    // 7. 写入 Info.md
+    // 8. 写入 Info.md（使用可能已更新的目录名）
     await this.md.writeNodeInfo(projectRoot, wsDirName, nodeDirName, nodeInfo);
 
-    // 8. 更新 graph.json 的 updatedAt 和 conclusion
+    // 9. 更新 graph.json 的 updatedAt 和 conclusion
     graph.nodes[nodeId].updatedAt = currentTime;
     if (conclusion !== undefined) {
       graph.nodes[nodeId].conclusion = conclusion || null;
     }
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 9. 追加日志
+    // 10. 追加日志
     await this.md.appendLog(projectRoot, wsDirName, {
       time: currentTime,
       operator: "AI",
