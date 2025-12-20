@@ -159,15 +159,20 @@ export class DispatchService {
       }
     }
 
-    // 3. 检查派发并发冲突（允许不同工作区使用不同模式）
-    const activeWorkspaceInfo = await this.getActiveDispatchWorkspaceWithMode(projectRoot, workspaceId);
-    if (activeWorkspaceInfo) {
-      // 只检查并发冲突，不再检查模式冲突
-      throw new TanmiError(
-        "DISPATCH_CONFLICT",
-        `已有工作区 ${activeWorkspaceInfo.workspaceId} 正在派发中，请先完成或取消该派发`
-      );
+    // 3. 检查派发并发冲突
+    // - 无 Git 模式：不涉及分支切换，多个工作区互不影响，不限制
+    // - 有 Git 模式：会切换分支，同一 git 仓库内只允许一个派发
+    if (useGit) {
+      const activeWorkspaceInfo = await this.getActiveDispatchWorkspaceWithMode(projectRoot, workspaceId);
+      // 只有当已有工作区也是 Git 模式时才冲突
+      if (activeWorkspaceInfo?.useGit) {
+        throw new TanmiError(
+          "DISPATCH_CONFLICT",
+          `已有工作区 ${activeWorkspaceInfo.workspaceId} 正在使用 Git 模式派发，请先完成或取消该派发`
+        );
+      }
     }
+    // 无 Git 模式不检查冲突，直接允许
 
     // 4. Git 模式：创建分支
     let originalBranch: string | undefined;
@@ -239,11 +244,12 @@ export class DispatchService {
     }
 
     // 1.1 检查是否有正在执行的派发任务
+    // 只检查 executing 状态，passed/failed 表示已完成（保留 dispatch 对象供 WebUI 显示历史）
     const graph = await this.json.readGraph(projectRoot, workspaceId);
     const activeDispatchNodes: string[] = [];
 
     for (const [nodeId, node] of Object.entries(graph.nodes)) {
-      if (node.dispatch && (node.dispatch.status === "executing" || node.dispatch.status === "testing")) {
+      if (node.dispatch && node.dispatch.status === "executing") {
         activeDispatchNodes.push(nodeId);
       }
     }
@@ -255,7 +261,24 @@ export class DispatchService {
       );
     }
 
-    // 1.1 验证 Git 环境（11.2 环境变化检测）
+    // 1.2 检查是否有可完成的 planning 节点（所有子节点都已完成）
+    const completablePlanningNodes: string[] = [];
+    const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
+
+    for (const [nodeId, node] of Object.entries(graph.nodes)) {
+      if (node.type === "planning" && node.status === "monitoring") {
+        // 检查所有子节点是否都已完成
+        const allChildrenCompleted = node.children.every(childId => {
+          const child = graph.nodes[childId];
+          return child && terminalStatuses.has(child.status);
+        });
+        if (allChildrenCompleted && node.children.length > 0) {
+          completablePlanningNodes.push(nodeId);
+        }
+      }
+    }
+
+    // 1.3 验证 Git 环境（11.2 环境变化检测）
     // 注意：这里不抛错，而是在返回信息中提示用户
     let gitEnvironmentLost = false;
     if (config.dispatch.useGit) {
@@ -340,6 +363,11 @@ export class DispatchService {
         },
       };
 
+      // 添加可完成 planning 节点的提醒
+      if (completablePlanningNodes.length > 0) {
+        actionRequired.message += `\n\n💡 **提醒**：以下 planning 节点的所有子任务已完成，请填写结论并完成：${completablePlanningNodes.join(", ")}`;
+      }
+
       return { actionRequired, status };
     } else {
       // 无 Git 模式：返回简化的 actionRequired（仅需确认）
@@ -349,9 +377,16 @@ export class DispatchService {
         useGit: false,
       };
 
+      let message = "派发任务完成（无 Git 模式），确认关闭？";
+
+      // 添加可完成 planning 节点的提醒
+      if (completablePlanningNodes.length > 0) {
+        message += `\n\n💡 **提醒**：以下 planning 节点的所有子任务已完成，请填写结论并完成：${completablePlanningNodes.join(", ")}`;
+      }
+
       const actionRequired: ActionRequired = {
         type: "dispatch_complete_choice",
-        message: "派发任务完成（无 Git 模式），确认关闭？",
+        message,
         data: {
           workspaceId,
           useGit: false,
@@ -548,8 +583,9 @@ export class DispatchService {
     node.updatedAt = now();
     await this.json.writeGraph(projectRoot, workspaceId, graph);
 
-    // 5. 读取节点信息构建 prompt
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+    // 5. 读取节点信息构建 prompt（使用 dirName 或回退到 nodeId）
+    const nodeDirName = node.dirName || nodeId;
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeDirName);
     const timeout = config.dispatch.limits?.timeoutMs ?? 300000;
 
     // 6. 构建 actionRequired
@@ -596,7 +632,10 @@ export class DispatchService {
     }
 
     const useGit = config.dispatch?.useGit ?? false;
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId);
+
+    // 获取节点目录名（用于读取和更新 Markdown 文件）
+    const nodeDirName = node.dirName || nodeId;
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeDirName);
 
     if (success) {
       // 2a. 执行成功：记录 endMarker
@@ -609,48 +648,91 @@ export class DispatchService {
         endMarker = Date.now().toString();
       }
 
-      // 更新节点派发状态
+      // 更新节点派发状态为 passed（保留对象以便 WebUI 显示派发历史）
       if (node.dispatch) {
         node.dispatch.endMarker = endMarker;
-        node.dispatch.status = "testing";
+        node.dispatch.status = "passed";
+      }
+
+      // 自动完成节点
+      node.status = "completed";
+      if (conclusion) {
+        node.conclusion = conclusion.replace(/\\n/g, "\n");
       }
       node.updatedAt = now();
       await this.json.writeGraph(projectRoot, workspaceId, graph);
+
+      // 更新 Info.md 状态和结论
+      await this.md.updateNodeStatus(projectRoot, workspaceId, nodeDirName, "completed");
+      if (conclusion) {
+        await this.md.updateConclusion(projectRoot, workspaceId, nodeDirName, conclusion);
+      }
 
       // 记录日志
       const markerInfo = useGit ? `commit: ${endMarker.substring(0, 7)}` : `timestamp: ${endMarker}`;
       await this.md.appendLog(projectRoot, workspaceId, {
         time: now(),
         operator: "tanmi-executor",
-        event: `节点 ${nodeId} 执行完成，${markerInfo}`,
+        event: `节点 ${nodeId} 派发执行完成并自动 complete，${markerInfo}`,
       }, nodeId);
 
-      // 返回下一步：返回父节点（测试节点现在作为兄弟节点存在，由父节点管理）
+      // 检查父节点是否可以完成
+      let parentCompletionHint = "";
+      const parentId = node.parentId;
+      if (parentId && parentId !== "root") {
+        const parentNode = graph.nodes[parentId];
+        if (parentNode && parentNode.type === "planning" && parentNode.status === "monitoring") {
+          // 检查所有兄弟节点是否都已完成
+          const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
+          const allChildrenCompleted = parentNode.children.every(childId => {
+            const child = graph.nodes[childId];
+            return child && terminalStatuses.has(child.status);
+          });
+
+          if (allChildrenCompleted) {
+            parentCompletionHint = `\n\n💡 **提醒**：父规划节点 ${parentId} 的所有子任务已完成。请检查是否可以填写结论并完成该节点，然后调用 dispatch_disable 关闭派发模式。`;
+          }
+        }
+      }
+
+      // 返回下一步：返回父节点
       return {
         success: true,
         endMarker,
         nextAction: "return_parent",
-        hint: "执行完成，返回父节点继续处理（如有测试节点，父节点会安排执行）",
+        hint: "执行完成，节点已自动标记为 completed。返回父节点继续处理。" + parentCompletionHint,
       };
     } else {
       // 2b. 执行失败：更新状态
       if (node.dispatch) {
         node.dispatch.status = "failed";
       }
+
+      // 自动标记节点失败
+      node.status = "failed";
+      if (conclusion) {
+        node.conclusion = conclusion.replace(/\\n/g, "\n");
+      }
       node.updatedAt = now();
       await this.json.writeGraph(projectRoot, workspaceId, graph);
+
+      // 更新 Info.md 状态和结论
+      await this.md.updateNodeStatus(projectRoot, workspaceId, nodeDirName, "failed");
+      if (conclusion) {
+        await this.md.updateConclusion(projectRoot, workspaceId, nodeDirName, conclusion);
+      }
 
       // 记录日志
       await this.md.appendLog(projectRoot, workspaceId, {
         time: now(),
         operator: "tanmi-executor",
-        event: `节点 ${nodeId} 执行失败: ${conclusion || "未知原因"}`,
+        event: `节点 ${nodeId} 派发执行失败并自动标记: ${conclusion || "未知原因"}`,
       }, nodeId);
 
       return {
         success: false,
         nextAction: "return_parent",
-        hint: "执行失败，返回父节点决策",
+        hint: "执行失败，节点已自动标记为 failed。返回父节点决策。",
       };
     }
   }
@@ -976,11 +1058,12 @@ IMPORTANT: You MUST call node_dispatch_complete to finalize the dispatch. Do NOT
     }
 
     // 2. 检查是否有正在执行的派发任务
+    // 只检查 executing 状态，passed/failed 表示已完成
     const graph = await this.json.readGraph(projectRoot, params.workspaceId);
     const activeDispatchNodes: string[] = [];
 
     for (const [nodeId, node] of Object.entries(graph.nodes)) {
-      if (node.dispatch && (node.dispatch.status === "executing" || node.dispatch.status === "testing")) {
+      if (node.dispatch && node.dispatch.status === "executing") {
         activeDispatchNodes.push(nodeId);
       }
     }

@@ -80,7 +80,13 @@ export async function contextRoutes(fastify: FastifyInstance): Promise<void> {
       let manualOperationRecorded = false;
       try {
         const projectRoot = await services.workspace.resolveProjectRoot(request.params.wid);
-        const nodeInfo = await services.md.readNodeInfo(projectRoot, request.params.wid, request.body.nodeId);
+        // 获取节点的 dirName（从 graph 中读取）
+        const wsEntry = await services.json.findWorkspaceEntry(request.params.wid);
+        const wsDirName = wsEntry?.dirName || request.params.wid;
+        const graph = await services.json.readGraph(projectRoot, wsDirName);
+        const node = graph.nodes[request.body.nodeId];
+        const nodeDirName = node?.dirName || request.body.nodeId;
+        const nodeInfo = await services.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
         await services.workspace.addManualChange(request.params.wid, {
           timestamp: new Date().toISOString(),

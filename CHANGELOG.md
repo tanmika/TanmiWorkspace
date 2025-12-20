@@ -11,6 +11,24 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.6.2] - 2025-12-21
+
+### Added
+
+- **派发节点自动完成**: `node_dispatch_complete` 成功时自动将节点标记为 completed，失败时标记为 failed
+- **父节点完成提醒**: 完成子节点时，检测父规划节点是否所有子任务已完成，给出完成提醒
+- **派发测试套件**: 新增 `tests/dispatch.test.ts`，15 个测试覆盖派发模式核心逻辑
+
+### Fixed
+
+- **派发冲突检测优化**: 无 Git 模式不再检查冲突，允许多工作区并行派发；Git 模式仅检查同仓库冲突
+- **节点目录解析修复**: 修复使用 nodeId 而非 dirName 导致的 ENOENT 错误（迁移后目录名变化场景）
+- **派发状态检测修复**: `dispatch_disable` 只检查 executing 状态，passed/failed 不再阻塞关闭
+
+### Changed
+
+- **派发状态语义**: 执行完成后 `dispatch.status` 改为 `passed/failed`（原 `testing`），保留对象供 WebUI 显示历史
+
 ## [1.6.1] - 2025-12-21
 
 ### Added

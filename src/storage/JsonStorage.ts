@@ -278,6 +278,15 @@ export class JsonStorage {
 
       // 检查源目录是否存在
       if (!(await this.fs.exists(srcPath))) {
+        // 源目录不存在，可能已经被迁移过但 graph.json 没有更新
+        // 查找以节点短 ID 结尾的目录
+        const shortId = nodeId.split("-").pop();  // 提取短 ID
+        const existingDir = await this.findDirBySuffix(nodesDir, shortId!);
+        if (existingDir && existingDir !== oldDirName) {
+          // 找到已存在的可读格式目录，更新 graph.json
+          node.dirName = existingDir;
+          console.error(`[migration] 修复节点目录名: ${nodeId} → ${existingDir}`);
+        }
         continue;
       }
 
@@ -306,6 +315,24 @@ export class JsonStorage {
       return "节点";  // 默认标题
     } catch {
       return "节点";  // 读取失败使用默认标题
+    }
+  }
+
+  /**
+   * 在目录中查找以指定后缀结尾的子目录
+   */
+  private async findDirBySuffix(parentDir: string, suffix: string): Promise<string | null> {
+    try {
+      const entries = await this.fs.readdir(parentDir);
+      for (const entry of entries) {
+        // 检查是否以 _suffix 结尾（可读格式为 名称_短ID）
+        if (entry.endsWith(`_${suffix}`)) {
+          return entry;
+        }
+      }
+      return null;
+    } catch {
+      return null;
     }
   }
 

@@ -295,6 +295,18 @@ export class FileSystemAdapter {
   }
 
   /**
+   * 读取目录内容
+   */
+  async readdir(dirPath: string): Promise<string[]> {
+    try {
+      return await fs.readdir(dirPath);
+    } catch (error) {
+      devLog.fileError("readdir", dirPath, error);
+      throw error;
+    }
+  }
+
+  /**
    * 写入文件（原子写入：先写临时文件再重命名）
    */
   async writeFile(filePath: string, content: string): Promise<void> {

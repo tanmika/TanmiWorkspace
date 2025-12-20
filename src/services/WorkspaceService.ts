@@ -641,8 +641,9 @@ export class WorkspaceService {
     const statusIcon = this.getStatusIcon(node.status);
     const focusIndicator = graph.currentFocus === nodeId ? " ◄" : "";
 
-    // 读取节点标题
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId, isArchived);
+    // 读取节点标题（使用 dirName 或回退到 nodeId）
+    const nodeDirName = node.dirName || nodeId;
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeDirName, isArchived);
     const title = nodeInfo.title || nodeId;
 
     lines.push(`${indent}${statusIcon} ${title}${focusIndicator}`);
@@ -673,8 +674,9 @@ export class WorkspaceService {
     const statusIcon = this.getStatusIcon(node.status);
     const focusIndicator = graph.currentFocus === nodeId ? " **◄ 当前聚焦**" : "";
 
-    // 读取节点标题
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeId, isArchived);
+    // 读取节点标题（使用 dirName 或回退到 nodeId）
+    const nodeDirName = node.dirName || nodeId;
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeDirName, isArchived);
     const title = nodeInfo.title || nodeId;
 
     lines.push(`${indent}- ${statusIcon} ${title}${focusIndicator}`);
