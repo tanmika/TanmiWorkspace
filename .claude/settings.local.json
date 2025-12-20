@@ -57,7 +57,22 @@
       "Bash(do echo '--- $(basename $(dirname $f)) ---' grep -A 10 '## 文档引用' $f)",
       "mcp__tanmi-workspace__workspace_restore",
       "mcp__tanmi-workspace__tanmi_prompt",
-      "mcp__tanmi-workspace__dispatch_enable"
+      "mcp__tanmi-workspace__dispatch_enable",
+      "mcp__tanmi-workspace-dev2__session_status",
+      "mcp__tanmi-workspace-dev2__workspace_get",
+      "mcp__tanmi-workspace-dev2__node_get",
+      "mcp__tanmi-workspace-dev2__session_bind",
+      "mcp__tanmi-workspace-dev2__node_transition",
+      "mcp__tanmi-workspace-dev2__workspace_archive",
+      "mcp__tanmi-workspace-dev2__workspace_init",
+      "mcp__tanmi-workspace-dev2__node_create",
+      "mcp__tanmi-workspace-dev2__workspace_status",
+      "mcp__tanmi-workspace-dev2__node_update",
+      "mcp__tanmi-workspace-dev2__log_append",
+      "mcp__tanmi-workspace-dev2__context_get",
+      "mcp__tanmi-workspace-dev2__node_list",
+      "Bash(npm install:*)",
+      "mcp__tanmi-workspace-dev2__workspace_delete"
     ]
   }
 }

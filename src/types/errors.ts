@@ -62,6 +62,9 @@ export const ErrorCodes = {
 
   // 配置错误
   INVALID_CONFIG: "INVALID_CONFIG",
+
+  // 版本错误
+  VERSION_TOO_HIGH: "VERSION_TOO_HIGH",
 } as const;
 
 /**
@@ -127,4 +130,5 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   DISPATCH_MODE_CONFLICT: "同一项目只能使用一种派发模式",
   GIT_ENVIRONMENT_LOST: "Git 环境已丢失",
   INVALID_CONFIG: "配置文件无效",
+  VERSION_TOO_HIGH: "数据版本过高，请升级 tanmi-workspace",
 };

@@ -3,6 +3,7 @@
 import type { FileSystemAdapter } from "./FileSystemAdapter.js";
 import type { WorkspaceIndex, WorkspaceConfig, WorkspaceEntry } from "../types/workspace.js";
 import type { NodeGraph } from "../types/node.js";
+import { TanmiError } from "../types/errors.js";
 
 /**
  * JSON 存储封装
@@ -45,22 +46,142 @@ export class JsonStorage {
     const content = await this.fs.readFile(indexPath);
     const index = JSON.parse(content) as WorkspaceIndex;
 
-    // 版本迁移
+    // 版本检查：数据版本高于代码版本
+    if (this.compareVersion(index.version, JsonStorage.STORAGE_VERSION) > 0) {
+      // 备份高版本 index，创建新的空 index
+      await this.backupAndResetIndex(indexPath, index.version);
+      console.error(
+        `[version] 检测到高版本数据 (${index.version} > ${JsonStorage.STORAGE_VERSION})，` +
+        `已备份原 index 并创建空索引。请升级 tanmi-workspace 以访问原有工作区。`
+      );
+      return {
+        version: JsonStorage.STORAGE_VERSION,
+        workspaces: []
+      };
+    }
+
+    // 版本迁移：一次性升级 index + 所有工作区的 graph
     if (index.version !== JsonStorage.STORAGE_VERSION) {
-      this.migrateIndex(index);
-      // 自动保存迁移后的数据
-      await this.writeIndex(index);
+      await this.migrateAll(index);
     }
 
     return index;
   }
 
   /**
-   * 迁移 index.json 到最新版本
+   * 备份高版本 index 并重置
    */
-  private migrateIndex(index: WorkspaceIndex): void {
-    const oldVersion = index.version;
+  private async backupAndResetIndex(indexPath: string, version: string): Promise<void> {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupPath = indexPath.replace(".json", `.backup.v${version}.${timestamp}.json`);
 
+    // 读取原内容并添加备份标记
+    const content = await this.fs.readFile(indexPath);
+    const index = JSON.parse(content);
+    index._backupReason = `版本 ${version} 高于当前支持的 ${JsonStorage.STORAGE_VERSION}`;
+    index._backupTime = new Date().toISOString();
+
+    // 写入备份
+    await this.fs.writeFile(backupPath, JSON.stringify(index, null, 2));
+
+    // 写入新的空 index
+    const newIndex: WorkspaceIndex = {
+      version: JsonStorage.STORAGE_VERSION,
+      workspaces: []
+    };
+    await this.fs.writeFile(indexPath, JSON.stringify(newIndex, null, 2));
+  }
+
+  /**
+   * 比较版本号
+   * @returns >0 表示 a > b, <0 表示 a < b, =0 表示相等
+   */
+  private compareVersion(a: string, b: string): number {
+    const [aMajor, aMinor = 0] = a.split(".").map(Number);
+    const [bMajor, bMinor = 0] = b.split(".").map(Number);
+    if (aMajor !== bMajor) return aMajor - bMajor;
+    return aMinor - bMinor;
+  }
+
+  /**
+   * 全量迁移：index + 所有工作区的 graph.json
+   * 在 readIndex 时一次性完成，避免分散迁移导致遗漏
+   */
+  private async migrateAll(index: WorkspaceIndex): Promise<void> {
+    const oldVersion = index.version;
+    const errors: { workspaceId: string; error: string }[] = [];
+
+    console.error(`[migration] 开始全量迁移 (${oldVersion} → ${JsonStorage.STORAGE_VERSION})...`);
+
+    // 1. 先迁移所有工作区的 graph.json
+    for (const ws of index.workspaces) {
+      try {
+        await this.migrateWorkspaceGraph(ws);
+      } catch (e) {
+        errors.push({
+          workspaceId: ws.id,
+          error: e instanceof Error ? e.message : String(e)
+        });
+        // 继续处理其他工作区，不中断
+      }
+    }
+
+    // 2. 迁移 index 数据
+    this.migrateIndexData(index);
+
+    // 3. 保存 index
+    try {
+      await this.writeIndex(index);
+    } catch (e) {
+      console.error("[migration] 保存 index.json 失败:", e);
+    }
+
+    // 4. 报告迁移结果
+    const successCount = index.workspaces.length - errors.length;
+    console.error(`[migration] 迁移完成: ${successCount}/${index.workspaces.length} 工作区成功`);
+    if (errors.length > 0) {
+      console.error(`[migration] 失败的工作区:`, errors.map(e => e.workspaceId).join(", "));
+    }
+  }
+
+  /**
+   * 迁移单个工作区的 graph.json
+   */
+  private async migrateWorkspaceGraph(ws: WorkspaceEntry): Promise<void> {
+    // 获取目录名（迁移前可能还没有 dirName 字段，使用 id）
+    const wsDirName = ws.dirName || ws.id;
+
+    // 处理活跃工作区
+    if (ws.status !== "archived") {
+      const graphPath = this.fs.getGraphPath(ws.projectRoot, wsDirName);
+      if (await this.fs.exists(graphPath)) {
+        const content = await this.fs.readFile(graphPath);
+        const graph = JSON.parse(content) as NodeGraph;
+        if (graph.version !== JsonStorage.STORAGE_VERSION) {
+          this.migrateGraphData(graph);
+          await this.writeGraph(ws.projectRoot, wsDirName, graph);
+        }
+      }
+    }
+
+    // 处理归档工作区
+    if (ws.status === "archived") {
+      const archivePath = this.fs.getGraphPathWithArchive(ws.projectRoot, wsDirName, true);
+      if (await this.fs.exists(archivePath)) {
+        const content = await this.fs.readFile(archivePath);
+        const graph = JSON.parse(content) as NodeGraph;
+        if (graph.version !== JsonStorage.STORAGE_VERSION) {
+          this.migrateGraphData(graph);
+          await this.fs.writeFile(archivePath, JSON.stringify(graph, null, 2));
+        }
+      }
+    }
+  }
+
+  /**
+   * 迁移 index 数据（纯数据操作）
+   */
+  private migrateIndexData(index: WorkspaceIndex): void {
     // 1.0 -> 2.0: 添加 projectRoot
     if (index.version === "1.0") {
       index.workspaces = index.workspaces.map(ws => ({
@@ -78,8 +199,6 @@ export class JsonStorage {
       }));
       index.version = "4.0";
     }
-
-    console.error(`[migration] index.json 从 ${oldVersion} 迁移到 ${JsonStorage.STORAGE_VERSION}`);
   }
 
   /**
@@ -216,11 +335,18 @@ export class JsonStorage {
     const content = await this.fs.readFile(graphPath);
     const graph = JSON.parse(content) as NodeGraph;
 
-    // 版本迁移：1.0/2.0/3.0 -> 4.0（仅对活跃工作区执行迁移写入）
+    // 版本检查：拒绝降级
+    if (this.compareVersion(graph.version, JsonStorage.STORAGE_VERSION) > 0) {
+      throw new TanmiError(
+        "VERSION_TOO_HIGH",
+        `工作区数据版本 (${graph.version}) 高于当前支持的版本 (${JsonStorage.STORAGE_VERSION})，请升级 tanmi-workspace`
+      );
+    }
+
+    // 兜底迁移：理论上 migrateAll 已处理，这里防止遗漏
     if (graph.version !== JsonStorage.STORAGE_VERSION) {
-      this.migrateGraph(graph);
+      this.migrateGraphData(graph);
       if (!isArchived) {
-        // 自动保存迁移后的数据
         await this.writeGraph(projectRoot, wsDirName, graph);
       }
     }
@@ -229,13 +355,11 @@ export class JsonStorage {
   }
 
   /**
-   * 迁移旧版本 graph 到当前版本
+   * 迁移 graph 数据（纯数据操作）
    * - 1.0/2.0 节点没有 type 字段，需要推断
    * - 3.0 节点没有 dirName 字段，需要从 id 推导
    */
-  private migrateGraph(graph: NodeGraph): void {
-    const oldVersion = graph.version;
-
+  private migrateGraphData(graph: NodeGraph): void {
     // 迁移节点
     for (const nodeId in graph.nodes) {
       const node = graph.nodes[nodeId];
@@ -272,8 +396,6 @@ export class JsonStorage {
 
     // 更新版本号
     graph.version = JsonStorage.STORAGE_VERSION;
-
-    console.error(`[migration] graph.json 从 ${oldVersion} 迁移到 ${JsonStorage.STORAGE_VERSION}`);
   }
 
   /**
