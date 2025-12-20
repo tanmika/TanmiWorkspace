@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { useServiceStore } from '@/stores/service'
 import ServiceUnavailable from '@/components/ServiceUnavailable.vue'
+import VersionUpdateNotification from '@/components/VersionUpdateNotification.vue'
 
 const serviceStore = useServiceStore()
 
@@ -13,6 +14,7 @@ onMounted(() => {
 
 <template>
   <el-config-provider>
+    <VersionUpdateNotification />
     <router-view />
     <ServiceUnavailable />
   </el-config-provider>

@@ -11,6 +11,20 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.5.0] - 2025-12-20
+
+### Added
+
+- **npm 包发布支持**: 可通过 `npm install -g tanmi-workspace` 全局安装
+- **setup 配置向导**: `tanmi-workspace setup` 交互式配置命令，支持 `--claude-code`、`--cursor`、`--status` 参数
+- **版本更新通知**: CLI 启动时检测新版本提醒，WebUI 显示版本更新通知
+- **Hook 脚本打包**: npm 包包含 `tanmi-workspace-hooks` 命令
+
+### Changed
+
+- **MCP 权限简化**: 支持通配符 `mcp__tanmi-workspace` 替代 30+ 条独立权限规则
+- **文档优化**: 更新 README 和配置指南，简化安装流程
+
 ## [1.4.1] - 2025-12-20
 
 ### Added
