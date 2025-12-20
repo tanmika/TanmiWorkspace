@@ -23,30 +23,63 @@ export class JsonStorage {
   // ========== Global Index ==========
 
   /**
+   * 统一存储版本（index.json 和 graph.json 共享）
+   * - 1.0: 初始版本
+   * - 2.0: index 添加 projectRoot
+   * - 3.0: 添加节点 type 字段
+   * - 4.0: 添加 dirName 字段（可读目录名）
+   */
+  static readonly STORAGE_VERSION = "4.0";
+
+  /**
    * 读取全局工作区索引
    */
   async readIndex(): Promise<WorkspaceIndex> {
     const indexPath = this.fs.getIndexPath();
     if (!(await this.fs.exists(indexPath))) {
       return {
-        version: "2.0",
+        version: JsonStorage.STORAGE_VERSION,
         workspaces: []
       };
     }
     const content = await this.fs.readFile(indexPath);
     const index = JSON.parse(content) as WorkspaceIndex;
 
-    // 版本迁移：1.0 -> 2.0
+    // 版本迁移
+    if (index.version !== JsonStorage.STORAGE_VERSION) {
+      this.migrateIndex(index);
+      // 自动保存迁移后的数据
+      await this.writeIndex(index);
+    }
+
+    return index;
+  }
+
+  /**
+   * 迁移 index.json 到最新版本
+   */
+  private migrateIndex(index: WorkspaceIndex): void {
+    const oldVersion = index.version;
+
+    // 1.0 -> 2.0: 添加 projectRoot
     if (index.version === "1.0") {
-      index.version = "2.0";
-      // 旧版本没有 projectRoot，标记为需要清理
       index.workspaces = index.workspaces.map(ws => ({
         ...ws,
         projectRoot: (ws as WorkspaceEntry).projectRoot || ""
       }));
+      index.version = "2.0";
     }
 
-    return index;
+    // 2.0/3.0 -> 4.0: 添加 dirName
+    if (index.version === "2.0" || index.version === "3.0") {
+      index.workspaces = index.workspaces.map(ws => ({
+        ...ws,
+        dirName: ws.dirName || ws.id  // 旧数据使用 id 作为 dirName
+      }));
+      index.version = "4.0";
+    }
+
+    console.error(`[migration] index.json 从 ${oldVersion} 迁移到 ${JsonStorage.STORAGE_VERSION}`);
   }
 
   /**
@@ -171,11 +204,6 @@ export class JsonStorage {
   // ========== Node Graph (项目级) ==========
 
   /**
-   * 当前 graph.json 版本
-   */
-  static readonly GRAPH_VERSION = "4.0";  // 升级版本号，支持 dirName
-
-  /**
    * 读取节点图
    * @param projectRoot 项目根目录
    * @param wsDirName 工作区目录名
@@ -189,7 +217,7 @@ export class JsonStorage {
     const graph = JSON.parse(content) as NodeGraph;
 
     // 版本迁移：1.0/2.0/3.0 -> 4.0（仅对活跃工作区执行迁移写入）
-    if (graph.version !== JsonStorage.GRAPH_VERSION) {
+    if (graph.version !== JsonStorage.STORAGE_VERSION) {
       this.migrateGraph(graph);
       if (!isArchived) {
         // 自动保存迁移后的数据
@@ -243,9 +271,9 @@ export class JsonStorage {
     }
 
     // 更新版本号
-    graph.version = JsonStorage.GRAPH_VERSION;
+    graph.version = JsonStorage.STORAGE_VERSION;
 
-    console.error(`[migration] graph.json 从 ${oldVersion} 迁移到 ${JsonStorage.GRAPH_VERSION}`);
+    console.error(`[migration] graph.json 从 ${oldVersion} 迁移到 ${JsonStorage.STORAGE_VERSION}`);
   }
 
   /**
