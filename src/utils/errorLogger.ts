@@ -19,6 +19,7 @@ export type ErrorType =
   | "config_corrupted"   // workspace.json 损坏
   | "graph_corrupted"    // graph.json 损坏
   | "index_corrupted"    // index.json 损坏
+  | "version_too_high"   // 数据版本过高
   | "unknown";           // 未知错误
 
 /**

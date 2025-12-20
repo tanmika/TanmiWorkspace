@@ -27,6 +27,7 @@ import type { GuidanceContext } from "../types/guidance.js";
  */
 export class ContextService {
   private guidanceService: GuidanceService;
+  private workspaceService?: any; // WorkspaceService - 避免循环依赖，通过 setter 注入
 
   constructor(
     private json: JsonStorage,
@@ -34,6 +35,13 @@ export class ContextService {
     private fs: FileSystemAdapter
   ) {
     this.guidanceService = new GuidanceService();
+  }
+
+  /**
+   * 设置 WorkspaceService 依赖（用于清除手动变更）
+   */
+  setWorkspaceService(workspaceService: any): void {
+    this.workspaceService = workspaceService;
   }
 
   /**
@@ -147,7 +155,18 @@ export class ContextService {
     const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
     const dispatch = config.dispatch?.enabled ? config.dispatch : undefined;
 
-    // 10. 返回结果
+    // 10. 清除手动变更清单（AI 已获取上下文，无需再提醒历史变更）
+    // 注意：只在非归档状态下清除，归档工作区为只读
+    if (!isArchived && this.workspaceService) {
+      try {
+        await this.workspaceService.clearManualChanges(workspaceId);
+      } catch (error) {
+        // 清除失败不影响主流程
+        devLog.warn("清除手动变更失败", { workspaceId, error });
+      }
+    }
+
+    // 11. 返回结果
     return {
       workspace: {
         goal: workspaceData.goal,

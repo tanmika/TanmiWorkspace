@@ -54,10 +54,14 @@ export function createServices(): Services {
   const workspace = new WorkspaceService(json, md, fs);
   const node = new NodeService(json, md, fs);
   const state = new StateService(json, md, fs);
+  const context = new ContextService(json, md, fs);
 
   // 设置 StateService 依赖（用于 token 生成）
   workspace.setStateService(state);
   node.setStateService(state);
+
+  // 设置 WorkspaceService 依赖（用于清除手动变更）
+  context.setWorkspaceService(workspace);
 
   servicesInstance = {
     fs,
@@ -67,7 +71,7 @@ export function createServices(): Services {
     workspace,
     node,
     state,
-    context: new ContextService(json, md, fs),
+    context,
     reference: new ReferenceService(json, md, fs),
     log: new LogService(json, md, fs),
     session: new SessionService(sessionStorage, json, md, fs),

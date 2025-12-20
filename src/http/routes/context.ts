@@ -74,7 +74,28 @@ export async function contextRoutes(fastify: FastifyInstance): Promise<void> {
         workspaceId: request.params.wid,
         nodeId: request.body.nodeId,
       };
-      return services.context.focus(params);
+      const result = await services.context.focus(params);
+
+      // 记录手动变更（WebUI 操作）
+      let manualOperationRecorded = false;
+      try {
+        const projectRoot = await services.workspace.resolveProjectRoot(request.params.wid);
+        const nodeInfo = await services.md.readNodeInfo(projectRoot, request.params.wid, request.body.nodeId);
+
+        await services.workspace.addManualChange(request.params.wid, {
+          timestamp: new Date().toISOString(),
+          type: "focus",
+          nodeId: request.body.nodeId,
+          nodeName: nodeInfo.title,
+          description: `切换焦点到节点「${nodeInfo.title}」`,
+          source: "webui",
+        });
+        manualOperationRecorded = true;
+      } catch {
+        // 记录失败不阻塞主流程
+      }
+
+      return { ...result, manualOperationRecorded };
     }
   );
 

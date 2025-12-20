@@ -24,32 +24,25 @@
 
 ### 方式一：npm 安装（推荐）
 
-适用于 Claude Code / Cursor 用户：
-
 ```bash
 # 1. 安装
 npm install -g tanmi-workspace
 
 # 2. 运行配置向导
 tanmi-workspace setup
-```
-
-或使用快速配置：
-
-```bash
-# Claude Code 一键配置
-tanmi-workspace setup --claude-code
-
-# Cursor 一键配置
-tanmi-workspace setup --cursor
 
 # 查看当前配置状态
 tanmi-workspace setup --status
 ```
 
-### 方式二：源码安装
+配置向导会自动检测你的环境并引导完成配置。也支持快速配置：
 
-适用于需要自定义或其他 AI 工具：
+```bash
+tanmi-workspace setup --claude-code  # Claude Code 一键配置
+tanmi-workspace setup --cursor       # Cursor 一键配置
+```
+
+### 方式二：源码安装
 
 ```bash
 git clone <仓库地址>

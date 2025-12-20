@@ -157,7 +157,24 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         rulesHash: request.body.rulesHash,
       };
       const result = await services.node.create(params);
-      reply.status(201).send(result);
+
+      // 记录手动变更（WebUI 操作）
+      let manualOperationRecorded = false;
+      try {
+        await services.workspace.addManualChange(request.params.wid, {
+          timestamp: new Date().toISOString(),
+          type: "create",
+          nodeId: result.nodeId,
+          nodeName: request.body.title,
+          description: `创建了新节点「${request.body.title}」`,
+          source: "webui",
+        });
+        manualOperationRecorded = true;
+      } catch {
+        // 记录失败不阻塞主流程
+      }
+
+      reply.status(201).send({ ...result, manualOperationRecorded });
     }
   );
 
@@ -206,7 +223,35 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         requirement: request.body.requirement,
         note: request.body.note,
       };
-      return services.node.update(params);
+      const result = await services.node.update(params);
+
+      // 记录手动变更（WebUI 操作）
+      let manualOperationRecorded = false;
+      try {
+        const projectRoot = await services.workspace.resolveProjectRoot(request.params.wid);
+        const nodeInfo = await services.md.readNodeInfo(projectRoot, request.params.wid, request.params.nid);
+
+        // 构建更新内容描述
+        const updates: string[] = [];
+        if (request.body.title) updates.push("标题");
+        if (request.body.requirement) updates.push("需求描述");
+        if (request.body.note) updates.push("备注");
+        const updateDesc = updates.length > 0 ? `(${updates.join("、")})` : "";
+
+        await services.workspace.addManualChange(request.params.wid, {
+          timestamp: new Date().toISOString(),
+          type: "update",
+          nodeId: request.params.nid,
+          nodeName: nodeInfo.title,
+          description: `更新了节点「${nodeInfo.title}」${updateDesc}`,
+          source: "webui",
+        });
+        manualOperationRecorded = true;
+      } catch {
+        // 记录失败不阻塞主流程
+      }
+
+      return { ...result, manualOperationRecorded };
     }
   );
 
@@ -217,11 +262,39 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
     "/workspaces/:wid/nodes/:nid",
     { schema: nodeIdSchema },
     async (request: FastifyRequest<{ Params: NodeIdParams }>) => {
+      // 先读取节点信息用于记录
+      let nodeName = request.params.nid;
+      try {
+        const projectRoot = await services.workspace.resolveProjectRoot(request.params.wid);
+        const nodeInfo = await services.md.readNodeInfo(projectRoot, request.params.wid, request.params.nid);
+        nodeName = nodeInfo.title;
+      } catch {
+        // 读取失败使用节点 ID
+      }
+
       const params: NodeDeleteParams = {
         workspaceId: request.params.wid,
         nodeId: request.params.nid,
       };
-      return services.node.delete(params);
+      const result = await services.node.delete(params);
+
+      // 记录手动变更（WebUI 操作）
+      let manualOperationRecorded = false;
+      try {
+        await services.workspace.addManualChange(request.params.wid, {
+          timestamp: new Date().toISOString(),
+          type: "delete",
+          nodeId: request.params.nid,
+          nodeName: nodeName,
+          description: `删除了节点「${nodeName}」`,
+          source: "webui",
+        });
+        manualOperationRecorded = true;
+      } catch {
+        // 记录失败不阻塞主流程
+      }
+
+      return { ...result, manualOperationRecorded };
     }
   );
 

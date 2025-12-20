@@ -69,6 +69,7 @@ export interface WorkspaceConfig {
   updatedAt: string;
   rootNodeId: string;               // 默认 "root"
   dispatch?: DispatchConfig;        // 派发配置（可选）
+  pendingManualChanges?: ManualChange[];  // 待处理的手动变更记录（上限 20 条）
 }
 
 /**
@@ -308,4 +309,19 @@ export interface WorkspaceRestoreResult {
   success: boolean;
   path: string;
   webUrl: string;
+}
+
+/**
+ * 手动变更记录（WebUI 手动操作）
+ */
+export interface ManualChange {
+  id: string;                       // 唯一标识
+  timestamp: string;                // ISO 时间戳
+  type: "transition" | "create" | "delete" | "focus" | "update";
+  nodeId?: string;                  // 相关节点ID
+  nodeName?: string;                // 节点标题（人类可读）
+  fromStatus?: string;              // 原状态（transition类型）
+  toStatus?: string;                // 新状态（transition类型）
+  description: string;              // 人类可读描述
+  source: "webui";                  // 来源标记
 }
