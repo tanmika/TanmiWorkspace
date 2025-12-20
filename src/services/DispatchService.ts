@@ -120,8 +120,12 @@ export class DispatchService {
     projectRoot: string,
     options?: { useGit?: boolean }
   ): Promise<{ success: boolean; config: DispatchConfig }> {
+    // 获取工作区目录名
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const dirName = location?.dirName || workspaceId;
+
     // 0. 检查是否已启用（11.1 模式不可变）
-    const existingConfig = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const existingConfig = await this.json.readWorkspaceConfig(projectRoot, dirName);
     if (existingConfig.dispatch?.enabled) {
       throw new TanmiError(
         "DISPATCH_ALREADY_ENABLED",
@@ -213,15 +217,15 @@ export class DispatchService {
     };
 
     // 6. 更新 workspace.json
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
     config.dispatch = dispatchConfig;
     config.updatedAt = now();
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, dirName, config);
 
     // 7. 记录日志
     const mode = useGit ? "Git 模式" : "无 Git 模式";
     const detail = useGit ? `，派发分支: ${processBranch}` : "";
-    await this.md.appendLog(projectRoot, workspaceId, {
+    await this.md.appendLog(projectRoot, dirName, {
       time: now(),
       operator: "system",
       event: `派发模式已启用（${mode}）${detail}`,
@@ -237,15 +241,19 @@ export class DispatchService {
     workspaceId: string,
     projectRoot: string
   ): Promise<DisableDispatchQueryResult | { success: boolean }> {
+    // 获取工作区目录名
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const dirName = location?.dirName || workspaceId;
+
     // 1. 读取配置
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
     if (!config.dispatch?.enabled) {
       return { success: true }; // 已经禁用
     }
 
     // 1.1 检查是否有正在执行的派发任务
     // 只检查 executing 状态，passed/failed 表示已完成（保留 dispatch 对象供 WebUI 显示历史）
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, dirName);
     const activeDispatchNodes: string[] = [];
 
     for (const [nodeId, node] of Object.entries(graph.nodes)) {
@@ -406,8 +414,12 @@ export class DispatchService {
   ): Promise<{ success: boolean; message: string }> {
     const { workspaceId, mergeStrategy, keepBackupBranch, keepProcessBranch, commitMessage } = params;
 
+    // 获取工作区目录名
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const dirName = location?.dirName || workspaceId;
+
     // 1. 读取配置
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
     if (!config.dispatch?.enabled) {
       return { success: true, message: "派发模式已禁用" };
     }
@@ -466,10 +478,10 @@ export class DispatchService {
     // 4. 更新配置
     config.dispatch = undefined;
     config.updatedAt = now();
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, dirName, config);
 
     // 5. 记录日志
-    await this.md.appendLog(projectRoot, workspaceId, {
+    await this.md.appendLog(projectRoot, dirName, {
       time: now(),
       operator: "system",
       event: `派发模式已禁用: ${resultMessage}`,
@@ -528,8 +540,12 @@ export class DispatchService {
     projectRoot: string,
     nodeId: string
   ): Promise<DispatchPrepareResult> {
+    // 获取工作区目录名
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const wsDirName = location?.dirName || workspaceId;
+
     // 1. 验证派发模式已启用
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
     if (!config.dispatch?.enabled) {
       throw new TanmiError("DISPATCH_NOT_ENABLED", "派发模式未启用");
     }
@@ -540,7 +556,7 @@ export class DispatchService {
     const useGit = config.dispatch.useGit;
 
     // 2. 验证节点状态
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     const node = graph.nodes[nodeId];
     if (!node) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 ${nodeId} 不存在`);
@@ -581,11 +597,11 @@ export class DispatchService {
       status: "executing",
     };
     node.updatedAt = now();
-    await this.json.writeGraph(projectRoot, workspaceId, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 5. 读取节点信息构建 prompt（使用 dirName 或回退到 nodeId）
     const nodeDirName = node.dirName || nodeId;
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeDirName);
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
     const timeout = config.dispatch.limits?.timeoutMs ?? 300000;
 
     // 6. 构建 actionRequired
@@ -618,13 +634,17 @@ export class DispatchService {
     success: boolean,
     conclusion?: string
   ): Promise<DispatchCompleteResult> {
+    // 获取工作区目录名
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const wsDirName = location?.dirName || workspaceId;
+
     // 1. 读取配置和节点
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
 
     // 1.1 验证 Git 环境（11.2 环境变化检测）
     await this.validateGitEnvironment(workspaceId, projectRoot, config);
 
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     const node = graph.nodes[nodeId];
 
     if (!node) {
@@ -635,7 +655,7 @@ export class DispatchService {
 
     // 获取节点目录名（用于读取和更新 Markdown 文件）
     const nodeDirName = node.dirName || nodeId;
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeDirName);
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
     if (success) {
       // 2a. 执行成功：记录 endMarker
@@ -660,17 +680,17 @@ export class DispatchService {
         node.conclusion = conclusion.replace(/\\n/g, "\n");
       }
       node.updatedAt = now();
-      await this.json.writeGraph(projectRoot, workspaceId, graph);
+      await this.json.writeGraph(projectRoot, wsDirName, graph);
 
       // 更新 Info.md 状态和结论
-      await this.md.updateNodeStatus(projectRoot, workspaceId, nodeDirName, "completed");
+      await this.md.updateNodeStatus(projectRoot, wsDirName, nodeDirName, "completed");
       if (conclusion) {
-        await this.md.updateConclusion(projectRoot, workspaceId, nodeDirName, conclusion);
+        await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
       }
 
       // 记录日志
       const markerInfo = useGit ? `commit: ${endMarker.substring(0, 7)}` : `timestamp: ${endMarker}`;
-      await this.md.appendLog(projectRoot, workspaceId, {
+      await this.md.appendLog(projectRoot, wsDirName, {
         time: now(),
         operator: "tanmi-executor",
         event: `节点 ${nodeId} 派发执行完成并自动 complete，${markerInfo}`,
@@ -714,16 +734,16 @@ export class DispatchService {
         node.conclusion = conclusion.replace(/\\n/g, "\n");
       }
       node.updatedAt = now();
-      await this.json.writeGraph(projectRoot, workspaceId, graph);
+      await this.json.writeGraph(projectRoot, wsDirName, graph);
 
       // 更新 Info.md 状态和结论
-      await this.md.updateNodeStatus(projectRoot, workspaceId, nodeDirName, "failed");
+      await this.md.updateNodeStatus(projectRoot, wsDirName, nodeDirName, "failed");
       if (conclusion) {
-        await this.md.updateConclusion(projectRoot, workspaceId, nodeDirName, conclusion);
+        await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
       }
 
       // 记录日志
-      await this.md.appendLog(projectRoot, workspaceId, {
+      await this.md.appendLog(projectRoot, wsDirName, {
         time: now(),
         operator: "tanmi-executor",
         event: `节点 ${nodeId} 派发执行失败并自动标记: ${conclusion || "未知原因"}`,
@@ -749,13 +769,17 @@ export class DispatchService {
     passed: boolean,
     _conclusion?: string
   ): Promise<{ success: boolean; hint?: string }> {
+    // 获取工作区目录名
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const wsDirName = location?.dirName || workspaceId;
+
     // 1. 读取配置和测试节点
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
 
     // 1.1 验证 Git 环境（11.2 环境变化检测）
     await this.validateGitEnvironment(workspaceId, projectRoot, config);
 
-    const graph = await this.json.readGraph(projectRoot, workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     const testNode = graph.nodes[testNodeId];
 
     if (!testNode) {
@@ -764,7 +788,7 @@ export class DispatchService {
 
     if (passed) {
       // 测试通过：记录日志
-      await this.md.appendLog(projectRoot, workspaceId, {
+      await this.md.appendLog(projectRoot, wsDirName, {
         time: now(),
         operator: "tanmi-tester",
         event: `测试节点 ${testNodeId} 验证通过`,
@@ -776,7 +800,7 @@ export class DispatchService {
       };
     } else {
       // 测试失败：记录日志
-      await this.md.appendLog(projectRoot, workspaceId, {
+      await this.md.appendLog(projectRoot, wsDirName, {
         time: now(),
         operator: "tanmi-tester",
         event: `测试节点 ${testNodeId} 验证失败`,
@@ -796,8 +820,12 @@ export class DispatchService {
     workspaceId: string,
     projectRoot: string
   ): Promise<GitStatusInfo | null> {
+    // 获取工作区目录名
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const wsDirName = location?.dirName || workspaceId;
+
     // 读取配置，检查是否使用 Git 模式
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
     const useGit = config.dispatch?.useGit ?? false;
 
     if (!useGit) {
@@ -827,8 +855,12 @@ export class DispatchService {
     workspaceId: string,
     projectRoot: string
   ): Promise<{ success: boolean; deleted: string[] }> {
+    // 获取工作区目录名
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const wsDirName = location?.dirName || workspaceId;
+
     // 读取配置，检查是否使用 Git 模式
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
     const useGit = config.dispatch?.useGit ?? false;
 
     if (!useGit) {
@@ -1048,10 +1080,15 @@ IMPORTANT: You MUST call node_dispatch_complete to finalize the dispatch. Do NOT
     workspaceId: string;
     useGit: boolean;
   }): Promise<{ success: boolean; hint?: string }> {
-    const projectRoot = await this.getProjectRoot(params.workspaceId);
+    // 获取工作区位置信息
+    const location = await this.json.getWorkspaceLocation(params.workspaceId);
+    if (!location) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区不存在: ${params.workspaceId}`);
+    }
+    const { projectRoot, dirName: wsDirName } = location;
 
     // 1. 读取当前配置
-    const config = await this.json.readWorkspaceConfig(projectRoot, params.workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
 
     if (!config.dispatch?.enabled) {
       throw new TanmiError("DISPATCH_NOT_ENABLED", "派发模式未启用，无法切换模式");
@@ -1059,7 +1096,7 @@ IMPORTANT: You MUST call node_dispatch_complete to finalize the dispatch. Do NOT
 
     // 2. 检查是否有正在执行的派发任务
     // 只检查 executing 状态，passed/failed 表示已完成
-    const graph = await this.json.readGraph(projectRoot, params.workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
     const activeDispatchNodes: string[] = [];
 
     for (const [nodeId, node] of Object.entries(graph.nodes)) {
@@ -1084,12 +1121,12 @@ IMPORTANT: You MUST call node_dispatch_complete to finalize the dispatch. Do NOT
     const oldMode = config.dispatch.useGit;
     config.dispatch.useGit = params.useGit;
     config.updatedAt = now();
-    await this.json.writeWorkspaceConfig(projectRoot, params.workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, wsDirName, config);
 
     // 5. 记录日志
     const fromMode = oldMode ? "Git 模式" : "无 Git 模式";
     const toMode = params.useGit ? "Git 模式" : "无 Git 模式";
-    await this.md.appendLog(projectRoot, params.workspaceId, {
+    await this.md.appendLog(projectRoot, wsDirName, {
       time: now(),
       operator: "system",
       event: `派发模式已切换: ${fromMode} → ${toMode}`,

@@ -534,11 +534,23 @@ export class WorkspaceService {
   }
 
   /**
+   * 解析工作区位置信息（projectRoot 和 dirName）
+   * 用于需要访问文件系统的操作
+   */
+  async resolveWorkspaceLocation(workspaceId: string): Promise<{ projectRoot: string; dirName: string }> {
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    if (!location) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+    return location;
+  }
+
+  /**
    * 生成 Box 格式状态输出
    */
   private async generateBoxStatus(
     projectRoot: string,
-    workspaceId: string,
+    wsDirName: string,
     config: WorkspaceConfig,
     graph: NodeGraph,
     workspaceMdData: { goal: string },
@@ -569,7 +581,7 @@ export class WorkspaceService {
     lines.push("│" + " 节点树:".padEnd(width - 2) + "│");
 
     // 生成节点树
-    const treeLines = await this.generateNodeTree(projectRoot, workspaceId, graph, config.rootNodeId, 0, isArchived);
+    const treeLines = await this.generateNodeTree(projectRoot, wsDirName, graph, config.rootNodeId, 0, isArchived);
     for (const treeLine of treeLines) {
       const truncated = treeLine.length > width - 4 ? treeLine.substring(0, width - 7) + "..." : treeLine;
       lines.push("│" + ` ${truncated}`.padEnd(width - 2) + "│");
@@ -585,7 +597,7 @@ export class WorkspaceService {
    */
   private async generateMarkdownStatus(
     projectRoot: string,
-    workspaceId: string,
+    wsDirName: string,
     config: WorkspaceConfig,
     graph: NodeGraph,
     workspaceMdData: { goal: string },
@@ -616,7 +628,7 @@ export class WorkspaceService {
     lines.push("## 节点树");
     lines.push("");
 
-    const treeLines = await this.generateNodeTreeMd(projectRoot, workspaceId, graph, config.rootNodeId, 0, isArchived);
+    const treeLines = await this.generateNodeTreeMd(projectRoot, wsDirName, graph, config.rootNodeId, 0, isArchived);
     lines.push(...treeLines);
 
     return lines.join("\n");
@@ -627,7 +639,7 @@ export class WorkspaceService {
    */
   private async generateNodeTree(
     projectRoot: string,
-    workspaceId: string,
+    wsDirName: string,
     graph: NodeGraph,
     nodeId: string,
     depth: number,
@@ -643,13 +655,13 @@ export class WorkspaceService {
 
     // 读取节点标题（使用 dirName 或回退到 nodeId）
     const nodeDirName = node.dirName || nodeId;
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeDirName, isArchived);
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName, isArchived);
     const title = nodeInfo.title || nodeId;
 
     lines.push(`${indent}${statusIcon} ${title}${focusIndicator}`);
 
     for (const childId of node.children) {
-      lines.push(...await this.generateNodeTree(projectRoot, workspaceId, graph, childId, depth + 1, isArchived));
+      lines.push(...await this.generateNodeTree(projectRoot, wsDirName, graph, childId, depth + 1, isArchived));
     }
 
     return lines;
@@ -660,7 +672,7 @@ export class WorkspaceService {
    */
   private async generateNodeTreeMd(
     projectRoot: string,
-    workspaceId: string,
+    wsDirName: string,
     graph: NodeGraph,
     nodeId: string,
     depth: number,
@@ -676,13 +688,13 @@ export class WorkspaceService {
 
     // 读取节点标题（使用 dirName 或回退到 nodeId）
     const nodeDirName = node.dirName || nodeId;
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, workspaceId, nodeDirName, isArchived);
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName, isArchived);
     const title = nodeInfo.title || nodeId;
 
     lines.push(`${indent}- ${statusIcon} ${title}${focusIndicator}`);
 
     for (const childId of node.children) {
-      lines.push(...await this.generateNodeTreeMd(projectRoot, workspaceId, graph, childId, depth + 1, isArchived));
+      lines.push(...await this.generateNodeTreeMd(projectRoot, wsDirName, graph, childId, depth + 1, isArchived));
     }
 
     return lines;
@@ -796,10 +808,11 @@ export class WorkspaceService {
     }
 
     const { projectRoot } = wsEntry;
+    const dirName = wsEntry.dirName || workspaceId;
     const currentTime = now();
 
     // 3. 验证源目录存在
-    const srcPath = this.fs.getWorkspacePath(projectRoot, workspaceId);
+    const srcPath = this.fs.getWorkspacePath(projectRoot, dirName);
     if (!(await this.fs.exists(srcPath))) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区目录不存在: ${srcPath}`);
     }
@@ -815,7 +828,7 @@ export class WorkspaceService {
     await this.fs.ensureArchiveDir(projectRoot);
 
     // 5. 移动目录到归档位置
-    const archivePath = this.fs.getArchivePath(projectRoot, workspaceId);
+    const archivePath = this.fs.getArchivePath(projectRoot, dirName);
     await this.fs.moveDir(srcPath, archivePath);
 
     // 6. 更新索引状态
@@ -824,13 +837,13 @@ export class WorkspaceService {
     await this.json.writeIndex(index);
 
     // 7. 更新 workspace.json 状态
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId, true);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName, true);
     config.status = "archived";
     config.updatedAt = currentTime;
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config, true);
+    await this.json.writeWorkspaceConfig(projectRoot, dirName, config, true);
 
     // 8. 追加日志
-    await this.md.appendLog(projectRoot, workspaceId, {
+    await this.md.appendLog(projectRoot, dirName, {
       time: currentTime,
       operator: "system",
       event: `工作区已归档`,
@@ -861,16 +874,17 @@ export class WorkspaceService {
     }
 
     const { projectRoot } = wsEntry;
+    const dirName = wsEntry.dirName || workspaceId;
     const currentTime = now();
 
     // 3. 验证归档目录存在
-    const archivePath = this.fs.getArchivePath(projectRoot, workspaceId);
+    const archivePath = this.fs.getArchivePath(projectRoot, dirName);
     if (!(await this.fs.exists(archivePath))) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `归档工作区目录不存在: ${archivePath}`);
     }
 
     // 4. 移动目录回原位置
-    const destPath = this.fs.getWorkspacePath(projectRoot, workspaceId);
+    const destPath = this.fs.getWorkspacePath(projectRoot, dirName);
     await this.fs.moveDir(archivePath, destPath);
 
     // 5. 更新索引状态
@@ -879,13 +893,13 @@ export class WorkspaceService {
     await this.json.writeIndex(index);
 
     // 6. 更新 workspace.json 状态
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
     config.status = "active";
     config.updatedAt = currentTime;
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, dirName, config);
 
     // 7. 追加日志
-    await this.md.appendLog(projectRoot, workspaceId, {
+    await this.md.appendLog(projectRoot, dirName, {
       time: currentTime,
       operator: "system",
       event: `工作区已从归档恢复`,
@@ -1142,8 +1156,8 @@ export class WorkspaceService {
     workspaceId: string,
     change: Omit<ManualChange, "id">
   ): Promise<void> {
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
 
     // 初始化变更清单
     if (!config.pendingManualChanges) {
@@ -1164,7 +1178,7 @@ export class WorkspaceService {
     }
 
     config.updatedAt = now();
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, dirName, config);
   }
 
   /**
@@ -1173,8 +1187,8 @@ export class WorkspaceService {
    * @returns 变更清单（按时间顺序）
    */
   async getManualChanges(workspaceId: string): Promise<ManualChange[]> {
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
     return config.pendingManualChanges || [];
   }
 
@@ -1183,11 +1197,11 @@ export class WorkspaceService {
    * @param workspaceId 工作区 ID
    */
   async clearManualChanges(workspaceId: string): Promise<void> {
-    const projectRoot = await this.resolveProjectRoot(workspaceId);
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
 
     config.pendingManualChanges = [];
     config.updatedAt = now();
-    await this.json.writeWorkspaceConfig(projectRoot, workspaceId, config);
+    await this.json.writeWorkspaceConfig(projectRoot, dirName, config);
   }
 }

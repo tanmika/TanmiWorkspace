@@ -113,33 +113,34 @@ export class SessionService {
   async bind(params: SessionBindParams): Promise<SessionBindResult> {
     const { sessionId, workspaceId, nodeId } = params;
 
-    // 验证工作区存在
-    const projectRoot = await this.json.getProjectRoot(workspaceId);
-    if (!projectRoot) {
+    // 验证工作区存在并获取位置信息
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    if (!location) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
+    const { projectRoot, dirName } = location;
 
     // 验证项目目录存在
-    const workspacePath = this.fs.getWorkspacePath(projectRoot, workspaceId);
+    const workspacePath = this.fs.getWorkspacePath(projectRoot, dirName);
     if (!(await this.fs.exists(workspacePath))) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在`);
     }
 
     // 如果指定了节点，验证节点存在并同步到 graph.currentFocus
     if (nodeId) {
-      const graph = await this.json.readGraph(projectRoot, workspaceId);
+      const graph = await this.json.readGraph(projectRoot, dirName);
       if (!graph.nodes[nodeId]) {
         throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
       }
       // 同步聚焦节点到 graph.currentFocus，确保单一数据源
       if (graph.currentFocus !== nodeId) {
         graph.currentFocus = nodeId;
-        await this.json.writeGraph(projectRoot, workspaceId, graph);
+        await this.json.writeGraph(projectRoot, dirName, graph);
       }
     }
 
     // 获取工作区名称
-    const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
 
     // 执行绑定
     const binding = await this.sessionStorage.bind(sessionId, workspaceId, nodeId);
@@ -174,9 +175,9 @@ export class SessionService {
     let workspaceName = "未知";
     if (currentBinding) {
       try {
-        const projectRoot = await this.json.getProjectRoot(currentBinding.workspaceId);
-        if (projectRoot) {
-          const config = await this.json.readWorkspaceConfig(projectRoot, currentBinding.workspaceId);
+        const location = await this.json.getWorkspaceLocation(currentBinding.workspaceId);
+        if (location) {
+          const config = await this.json.readWorkspaceConfig(location.projectRoot, location.dirName);
           workspaceName = config.name;
         }
       } catch {
@@ -217,8 +218,8 @@ export class SessionService {
     }
 
     // 已绑定，获取详细信息
-    const projectRoot = await this.json.getProjectRoot(binding.workspaceId);
-    if (!projectRoot) {
+    const location = await this.json.getWorkspaceLocation(binding.workspaceId);
+    if (!location) {
       // 工作区已删除，自动清理绑定
       await this.sessionStorage.unbind(sessionId);
       const index = await this.json.readIndex();
@@ -233,11 +234,12 @@ export class SessionService {
           }))
       };
     }
+    const { projectRoot, dirName } = location;
 
     // 获取工作区信息
-    const config = await this.json.readWorkspaceConfig(projectRoot, binding.workspaceId);
-    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, binding.workspaceId);
-    const graph = await this.json.readGraph(projectRoot, binding.workspaceId);
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, dirName);
+    const graph = await this.json.readGraph(projectRoot, dirName);
 
     const result: SessionStatusBoundResult = {
       bound: true,
@@ -252,7 +254,7 @@ export class SessionService {
     // 获取聚焦节点信息（优先使用 graph.currentFocus 作为权威来源）
     const focusNodeId = graph.currentFocus || binding.focusedNodeId;
     if (focusNodeId && graph.nodes[focusNodeId]) {
-      const nodeInfo = await this.md.readNodeInfo(projectRoot, binding.workspaceId, focusNodeId);
+      const nodeInfo = await this.md.readNodeInfo(projectRoot, dirName, focusNodeId);
       result.focusedNode = {
         id: focusNodeId,
         title: nodeInfo.title,
@@ -305,19 +307,20 @@ export class SessionService {
       workspaceId = binding.workspaceId;
     }
 
-    // 获取项目根目录
-    const projectRoot = await this.json.getProjectRoot(workspaceId);
-    if (!projectRoot) {
+    // 获取工作区位置信息
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    if (!location) {
       // 工作区不存在，返回空结果
       return {
         hasChanges: false,
         reminderText: ""
       };
     }
+    const { projectRoot, dirName } = location;
 
     // 读取工作区配置
     try {
-      const config = await this.json.readWorkspaceConfig(projectRoot, workspaceId);
+      const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
       const manualChanges = config.pendingManualChanges || [];
 
       if (manualChanges.length === 0) {

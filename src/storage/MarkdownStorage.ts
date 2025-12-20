@@ -416,10 +416,10 @@ ${data.conclusion}
   /**
    * 获取日志文件路径（支持归档目录）
    */
-  private getLogPath(projectRoot: string, workspaceId: string, nodeId?: string, isArchived = false): string {
+  private getLogPath(projectRoot: string, wsDirName: string, nodeId?: string, isArchived = false): string {
     const basePath = isArchived
-      ? this.fs.getArchivePath(projectRoot, workspaceId)
-      : this.fs.getWorkspacePath(projectRoot, workspaceId);
+      ? this.fs.getArchivePath(projectRoot, wsDirName)
+      : this.fs.getWorkspacePath(projectRoot, wsDirName);
 
     if (nodeId) {
       return `${basePath}/nodes/${nodeId}/Log.md`;

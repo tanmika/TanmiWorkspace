@@ -396,6 +396,18 @@ export class JsonStorage {
   }
 
   /**
+   * 根据 workspaceId 获取 projectRoot 和 dirName
+   */
+  async getWorkspaceLocation(workspaceId: string): Promise<{ projectRoot: string; dirName: string } | null> {
+    const entry = await this.findWorkspaceEntry(workspaceId);
+    if (!entry?.projectRoot) return null;
+    return {
+      projectRoot: entry.projectRoot,
+      dirName: entry.dirName || entry.id
+    };
+  }
+
+  /**
    * 验证索引中的工作区路径是否有效
    * 返回无效的工作区列表
    */

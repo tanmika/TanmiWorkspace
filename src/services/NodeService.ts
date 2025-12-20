@@ -675,7 +675,7 @@ export class NodeService {
     }
 
     // 9. 追加日志
-    await this.md.appendLog(projectRoot, workspaceId, {
+    await this.md.appendLog(projectRoot, wsDirName, {
       time: currentTime,
       operator: "system",
       event: `节点 "${nodeId}" 及其 ${deletedNodes.length - 1} 个子节点已删除`,

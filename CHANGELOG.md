@@ -11,6 +11,14 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.6.3] - 2025-12-21
+
+### Fixed
+
+- **dirName 全面修复**: 修复 SessionService、DispatchService、WorkspaceService 中仍使用 workspaceId 作为目录名的遗留问题
+- **新增 getWorkspaceLocation 方法**: JsonStorage 新增统一获取 projectRoot 和 dirName 的方法，避免后续出错
+- **私有方法参数命名统一**: WorkspaceService 私有方法参数从 workspaceId 改为 wsDirName，提升代码可读性
+
 ## [1.6.2] - 2025-12-21
 
 ### Added
