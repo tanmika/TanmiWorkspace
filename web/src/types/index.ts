@@ -27,6 +27,16 @@ export type PlanningStatus = 'pending' | 'planning' | 'monitoring' | 'completed'
 // 联合状态类型
 export type NodeStatus = ExecutionStatus | PlanningStatus
 
+// 节点派发状态
+export type NodeDispatchStatus = 'pending' | 'executing' | 'testing' | 'passed' | 'failed'
+
+// 节点派发信息
+export interface NodeDispatchInfo {
+  startMarker: string // Git 模式=commit hash，无 Git 模式=时间戳
+  endMarker?: string // Git 模式=commit hash，无 Git 模式=时间戳
+  status: NodeDispatchStatus
+}
+
 // 执行节点动作
 export type ExecutionAction = 'start' | 'submit' | 'complete' | 'fail' | 'retry' | 'reopen'
 
@@ -98,6 +108,7 @@ export interface NodeMeta {
   references: string[]
   conclusion: string | null
   role?: NodeRole
+  dispatch?: NodeDispatchInfo
   createdAt: string
   updatedAt: string
 }
@@ -114,6 +125,7 @@ export interface NodeTreeItem {
   title: string
   status: NodeStatus
   role?: NodeRole
+  dispatch?: NodeDispatchInfo
   children: NodeTreeItem[]
 }
 
@@ -442,5 +454,52 @@ export const NODE_ROLE_CONFIG: Record<NodeRole, NodeRoleConfig> = {
     color: '#909399',
     emoji: '📝',
     description: '汇总类任务（预留）',
+  },
+}
+
+// 派发状态配置
+export interface DispatchStatusConfig {
+  label: string
+  color: string
+  bgColor: string
+  emoji: string
+  description: string
+}
+
+export const DISPATCH_STATUS_CONFIG: Record<NodeDispatchStatus, DispatchStatusConfig> = {
+  pending: {
+    label: '待派发',
+    color: '#909399',
+    bgColor: '#f4f4f5',
+    emoji: '⏳',
+    description: '等待派发执行',
+  },
+  executing: {
+    label: '执行中',
+    color: '#409EFF',
+    bgColor: '#ecf5ff',
+    emoji: '🔄',
+    description: 'Subagent 正在执行',
+  },
+  testing: {
+    label: '测试中',
+    color: '#E6A23C',
+    bgColor: '#fdf6ec',
+    emoji: '🧪',
+    description: '测试节点验证中',
+  },
+  passed: {
+    label: '已通过',
+    color: '#67C23A',
+    bgColor: '#f0f9eb',
+    emoji: '✅',
+    description: '测试通过',
+  },
+  failed: {
+    label: '已失败',
+    color: '#F56C6C',
+    bgColor: '#fef0f0',
+    emoji: '❌',
+    description: '执行或测试失败',
   },
 }

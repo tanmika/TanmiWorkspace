@@ -60,6 +60,7 @@ export interface ContextGetResult {
   references: ContextChainItem[]; // 跨节点引用（仅 active）
   childConclusions: ChildConclusionItem[]; // 子节点结论冒泡
   hint?: string;                // 工作流提示
+  guidance?: string;            // 场景感知引导内容（L0 级别）
 }
 
 // ========== API 输入输出类型 ==========

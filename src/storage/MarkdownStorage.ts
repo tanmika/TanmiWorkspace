@@ -400,10 +400,12 @@ ${data.conclusion}
 
       const parts = line.split("|").map(p => p.trim()).filter(p => p);
       if (parts.length >= 3) {
+        // 将 <br> 还原为换行符
+        const event = (parts[2] || "").replace(/<br>/g, "\n");
         logs.push({
           time: parts[0] || "",
           operator: parts[1] || "AI",
-          event: parts[2] || ""
+          event
         });
       }
     }
@@ -453,7 +455,9 @@ ${data.conclusion}
     }
 
     const formattedTime = formatShort(entry.time);
-    content += `| ${formattedTime} | ${entry.operator} | ${entry.event} |\n`;
+    // 将换行符转义为 <br>，避免破坏 Markdown 表格格式
+    const escapedEvent = entry.event.replace(/\n/g, "<br>");
+    content += `| ${formattedTime} | ${entry.operator} | ${escapedEvent} |\n`;
 
     await this.fs.writeFile(logPath, content);
   }
@@ -633,10 +637,12 @@ ${data.nextStep}
       const cells = line.split("|").map(c => c.trim()).filter(Boolean);
       if (cells.length >= 3) {
         const operator = cells[1];
+        // 将 <br> 还原为换行符
+        const event = (cells[2] || "").replace(/<br>/g, "\n");
         entries.push({
           timestamp: cells[0] || "",
           operator: operator === "AI" || operator === "Human" ? operator : "AI",
-          event: cells[2] || "",
+          event,
         });
       }
     }
@@ -668,7 +674,9 @@ ${data.nextStep}
 `;
     }
 
-    const newLine = `| ${entry.timestamp} | ${entry.operator} | ${entry.event} |`;
+    // 将换行符转义为 <br>，避免破坏 Markdown 表格格式
+    const escapedEvent = entry.event.replace(/\n/g, "<br>");
+    const newLine = `| ${entry.timestamp} | ${entry.operator} | ${escapedEvent} |`;
     const updatedContent = content.trimEnd() + "\n" + newLine + "\n";
     await this.fs.writeFile(logPath, updatedContent);
   }

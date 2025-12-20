@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore, useWorkspaceStore } from '@/stores'
-import { STATUS_CONFIG, NODE_TYPE_CONFIG, NODE_ROLE_CONFIG, type TransitionAction } from '@/types'
+import { STATUS_CONFIG, NODE_TYPE_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type TransitionAction } from '@/types'
 import StatusIcon from '@/components/common/StatusIcon.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import LogTimeline from '@/components/log/LogTimeline.vue'
@@ -25,6 +25,10 @@ const isPlanning = computed(() => nodeType.value === 'planning')
 // 节点角色
 const nodeRole = computed(() => nodeMeta.value?.role)
 const roleConfig = computed(() => nodeRole.value ? NODE_ROLE_CONFIG[nodeRole.value] : null)
+
+// 派发信息
+const dispatchInfo = computed(() => nodeMeta.value?.dispatch)
+const dispatchConfig = computed(() => dispatchInfo.value ? DISPATCH_STATUS_CONFIG[dispatchInfo.value.status] : null)
 
 // 可用的状态转换（根据节点类型）
 const availableActions = computed(() => {
@@ -192,6 +196,38 @@ function formatTime(isoString: string) {
         <el-tag type="warning" size="small">已隔离</el-tag>
       </div>
     </div>
+
+    <!-- 派发信息 -->
+    <el-card v-if="dispatchInfo && dispatchConfig" class="section-card dispatch-card">
+      <template #header>
+        <div class="dispatch-header">
+          <span>派发信息</span>
+          <el-tag
+            :color="dispatchConfig.bgColor"
+            :style="{ color: dispatchConfig.color, borderColor: dispatchConfig.color }"
+            size="small"
+          >
+            {{ dispatchConfig.emoji }} {{ dispatchConfig.label }}
+          </el-tag>
+        </div>
+      </template>
+      <div class="dispatch-content">
+        <div class="dispatch-item">
+          <span class="dispatch-label">派发状态:</span>
+          <span class="dispatch-value" :style="{ color: dispatchConfig.color }">
+            {{ dispatchConfig.description }}
+          </span>
+        </div>
+        <div class="dispatch-item">
+          <span class="dispatch-label">开始标记:</span>
+          <span class="dispatch-value dispatch-marker">{{ dispatchInfo.startMarker }}</span>
+        </div>
+        <div class="dispatch-item" v-if="dispatchInfo.endMarker">
+          <span class="dispatch-label">结束标记:</span>
+          <span class="dispatch-value dispatch-marker">{{ dispatchInfo.endMarker }}</span>
+        </div>
+      </div>
+    </el-card>
 
     <!-- 操作按钮 -->
     <div class="action-bar">
@@ -450,5 +486,55 @@ function formatTime(isoString: string) {
   font-size: 13px;
   color: #606266;
   flex: 1;
+}
+
+/* 派发信息卡片 */
+.dispatch-card {
+  border-color: #409eff;
+}
+
+.dispatch-card :deep(.el-card__header) {
+  background: #ecf5ff;
+  padding: 10px 16px;
+}
+
+.dispatch-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: #409eff;
+}
+
+.dispatch-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dispatch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dispatch-label {
+  color: #909399;
+  font-size: 13px;
+  min-width: 80px;
+}
+
+.dispatch-value {
+  color: #606266;
+  font-size: 13px;
+}
+
+.dispatch-marker {
+  font-family: 'Monaco', 'Menlo', monospace;
+  background: #f5f7fa;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
 }
 </style>

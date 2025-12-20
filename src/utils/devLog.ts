@@ -77,4 +77,26 @@ export const devLog = {
       status: status || "N/A",
     }, null, 2));
   },
+
+  /**
+   * Git 操作错误日志
+   */
+  gitError(operation: string, error: Error | unknown, context?: LogContext): void {
+    if (!IS_DEV) return;
+    const errorInfo = error instanceof Error
+      ? { message: error.message, code: (error as NodeJS.ErrnoException).code }
+      : { raw: String(error) };
+    console.error(`[DEV:GIT] ${operation} failed`, JSON.stringify({
+      ...errorInfo,
+      ...context,
+    }, null, 2));
+  },
+
+  /**
+   * Git 操作调试日志
+   */
+  gitDebug(operation: string, context?: LogContext): void {
+    if (!IS_DEV) return;
+    console.error(`[DEV:GIT] ${operation}`, context ? JSON.stringify(context, null, 2) : "");
+  },
 };

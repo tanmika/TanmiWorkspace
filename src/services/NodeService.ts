@@ -27,17 +27,31 @@ import { generateNodeId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { validateNodeTitle } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
+import { GuidanceService } from "./GuidanceService.js";
+import type { GuidanceContext } from "../types/guidance.js";
 
 /**
  * 节点服务
  * 处理节点相关的业务逻辑
  */
 export class NodeService {
+  private stateService?: import("./StateService.js").StateService;
+  private guidanceService: GuidanceService;
+
   constructor(
     private json: JsonStorage,
     private md: MarkdownStorage,
     private fs: FileSystemAdapter
-  ) {}
+  ) {
+    this.guidanceService = new GuidanceService();
+  }
+
+  /**
+   * 设置 StateService 依赖（用于 token 生成）
+   */
+  setStateService(stateService: import("./StateService.js").StateService): void {
+    this.stateService = stateService;
+  }
 
   /**
    * 根据 workspaceId 获取 projectRoot
@@ -75,7 +89,7 @@ export class NodeService {
    * 创建节点
    */
   async create(params: NodeCreateParams): Promise<NodeCreateResult> {
-    const { workspaceId, parentId, type, title, requirement = "", docs = [], role, createTestNode, pairWithExecNode } = params;
+    const { workspaceId, parentId, type, title, requirement = "", docs = [], role, isNeedTest, testRequirement } = params;
 
     // 1. 获取 projectRoot
     const projectRoot = await this.resolveProjectRoot(workspaceId);
@@ -97,15 +111,25 @@ export class NodeService {
 
     // 4. 如果父节点是 completed 状态，自动 reopen 到 planning
     let autoReopened = false;
+    let archivedConclusion: string | null = null;
     if (parentMeta.status === "completed") {
       parentMeta.status = "planning";
       parentMeta.updatedAt = now();
-      // 清空结论（reopen 语义）
+      // 保留原有结论作为历史引用（不清空）
       const oldConclusion = parentMeta.conclusion;
-      parentMeta.conclusion = null;
+      if (oldConclusion) {
+        // 将原有结论转换为引用格式，标注为历史结论
+        const timestamp = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+        const quotedConclusion = oldConclusion.split("\n").map(line => `> ${line}`).join("\n");
+        archivedConclusion = `**[历史结论 - ${timestamp}]**\n${quotedConclusion}\n\n---\n\n`;
+        parentMeta.conclusion = archivedConclusion;
+      }
       autoReopened = true;
-      // 同步更新 Info.md 中的状态
+      // 同步更新 Info.md 中的状态和结论
       await this.md.updateNodeStatus(projectRoot, workspaceId, parentId, "planning");
+      if (archivedConclusion) {
+        await this.md.updateConclusion(projectRoot, workspaceId, parentId, archivedConclusion);
+      }
     }
 
     // 5. 验证父节点状态允许创建子节点（pending/planning/monitoring 状态）
@@ -187,73 +211,140 @@ export class NodeService {
     graph.nodes[parentId].children.push(nodeId);
     graph.nodes[parentId].updatedAt = currentTime;
 
-    // 11.1 处理节点配对（派发模式）
+    // 11.1 处理测试节点附属化（isNeedTest=true）
+    let upgradedToPlanning = false;
+    let createdExecNodeId: string | undefined;
     let createdTestNodeId: string | undefined;
 
-    // 处理 pairWithExecNode：将当前节点与已有执行节点配对
-    if (pairWithExecNode) {
-      const execNode = graph.nodes[pairWithExecNode];
-      if (!execNode) {
-        throw new TanmiError("EXEC_NODE_NOT_FOUND", `执行节点 "${pairWithExecNode}" 不存在`);
-      }
-      if (execNode.type !== "execution") {
-        throw new TanmiError("INVALID_NODE_TYPE", `节点 "${pairWithExecNode}" 不是执行节点`);
-      }
-      // 建立双向关联
-      newNode.execNodeId = pairWithExecNode;
-      execNode.testNodeId = nodeId;
-      execNode.updatedAt = currentTime;
-    }
+    if (isNeedTest && type === "execution") {
+      // 执行节点 + isNeedTest=true：升级为 planning 管理节点
+      upgradedToPlanning = true;
+      newNode.type = "planning";
 
-    // 处理 createTestNode：同时创建配对的测试节点
-    if (createTestNode && type === "execution") {
-      const testNodeId = generateNodeId();
-
-      // 创建测试节点目录
-      const testNodePath = this.fs.getNodePath(projectRoot, workspaceId, testNodeId);
-      await this.fs.mkdir(testNodePath);
-
-      // 写入测试节点 Info.md
-      const testNodeInfo: NodeInfoData = {
-        id: testNodeId,
-        type: "execution",
-        title: createTestNode.title,
+      // 更新 Info.md 中的类型
+      const updatedNodeInfo: NodeInfoData = {
+        id: nodeId,
+        type: "planning",  // 升级为 planning
+        title: `[管理] ${title}`,
         status: "pending",
         createdAt: currentTime,
         updatedAt: currentTime,
-        requirement: createTestNode.requirement.replace(/\\n/g, "\n"),
-        docs: [],
+        requirement: normalizedRequirement,
+        docs,
         notes: "",
         conclusion: "",
       };
-      await this.md.writeNodeInfo(projectRoot, workspaceId, testNodeId, testNodeInfo);
+      await this.md.writeNodeInfo(projectRoot, workspaceId, nodeId, updatedNodeInfo);
 
-      // 创建测试节点的 Log.md 和 Problem.md
-      await this.md.createEmptyLog(projectRoot, workspaceId, testNodeId);
-      await this.md.createEmptyProblem(projectRoot, workspaceId, testNodeId);
+      // 创建执行子节点
+      const execNodeId = generateNodeId();
+      const execNodePath = this.fs.getNodePath(projectRoot, workspaceId, execNodeId);
+      await this.fs.mkdir(execNodePath);
 
-      // 创建测试节点元数据
-      const testNodeMeta: NodeMeta = {
-        id: testNodeId,
+      const execNodeInfo: NodeInfoData = {
+        id: execNodeId,
         type: "execution",
-        parentId,
+        title: `[执行] ${title}`,
+        status: "pending",
+        createdAt: currentTime,
+        updatedAt: currentTime,
+        requirement: normalizedRequirement,
+        docs,
+        notes: "",
+        conclusion: "",
+      };
+      await this.md.writeNodeInfo(projectRoot, workspaceId, execNodeId, execNodeInfo);
+      await this.md.createEmptyLog(projectRoot, workspaceId, execNodeId);
+      await this.md.createEmptyProblem(projectRoot, workspaceId, execNodeId);
+
+      const execNodeMeta: NodeMeta = {
+        id: execNodeId,
+        type: "execution",
+        parentId: nodeId,  // 父节点是管理节点
         children: [],
         status: "pending",
         isolate: false,
         references: [],
         conclusion: null,
-        execNodeId: nodeId,  // 关联到执行节点
         createdAt: currentTime,
         updatedAt: currentTime,
       };
+      graph.nodes[execNodeId] = execNodeMeta;
+      newNode.children.push(execNodeId);
+      createdExecNodeId = execNodeId;
 
-      // 添加到图中
+      // 创建测试子节点
+      const testNodeId = generateNodeId();
+      const testNodePath = this.fs.getNodePath(projectRoot, workspaceId, testNodeId);
+      await this.fs.mkdir(testNodePath);
+
+      const testNodeInfo: NodeInfoData = {
+        id: testNodeId,
+        type: "execution",
+        title: `[测试] ${title}`,
+        status: "pending",
+        createdAt: currentTime,
+        updatedAt: currentTime,
+        requirement: testRequirement || "（需要补充验收标准）",
+        docs: [],
+        notes: "",
+        conclusion: "",
+      };
+      await this.md.writeNodeInfo(projectRoot, workspaceId, testNodeId, testNodeInfo);
+      await this.md.createEmptyLog(projectRoot, workspaceId, testNodeId);
+      await this.md.createEmptyProblem(projectRoot, workspaceId, testNodeId);
+
+      const testNodeMeta: NodeMeta = {
+        id: testNodeId,
+        type: "execution",
+        parentId: nodeId,  // 父节点是管理节点
+        children: [],
+        status: "pending",
+        isolate: false,
+        references: [],
+        conclusion: null,
+        createdAt: currentTime,
+        updatedAt: currentTime,
+      };
       graph.nodes[testNodeId] = testNodeMeta;
-      graph.nodes[parentId].children.push(testNodeId);
+      newNode.children.push(testNodeId);
+      createdTestNodeId = testNodeId;
+    } else if (isNeedTest && type === "planning") {
+      // 规划节点 + isNeedTest=true：创建测试子节点（集成测试）
+      const testNodeId = generateNodeId();
+      const testNodePath = this.fs.getNodePath(projectRoot, workspaceId, testNodeId);
+      await this.fs.mkdir(testNodePath);
 
-      // 设置执行节点的 testNodeId
-      newNode.testNodeId = testNodeId;
+      const testNodeInfo: NodeInfoData = {
+        id: testNodeId,
+        type: "execution",
+        title: `[集成测试] ${title}`,
+        status: "pending",
+        createdAt: currentTime,
+        updatedAt: currentTime,
+        requirement: testRequirement || "（需要补充集成测试验收标准）",
+        docs: [],
+        notes: "",
+        conclusion: "",
+      };
+      await this.md.writeNodeInfo(projectRoot, workspaceId, testNodeId, testNodeInfo);
+      await this.md.createEmptyLog(projectRoot, workspaceId, testNodeId);
+      await this.md.createEmptyProblem(projectRoot, workspaceId, testNodeId);
 
+      const testNodeMeta: NodeMeta = {
+        id: testNodeId,
+        type: "execution",
+        parentId: nodeId,  // 父节点是当前规划节点
+        children: [],
+        status: "pending",
+        isolate: false,
+        references: [],
+        conclusion: null,
+        createdAt: currentTime,
+        updatedAt: currentTime,
+      };
+      graph.nodes[testNodeId] = testNodeMeta;
+      newNode.children.push(testNodeId);
       createdTestNodeId = testNodeId;
     }
 
@@ -281,10 +372,14 @@ export class NodeService {
     }
 
     // 14. 追加日志
-    const typeLabel = type === "planning" ? "规划" : "执行";
-    let logEvent = `${typeLabel}节点 "${title}" (${nodeId}) 已创建`;
-    if (createdTestNodeId) {
-      logEvent += `，配对测试节点 (${createdTestNodeId}) 已创建`;
+    let logEvent: string;
+    if (upgradedToPlanning) {
+      logEvent = `管理节点 "[管理] ${title}" (${nodeId}) 已创建，包含执行子节点 (${createdExecNodeId}) 和测试子节点 (${createdTestNodeId})`;
+    } else if (isNeedTest && type === "planning") {
+      logEvent = `规划节点 "${title}" (${nodeId}) 已创建，包含集成测试子节点 (${createdTestNodeId})`;
+    } else {
+      const typeLabel = newNode.type === "planning" ? "规划" : "执行";
+      logEvent = `${typeLabel}节点 "${title}" (${nodeId}) 已创建`;
     }
     await this.md.appendLog(projectRoot, workspaceId, {
       time: currentTime,
@@ -295,7 +390,17 @@ export class NodeService {
     // 14. 生成提示
     const hasDispatchedDocs = docs.length > 0;
     let hint: string;
-    if (type === "execution") {
+    if (upgradedToPlanning) {
+      // isNeedTest=true 的执行节点已升级为管理节点
+      hint = `💡 已创建管理节点 "[管理] ${title}"，自动生成了：\n` +
+        `  - [执行] 子节点 (${createdExecNodeId})：实际执行任务\n` +
+        `  - [测试] 子节点 (${createdTestNodeId})：验收测试\n` +
+        `下一步：调用 node_transition(action="start") 开始管理节点，然后派发 [执行] 子节点。`;
+    } else if (isNeedTest && type === "planning") {
+      // 规划节点 + isNeedTest=true
+      hint = `💡 规划节点已创建，自动生成了集成测试子节点 (${createdTestNodeId})。\n` +
+        `下一步：调用 node_transition(action="start") 进入规划状态，创建执行子节点。所有执行完成后执行集成测试。`;
+    } else if (newNode.type === "execution") {
       hint = hasDispatchedDocs
         ? "💡 执行节点已创建并派发了文档。下一步：调用 node_transition(action=\"start\") 开始执行。"
         : "💡 执行节点已创建。提醒：如需参考文档请用 node_reference 添加。下一步：调用 node_transition(action=\"start\") 开始执行。";
@@ -308,11 +413,6 @@ export class NodeService {
     // 如果自动 reopen 了父节点，追加提示
     if (autoReopened) {
       hint = `⚠️ 父节点 ${parentId} 已自动从 completed 重开为 planning。` + hint;
-    }
-
-    // 如果创建了配对测试节点，追加提示
-    if (createdTestNodeId) {
-      hint += `\n\n🧪 配对测试节点 (${createdTestNodeId}) 已创建，执行节点完成后将自动触发测试。`;
     }
 
     // 14.1 如果工作区有规则，在 hint 末尾追加规则提醒
@@ -328,17 +428,41 @@ export class NodeService {
       hint += `\n\n⚠️ **重要**：完成所有计划节点创建后，请向用户展示完整计划并等待确认，再开始执行第一个任务。`;
     }
 
+    // 生成引导内容
+    const guidanceContext: GuidanceContext = {
+      toolName: "node_create",
+      nodeType: type,
+      nodeRole: role,
+      toolInput: { type, role, parentId },
+    };
+    const guidance = this.guidanceService.generateFromContext(guidanceContext, 0);
+
     // 构建返回结果
     const result: NodeCreateResult = {
       nodeId,
       path: nodePath,
       autoReopened: autoReopened ? parentId : undefined,
       hint,
+      // 测试节点附属化输出
+      upgradedToPlanning,
+      execNodeId: createdExecNodeId,
+      guidance: guidance.content,
       testNodeId: createdTestNodeId,
     };
 
     // 如果在根节点下创建非信息收集的子节点，添加 show_plan actionRequired
     if (parentId === "root" && role !== "info_collection") {
+      // 生成 confirmation token（如果 StateService 可用）
+      let confirmationToken: string | undefined;
+      if (this.stateService) {
+        const confirmation = this.stateService.createPendingConfirmation(workspaceId, nodeId, "show_plan", {
+          nodeId,
+          title,
+          type,
+        });
+        confirmationToken = confirmation.token;
+      }
+
       result.actionRequired = {
         type: "show_plan",
         message: "已创建计划节点，请向用户展示当前计划并等待确认后再开始执行。",
@@ -347,6 +471,7 @@ export class NodeService {
           title,
           type,
         },
+        confirmationToken,
       };
     }
 
@@ -426,6 +551,7 @@ export class NodeService {
       title: nodeInfo.title,
       status: node.status,
       role: node.role,
+      dispatch: node.dispatch,
       children: [],
     };
 

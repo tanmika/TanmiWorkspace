@@ -87,24 +87,16 @@ export const nodeCreateTool: Tool = {
         enum: ["info_collection", "validation", "summary"],
         description: "节点角色（可选）：info_collection=信息收集节点，完成时自动归档规则和文档到工作区",
       },
-      createTestNode: {
-        type: "object",
-        properties: {
-          title: {
-            type: "string",
-            description: "测试节点标题",
-          },
-          requirement: {
-            type: "string",
-            description: "验收标准",
-          },
-        },
-        required: ["title", "requirement"],
-        description: "同时创建配对的测试节点（派发模式用）",
+      isNeedTest: {
+        type: "boolean",
+        description: `是否需要测试（可选，仅执行节点或规划节点有效）。设为 true 时系统会自动处理：
+- **执行节点 + isNeedTest=true**：自动升级为 [管理] 规划节点，并创建 [执行] 和 [测试] 两个子节点
+- **规划节点 + isNeedTest=true**：自动创建 [集成测试] 子节点
+这样可以确保重要任务都有配对的测试验收。`,
       },
-      pairWithExecNode: {
+      testRequirement: {
         type: "string",
-        description: "与指定执行节点配对（用于单独创建测试节点时，指定关联的执行节点 ID）",
+        description: "测试验收标准（isNeedTest=true 时使用，可选）",
       },
     },
     required: ["workspaceId", "parentId", "type", "title", "requirement"],

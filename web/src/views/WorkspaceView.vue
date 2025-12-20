@@ -3,12 +3,13 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus, List, Share, Refresh, InfoFilled, Aim, ArrowDown, Document } from '@element-plus/icons-vue'
-import { useWorkspaceStore, useNodeStore } from '@/stores'
+import { useWorkspaceStore, useNodeStore, useSettingsStore } from '@/stores'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
 import EnableDispatchDialog from '@/components/dispatch/EnableDispatchDialog.vue'
 import DisableDispatchDialog from '@/components/dispatch/DisableDispatchDialog.vue'
+import SwitchDispatchModeDialog from '@/components/dispatch/SwitchDispatchModeDialog.vue'
 
 // 视图模式
 type ViewMode = 'list' | 'graph'
@@ -69,6 +70,7 @@ const route = useRoute()
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
 const nodeStore = useNodeStore()
+const settingsStore = useSettingsStore()
 
 // 获取工作区 ID
 const workspaceId = computed(() => route.params.id as string)
@@ -198,13 +200,38 @@ async function handleCreateNode() {
 // 派发模式控制
 const showEnableDispatchDialog = ref(false)
 const showDisableDispatchDialog = ref(false)
+const showSwitchModeDialog = ref(false)
+const isEnablingDispatch = ref(false)
 
-function handleEnableDispatch() {
-  showEnableDispatchDialog.value = true
+async function handleEnableDispatch() {
+  // 加载全局配置
+  await settingsStore.loadSettings()
+  const mode = settingsStore.settings.defaultDispatchMode
+
+  if (mode === 'none') {
+    // 每次询问 - 显示对话框让用户选择
+    showEnableDispatchDialog.value = true
+  } else {
+    // git 或 no-git - 直接启用，后端会读取全局配置
+    isEnablingDispatch.value = true
+    try {
+      await workspaceStore.enableDispatch()
+      ElMessage.success('派发模式已启用')
+      await loadWorkspace()
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '启用派发失败')
+    } finally {
+      isEnablingDispatch.value = false
+    }
+  }
 }
 
 function handleDisableDispatch() {
   showDisableDispatchDialog.value = true
+}
+
+function handleSwitchMode() {
+  showSwitchModeDialog.value = true
 }
 
 async function handleDispatchSuccess() {
@@ -279,7 +306,7 @@ async function handleDispatchSuccess() {
                 未启用
               </span>
               <span v-else-if="workspaceStore.dispatchStatus === 'enabled'" class="dispatch-status enabled">
-                已启用
+                已启用(无Git)
               </span>
               <span v-else class="dispatch-status enabled-git">
                 已启用(Git)
@@ -288,18 +315,26 @@ async function handleDispatchSuccess() {
                 v-if="workspaceStore.dispatchStatus === 'disabled'"
                 size="small"
                 type="primary"
+                :loading="isEnablingDispatch"
                 @click="handleEnableDispatch"
               >
                 启用
               </el-button>
-              <el-button
-                v-else
-                size="small"
-                type="danger"
-                @click="handleDisableDispatch"
-              >
-                关闭
-              </el-button>
+              <el-button-group v-else>
+                <el-button
+                  size="small"
+                  @click="handleSwitchMode"
+                >
+                  切换模式
+                </el-button>
+                <el-button
+                  size="small"
+                  type="danger"
+                  @click="handleDisableDispatch"
+                >
+                  关闭
+                </el-button>
+              </el-button-group>
             </div>
           </div>
           <div class="info-item rules-docs" v-if="hasRulesOrDocs">
@@ -532,6 +567,12 @@ async function handleDispatchSuccess() {
     <!-- 禁用派发对话框 -->
     <DisableDispatchDialog
       v-model="showDisableDispatchDialog"
+      @success="handleDispatchSuccess"
+    />
+
+    <!-- 切换派发模式对话框 -->
+    <SwitchDispatchModeDialog
+      v-model="showSwitchModeDialog"
       @success="handleDispatchSuccess"
     />
   </div>

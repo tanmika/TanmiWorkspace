@@ -21,7 +21,8 @@ const {
   shouldThrottle,
   updateLastReminder,
   logHook,
-  getNodeGraph
+  getNodeGraph,
+  getWorkspacesByCwd
 } = require('./shared/index.cjs');
 
 // ============================================================================
@@ -52,10 +53,48 @@ function outputHookResponse(eventType, context) {
 // ============================================================================
 
 /**
+ * 生成工作区绑定建议提示
+ * @param {string} sessionId - 会话 ID
+ * @param {Array} matchedWorkspaces - 匹配的工作区列表
+ * @returns {string} 建议提示内容
+ */
+function generateBindingSuggestion(sessionId, matchedWorkspaces) {
+  const sessionContext = generateSessionIdContext(sessionId, 'claude-code');
+
+  // 生成工作区列表
+  const workspaceList = matchedWorkspaces.map(ws => {
+    const goalInfo = ws.goal ? `\n   目标: ${ws.goal.slice(0, 80)}${ws.goal.length > 80 ? '...' : ''}` : '';
+    return `- **${ws.name}** (${ws.id})${goalInfo}`;
+  }).join('\n');
+
+  const suggestion = `${sessionContext}
+
+<tanmi-workspace-suggestion>
+## 检测到匹配的工作区
+
+当前目录下存在以下活跃工作区：
+
+${workspaceList}
+
+**建议**: 如果本次会话涉及以上工作区的任务，请考虑使用 \`session_bind\` 绑定工作区以获取完整上下文。
+
+绑定示例：
+\`\`\`
+session_bind(workspaceId: "${matchedWorkspaces[0].id}")
+\`\`\`
+
+如果本次会话与工作区无关，可以忽略此建议。
+</tanmi-workspace-suggestion>`;
+
+  return suggestion;
+}
+
+/**
  * 处理 SessionStart 事件
  * 始终注入 sessionId，如果已绑定则同时注入工作区上下文
+ * 如果未绑定但检测到匹配工作区，则提示绑定建议
  */
-function handleSessionStart(sessionId, binding) {
+function handleSessionStart(sessionId, binding, input) {
   let context = '';
 
   if (binding) {
@@ -63,12 +102,23 @@ function handleSessionStart(sessionId, binding) {
     context = getFullWorkspaceContext(binding);
     logHook(sessionId, 'SessionStart', { bound: true, workspaceId: binding.workspaceId });
   } else {
-    logHook(sessionId, 'SessionStart', { bound: false });
-  }
+    // 未绑定：检查是否有匹配的工作区
+    const cwd = input?.cwd || process.cwd();
+    const matchedWorkspaces = getWorkspacesByCwd(cwd);
 
-  if (!context) {
-    // 未绑定或获取上下文失败：仅注入 sessionId 信息
-    context = generateSessionIdContext(sessionId, 'claude-code');
+    if (matchedWorkspaces.length > 0) {
+      // 有匹配的工作区：生成绑定建议
+      context = generateBindingSuggestion(sessionId, matchedWorkspaces);
+      logHook(sessionId, 'SessionStart', {
+        bound: false,
+        matchedWorkspaces: matchedWorkspaces.map(ws => ws.id),
+        suggestion: true
+      });
+    } else {
+      // 无匹配工作区：仅注入 sessionId
+      context = generateSessionIdContext(sessionId, 'claude-code');
+      logHook(sessionId, 'SessionStart', { bound: false });
+    }
   }
 
   if (context) {
@@ -448,7 +498,7 @@ async function main() {
   // 根据事件类型处理
   switch (eventType) {
     case 'SessionStart':
-      handleSessionStart(sessionId, binding);
+      handleSessionStart(sessionId, binding, input);
       break;
 
     case 'UserPromptSubmit':

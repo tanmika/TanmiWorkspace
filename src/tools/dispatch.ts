@@ -15,7 +15,13 @@ export const nodeDispatchTool: Tool = {
 **前置条件**：
 - 工作区已启用派发模式
 - 节点类型为 execution
-- 节点状态为 implementing
+- 节点状态为 pending 或 implementing
+
+**⚠️ 重要：派发模式下，执行节点必须通过此工具派发，不能直接调用 node_transition(action="start")**
+
+**自动状态转换**：
+- 如果节点状态为 pending，会自动转换为 implementing
+- 这意味着派发操作会自动包含 start 的效果，无需单独调用 start
 
 **返回内容**：
 - startMarker: 执行前的标记，用于记录执行起点
@@ -36,7 +42,7 @@ export const nodeDispatchTool: Tool = {
       },
       nodeId: {
         type: "string",
-        description: "要派发的节点 ID（必须是 implementing 状态的执行节点）",
+        description: "要派发的节点 ID（pending 或 implementing 状态的执行节点）",
       },
     },
     required: ["workspaceId", "nodeId"],

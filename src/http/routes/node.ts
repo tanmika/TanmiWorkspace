@@ -29,6 +29,7 @@ interface CreateNodeBody {
   title: string;
   requirement?: string;
   docs?: DocRef[];
+  rulesHash?: string;
 }
 
 interface UpdateNodeBody {
@@ -89,7 +90,8 @@ const createNodeSchema = {
             description: { type: "string", maxLength: 200 }
           }
         }
-      }
+      },
+      rulesHash: { type: "string", minLength: 8, maxLength: 8 }
     },
     additionalProperties: false
   }
@@ -152,6 +154,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         title: request.body.title,
         requirement: request.body.requirement,
         docs: request.body.docs,
+        rulesHash: request.body.rulesHash,
       };
       const result = await services.node.create(params);
       reply.status(201).send(result);

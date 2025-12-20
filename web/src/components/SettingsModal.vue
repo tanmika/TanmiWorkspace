@@ -60,15 +60,15 @@ function handleClose() {
 
 // 保存配置
 async function handleSave() {
-  // 如果从 none 切换到 git 模式，显示警告确认
+  // 如果切换到 git 模式，显示警告确认
   if (settingsStore.settings.defaultDispatchMode !== 'git' && localMode.value === 'git') {
     try {
       await ElMessageBox.confirm(
-        '启用 Git 模式后，新建工作区的派发功能将默认使用 Git 模式（自动创建分支、提交、回滚）。此功能为实验性功能，可能会影响 Git 历史。确定要启用吗？',
+        '选择此选项后，启用派发时将自动使用 Git 模式（自动创建分支、提交、回滚）。此功能为实验性功能，可能会影响 Git 历史。确定要设置吗？',
         'Git 模式警告',
         {
           type: 'warning',
-          confirmButtonText: '确定启用',
+          confirmButtonText: '确定设置',
           cancelButtonText: '取消',
         }
       )
@@ -104,31 +104,31 @@ async function handleSave() {
           <el-icon :size="18" style="margin-right: 8px">
             <Setting />
           </el-icon>
-          <h3>派发默认模式</h3>
+          <h3>启用派发时的行为</h3>
         </div>
         <div class="section-description">
-          选择新建工作区时的默认派发模式。已启用派发的工作区不受影响。
+          设置在工作区启用派发时的默认行为。已启用派发的工作区不受影响。
         </div>
 
         <el-radio-group v-model="localMode" class="mode-radio-group">
           <el-radio value="none" size="large">
             <div class="radio-content">
-              <div class="radio-title">不启用派发</div>
-              <div class="radio-desc">默认不使用派发功能（推荐）</div>
+              <div class="radio-title">每次询问</div>
+              <div class="radio-desc">启用派发时弹窗让用户选择模式（推荐）</div>
             </div>
           </el-radio>
 
           <el-radio value="no-git" size="large">
             <div class="radio-content">
-              <div class="radio-title">无 Git 模式</div>
-              <div class="radio-desc">仅更新元数据，不影响代码仓库</div>
+              <div class="radio-title">自动使用无Git模式</div>
+              <div class="radio-desc">直接启用派发，仅更新元数据，不影响代码仓库</div>
             </div>
           </el-radio>
 
           <el-radio value="git" size="large">
             <div class="radio-content">
-              <div class="radio-title">Git 模式（实验功能）</div>
-              <div class="radio-desc">自动创建分支、提交、回滚</div>
+              <div class="radio-title">自动使用Git模式（实验功能）</div>
+              <div class="radio-desc">直接启用派发，自动创建分支、提交、回滚</div>
             </div>
           </el-radio>
         </el-radio-group>

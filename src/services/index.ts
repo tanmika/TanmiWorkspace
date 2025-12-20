@@ -7,6 +7,7 @@ export { ContextService } from "./ContextService.js";
 export { ReferenceService } from "./ReferenceService.js";
 export { LogService } from "./LogService.js";
 export { SessionService } from "./SessionService.js";
+export { GuidanceService } from "./GuidanceService.js";
 export { DispatchService } from "./DispatchService.js";
 export { ConfigService } from "./ConfigService.js";
 export type {

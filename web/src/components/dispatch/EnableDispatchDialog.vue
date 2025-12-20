@@ -63,10 +63,12 @@ function handleClose() {
     </div>
 
     <template #footer>
-      <el-button @click="handleClose">取消</el-button>
-      <el-button type="primary" :loading="loading" @click="handleEnable">
-        启用
-      </el-button>
+      <div class="dialog-footer">
+        <el-button @click="handleClose">取消</el-button>
+        <el-button type="primary" :loading="loading" @click="handleEnable">
+          启用
+        </el-button>
+      </div>
     </template>
   </el-dialog>
 </template>
@@ -131,5 +133,11 @@ function handleClose() {
 
 .mode-desc.warning-text {
   color: #e6a23c;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

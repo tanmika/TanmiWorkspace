@@ -226,8 +226,8 @@ function createMcpServer(services: Services): Server {
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
             rulesHash: args?.rulesHash as string | undefined,
             role: args?.role as "info_collection" | "validation" | "summary" | undefined,
-            createTestNode: args?.createTestNode as { title: string; requirement: string } | undefined,
-            pairWithExecNode: args?.pairWithExecNode as string | undefined,
+            isNeedTest: args?.isNeedTest as boolean | undefined,
+            testRequirement: args?.testRequirement as string | undefined,
           });
           break;
 

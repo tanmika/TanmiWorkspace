@@ -2,8 +2,16 @@
 
 import { exec } from "child_process";
 import { promisify } from "util";
+import { promises as fs } from "fs";
+import path from "path";
+import { devLog } from "./devLog.js";
 
 const execAsync = promisify(exec);
+
+/**
+ * 需要从 git 跟踪中排除的目录
+ */
+const EXCLUDED_DIRS = [".tanmi-workspace/", ".tanmi-workspace-dev/"];
 
 /**
  * 分支命名常量
@@ -32,6 +40,48 @@ export async function isGitRepo(cwd?: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * 确保 TanmiWorkspace 目录被 git 排除
+ * 通过添加到 .git/info/exclude（不影响项目的 .gitignore）
+ */
+export async function ensureGitExclude(cwd?: string): Promise<void> {
+  const workDir = cwd || process.cwd();
+
+  try {
+    // 获取 git 仓库根目录
+    const { stdout } = await execGit("rev-parse --git-dir", workDir);
+    const gitDir = path.resolve(workDir, stdout.trim());
+    const excludePath = path.join(gitDir, "info", "exclude");
+
+    // 读取现有内容
+    let content = "";
+    try {
+      content = await fs.readFile(excludePath, "utf-8");
+    } catch {
+      // 文件不存在，使用空内容
+    }
+
+    // 检查并添加缺失的排除项
+    const lines = content.split("\n");
+    let modified = false;
+
+    for (const dir of EXCLUDED_DIRS) {
+      if (!lines.includes(dir)) {
+        lines.push(dir);
+        modified = true;
+      }
+    }
+
+    // 只在有修改时写入
+    if (modified) {
+      await fs.writeFile(excludePath, lines.join("\n"), "utf-8");
+    }
+  } catch (error) {
+    // 记录错误但不抛出（可能不是 git 仓库或权限问题）
+    devLog.gitError("ensureGitExclude", error, { cwd: workDir });
   }
 }
 
@@ -73,7 +123,8 @@ export async function listBranches(
       .split("\n")
       .map((line) => line.trim().replace(/^\*\s*/, ""))
       .filter((line) => line.length > 0);
-  } catch {
+  } catch (error) {
+    devLog.gitDebug("listBranches", { pattern, error: error instanceof Error ? error.message : String(error) });
     return [];
   }
 }
@@ -112,6 +163,20 @@ export async function createProcessBranch(
   cwd?: string
 ): Promise<string> {
   const branchName = `${PROCESS_PREFIX}/${workspaceId}`;
+
+  // 检查分支是否已存在
+  const existingBranches = await listBranches(branchName, cwd);
+  if (existingBranches.length > 0) {
+    // 检查是否当前在该分支上
+    const currentBranch = await getCurrentBranch(cwd);
+    if (currentBranch === branchName) {
+      // 当前在目标分支上，先切换到 detached HEAD
+      await execGit("checkout --detach", cwd);
+    }
+    // 删除已存在的分支
+    await execGit(`branch -D "${branchName}"`, cwd);
+  }
+
   await execGit(`checkout -b "${branchName}"`, cwd);
   return branchName;
 }
@@ -208,8 +273,9 @@ export async function deleteProcessBranch(
   const branchName = `${PROCESS_PREFIX}/${workspaceId}`;
   try {
     await execGit(`branch -D "${branchName}"`, cwd);
-  } catch {
+  } catch (error) {
     // 分支不存在，忽略错误
+    devLog.gitDebug("deleteProcessBranch", { branchName, error: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -226,8 +292,9 @@ export async function deleteBackupBranch(
     const branchName = `${BACKUP_PREFIX}/${workspaceId}/${timestamp}`;
     try {
       await execGit(`branch -D "${branchName}"`, cwd);
-    } catch {
+    } catch (error) {
       // 分支不存在，忽略错误
+      devLog.gitDebug("deleteBackupBranch", { branchName, error: error instanceof Error ? error.message : String(error) });
     }
   } else {
     // 删除该工作区所有备份分支
@@ -236,8 +303,9 @@ export async function deleteBackupBranch(
     for (const branch of branches) {
       try {
         await execGit(`branch -D "${branch}"`, cwd);
-      } catch {
+      } catch (error) {
         // 忽略错误
+        devLog.gitDebug("deleteBackupBranch:loop", { branch, error: error instanceof Error ? error.message : String(error) });
       }
     }
   }
@@ -313,7 +381,8 @@ export async function getCommitsBetween(
         const [hash, ...messageParts] = line.split(" ");
         return { hash, message: messageParts.join(" ") };
       });
-  } catch {
+  } catch (error) {
+    devLog.gitError("getCommitsBetween", error, { fromCommit, toCommit });
     return [];
   }
 }
@@ -343,12 +412,13 @@ export async function getUncommittedChangesSummary(
           deletions: parseInt(match[2], 10),
         };
       }
-    } catch {
-      // 忽略 diff 错误
+    } catch (error) {
+      devLog.gitError("getUncommittedChangesSummary:diff", error);
     }
 
     return { files, insertions: 0, deletions: 0 };
-  } catch {
+  } catch (error) {
+    devLog.gitError("getUncommittedChangesSummary", error);
     return null;
   }
 }
@@ -393,8 +463,9 @@ export async function rebaseMergeProcessBranch(
   // Fast-forward 合并（如果可能）或 rebase
   try {
     await execGit(`merge --ff-only "${processBranch}"`, cwd);
-  } catch {
+  } catch (error) {
     // 如果不能 fast-forward，使用 rebase
+    devLog.gitDebug("rebaseMergeProcessBranch:ff-failed", { processBranch, targetBranch, error: error instanceof Error ? error.message : String(error) });
     await execGit(`rebase "${processBranch}"`, cwd);
   }
 }
@@ -426,8 +497,9 @@ export async function cherryPickToWorkingTree(
   for (const hash of commitHashes) {
     try {
       await execGit(`cherry-pick --no-commit ${hash}`, cwd);
-    } catch {
+    } catch (error) {
       // 如果有冲突，保持当前状态让用户处理
+      devLog.gitDebug("cherryPickToWorkingTree:conflict", { hash, error: error instanceof Error ? error.message : String(error) });
       break;
     }
   }
