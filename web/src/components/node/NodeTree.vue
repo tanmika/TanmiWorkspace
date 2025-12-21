@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { NodeTreeItem, NodeStatus, NodeRole, NodeDispatchStatus } from '@/types'
-import { STATUS_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG } from '@/types'
+import type { NodeTreeItem } from '@/types'
+import TreeNodeItem from '@/components/tree/TreeNodeItem.vue'
+import TreeChildren from '@/components/tree/TreeChildren.vue'
+import WsEmpty from '@/components/ui/WsEmpty.vue'
 
 const props = defineProps<{
   tree: NodeTreeItem | null
@@ -13,91 +15,82 @@ const emit = defineEmits<{
   select: [nodeId: string]
 }>()
 
-// 树形数据
-const treeData = computed(() => {
-  if (!props.tree) return []
-  return [props.tree]
+// 计算选中路径上的所有节点ID
+const activePathIds = computed(() => {
+  const pathIds = new Set<string>()
+  if (!props.selectedId || !props.tree) return pathIds
+
+  // 递归查找选中节点的路径
+  function findPath(node: NodeTreeItem, targetId: string, currentPath: string[]): boolean {
+    currentPath.push(node.id)
+
+    if (node.id === targetId) {
+      currentPath.forEach(id => pathIds.add(id))
+      return true
+    }
+
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        if (findPath(child, targetId, [...currentPath])) {
+          return true
+        }
+      }
+    }
+
+    return false
+  }
+
+  findPath(props.tree, props.selectedId, [])
+  return pathIds
 })
 
-// 获取状态图标颜色
-function getStatusColor(status: NodeStatus) {
-  return STATUS_CONFIG[status]?.color || '#909399'
-}
-
-// 获取状态 emoji
-function getStatusEmoji(status: NodeStatus) {
-  return STATUS_CONFIG[status]?.emoji || '⚪'
-}
-
-// 获取角色 emoji
-function getRoleEmoji(role?: NodeRole) {
-  if (!role) return ''
-  return NODE_ROLE_CONFIG[role]?.emoji || ''
-}
-
-// 获取派发状态配置
-function getDispatchConfig(status?: NodeDispatchStatus) {
-  if (!status) return null
-  return DISPATCH_STATUS_CONFIG[status] || null
-}
-
 // 选择节点
-function handleNodeClick(data: NodeTreeItem) {
-  emit('select', data.id)
+function handleNodeClick(node: NodeTreeItem) {
+  emit('select', node.id)
 }
 
 // 判断是否当前焦点
-function isFocus(id: string) {
-  return props.focusId === id
+function isFocused(nodeId: string): boolean {
+  return props.focusId === nodeId
 }
 
 // 判断是否选中
-function isSelected(id: string) {
-  return props.selectedId === id
+function isSelected(nodeId: string): boolean {
+  return props.selectedId === nodeId
+}
+
+// 判断是否在选中路径上
+function isActivePath(nodeId: string): boolean {
+  return activePathIds.value.has(nodeId)
 }
 </script>
 
 <template>
   <div class="node-tree">
-    <el-tree
-      v-if="treeData.length"
-      :data="treeData"
-      :props="{ label: 'title', children: 'children' }"
-      node-key="id"
-      :current-node-key="selectedId"
-      :default-expanded-keys="[tree?.id || 'root']"
-      highlight-current
-      @node-click="handleNodeClick"
-    >
-      <template #default="{ data }">
-        <span
-          class="node-item"
-          :class="{ 'is-focus': isFocus(data.id), 'is-selected': isSelected(data.id) }"
-        >
-          <span class="status-icon" :style="{ color: getStatusColor(data.status) }">
-            {{ getStatusEmoji(data.status) }}
-          </span>
-          <span v-if="data.role" class="role-icon" :title="NODE_ROLE_CONFIG[data.role as NodeRole]?.label">
-            {{ getRoleEmoji(data.role as NodeRole) }}
-          </span>
-          <span class="node-title">{{ data.title }}</span>
-          <span
-            v-if="data.dispatch"
-            class="dispatch-badge"
-            :style="{
-              color: getDispatchConfig(data.dispatch.status)?.color,
-              backgroundColor: getDispatchConfig(data.dispatch.status)?.bgColor
-            }"
-            :title="getDispatchConfig(data.dispatch.status)?.description"
-          >
-            {{ getDispatchConfig(data.dispatch.status)?.emoji }}
-            {{ getDispatchConfig(data.dispatch.status)?.label }}
-          </span>
-          <span v-if="isFocus(data.id)" class="focus-indicator">◄</span>
-        </span>
-      </template>
-    </el-tree>
-    <el-empty v-else description="暂无节点" :image-size="60" />
+    <div v-if="tree" class="tree-container">
+      <!-- Root node -->
+      <TreeNodeItem
+        :node="tree"
+        :is-focused="isFocused(tree.id)"
+        :is-selected="isSelected(tree.id)"
+        :is-active-path="isActivePath(tree.id)"
+        @click="handleNodeClick(tree)"
+      />
+      <!-- Children -->
+      <div
+        v-if="tree.children && tree.children.length > 0"
+        :class="['tree-children', { 'active-path': isActivePath(tree.id) }]"
+      >
+        <TreeChildren
+          :children="tree.children"
+          :selected-id="selectedId"
+          :focus-id="focusId"
+          :active-path-ids="activePathIds"
+          @select="handleNodeClick"
+        />
+      </div>
+    </div>
+    <WsEmpty v-else description="暂无节点" />
   </div>
 </template>
 
@@ -106,47 +99,28 @@ function isSelected(id: string) {
   min-height: 200px;
 }
 
-.node-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0;
+.tree-container {
+  position: relative;
 }
 
-.node-item.is-focus {
-  font-weight: 600;
+/* 子树容器 - 曼哈顿连线 */
+.tree-children {
+  margin-left: 11px;
+  border-left: 2px solid #999;
+  padding-left: 20px;
 }
 
-.status-icon {
-  font-size: 14px;
+/* 选中路径加粗变黑 */
+.tree-children.active-path {
+  border-left-color: #111;
 }
 
-.role-icon {
-  font-size: 12px;
-  opacity: 0.8;
+/* 深色模式 */
+[data-theme="dark"] .tree-children {
+  border-left-color: #666;
 }
 
-.node-title {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.focus-indicator {
-  color: #409eff;
-  font-size: 12px;
-  margin-left: 4px;
-}
-
-.dispatch-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  font-size: 11px;
-  margin-left: 4px;
-  flex-shrink: 0;
+[data-theme="dark"] .tree-children.active-path {
+  border-left-color: #fff;
 }
 </style>

@@ -1,0 +1,22 @@
+:root {
+  --bg-color: #f0f2f5;
+  --card-bg: #ffffff;
+  --text-main: #111;
+  --text-secondary: #666;
+  --text-muted: #999;
+  --accent-red: #D92B2B;
+  --accent-blue: #3b82f6;
+  --border-color: #e0e0e0;
+  --border-heavy: #111;
+  --mono-font: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}
+
+[data-theme="dark"] {
+  --bg-color: #111111;
+  --card-bg: #1a1a1a;
+  --text-main: #ffffff;
+  --text-secondary: #aaa;
+  --text-muted: #777;
+  --border-color: #333;
+  --border-heavy: #fff;
+}

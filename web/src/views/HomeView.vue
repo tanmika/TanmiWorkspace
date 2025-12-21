@@ -2,14 +2,23 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, ArrowRight, Box, RefreshRight, Search, Sort, Setting, WarningFilled } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowRight, Box, RefreshRight, Sort, Setting, WarningFilled, Moon, Sunny } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@/stores'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
 import SettingsModal from '@/components/SettingsModal.vue'
+import WsButton from '@/components/ui/WsButton.vue'
+import WsInput from '@/components/ui/WsInput.vue'
+import WsSelect from '@/components/ui/WsSelect.vue'
+import WsBadge from '@/components/ui/WsBadge.vue'
+import WsModal from '@/components/ui/WsModal.vue'
+import WsEmpty from '@/components/ui/WsEmpty.vue'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
+
+// 主题
+const theme = ref<'light' | 'dark'>('light')
 
 // 状态
 const showCreateDialog = ref(false)
@@ -28,6 +37,7 @@ interface HomePreferences {
   statusFilter: 'all' | 'active' | 'archived' | 'error'
   sortBy: 'updatedAt' | 'createdAt'
   sortOrder: 'desc' | 'asc'
+  theme: 'light' | 'dark'
 }
 
 // 加载本地偏好
@@ -40,7 +50,7 @@ function loadPreferences(): HomePreferences {
   } catch {
     // 忽略解析错误
   }
-  return { statusFilter: 'all', sortBy: 'updatedAt', sortOrder: 'desc' }
+  return { statusFilter: 'all', sortBy: 'updatedAt', sortOrder: 'desc', theme: 'light' }
 }
 
 // 保存本地偏好
@@ -49,6 +59,7 @@ function savePreferences() {
     statusFilter: statusFilter.value,
     sortBy: sortBy.value,
     sortOrder: sortOrder.value,
+    theme: theme.value,
   }
   localStorage.setItem(PREFERENCES_KEY, JSON.stringify(prefs))
 }
@@ -59,12 +70,22 @@ const statusFilter = ref<'all' | 'active' | 'archived' | 'error'>(savedPrefs.sta
 const searchQuery = ref('')
 const sortBy = ref<'updatedAt' | 'createdAt'>(savedPrefs.sortBy)
 const sortOrder = ref<'desc' | 'asc'>(savedPrefs.sortOrder)
+theme.value = savedPrefs.theme
 
 // 开发信息
 const devInfo = ref<DevInfoResult | null>(null)
 
+// 主题切换
+function toggleTheme() {
+  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  document.documentElement.setAttribute('data-theme', theme.value)
+}
+
 // 加载工作区列表和开发信息
 onMounted(async () => {
+  // 应用保存的主题
+  document.documentElement.setAttribute('data-theme', theme.value)
+
   try {
     await workspaceStore.fetchWorkspaces('all')
   } catch {
@@ -80,7 +101,7 @@ onMounted(async () => {
 })
 
 // 监听偏好变化并自动保存
-watch([statusFilter, sortBy, sortOrder], () => {
+watch([statusFilter, sortBy, sortOrder, theme], () => {
   savePreferences()
 })
 
@@ -219,74 +240,108 @@ function getShortPath(fullPath: string): string {
 function toggleSortOrder() {
   sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
 }
+
+// Select 组件的选项
+const sortOptions = [
+  { label: '更新时间', value: 'updatedAt' },
+  { label: '创建时间', value: 'createdAt' }
+]
 </script>
 
 <template>
   <div class="home-view">
     <!-- 头部 -->
     <header class="header">
-      <h1>TanmiWorkspace</h1>
+      <div class="logo">TanmiWorkspace</div>
       <div class="header-actions">
-        <el-button :icon="Setting" @click="showSettingsModal = true" title="设置">
+        <WsButton variant="icon" @click="toggleTheme" :title="theme === 'light' ? '切换到深色模式' : '切换到浅色模式'" class="theme-toggle">
+          <Moon v-if="theme === 'light'" style="width: 18px; height: 18px;" />
+          <Sunny v-else style="width: 18px; height: 18px;" />
+        </WsButton>
+        <WsButton variant="secondary" @click="showSettingsModal = true">
+          <Setting style="width: 16px; height: 16px;" />
           设置
-        </el-button>
-        <el-button type="primary" :icon="Plus" @click="showCreateDialog = true">
+        </WsButton>
+        <WsButton variant="primary" @click="showCreateDialog = true">
+          <Plus style="width: 16px; height: 16px;" />
           新建工作区
-        </el-button>
+        </WsButton>
       </div>
     </header>
 
     <!-- 筛选栏 -->
     <div class="filter-bar">
       <div class="filter-left">
-        <el-radio-group v-model="statusFilter" size="small">
-          <el-radio-button value="all">全部</el-radio-button>
-          <el-radio-button value="active">活跃</el-radio-button>
-          <el-radio-button value="archived">已归档</el-radio-button>
-          <el-radio-button value="error">错误</el-radio-button>
-        </el-radio-group>
-        <el-input
+        <div class="tabs">
+          <button
+            class="tab"
+            :class="{ active: statusFilter === 'all' }"
+            @click="statusFilter = 'all'"
+          >
+            全部
+          </button>
+          <button
+            class="tab"
+            :class="{ active: statusFilter === 'active' }"
+            @click="statusFilter = 'active'"
+          >
+            活跃
+          </button>
+          <button
+            class="tab"
+            :class="{ active: statusFilter === 'archived' }"
+            @click="statusFilter = 'archived'"
+          >
+            已归档
+          </button>
+          <button
+            class="tab"
+            :class="{ active: statusFilter === 'error' }"
+            @click="statusFilter = 'error'"
+          >
+            错误
+          </button>
+        </div>
+        <WsInput
           v-model="searchQuery"
           placeholder="搜索名称或路径..."
-          :prefix-icon="Search"
-          clearable
-          size="small"
-          class="search-input"
+          class="search-input-wrapper"
         />
       </div>
       <div class="filter-right">
-        <el-select v-model="sortBy" size="small" class="sort-select">
-          <el-option value="updatedAt" label="更新时间" />
-          <el-option value="createdAt" label="创建时间" />
-        </el-select>
-        <el-button size="small" :icon="Sort" @click="toggleSortOrder" :title="sortOrder === 'desc' ? '降序' : '升序'">
+        <WsSelect
+          v-model="sortBy"
+          :options="sortOptions"
+          class="sort-select"
+        />
+        <WsButton variant="icon" @click="toggleSortOrder" :title="sortOrder === 'desc' ? '降序' : '升序'">
+          <Sort style="width: 16px; height: 16px;" />
           {{ sortOrder === 'desc' ? '↓' : '↑' }}
-        </el-button>
+        </WsButton>
       </div>
     </div>
 
     <!-- 工作区列表 -->
     <div class="workspace-list" v-loading="workspaceStore.loading">
-      <el-empty v-if="filteredWorkspaces.length === 0" :description="searchQuery ? '没有匹配的工作区' : '暂无工作区'" />
+      <WsEmpty
+        v-if="filteredWorkspaces.length === 0"
+        :title="searchQuery ? '没有匹配的工作区' : '暂无工作区'"
+      />
       <div v-else class="workspace-grid">
-        <el-card
+        <div
           v-for="ws in filteredWorkspaces"
           :key="ws.id"
-          class="workspace-card"
+          class="card"
           :class="{ 'error-card': ws.status === 'error' }"
-          shadow="hover"
         >
-          <template #header>
-            <div class="card-header">
-              <span class="name">{{ ws.name }}</span>
-              <el-tag
-                :type="ws.status === 'active' ? 'success' : ws.status === 'error' ? 'danger' : 'info'"
-                size="small"
-              >
-                {{ ws.status === 'active' ? '活跃' : ws.status === 'error' ? '错误' : '已归档' }}
-              </el-tag>
-            </div>
-          </template>
+          <div class="card-header">
+            <span class="name">{{ ws.name }}</span>
+            <WsBadge
+              :variant="ws.status === 'active' ? 'active' : ws.status === 'error' ? 'error' : 'archived'"
+            >
+              {{ ws.status === 'active' ? '活跃' : ws.status === 'error' ? '错误' : '已归档' }}
+            </WsBadge>
+          </div>
           <div class="card-body">
             <div class="project-path" :title="ws.projectRoot">
               {{ getShortPath(ws.projectRoot) }}
@@ -296,50 +351,54 @@ function toggleSortOrder() {
               <span>更新于 {{ formatTime(ws.updatedAt) }}</span>
             </div>
           </div>
-          <div class="card-actions">
+          <div class="card-footer">
             <!-- 错误状态的工作区 -->
             <template v-if="ws.status === 'error'">
-              <el-button type="warning" text :icon="WarningFilled" @click="showErrorInfo(ws)">
+              <WsButton variant="accent" size="sm" @click="showErrorInfo(ws)">
+                <WarningFilled style="width: 14px; height: 14px;" />
                 查看错误
-              </el-button>
-              <el-button type="danger" text :icon="Delete" @click="handleDelete(ws.id, ws.name)">
+              </WsButton>
+              <WsButton variant="danger" size="sm" @click="handleDelete(ws.id, ws.name)">
+                <Delete style="width: 14px; height: 14px;" />
                 删除
-              </el-button>
+              </WsButton>
             </template>
             <!-- 正常状态的工作区 -->
             <template v-else>
-              <el-button type="primary" text :icon="ArrowRight" @click="handleEnter(ws)">
+              <WsButton variant="ghost" size="sm" @click="handleEnter(ws)">
+                <ArrowRight style="width: 14px; height: 14px;" />
                 进入
-              </el-button>
-              <el-button
+              </WsButton>
+              <WsButton
                 v-if="ws.status === 'active'"
-                type="info"
-                text
-                :icon="Box"
+                variant="ghost"
+                size="sm"
                 @click="handleArchive(ws.id, ws.name)"
               >
+                <Box style="width: 14px; height: 14px;" />
                 归档
-              </el-button>
-              <el-button
+              </WsButton>
+              <WsButton
                 v-else
-                type="success"
-                text
-                :icon="RefreshRight"
+                variant="accent"
+                size="sm"
                 @click="handleRestore(ws.id, ws.name)"
               >
+                <RefreshRight style="width: 14px; height: 14px;" />
                 恢复
-              </el-button>
-              <el-button type="danger" text :icon="Delete" @click="handleDelete(ws.id, ws.name)">
+              </WsButton>
+              <WsButton variant="danger" size="sm" @click="handleDelete(ws.id, ws.name)">
+                <Delete style="width: 14px; height: 14px;" />
                 删除
-              </el-button>
+              </WsButton>
             </template>
           </div>
-        </el-card>
+        </div>
       </div>
     </div>
 
     <!-- 创建对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新建工作区" width="500px">
+    <WsModal v-model="showCreateDialog" title="新建工作区">
       <el-form :model="createForm" label-width="80px">
         <el-form-item label="名称" required>
           <el-input v-model="createForm.name" placeholder="输入工作区名称" />
@@ -354,12 +413,12 @@ function toggleSortOrder() {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate" :loading="workspaceStore.loading">
+        <WsButton variant="secondary" @click="showCreateDialog = false">取消</WsButton>
+        <WsButton variant="primary" @click="handleCreate" :disabled="workspaceStore.loading">
           创建
-        </el-button>
+        </WsButton>
       </template>
-    </el-dialog>
+    </WsModal>
 
     <!-- 设置弹窗 -->
     <SettingsModal v-model:visible="showSettingsModal" />
@@ -376,18 +435,28 @@ function toggleSortOrder() {
   padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
+  min-height: 100vh;
+  background: var(--bg-color);
 }
 
+/* Header */
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  padding: 16px 0;
+  position: sticky;
+  top: 0;
+  background: var(--bg-color);
+  z-index: 10;
 }
 
-.header h1 {
-  margin: 0;
+.logo {
   font-size: 24px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.5px;
 }
 
 .header-actions {
@@ -396,20 +465,28 @@ function toggleSortOrder() {
   align-items: center;
 }
 
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Filter Bar */
 .filter-bar {
-  margin-bottom: 16px;
+  margin-bottom: 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 16px;
 }
 
 .filter-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
+  flex: 1;
 }
 
 .filter-right {
@@ -418,69 +495,122 @@ function toggleSortOrder() {
   gap: 8px;
 }
 
-.search-input {
-  width: 220px;
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px;
 }
 
+.tab {
+  padding: 6px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab:hover {
+  background: var(--bg-color);
+  color: var(--text-main);
+}
+
+.tab.active {
+  background: var(--border-heavy);
+  color: var(--card-bg);
+}
+
+/* Search Input */
+.search-input-wrapper {
+  width: 240px;
+}
+
+/* Sort Select */
 .sort-select {
-  width: 110px;
+  width: 130px;
 }
 
+/* Workspace Grid */
 .workspace-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
 }
 
-.workspace-card {
+/* Card */
+.card {
+  background: var(--card-bg);
+  border: 2px solid var(--border-heavy);
+  border-radius: 8px;
+  padding: 20px;
   cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.1);
 }
 
-.workspace-card.error-card {
-  border-color: #F56C6C;
-  background: linear-gradient(135deg, #fff 0%, #fef0f0 100%);
+.card:hover {
+  transform: translate(-4px, -4px);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.15);
 }
 
-.workspace-card.error-card:hover {
-  border-color: #f56c6c;
+[data-theme="dark"] .card:hover {
+  box-shadow: 8px 8px 0 rgba(255, 255, 255, 0.1);
+}
+
+.card.error-card {
+  border-color: var(--accent-red);
+  background: var(--card-bg);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 16px;
 }
 
 .card-header .name {
   font-weight: 600;
   font-size: 16px;
+  color: var(--text-main);
 }
 
 .card-body .project-path {
-  color: #606266;
+  color: var(--text-secondary);
   font-size: 12px;
-  font-family: 'Monaco', 'Menlo', monospace;
-  background: #f5f7fa;
-  padding: 4px 8px;
+  font-family: var(--mono-font);
+  background: var(--bg-color);
+  padding: 6px 10px;
   border-radius: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border: 1px solid var(--border-color);
 }
 
 .card-body .meta {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  color: #909399;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
-.card-actions {
-  margin-top: 12px;
+.card-footer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* 开发模式标识 */
@@ -494,7 +624,7 @@ function toggleSortOrder() {
   border-radius: 4px;
   font-size: 10px;
   font-weight: bold;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: var(--mono-font);
   letter-spacing: 1px;
   z-index: 9999;
   cursor: default;

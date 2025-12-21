@@ -5,7 +5,7 @@ import { useNodeStore, useWorkspaceStore } from '@/stores'
 import { STATUS_CONFIG, NODE_TYPE_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type TransitionAction } from '@/types'
 import StatusIcon from '@/components/common/StatusIcon.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
-import LogTimeline from '@/components/log/LogTimeline.vue'
+import WsButton from '@/components/ui/WsButton.vue'
 
 const nodeStore = useNodeStore()
 const workspaceStore = useWorkspaceStore()
@@ -36,49 +36,49 @@ const availableActions = computed(() => {
   const type = nodeMeta.value?.type
   if (!status || !type) return []
 
-  const actions: { action: TransitionAction; label: string; type: 'primary' | 'success' | 'danger' | 'warning' | 'default' }[] = []
+  const actions: { action: TransitionAction; label: string; variant: 'primary' | 'secondary' | 'accent' | 'danger' }[] = []
 
   if (type === 'execution') {
     // 执行节点状态转换
     switch (status) {
       case 'pending':
-        actions.push({ action: 'start', label: '开始执行', type: 'primary' })
+        actions.push({ action: 'start', label: '开始执行', variant: 'primary' })
         break
       case 'implementing':
-        actions.push({ action: 'submit', label: '提交验证', type: 'warning' })
-        actions.push({ action: 'complete', label: '直接完成', type: 'success' })
-        actions.push({ action: 'fail', label: '标记失败', type: 'danger' })
+        actions.push({ action: 'submit', label: '提交验证', variant: 'accent' })
+        actions.push({ action: 'complete', label: '直接完成', variant: 'primary' })
+        actions.push({ action: 'fail', label: '标记失败', variant: 'danger' })
         break
       case 'validating':
-        actions.push({ action: 'complete', label: '验证通过', type: 'success' })
-        actions.push({ action: 'fail', label: '验证失败', type: 'danger' })
+        actions.push({ action: 'complete', label: '验证通过', variant: 'primary' })
+        actions.push({ action: 'fail', label: '验证失败', variant: 'danger' })
         break
       case 'failed':
-        actions.push({ action: 'retry', label: '重试', type: 'primary' })
+        actions.push({ action: 'retry', label: '重试', variant: 'primary' })
         break
       case 'completed':
-        actions.push({ action: 'reopen', label: '重新激活', type: 'warning' })
+        actions.push({ action: 'reopen', label: '重新激活', variant: 'secondary' })
         break
     }
   } else {
     // 规划节点状态转换
     switch (status) {
       case 'pending':
-        actions.push({ action: 'start', label: '开始规划', type: 'primary' })
+        actions.push({ action: 'start', label: '开始规划', variant: 'primary' })
         break
       case 'planning':
-        actions.push({ action: 'complete', label: '完成规划', type: 'success' })
-        actions.push({ action: 'cancel', label: '取消', type: 'danger' })
+        actions.push({ action: 'complete', label: '完成规划', variant: 'primary' })
+        actions.push({ action: 'cancel', label: '取消', variant: 'danger' })
         break
       case 'monitoring':
-        actions.push({ action: 'complete', label: '汇总完成', type: 'success' })
-        actions.push({ action: 'cancel', label: '取消', type: 'danger' })
+        actions.push({ action: 'complete', label: '汇总完成', variant: 'primary' })
+        actions.push({ action: 'cancel', label: '取消', variant: 'danger' })
         break
       case 'completed':
-        actions.push({ action: 'reopen', label: '重新激活', type: 'warning' })
+        actions.push({ action: 'reopen', label: '重新激活', variant: 'secondary' })
         break
       case 'cancelled':
-        actions.push({ action: 'reopen', label: '重新激活', type: 'warning' })
+        actions.push({ action: 'reopen', label: '重新激活', variant: 'secondary' })
         break
     }
   }
@@ -133,408 +133,619 @@ async function handleDelete() {
   }
 }
 
-// 格式化时间
-function formatTime(isoString: string) {
-  const date = new Date(isoString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+// 获取操作者类名
+function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
+  if (operator === 'AI') return 'ai'
+  if (operator === 'Human') return 'usr'
+  return 'sys'
 }
 </script>
 
 <template>
-  <div class="node-detail" v-if="nodeMeta && currentNode">
-    <!-- 节点标题和状态 -->
+  <div class="node-detail-panel" v-if="nodeMeta && currentNode">
+    <!-- 头部区 -->
     <div class="detail-header">
-      <div class="title-row">
+      <div class="header-title-row">
         <StatusIcon :status="nodeMeta.status" :size="20" />
         <h3>{{ currentNode.title }}</h3>
       </div>
       <div class="header-badges">
-        <el-tag
-          :color="NODE_TYPE_CONFIG[nodeType].color"
-          effect="dark"
-          size="small"
-        >
+        <span class="status-badge" :data-type="nodeType">
           {{ NODE_TYPE_CONFIG[nodeType].label }}
-        </el-tag>
-        <el-tag :color="STATUS_CONFIG[nodeMeta.status].color" effect="dark" size="small">
+        </span>
+        <span class="status-badge" :data-status="nodeMeta.status">
           {{ STATUS_CONFIG[nodeMeta.status].label }}
-        </el-tag>
-        <el-tag
+        </span>
+        <span
           v-if="roleConfig"
-          :color="roleConfig.color"
-          effect="dark"
-          size="small"
+          class="status-badge"
           :title="roleConfig.description"
         >
           {{ roleConfig.emoji }} {{ roleConfig.label }}
-        </el-tag>
+        </span>
       </div>
     </div>
 
-    <!-- 节点属性 -->
-    <div class="node-properties">
-      <div class="property-item">
-        <span class="property-label">ID:</span>
-        <span class="property-value">{{ nodeMeta.id }}</span>
-      </div>
-      <div class="property-item">
-        <span class="property-label">创建时间:</span>
-        <span class="property-value">{{ formatTime(nodeMeta.createdAt) }}</span>
-      </div>
-      <div class="property-item">
-        <span class="property-label">更新时间:</span>
-        <span class="property-value">{{ formatTime(nodeMeta.updatedAt) }}</span>
-      </div>
-      <div class="property-item" v-if="nodeMeta.isolate">
-        <span class="property-label">隔离:</span>
-        <el-tag type="warning" size="small">已隔离</el-tag>
+    <!-- 节点ID -->
+    <div class="detail-section">
+      <div class="node-id">
+        <span class="id-label">ID:</span>
+        <span class="id-value">{{ nodeMeta.id }}</span>
       </div>
     </div>
 
     <!-- 派发信息 -->
-    <el-card v-if="dispatchInfo && dispatchConfig" class="section-card dispatch-card">
-      <template #header>
-        <div class="dispatch-header">
-          <span>派发信息</span>
-          <el-tag
-            :color="dispatchConfig.bgColor"
-            :style="{ color: dispatchConfig.color, borderColor: dispatchConfig.color }"
-            size="small"
-          >
+    <div v-if="dispatchInfo && dispatchConfig" class="detail-section">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">派发信息</div>
+          <span class="dispatch-status-badge" :data-status="dispatchInfo.status">
             {{ dispatchConfig.emoji }} {{ dispatchConfig.label }}
-          </el-tag>
-        </div>
-      </template>
-      <div class="dispatch-content">
-        <div class="dispatch-item">
-          <span class="dispatch-label">派发状态:</span>
-          <span class="dispatch-value" :style="{ color: dispatchConfig.color }">
-            {{ dispatchConfig.description }}
           </span>
         </div>
-        <div class="dispatch-item">
-          <span class="dispatch-label">开始标记:</span>
-          <span class="dispatch-value dispatch-marker">{{ dispatchInfo.startMarker }}</span>
+        <div class="panel-body">
+          <div class="dispatch-info">
+            <div class="dispatch-row">
+              <span class="dispatch-label">派发状态:</span>
+              <span class="dispatch-value">{{ dispatchConfig.description }}</span>
+            </div>
+            <div class="dispatch-row">
+              <span class="dispatch-label">开始标记:</span>
+              <span class="dispatch-marker">{{ dispatchInfo.startMarker }}</span>
+            </div>
+            <div class="dispatch-row" v-if="dispatchInfo.endMarker">
+              <span class="dispatch-label">结束标记:</span>
+              <span class="dispatch-marker">{{ dispatchInfo.endMarker }}</span>
+            </div>
+          </div>
         </div>
-        <div class="dispatch-item" v-if="dispatchInfo.endMarker">
-          <span class="dispatch-label">结束标记:</span>
-          <span class="dispatch-value dispatch-marker">{{ dispatchInfo.endMarker }}</span>
-        </div>
-      </div>
-    </el-card>
-
-    <!-- 操作按钮 -->
-    <div class="action-bar">
-      <el-button-group>
-        <el-button
-          v-for="action in availableActions"
-          :key="action.action"
-          :type="action.type"
-          size="small"
-          @click="handleTransition(action.action)"
-        >
-          {{ action.label }}
-        </el-button>
-      </el-button-group>
-      <div class="extra-actions">
-        <el-button size="small" @click="handleSetFocus" :disabled="workspaceStore.currentFocus === nodeMeta.id">
-          设为焦点
-        </el-button>
-        <el-button size="small" type="danger" @click="handleDelete" :disabled="nodeMeta.id === 'root'">
-          删除
-        </el-button>
       </div>
     </div>
 
     <!-- 需求描述 -->
-    <el-card class="section-card">
-      <template #header>
-        <span>需求描述</span>
-      </template>
-      <MarkdownContent :content="currentNode.requirement || '暂无描述'" />
-    </el-card>
-
-    <!-- 文档引用 -->
-    <el-card v-if="currentNode.docs?.length" class="section-card docs-card">
-      <template #header>
-        <span>文档引用</span>
-      </template>
-      <ul class="doc-list">
-        <li v-for="doc in currentNode.docs" :key="doc.path" class="doc-item">
-          <span class="doc-path">{{ doc.path }}</span>
-          <span class="doc-desc">{{ doc.description }}</span>
-          <el-tag v-if="doc.status === 'expired'" type="info" size="small">已过期</el-tag>
-        </li>
-      </ul>
-    </el-card>
-
-    <!-- 备注 -->
-    <el-card v-if="currentNode.note" class="section-card">
-      <template #header>
-        <span>备注</span>
-      </template>
-      <MarkdownContent :content="currentNode.note" />
-    </el-card>
-
-    <!-- 结论（已完成节点） -->
-    <el-card v-if="nodeMeta.conclusion" class="section-card">
-      <template #header>
-        <span>结论</span>
-      </template>
-      <MarkdownContent :content="nodeMeta.conclusion" />
-    </el-card>
-
-    <!-- 当前问题 -->
-    <el-card v-if="currentNode.problem" class="section-card problem-card">
-      <template #header>
-        <span>当前问题</span>
-      </template>
-      <MarkdownContent :content="currentNode.problem" />
-    </el-card>
-
-    <!-- 日志时间线 -->
-    <el-card class="section-card">
-      <template #header>
-        <span>执行日志</span>
-      </template>
-      <LogTimeline :entries="currentNode.logEntries || []" />
-    </el-card>
-
-    <!-- 子节点结论（仅规划节点显示） -->
-    <el-card v-if="isPlanning && context?.childConclusions?.length" class="section-card">
-      <template #header>
-        <span>子节点结论</span>
-      </template>
-      <div class="child-conclusions">
-        <div
-          v-for="child in context.childConclusions"
-          :key="child.nodeId"
-          class="child-item"
-        >
-          <div class="child-header">
-            <StatusIcon :status="child.status" :size="14" />
-            <span class="child-title">{{ child.title }}</span>
+    <div class="detail-section">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">需求描述</div>
+        </div>
+        <div class="panel-body">
+          <div class="note-box">
+            <MarkdownContent :content="currentNode.requirement || '暂无描述'" />
           </div>
-          <div class="child-conclusion">{{ child.conclusion }}</div>
         </div>
       </div>
-    </el-card>
+    </div>
+
+    <!-- 文档引用 -->
+    <div v-if="currentNode.docs?.length" class="detail-section">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">文档引用</div>
+        </div>
+        <div class="panel-body">
+          <div class="docs-list">
+            <div v-for="doc in currentNode.docs" :key="doc.path" class="docs-item">
+              <span class="docs-path">{{ doc.path }}</span>
+              <span class="docs-desc">{{ doc.description }}</span>
+              <span v-if="doc.status === 'expired'" class="docs-expired">已过期</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 备注 -->
+    <div v-if="currentNode.note" class="detail-section">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">备注</div>
+        </div>
+        <div class="panel-body">
+          <div class="note-box">
+            <MarkdownContent :content="currentNode.note" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 当前问题 -->
+    <div v-if="currentNode.problem" class="detail-section">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">当前问题</div>
+        </div>
+        <div class="panel-body">
+          <div class="problem-box">
+            <div class="problem-title">WARNING</div>
+            <MarkdownContent :content="currentNode.problem" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 结论（已完成节点） -->
+    <div v-if="nodeMeta.conclusion" class="detail-section">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">结论</div>
+        </div>
+        <div class="panel-body">
+          <div class="conclusion-box">
+            <MarkdownContent :content="nodeMeta.conclusion" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 执行日志 -->
+    <div class="detail-section">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">执行日志</div>
+        </div>
+        <div class="panel-body">
+          <div class="log-container" v-if="currentNode.logEntries?.length">
+            <div v-for="(entry, index) in currentNode.logEntries" :key="index" class="log-item">
+              <span class="log-time">{{ entry.timestamp }}</span>
+              <span class="log-operator" :class="getOperatorClass(entry.operator)">
+                {{ entry.operator }}
+              </span>
+              <span class="log-content">{{ entry.event }}</span>
+            </div>
+          </div>
+          <div v-else class="log-empty">暂无日志</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 子节点结论（仅规划节点显示） -->
+    <div v-if="isPlanning && context?.childConclusions?.length" class="detail-section">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">子节点结论</div>
+        </div>
+        <div class="panel-body">
+          <div class="child-conclusions">
+            <div
+              v-for="child in context.childConclusions"
+              :key="child.nodeId"
+              class="child-conclusion-item"
+            >
+              <div class="child-conclusion-header">
+                <StatusIcon :status="child.status" :size="14" />
+                <span class="child-conclusion-title">{{ child.title }}</span>
+              </div>
+              <div class="child-conclusion-content">{{ child.conclusion }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 操作按钮区 -->
+    <div class="action-bar">
+      <div class="action-group">
+        <WsButton
+          v-for="action in availableActions"
+          :key="action.action"
+          :variant="action.variant"
+          size="sm"
+          @click="handleTransition(action.action)"
+        >
+          {{ action.label }}
+        </WsButton>
+      </div>
+      <div class="action-group">
+        <WsButton
+          variant="secondary"
+          size="sm"
+          @click="handleSetFocus"
+          :disabled="workspaceStore.currentFocus === nodeMeta.id"
+        >
+          设为焦点
+        </WsButton>
+        <WsButton
+          variant="danger"
+          size="sm"
+          @click="handleDelete"
+          :disabled="nodeMeta.id === 'root'"
+        >
+          删除
+        </WsButton>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.node-detail {
+.node-detail-panel {
   width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
 }
 
+/* 头部区 */
 .detail-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.header-title-row {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.title-row h3 {
+.header-title-row h3 {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-main);
 }
 
 .header-badges {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
-.node-properties {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 12px;
-  background: #f5f7fa;
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
   border-radius: 4px;
-  margin-bottom: 16px;
-  font-size: 13px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--border-heavy);
+  color: var(--card-bg);
 }
 
-.property-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+/* 内容区块 */
+.detail-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.property-label {
-  color: #909399;
-}
-
-.property-value {
-  color: #606266;
-  font-family: monospace;
-}
-
-.action-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.extra-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.section-card {
-  margin-bottom: 16px;
-}
-
-.section-card :deep(.el-card__header) {
-  padding: 12px 16px;
-  font-weight: 600;
-  font-size: 14px;
-  color: #303133;
-}
-
-
-.problem-card {
-  border-color: #e6a23c;
-}
-
-.problem-card :deep(.el-card__header) {
-  background: #fdf6ec;
-  color: #e6a23c;
-}
-
-.child-conclusions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.child-item {
-  padding: 10px 12px;
-  background: #f5f7fa;
-  border-radius: 6px;
-  border-left: 3px solid #409eff;
-}
-
-.child-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.child-title {
-  font-weight: 600;
-  font-size: 13px;
-  color: #303133;
-}
-
-.child-conclusion {
-  font-size: 13px;
-  color: #606266;
-  line-height: 1.5;
-  padding-left: 20px;
-}
-
-.docs-card :deep(.el-card__header) {
-  background: #f0f9ff;
-  color: #409eff;
-}
-
-.doc-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.doc-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.doc-item:last-child {
+.detail-section:last-child {
   border-bottom: none;
 }
 
-.doc-path {
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 13px;
-  color: #409eff;
-  background: #f5f7fa;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.doc-desc {
-  font-size: 13px;
-  color: #606266;
-  flex: 1;
-}
-
-/* 派发信息卡片 */
-.dispatch-card {
-  border-color: #409eff;
-}
-
-.dispatch-card :deep(.el-card__header) {
-  background: #ecf5ff;
-  padding: 10px 16px;
-}
-
-.dispatch-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 600;
-  font-size: 14px;
-  color: #409eff;
-}
-
-.dispatch-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.dispatch-item {
+/* 节点ID */
+.node-id {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 13px;
+}
+
+.id-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.id-value {
+  font-family: var(--mono-font), monospace;
+  color: var(--text-secondary);
+}
+
+/* 面板容器 */
+.panel-section {
+  background: var(--card-bg);
+  border: 2px solid var(--border-heavy);
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.1);
+}
+
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-main);
+}
+
+.panel-title::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  background: var(--accent-red);
+}
+
+.panel-body {
+  padding: 0;
+}
+
+/* 派发信息 */
+.dispatch-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #ecf5ff;
+  color: #409eff;
+}
+
+.dispatch-info {
+  padding: 16px;
+}
+
+.dispatch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dispatch-row:last-child {
+  margin-bottom: 0;
 }
 
 .dispatch-label {
-  color: #909399;
+  color: var(--text-muted);
   font-size: 13px;
   min-width: 80px;
 }
 
 .dispatch-value {
-  color: #606266;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
 .dispatch-marker {
-  font-family: 'Monaco', 'Menlo', monospace;
-  background: #f5f7fa;
+  font-family: var(--mono-font), monospace;
+  background: #fafafa;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 12px;
+  color: var(--text-main);
+}
+
+[data-theme="dark"] .dispatch-marker {
+  background: #333;
+}
+
+/* 备注框 */
+.note-box {
+  background: #fafafa;
+  border-left: 4px solid #999;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .note-box {
+  background: #1a1a1a;
+}
+
+/* 文档列表 */
+.docs-list {
+  background: #fafafa;
+  border-left: 4px solid var(--accent-blue);
+}
+
+[data-theme="dark"] .docs-list {
+  background: #1a1a1a;
+}
+
+.docs-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+[data-theme="dark"] .docs-item {
+  border-bottom: 1px solid #333;
+}
+
+.docs-item:last-child {
+  border-bottom: none;
+}
+
+.docs-path {
+  font-family: var(--mono-font), monospace;
+  font-size: 12px;
+  color: var(--accent-blue);
+}
+
+.docs-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.docs-expired {
+  font-size: 10px;
+  color: var(--accent-red);
+  background: #fff5f5;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+[data-theme="dark"] .docs-expired {
+  background: #331111;
+}
+
+/* 问题框 */
+.problem-box {
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  padding: 16px;
+}
+
+[data-theme="dark"] .problem-box {
+  background: #332a0a;
+  border-color: #f59e0b;
+}
+
+.problem-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b45309;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* 结论框 */
+.conclusion-box {
+  background: #fafafa;
+  border-left: 4px solid var(--border-heavy);
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
+[data-theme="dark"] .conclusion-box {
+  background: #1a1a1a;
+}
+
+/* 日志容器 */
+.log-container {
+  background: #fafafa;
+  border-left: 4px solid var(--border-heavy);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+[data-theme="dark"] .log-container {
+  background: #1a1a1a;
+}
+
+.log-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+[data-theme="dark"] .log-item {
+  border-bottom: 1px solid #333;
+}
+
+.log-item:last-child {
+  border-bottom: none;
+}
+
+.log-time {
+  font-family: var(--mono-font), monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.log-operator {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  border-radius: 2px;
+}
+
+.log-operator.ai {
+  background: #111;
+  color: #fff;
+}
+
+.log-operator.usr {
+  background: #22c55e;
+  color: #fff;
+}
+
+.log-operator.sys {
+  background: #999;
+  color: #fff;
+}
+
+.log-content {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-main);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* 子节点结论 */
+.child-conclusions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.child-conclusion-item {
+  background: #fafafa;
+  border-left: 4px solid #999;
+  padding: 12px 16px;
+}
+
+[data-theme="dark"] .child-conclusion-item {
+  background: #1a1a1a;
+}
+
+.child-conclusion-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.child-conclusion-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.child-conclusion-content {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding-left: 22px;
+}
+
+/* 操作按钮区 */
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #fafafa;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+[data-theme="dark"] .action-bar {
+  background: #1a1a1a;
+}
+
+.action-group {
+  display: flex;
+  gap: 8px;
 }
 </style>
