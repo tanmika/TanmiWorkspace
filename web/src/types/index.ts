@@ -438,19 +438,19 @@ export interface NodeRoleConfig {
 
 export const NODE_ROLE_CONFIG: Record<NodeRole, NodeRoleConfig> = {
   info_collection: {
-    label: '信息收集',
+    label: 'INFO',
     color: '#E6A23C',
     emoji: '📋',
     description: '收集项目信息，完成时自动归档规则和文档到工作区',
   },
   validation: {
-    label: '验证',
+    label: 'VALID',
     color: '#67C23A',
     emoji: '✔️',
     description: '验证类任务（预留）',
   },
   summary: {
-    label: '汇总',
+    label: 'SUMM',
     color: '#909399',
     emoji: '📝',
     description: '汇总类任务（预留）',

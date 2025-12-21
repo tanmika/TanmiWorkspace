@@ -335,13 +335,17 @@ async function handleDispatchSuccess() {
         </div>
         <div class="info-item info-progress">
           <span class="info-label">Progress / 进度</span>
-          <div class="info-value">
-            <div class="progress-track">
-              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
-            </div>
-            <span class="progress-text">
-              {{ workspaceStore.currentStatus.completedNodes }}/{{ workspaceStore.currentStatus.totalNodes }}
+          <div class="info-value progress-display">
+            <span class="progress-number">
+              <span class="progress-current">{{ workspaceStore.currentStatus.completedNodes }}</span>
+              <span class="progress-sep">/</span>
+              <span class="progress-total">{{ workspaceStore.currentStatus.totalNodes }}</span>
             </span>
+            <div class="progress-bar-wrapper">
+              <div class="progress-track">
+                <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="info-item">
@@ -780,16 +784,52 @@ async function handleDispatchSuccess() {
   text-overflow: ellipsis;
 }
 
-/* 进度条 */
-.progress-container {
+/* 进度条 - 构成主义风格 */
+.progress-display {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  position: relative;
+  min-width: 64px;
+  padding-bottom: 6px;
+}
+
+.progress-number {
+  display: flex;
+  align-items: baseline;
+  font-family: var(--mono-font);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.progress-current {
+  font-size: 18px;
+  color: var(--accent-red);
+}
+
+.progress-sep {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 1px;
+}
+
+.progress-total {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.progress-bar-wrapper {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
 }
 
 .progress-track {
-  width: 120px;
-  height: 8px;
+  width: 48px;
+  height: 3px;
   background: var(--border-color);
   overflow: hidden;
 }
@@ -863,11 +903,6 @@ async function handleDispatchSuccess() {
   font-size: 10px;
 }
 
-/* 进度文本 */
-.progress-text {
-  font-family: var(--mono-font);
-  font-size: 13px;
-}
 
 /* 引用标签 - outline 样式 */
 .tag-outline {
@@ -1203,6 +1238,8 @@ async function handleDispatchSuccess() {
   font-family: var(--mono-font);
   font-size: 12px;
   color: #3b82f6;
+  word-break: break-all;
+  line-height: 1.4;
 }
 
 .doc-desc {

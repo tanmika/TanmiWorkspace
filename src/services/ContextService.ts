@@ -114,22 +114,20 @@ export class ContextService {
       }
     }
 
-    // 6. 收集子节点结论（completed/failed 状态的直接子节点）
+    // 6. 收集所有直接子节点信息
     // 内容数据以 Info.md 为权威来源
     const childConclusions: ChildConclusionItem[] = [];
     for (const childId of nodeMeta.children) {
       const childMeta = graph.nodes[childId];
-      if (childMeta && (childMeta.status === "completed" || childMeta.status === "failed")) {
+      if (childMeta) {
         const childDirName = childMeta.dirName || childId;  // 向后兼容
         const childInfo = await this.md.readNodeInfo(projectRoot, wsDirName, childDirName, isArchived);
-        if (childInfo.conclusion) {
-          childConclusions.push({
-            nodeId: childId,
-            title: childInfo.title,
-            status: childMeta.status,
-            conclusion: childInfo.conclusion,
-          });
-        }
+        childConclusions.push({
+          nodeId: childId,
+          title: childInfo.title,
+          status: childMeta.status,
+          conclusion: childInfo.conclusion || "",
+        });
       }
     }
 
@@ -215,7 +213,7 @@ export class ContextService {
             return "💡 规划节点有子节点但仍在规划状态。如需继续添加子节点可继续创建，否则等待子节点 start 后进入 monitoring。" + docsWarning;
           }
         case "monitoring":
-          const completedCount = childConclusions.length;
+          const completedCount = childConclusions.filter(c => c.status === "completed" || c.status === "failed").length;
           const pendingChildren = childCount - completedCount;
           if (pendingChildren > 0) {
             return `💡 规划节点正在监控子节点。已完成 ${completedCount}/${childCount}，还有 ${pendingChildren} 个子节点待完成。`;

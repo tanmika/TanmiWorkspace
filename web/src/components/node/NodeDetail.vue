@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useNodeStore, useWorkspaceStore } from '@/stores'
 import { STATUS_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type TransitionAction } from '@/types'
 import NodeIcon from '@/components/tree/NodeIcon.vue'
+import DispatchBadge from '@/components/tree/DispatchBadge.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsPromptDialog from '@/components/ui/WsPromptDialog.vue'
@@ -175,12 +176,15 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
         <span class="header-sep">·</span>
         <span class="header-title">{{ currentNode.title }}</span>
         <div class="header-badges">
+          <span class="type-badge" :data-type="nodeType">
+            {{ isPlanning ? 'PLAN' : 'EXEC' }}
+          </span>
           <span
             v-if="roleConfig"
             class="role-badge"
             :data-role="nodeRole"
           >
-            {{ roleConfig.label.toUpperCase() }}
+            {{ roleConfig.label }}
           </span>
           <span
             v-if="nodeMeta.isolate"
@@ -197,9 +201,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
     <div v-if="dispatchInfo && dispatchConfig" class="detail-section">
       <div class="section-title">
         <span>Dispatch / 派发信息</span>
-        <span class="dispatch-status-badge" :data-status="dispatchInfo.status">
-          {{ dispatchConfig.label.toUpperCase() }}
-        </span>
+        <DispatchBadge :status="dispatchInfo.status" />
       </div>
       <div class="dispatch-info">
         <div class="dispatch-row">
@@ -230,9 +232,11 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
       <div class="section-title">References / 文档引用</div>
       <div class="docs-list">
         <div v-for="doc in currentNode.docs" :key="doc.path" class="docs-item">
-          <span class="docs-path">{{ doc.path }}</span>
+          <div class="docs-main">
+            <span class="docs-path">{{ doc.path }}</span>
+            <span v-if="doc.status === 'expired'" class="docs-expired">EXPIRED</span>
+          </div>
           <span class="docs-desc">{{ doc.description }}</span>
-          <span v-if="doc.status === 'expired'" class="docs-expired">EXPIRED</span>
         </div>
       </div>
     </div>
@@ -273,12 +277,14 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
           v-for="child in context.childConclusions"
           :key="child.nodeId"
           class="child-conclusion-item"
+          :class="{ 'is-incomplete': !child.conclusion }"
         >
           <div class="child-conclusion-title">
-            <span class="child-node-icon" :data-status="child.status"></span>
+            <span class="child-node-icon" :data-status="child.status" :data-incomplete="!child.conclusion"></span>
             {{ child.title }}
           </div>
-          <div class="child-conclusion-content">{{ child.conclusion || '待执行...' }}</div>
+          <div v-if="child.conclusion" class="child-conclusion-content">{{ child.conclusion }}</div>
+          <div v-else class="child-conclusion-pending">-- waiting for completion --</div>
         </div>
       </div>
     </div>
@@ -430,6 +436,28 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   color: var(--text-muted);
 }
 
+/* 节点类型徽章 */
+.type-badge {
+  font-family: var(--mono-font), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  line-height: 1;
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.type-badge[data-type="execution"] {
+  background: var(--border-heavy);
+  color: #fff;
+}
+
+.type-badge[data-type="planning"] {
+  background: var(--accent-purple);
+  color: #fff;
+}
+
 /* 角色徽章 */
 .role-badge {
   font-family: var(--mono-font), monospace;
@@ -442,7 +470,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   letter-spacing: 0.5px;
 }
 
-.role-badge[data-role="info-collection"] {
+.role-badge[data-role="info_collection"] {
   background: var(--accent-orange);
   color: #000;
 }
@@ -573,16 +601,6 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 }
 
 /* 派发信息 */
-.dispatch-status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  background: var(--accent-blue);
-  color: #fff;
-}
-
 .dispatch-info {
   padding: 16px;
 }
@@ -648,8 +666,8 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 
 .docs-item {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   padding: 10px 16px;
   border-bottom: 1px solid #eee;
 }
@@ -662,16 +680,25 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   border-bottom: none;
 }
 
+.docs-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .docs-path {
   font-family: var(--mono-font), monospace;
   font-size: 12px;
   color: var(--accent-blue);
+  word-break: break-all;
+  line-height: 1.4;
 }
 
 .docs-desc {
   font-size: 12px;
   color: var(--text-muted);
-  flex: 1;
+  padding-left: 0;
 }
 
 .docs-expired {
@@ -679,6 +706,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   color: #000;
   background: var(--accent-orange);
   padding: 2px 6px;
+  flex-shrink: 0;
 }
 
 /* 问题框 */
@@ -839,6 +867,13 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   flex-shrink: 0;
 }
 
+/* 未完成节点：空心灰色 */
+.child-node-icon[data-incomplete="true"] {
+  background: transparent;
+  border-style: solid;
+  border-color: #999;
+}
+
 .child-node-icon[data-status="pending"] {
   background: transparent;
   border-style: dashed;
@@ -850,8 +885,18 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   border-color: var(--accent-blue);
 }
 
+.child-node-icon[data-status="implementing"][data-incomplete="true"] {
+  background: transparent;
+  border-color: var(--accent-blue);
+}
+
 .child-node-icon[data-status="validating"] {
   background: var(--accent-orange);
+  border-color: var(--accent-orange);
+}
+
+.child-node-icon[data-status="validating"][data-incomplete="true"] {
+  background: transparent;
   border-color: var(--accent-orange);
 }
 
@@ -860,11 +905,28 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   border-color: var(--accent-red);
 }
 
+.child-node-icon[data-status="failed"][data-incomplete="true"] {
+  background: transparent;
+  border-color: var(--accent-red);
+}
+
 .child-conclusion-content {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
   padding-left: 20px;
+}
+
+.child-conclusion-pending {
+  font-size: 11px;
+  font-family: var(--mono-font);
+  color: var(--text-muted);
+  font-style: italic;
+  padding-left: 20px;
+}
+
+.child-conclusion-item.is-incomplete {
+  opacity: 0.7;
 }
 
 /* 操作按钮区 - 固定底部 */
