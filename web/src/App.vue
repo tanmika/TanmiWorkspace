@@ -4,6 +4,7 @@ import { useServiceStore, useToastStore } from '@/stores'
 import ServiceUnavailable from '@/components/ServiceUnavailable.vue'
 import VersionUpdateNotification from '@/components/VersionUpdateNotification.vue'
 import ManualOperationToast from '@/components/ManualOperationToast.vue'
+import WsToastContainer from '@/components/ui/WsToastContainer.vue'
 
 const serviceStore = useServiceStore()
 const toastStore = useToastStore()
@@ -23,6 +24,7 @@ onMounted(() => {
       :visible="toastStore.showManualOperationToast"
       @close="toastStore.closeToast"
     />
+    <WsToastContainer />
   </el-config-provider>
 </template>
 

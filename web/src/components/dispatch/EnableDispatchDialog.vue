@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { useWorkspaceStore } from '@/stores'
+import { ref, watch } from 'vue'
+import { useWorkspaceStore, useToastStore } from '@/stores'
+import WsModal from '@/components/ui/WsModal.vue'
+import WsButton from '@/components/ui/WsButton.vue'
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean
 }>()
 
@@ -13,18 +14,26 @@ const emit = defineEmits<{
 }>()
 
 const workspaceStore = useWorkspaceStore()
+const toastStore = useToastStore()
 const useGit = ref(false)
 const loading = ref(false)
+
+// 重置选择
+watch(() => props.modelValue, (val) => {
+  if (val) {
+    useGit.value = false
+  }
+})
 
 async function handleEnable() {
   loading.value = true
   try {
     await workspaceStore.enableDispatch(useGit.value)
-    ElMessage.success('派发模式已启用')
+    toastStore.success('派发模式已启用')
     emit('success')
     emit('update:modelValue', false)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '启用派发失败')
+    toastStore.error('启用派发失败', error instanceof Error ? error.message : undefined)
   } finally {
     loading.value = false
   }
@@ -36,108 +45,128 @@ function handleClose() {
 </script>
 
 <template>
-  <el-dialog
+  <WsModal
     :model-value="modelValue"
     title="启用派发模式"
     width="500px"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="enable-dispatch-content">
-      <div class="mode-section">
-        <div class="section-label">选择模式</div>
-        <el-radio-group v-model="useGit" class="mode-options">
-          <el-radio :label="false" size="large">
-            <div class="mode-option">
-              <div class="mode-title">标准模式（无 Git）</div>
-              <div class="mode-desc">仅更新元数据，不影响代码</div>
-            </div>
-          </el-radio>
-          <el-radio :label="true" size="large">
-            <div class="mode-option">
-              <div class="mode-title">Git 模式（实验功能）</div>
-              <div class="mode-desc warning-text">自动创建分支、提交、回滚，可能影响 Git 历史</div>
-            </div>
-          </el-radio>
-        </el-radio-group>
+      <div class="section-label">选择模式：</div>
+
+      <div class="mode-options">
+        <div
+          class="card-option"
+          :class="{ selected: !useGit }"
+          @click="useGit = false"
+        >
+          <div class="card-option-title">
+            <span>标准模式 (无 Git)</span>
+          </div>
+          <div class="card-option-desc">
+            仅更新元数据，不影响代码。适合轻量级任务管理。
+          </div>
+        </div>
+
+        <div
+          class="card-option"
+          :class="{ selected: useGit }"
+          @click="useGit = true"
+        >
+          <div class="card-option-title">
+            <span>Git 模式 (实验功能)</span>
+            <span class="tag-experimental">Experimental</span>
+          </div>
+          <div class="card-option-desc">
+            自动创建分支、提交、回滚。提供完整的代码版本控制能力。
+          </div>
+        </div>
       </div>
     </div>
 
     <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="handleClose">取消</el-button>
-        <el-button type="primary" :loading="loading" @click="handleEnable">
-          启用
-        </el-button>
-      </div>
+      <WsButton variant="secondary" @click="handleClose">取消</WsButton>
+      <WsButton variant="primary" :loading="loading" @click="handleEnable">
+        启用
+      </WsButton>
     </template>
-  </el-dialog>
+  </WsModal>
 </template>
 
 <style scoped>
 .enable-dispatch-content {
-  padding: 8px 0;
-}
-
-.mode-section {
-  margin-bottom: 16px;
+  padding: 0;
 }
 
 .section-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
   margin-bottom: 12px;
 }
 
 .mode-options {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 100%;
+  gap: 10px;
 }
 
-.mode-options :deep(.el-radio) {
-  margin-right: 0;
+.card-option {
+  border: 1px solid var(--border-color);
   padding: 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  transition: all 0.2s;
+  cursor: pointer;
+  transition: all 0.1s;
+  background: var(--card-bg);
 }
 
-.mode-options :deep(.el-radio:hover) {
-  border-color: #409eff;
-  background: #f5f7fa;
+.card-option:hover {
+  border-color: var(--border-heavy);
+  background: #f9fafb;
 }
 
-.mode-options :deep(.el-radio.is-checked) {
-  border-color: #409eff;
-  background: #ecf5ff;
+[data-theme="dark"] .card-option:hover {
+  background: #1a1a1a;
 }
 
-.mode-option {
-  margin-left: 8px;
-  flex: 1;
+.card-option.selected {
+  border-color: var(--accent-blue);
+  background: rgba(37, 99, 235, 0.05);
+  position: relative;
 }
 
-.mode-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
+[data-theme="dark"] .card-option.selected {
+  background: rgba(37, 99, 235, 0.15);
+}
+
+.card-option-title {
+  font-size: 13px;
+  font-weight: 700;
   margin-bottom: 4px;
-}
-
-.mode-desc {
-  font-size: 12px;
-  color: #909399;
-}
-
-.mode-desc.warning-text {
-  color: #e6a23c;
-}
-
-.dialog-footer {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-main);
+}
+
+.card-option-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.tag-experimental {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  text-transform: uppercase;
+}
+
+[data-theme="dark"] .tag-experimental {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
 }
 </style>

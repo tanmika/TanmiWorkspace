@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- 母节点 - 黑色大块 -->
+  <rect x="0" y="0" width="18" height="18" fill="#111111"/>
+  <!-- 子节点 - 红色小块 -->
+  <rect x="12" y="12" width="10" height="10" fill="#D92B2B" stroke="#ffffff" stroke-width="2"/>
+</svg>

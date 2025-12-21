@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { useWorkspaceStore } from '@/stores'
+import { useWorkspaceStore, useToastStore } from '@/stores'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
 import SettingsModal from '@/components/SettingsModal.vue'
 import WsModal from '@/components/ui/WsModal.vue'
+import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
+const toastStore = useToastStore()
 
 // 主题
 const theme = ref<'light' | 'dark'>('light')
@@ -17,6 +18,19 @@ const theme = ref<'light' | 'dark'>('light')
 // 状态
 const showCreateDialog = ref(false)
 const showSettingsModal = ref(false)
+
+// 确认弹窗状态
+const showConfirmDialog = ref(false)
+const confirmDialogTitle = ref('')
+const confirmDialogMessage = ref('')
+const confirmDialogType = ref<'info' | 'warning' | 'danger'>('info')
+const pendingConfirmAction = ref<(() => Promise<void>) | null>(null)
+
+// 错误信息弹窗状态
+const showErrorDialog = ref(false)
+const errorDialogTitle = ref('')
+const errorDialogMessage = ref('')
+
 const createForm = ref<WorkspaceInitParams>({
   name: '',
   goal: '',
@@ -92,7 +106,7 @@ onMounted(async () => {
   try {
     await workspaceStore.fetchWorkspaces('all')
   } catch {
-    ElMessage.error('加载工作区列表失败')
+    toastStore.error('加载失败', '无法加载工作区列表')
   }
 
   // 加载开发信息（静默失败）
@@ -111,56 +125,58 @@ watch([statusFilter, sortBy, sortOrder, theme], () => {
 // 创建工作区
 async function handleCreate() {
   if (!createForm.value.name || !createForm.value.goal) {
-    ElMessage.warning('请填写名称和目标')
+    toastStore.warning('请填写名称和目标')
     return
   }
   try {
     await workspaceStore.createWorkspace(createForm.value)
-    ElMessage.success('创建成功')
+    toastStore.success('创建成功')
     showCreateDialog.value = false
     createForm.value = { name: '', goal: '', rules: [], docs: [] }
   } catch {
-    ElMessage.error('创建失败')
+    toastStore.error('创建失败')
+  }
+}
+
+// 显示确认弹窗
+function showConfirm(title: string, message: string, type: 'info' | 'warning' | 'danger', action: () => Promise<void>) {
+  confirmDialogTitle.value = title
+  confirmDialogMessage.value = message
+  confirmDialogType.value = type
+  pendingConfirmAction.value = action
+  showConfirmDialog.value = true
+}
+
+// 执行确认操作
+async function handleConfirmAction() {
+  if (pendingConfirmAction.value) {
+    await pendingConfirmAction.value()
+    pendingConfirmAction.value = null
   }
 }
 
 // 删除工作区
-async function handleDelete(id: string, name: string) {
-  try {
-    await ElMessageBox.confirm(`确定要删除工作区「${name}」吗？`, '删除确认', {
-      type: 'warning',
-    })
+function handleDelete(id: string, name: string) {
+  showConfirm('删除确认', `确定要删除工作区「${name}」吗？此操作不可撤销。`, 'danger', async () => {
     await workspaceStore.deleteWorkspace(id, true)
-    ElMessage.success('删除成功')
-  } catch {
-    // 用户取消或删除失败
-  }
+    toastStore.success('删除成功')
+  })
 }
 
 // 归档工作区
-async function handleArchive(id: string, name: string) {
-  try {
-    await ElMessageBox.confirm(`确定要归档工作区「${name}」吗？`, '归档确认', {
-      type: 'info',
-    })
+function handleArchive(id: string, name: string) {
+  showConfirm('归档确认', `确定要归档工作区「${name}」吗？`, 'info', async () => {
     await workspaceStore.archiveWorkspace(id)
-    ElMessage.success('归档成功')
-  } catch {
-    // 用户取消或归档失败
-  }
+    toastStore.success('归档成功')
+  })
 }
 
 // 恢复工作区
-async function handleRestore(id: string, name: string) {
-  try {
-    await ElMessageBox.confirm(`确定要恢复工作区「${name}」吗？`, '恢复确认', {
-      type: 'info',
-    })
+function handleRestore(id: string, name: string) {
+  showConfirm('恢复确认', `确定要恢复工作区「${name}」吗？`, 'info', async () => {
     await workspaceStore.restoreWorkspace(id)
-    ElMessage.success('恢复成功')
-  } catch {
-    // 用户取消或恢复失败
-  }
+    toastStore.success('恢复成功')
+  })
 }
 
 // 进入工作区
@@ -180,11 +196,9 @@ function showErrorInfo(ws: WorkspaceEntry) {
     ? `错误类型：${errorInfo.type || '未知'}\n错误信息：${errorInfo.message}\n检测时间：${formatTime(errorInfo.detectedAt)}`
     : '未知错误'
 
-  ElMessageBox.alert(message, `工作区「${ws.name}」出错`, {
-    type: 'error',
-    confirmButtonText: '知道了',
-    dangerouslyUseHTMLString: false,
-  })
+  errorDialogTitle.value = `工作区「${ws.name}」出错`
+  errorDialogMessage.value = message
+  showErrorDialog.value = true
 }
 
 // 格式化时间
@@ -266,7 +280,7 @@ function getBadgeText(status: string) {
       <div class="logo">
         <div class="logo-icon"></div>
         <div class="logo-text">
-          <span class="bold">Tanm<i class="red-dot">i</i></span><span class="light">Workspace</span>
+          <span class="bold">Tanm<i class="red-dot">ı</i></span><span class="light">Workspace</span>
         </div>
       </div>
       <div class="header-actions">
@@ -295,9 +309,9 @@ function getBadgeText(status: string) {
             <line x1="1" y1="13" x2="15" y2="13"/>
             <rect x="8" y="11" width="3" height="4" fill="currentColor" stroke="none"/>
           </svg>
-          设置
+          SETTINGS
         </button>
-        <button class="btn btn-primary" @click="showCreateDialog = true">+ 新建工作区</button>
+        <button class="btn btn-primary" @click="showCreateDialog = true">+ NEW</button>
       </div>
     </header>
 
@@ -402,6 +416,23 @@ function getBadgeText(status: string) {
     <div v-if="devInfo?.available" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">
       DEV
     </div>
+
+    <!-- 确认弹窗 -->
+    <WsConfirmDialog
+      v-model="showConfirmDialog"
+      :title="confirmDialogTitle"
+      :message="confirmDialogMessage"
+      :type="confirmDialogType"
+      @confirm="handleConfirmAction"
+    />
+
+    <!-- 错误信息弹窗 -->
+    <WsModal v-model="showErrorDialog" :title="errorDialogTitle" width="480px">
+      <div class="error-message-box">{{ errorDialogMessage }}</div>
+      <template #footer>
+        <button class="btn btn-primary" @click="showErrorDialog = false">知道了</button>
+      </template>
+    </WsModal>
   </div>
 </template>
 
@@ -788,16 +819,16 @@ function getBadgeText(status: string) {
 }
 
 .btn-primary {
-  background: var(--border-heavy);
+  background: var(--accent-red);
   color: #fff;
-  border: 1px solid var(--border-heavy);
+  border: 1px solid var(--accent-red);
 }
 
 .btn-primary:hover {
-  background: var(--accent-red);
-  border-color: var(--accent-red);
+  background: #b82424;
+  border-color: #b82424;
   transform: translateY(-1px);
-  box-shadow: 2px 2px 0 #111;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3);
 }
 
 .btn-secondary {
@@ -968,16 +999,15 @@ function getBadgeText(status: string) {
 
 /* Dark Mode Overrides */
 [data-theme="dark"] .btn-primary {
-  background: #fff;
-  border-color: #fff;
-  color: #111;
-}
-
-[data-theme="dark"] .btn-primary:hover {
   background: var(--accent-red);
   border-color: var(--accent-red);
   color: #fff;
-  box-shadow: 2px 2px 0 #fff;
+}
+
+[data-theme="dark"] .btn-primary:hover {
+  background: #b82424;
+  border-color: #b82424;
+  box-shadow: 2px 2px 0 rgba(255, 255, 255, 0.2);
 }
 
 [data-theme="dark"] .badge-active {
@@ -1008,5 +1038,17 @@ function getBadgeText(status: string) {
   letter-spacing: 1px;
   z-index: 9999;
   cursor: default;
+}
+
+/* 错误信息框 */
+.error-message-box {
+  font-family: var(--mono-font);
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  background: var(--path-bg);
+  padding: 16px;
+  border-left: 4px solid var(--accent-red);
 }
 </style>

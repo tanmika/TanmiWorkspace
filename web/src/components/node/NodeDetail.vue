@@ -1,14 +1,23 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, ref } from 'vue'
 import { useNodeStore, useWorkspaceStore } from '@/stores'
 import { STATUS_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type TransitionAction } from '@/types'
 import NodeIcon from '@/components/tree/NodeIcon.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import WsButton from '@/components/ui/WsButton.vue'
+import WsPromptDialog from '@/components/ui/WsPromptDialog.vue'
+import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 
 const nodeStore = useNodeStore()
 const workspaceStore = useWorkspaceStore()
+
+// 弹窗状态
+const showPromptDialog = ref(false)
+const promptTitle = ref('')
+const promptMessage = ref('')
+const pendingAction = ref<TransitionAction | null>(null)
+
+const showDeleteDialog = ref(false)
 
 // 当前节点信息
 const nodeMeta = computed(() => nodeStore.selectedNodeMeta)
@@ -87,27 +96,37 @@ const availableActions = computed(() => {
 })
 
 // 状态转换
-async function handleTransition(action: TransitionAction) {
-  try {
-    let conclusion: string | undefined
-
-    if (action === 'complete' || action === 'fail' || action === 'cancel') {
-      const promptTitle = action === 'complete' ? '请输入完成结论'
-        : action === 'fail' ? '请输入失败原因'
-        : '请输入取消原因'
-      const result = await ElMessageBox.prompt(
-        promptTitle,
-        '填写结论',
-        { inputType: 'textarea' }
-      )
-      conclusion = result.value
-    }
-
-    await nodeStore.transition(action, undefined, conclusion)
-    ElMessage.success('状态更新成功')
-  } catch {
-    // 用户取消或操作失败
+function handleTransition(action: TransitionAction) {
+  if (action === 'complete' || action === 'fail' || action === 'cancel') {
+    pendingAction.value = action
+    promptTitle.value = '填写结论'
+    promptMessage.value = action === 'complete' ? '请输入完成结论'
+      : action === 'fail' ? '请输入失败原因'
+      : '请输入取消原因'
+    showPromptDialog.value = true
+  } else {
+    // 无需输入的操作直接执行
+    executeTransition(action)
   }
+}
+
+async function executeTransition(action: TransitionAction, conclusion?: string) {
+  try {
+    await nodeStore.transition(action, undefined, conclusion)
+  } catch {
+    // 操作失败
+  }
+}
+
+function handlePromptConfirm(value: string) {
+  if (pendingAction.value) {
+    executeTransition(pendingAction.value, value)
+    pendingAction.value = null
+  }
+}
+
+function handlePromptCancel() {
+  pendingAction.value = null
 }
 
 // 设为焦点
@@ -115,21 +134,23 @@ async function handleSetFocus() {
   if (!nodeStore.selectedNodeId) return
   try {
     await nodeStore.setFocus(nodeStore.selectedNodeId)
-    ElMessage.success('已设为当前焦点')
   } catch {
-    ElMessage.error('设置焦点失败')
+    // 静默失败，错误已在 store 中处理
   }
 }
 
 // 删除节点
-async function handleDelete() {
+function handleDelete() {
+  if (!nodeStore.selectedNodeId) return
+  showDeleteDialog.value = true
+}
+
+async function confirmDelete() {
   if (!nodeStore.selectedNodeId) return
   try {
-    await ElMessageBox.confirm('确定要删除此节点吗？', '删除确认', { type: 'warning' })
     await nodeStore.deleteNode(nodeStore.selectedNodeId)
-    ElMessage.success('删除成功')
   } catch {
-    // 用户取消
+    // 删除失败
   }
 }
 
@@ -264,7 +285,10 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 
     <!-- 执行日志 -->
     <div class="detail-section">
-      <div class="section-title">Log / 执行日志</div>
+      <div class="section-title">
+        Log / 执行日志
+        <span class="count-badge">{{ currentNode.logEntries?.length || 0 }}</span>
+      </div>
       <div class="log-container" v-if="currentNode.logEntries?.length">
         <div v-for="(entry, index) in currentNode.logEntries" :key="index" class="log-item">
           <span class="log-time">{{ entry.timestamp }}</span>
@@ -311,6 +335,28 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
         </WsButton>
       </div>
     </div>
+
+    <!-- 输入弹窗 -->
+    <WsPromptDialog
+      v-model="showPromptDialog"
+      :title="promptTitle"
+      :message="promptMessage"
+      confirm-text="确定"
+      cancel-text="取消"
+      @confirm="handlePromptConfirm"
+      @cancel="handlePromptCancel"
+    />
+
+    <!-- 删除确认弹窗 -->
+    <WsConfirmDialog
+      v-model="showDeleteDialog"
+      title="删除确认"
+      message="确定要删除此节点吗？此操作不可撤销。"
+      confirm-text="删除"
+      cancel-text="取消"
+      type="danger"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
 
@@ -436,7 +482,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   border-bottom: none;
 }
 
-/* Section 标题 */
+/* Section 标题 - 带红色竖条 */
 .section-title {
   font-size: 10px;
   font-weight: 700;
@@ -447,6 +493,23 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.section-title::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  background: var(--accent-red);
+  flex-shrink: 0;
+}
+
+.count-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--border-color);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-family: var(--mono-font);
 }
 
 /* 节点ID */

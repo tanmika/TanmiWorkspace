@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 // Element Plus icons (no longer used in header/sidebar)
-import { useWorkspaceStore, useNodeStore, useSettingsStore } from '@/stores'
+import { useWorkspaceStore, useNodeStore, useSettingsStore, useToastStore } from '@/stores'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
@@ -12,29 +12,32 @@ import SwitchDispatchModeDialog from '@/components/dispatch/SwitchDispatchModeDi
 import WsButton from '@/components/ui/WsButton.vue'
 import WsModal from '@/components/ui/WsModal.vue'
 
+// Toast store
+const toastStore = useToastStore()
+
+// 主题
+const theme = ref<'light' | 'dark'>(
+  (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light'
+)
+
+function toggleTheme() {
+  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  document.documentElement.setAttribute('data-theme', theme.value)
+  // 同步到 localStorage
+  const prefs = JSON.parse(localStorage.getItem('tanmi-workspace-home-preferences') || '{}')
+  prefs.theme = theme.value
+  localStorage.setItem('tanmi-workspace-home-preferences', JSON.stringify(prefs))
+}
+
 // Toast notification helper
 function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
-  console.log(`[${type.toUpperCase()}] ${message}`)
-  // Simple toast implementation - can be enhanced
-  const toast = document.createElement('div')
-  toast.className = `toast toast-${type}`
-  toast.textContent = message
-  toast.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    background: ${type === 'success' ? '#67c23a' : type === 'error' ? '#f56c6c' : '#409eff'};
-    color: white;
-    border-radius: 4px;
-    z-index: 10000;
-    animation: slideIn 0.3s ease;
-  `
-  document.body.appendChild(toast)
-  setTimeout(() => {
-    toast.style.animation = 'slideOut 0.3s ease'
-    setTimeout(() => document.body.removeChild(toast), 300)
-  }, 3000)
+  if (type === 'success') {
+    toastStore.success(message)
+  } else if (type === 'error') {
+    toastStore.error(message)
+  } else {
+    toastStore.info(message)
+  }
 }
 
 // 视图模式
@@ -109,11 +112,45 @@ async function loadWorkspace() {
   }
 }
 
-// 工作区信息栏展开状态
-const showInfoBar = ref(true)
-
 // 工作区详情抽屉状态
 const showWorkspaceDetail = ref(false)
+
+// 抽屉宽度（可拖动调整）
+const DEFAULT_DRAWER_WIDTH = 450
+const MIN_DRAWER_WIDTH = 320
+const MAX_DRAWER_WIDTH = 800
+
+const drawerWidth = ref(
+  parseInt(localStorage.getItem('tanmi-workspace-drawer-width') || '') || DEFAULT_DRAWER_WIDTH
+)
+
+const isDrawerResizing = ref(false)
+
+function startDrawerResize(e: MouseEvent) {
+  e.preventDefault()
+  isDrawerResizing.value = true
+  document.addEventListener('mousemove', handleDrawerResize)
+  document.addEventListener('mouseup', stopDrawerResize)
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'ew-resize'
+}
+
+function handleDrawerResize(e: MouseEvent) {
+  if (!isDrawerResizing.value) return
+  const newWidth = window.innerWidth - e.clientX
+  if (newWidth >= MIN_DRAWER_WIDTH && newWidth <= MAX_DRAWER_WIDTH) {
+    drawerWidth.value = newWidth
+  }
+}
+
+function stopDrawerResize() {
+  isDrawerResizing.value = false
+  document.removeEventListener('mousemove', handleDrawerResize)
+  document.removeEventListener('mouseup', stopDrawerResize)
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
+  localStorage.setItem('tanmi-workspace-drawer-width', drawerWidth.value.toString())
+}
 
 // 是否有规则或文档可展开
 const hasRulesOrDocs = computed(() => {
@@ -264,23 +301,34 @@ async function handleDispatchSuccess() {
       <div class="header-left">
         <button class="ws-btn text" @click="goBack" title="返回首页">&lt;</button>
         <h2 class="workspace-title">{{ workspaceStore.currentWorkspace?.name }}</h2>
-        <button
-          class="ws-btn text"
-          :class="{ active: showInfoBar }"
-          @click="showInfoBar = !showInfoBar"
-          title="切换信息栏"
-        >i</button>
+        <span class="header-sep">·</span>
+        <button class="ws-btn text details-link" @click="showWorkspaceDetail = true">DETAILS<span class="blink-cursor">_</span></button>
       </div>
       <div class="header-right">
-        <button class="ws-btn" @click="handleFocusCurrent" :disabled="isFocusing" title="聚焦当前任务">FOCUS</button>
-        <button class="ws-btn" @click="handleRefresh" :disabled="isRefreshing" title="刷新数据">SYNC</button>
+        <button class="theme-toggle" @click="toggleTheme" :title="theme === 'light' ? '切换到深色模式' : '切换到浅色模式'">
+          <svg v-if="theme === 'light'" class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg v-else class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+        <button class="ws-btn" @click="handleFocusCurrent" :disabled="isFocusing" title="聚焦当前任务">▶ FOCUS</button>
+        <button class="ws-btn" @click="handleRefresh" :disabled="isRefreshing" title="刷新数据">⇄ SYNC</button>
         <button class="ws-btn primary" @click="openCreateDialog">+ NEW</button>
       </div>
     </header>
 
     <!-- 工作区信息栏 InfoBar -->
-    <transition name="slide">
-      <div v-if="showInfoBar && workspaceStore.currentStatus" class="layout-infobar">
+    <div v-if="workspaceStore.currentStatus" class="layout-infobar">
         <div class="info-item info-goal">
           <span class="info-label">Goal / 目标</span>
           <span class="info-value">{{ workspaceStore.currentStatus.goal }}</span>
@@ -331,9 +379,7 @@ async function handleDispatchSuccess() {
             </span>
           </div>
         </div>
-        <button class="ws-btn text details-btn" @click="showWorkspaceDetail = true">DETAILS ↓</button>
-      </div>
-    </transition>
+    </div>
 
     <!-- 主内容区 -->
     <div class="main-content">
@@ -385,8 +431,9 @@ async function handleDispatchSuccess() {
       <main class="layout-content">
         <NodeDetail v-if="nodeStore.selectedNodeId" />
         <div v-else class="empty-state">
-          <div class="empty-icon">📋</div>
-          <p class="empty-text">选择一个节点查看详情</p>
+          <div class="empty-icon"></div>
+          <p class="empty-text">SELECT A NODE</p>
+          <p class="empty-hint">选择左侧节点查看详情</p>
         </div>
       </main>
     </div>
@@ -394,7 +441,11 @@ async function handleDispatchSuccess() {
     <!-- 工作区详情抽屉 -->
     <transition name="drawer-fade">
       <div v-if="showWorkspaceDetail" class="drawer-overlay" @click="showWorkspaceDetail = false">
-        <div class="drawer-panel" @click.stop>
+        <div class="drawer-panel" :style="{ width: drawerWidth + 'px' }" @click.stop>
+          <div
+            class="drawer-resizer"
+            @mousedown="startDrawerResize"
+          />
           <div class="modal-header">
             <span>工作区详情</span>
             <button class="modal-close" @click="showWorkspaceDetail = false">×</button>
@@ -402,9 +453,7 @@ async function handleDispatchSuccess() {
           <div class="modal-body">
             <!-- 基本信息 -->
             <div class="detail-section">
-              <div class="section-header">
-                <span class="info-label">目标</span>
-              </div>
+              <div class="section-title">Goal / 目标</div>
               <div class="goal-content">
                 {{ workspaceStore.currentStatus?.goal || '暂无目标' }}
               </div>
@@ -412,8 +461,8 @@ async function handleDispatchSuccess() {
 
             <!-- 规则 -->
             <div v-if="workspaceStore.currentRules.length > 0" class="detail-section">
-              <div class="section-header">
-                <span class="info-label">规则</span>
+              <div class="section-title">
+                Rules / 规则
                 <span class="count-badge">{{ workspaceStore.currentRules.length }}</span>
               </div>
               <ul class="rules-list">
@@ -423,8 +472,8 @@ async function handleDispatchSuccess() {
 
             <!-- 文档 -->
             <div v-if="workspaceStore.currentDocs.length > 0" class="detail-section">
-              <div class="section-header">
-                <span class="info-label">文档</span>
+              <div class="section-title">
+                Docs / 文档
                 <span class="count-badge">{{ workspaceStore.currentDocs.length }}</span>
               </div>
               <ul class="docs-list">
@@ -437,8 +486,8 @@ async function handleDispatchSuccess() {
 
             <!-- 日志 -->
             <div class="detail-section">
-              <div class="section-header">
-                <span class="info-label">工作区日志</span>
+              <div class="section-title">
+                Log / 工作区日志
                 <span class="count-badge">{{ workspaceStore.currentLogs.length }}</span>
               </div>
               <div v-if="workspaceStore.currentLogs.length > 0" class="log-container">
@@ -447,7 +496,7 @@ async function handleDispatchSuccess() {
                   :key="idx"
                   class="log-item"
                 >
-                  <div class="log-meta">
+                  <div class="log-header">
                     <span class="log-time">{{ log.timestamp }}</span>
                     <span
                       :class="[
@@ -459,7 +508,7 @@ async function handleDispatchSuccess() {
                       {{ log.operator === 'AI' ? 'AI' : log.operator === 'Human' ? 'USR' : 'SYS' }}
                     </span>
                   </div>
-                  <div class="log-event">{{ log.event }}</div>
+                  <div class="log-content">{{ log.event }}</div>
                 </div>
               </div>
               <div v-else class="empty-tip">暂无日志记录</div>
@@ -545,13 +594,13 @@ async function handleDispatchSuccess() {
 
 /* ===== 头部 Header ===== */
 .layout-header {
-  height: 56px;
+  height: 64px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 24px;
+  padding: 0 32px;
   background: var(--card-bg);
-  border-bottom: 2px solid var(--border-heavy);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .header-left,
@@ -568,14 +617,68 @@ async function handleDispatchSuccess() {
   color: var(--text-main);
 }
 
+.header-sep {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0 4px 0 -4px;
+}
+
+.details-link {
+  color: var(--accent-red) !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  margin-left: -4px;
+}
+
+.details-link:hover:not(:disabled) {
+  background: rgba(217, 43, 43, 0.08) !important;
+}
+
+.blink-cursor {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* 主题切换按钮 */
+.theme-toggle {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-heavy);
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--border-heavy);
+  color: var(--accent-red);
+  background: var(--path-bg);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 var(--border-heavy);
+}
+
+.theme-toggle .icon-sun,
+.theme-toggle .icon-moon {
+  width: 18px;
+  height: 18px;
+}
+
 /* 工作区操作按钮 */
 .ws-btn {
-  height: 28px;
-  padding: 0 10px;
-  font-family: var(--mono-font);
-  font-size: 10px;
+  height: 36px;
+  padding: 0 16px;
+  font-size: 14px;
   font-weight: 600;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-heavy);
   background: var(--card-bg);
   color: var(--text-main);
   cursor: pointer;
@@ -627,15 +730,15 @@ async function handleDispatchSuccess() {
 }
 
 .ws-btn.primary {
-  background: var(--border-heavy);
-  border-color: var(--border-heavy);
+  background: var(--accent-red);
+  border-color: var(--accent-red);
   color: #fff;
 }
 
 .ws-btn.primary:hover:not(:disabled) {
-  background: var(--accent-red);
-  border-color: var(--accent-red);
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.2);
+  background: #b82424;
+  border-color: #b82424;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3);
 }
 
 /* ===== 信息栏 InfoBar ===== */
@@ -643,8 +746,8 @@ async function handleDispatchSuccess() {
   display: flex;
   align-items: center;
   gap: 40px;
-  padding: 12px 24px;
-  background: var(--bg-color);
+  padding: 16px 32px;
+  background: var(--card-bg);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -665,6 +768,8 @@ async function handleDispatchSuccess() {
   text-transform: uppercase;
   color: var(--text-secondary);
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .info-value {
@@ -691,7 +796,7 @@ async function handleDispatchSuccess() {
 
 .progress-fill {
   height: 100%;
-  background: var(--border-heavy);
+  background: var(--accent-red);
   transition: width 0.3s ease;
 }
 
@@ -783,12 +888,6 @@ async function handleDispatchSuccess() {
   color: var(--text-main);
 }
 
-/* DETAILS 按钮 */
-.details-btn {
-  margin-left: auto;
-  font-size: 10px;
-}
-
 /* 信息标签 */
 .info-tags {
   display: flex;
@@ -824,27 +923,6 @@ async function handleDispatchSuccess() {
 [data-theme="dark"] .info-tag.docs {
   background: #1a3a42;
   color: #5bc0de;
-}
-
-/* 信息栏动画 */
-.slide-enter-active,
-.slide-leave-active {
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.slide-enter-from,
-.slide-leave-to {
-  opacity: 0;
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.slide-enter-to,
-.slide-leave-from {
-  opacity: 1;
-  max-height: 80px;
 }
 
 /* ===== 主内容区 ===== */
@@ -939,17 +1017,28 @@ async function handleDispatchSuccess() {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-muted);
+  background: var(--card-bg);
 }
 
 .empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-  opacity: 0.5;
+  width: 48px;
+  height: 48px;
+  border: 3px dashed var(--border-color);
+  margin-bottom: 20px;
 }
 
 .empty-text {
-  font-size: 14px;
+  font-family: var(--mono-font), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  margin: 0 0 8px 0;
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--text-muted);
   margin: 0;
 }
 
@@ -967,12 +1056,28 @@ async function handleDispatchSuccess() {
 }
 
 .drawer-panel {
-  width: 450px;
   background: var(--card-bg);
   border-left: 4px solid var(--border-heavy);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+.drawer-resizer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.2s;
+}
+
+.drawer-resizer:hover {
+  background: var(--accent-red);
 }
 
 .modal-header {
@@ -1021,19 +1126,34 @@ async function handleDispatchSuccess() {
   margin-bottom: 0;
 }
 
-.section-header {
+/* 抽屉内 Section 标题 - 带红色竖条 */
+.drawer-panel .section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+}
+
+.drawer-panel .section-title::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  background: var(--accent-red);
+  flex-shrink: 0;
 }
 
 .count-badge {
-  font-size: 11px;
-  padding: 2px 8px;
+  font-size: 10px;
+  padding: 2px 6px;
   background: var(--border-color);
   color: var(--text-secondary);
   font-weight: 600;
+  font-family: var(--mono-font);
 }
 
 .goal-content {
@@ -1092,17 +1212,30 @@ async function handleDispatchSuccess() {
 
 /* 日志容器 */
 .log-container {
-  border-left: 4px solid var(--border-heavy);
-  padding-left: 12px;
+  background: #fafafa;
+  border: 1px solid var(--border-color);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+[data-theme="dark"] .log-container {
+  background: #1a1a1a;
 }
 
 .log-item {
   padding: 10px 12px;
-  background: var(--bg-color);
-  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.log-meta {
+[data-theme="dark"] .log-item {
+  border-bottom-color: #333;
+}
+
+.log-item:last-child {
+  border-bottom: none;
+}
+
+.log-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1119,28 +1252,26 @@ async function handleDispatchSuccess() {
   font-family: var(--mono-font);
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 0;
-  width: 32px;
+  padding: 2px 6px;
   text-align: center;
-  text-transform: uppercase;
 }
 
 .log-operator.ai {
-  background: var(--border-heavy);
-  color: var(--card-bg);
+  background: #111;
+  color: #fff;
 }
 
 .log-operator.usr {
-  background: #67c23a;
-  color: white;
+  background: var(--accent-green);
+  color: #fff;
 }
 
 .log-operator.sys {
-  background: #909399;
-  color: white;
+  background: #999;
+  color: #fff;
 }
 
-.log-event {
+.log-content {
   font-size: 13px;
   color: var(--text-main);
   line-height: 1.5;

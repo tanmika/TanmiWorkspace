@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { NodeTreeItem } from '@/types'
 import TreeNodeItem from '@/components/tree/TreeNodeItem.vue'
 import TreeChildren from '@/components/tree/TreeChildren.vue'
@@ -14,6 +14,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [nodeId: string]
 }>()
+
+// TreeChildren 组件引用
+const treeChildrenRef = ref<InstanceType<typeof TreeChildren> | null>(null)
+// 当前是否全部展开
+const allExpanded = ref(true)
 
 // 计算选中路径上的所有节点ID
 const activePathIds = computed(() => {
@@ -63,12 +68,18 @@ function isSelected(nodeId: string): boolean {
 function isActivePath(nodeId: string): boolean {
   return activePathIds.value.has(nodeId)
 }
+
+// 双击根节点：一键展开/收起所有
+function handleRootDblClick() {
+  allExpanded.value = !allExpanded.value
+  treeChildrenRef.value?.setAllExpanded(allExpanded.value)
+}
 </script>
 
 <template>
   <div class="node-tree">
     <div v-if="tree" class="tree-container">
-      <!-- Root node (depth=0, no expand button) -->
+      <!-- Root node (depth=0, no expand button, dblclick to toggle all) -->
       <TreeNodeItem
         :node="tree"
         :is-focused="isFocused(tree.id)"
@@ -76,6 +87,7 @@ function isActivePath(nodeId: string): boolean {
         :is-active-path="isActivePath(tree.id)"
         :depth="0"
         @click="handleNodeClick(tree)"
+        @dblclick="handleRootDblClick"
       />
       <!-- Children (depth starts at 1) -->
       <div
@@ -83,6 +95,7 @@ function isActivePath(nodeId: string): boolean {
         class="tree-children"
       >
         <TreeChildren
+          ref="treeChildrenRef"
           :children="tree.children!"
           :selected-id="selectedId"
           :focus-id="focusId"

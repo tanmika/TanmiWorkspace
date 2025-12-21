@@ -24,23 +24,24 @@ defineProps<{
 </template>
 
 <style scoped>
-/* 方形准星容器 */
+/* 方形准星容器 - 与 NodeIcon 相同宽度 20px */
 .focus-wrapper {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 3px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
 
-/* 准星四角样式 (方形节点) */
+/* 准星四角样式 (方形节点) - 超出容器边界 */
 .focus-crosshair {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: -3px;
+  left: -3px;
+  right: -3px;
+  bottom: -3px;
   pointer-events: none;
 }
 
@@ -99,14 +100,14 @@ defineProps<{
   border-right-width: 2px;
 }
 
-/* 菱形准星容器 - 与方形准星统一宽度 */
+/* 菱形准星容器 - 与 NodeIcon 相同宽度 20px */
 .focus-wrapper-diamond {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
 
@@ -116,13 +117,13 @@ defineProps<{
   justify-content: center;
 }
 
-/* 菱形准星 */
+/* 菱形准星 - 超出容器边界 */
 .focus-diamond {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   transform: translate(-50%, -50%) rotate(45deg);
   pointer-events: none;
 }

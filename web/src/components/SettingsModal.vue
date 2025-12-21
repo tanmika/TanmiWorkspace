@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { useSettingsStore } from '@/stores/settings'
+import { useToastStore } from '@/stores/toast'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
 import WsModal from '@/components/ui/WsModal.vue'
 import WsButton from '@/components/ui/WsButton.vue'
+import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 
 const settingsStore = useSettingsStore()
+const toastStore = useToastStore()
 
 // 版本信息
 const devInfo = ref<DevInfoResult | null>(null)
@@ -26,6 +28,9 @@ const emit = defineEmits<{
 
 // 本地状态
 const localMode = ref<'none' | 'git' | 'no-git'>('none')
+
+// Git 模式警告弹窗
+const showGitWarning = ref(false)
 
 // 监听弹窗打开，加载配置
 watch(() => props.visible, async (isVisible) => {
@@ -60,33 +65,26 @@ function handleClose() {
 }
 
 // 保存配置
-async function handleSave() {
+function handleSave() {
   // 如果切换到 git 模式，显示警告确认
   if (settingsStore.settings.defaultDispatchMode !== 'git' && localMode.value === 'git') {
-    try {
-      await ElMessageBox.confirm(
-        '选择此选项后，启用派发时将自动使用 Git 模式（自动创建分支、提交、回滚）。此功能为实验性功能，可能会影响 Git 历史。确定要设置吗？',
-        'Git 模式警告',
-        {
-          type: 'warning',
-          confirmButtonText: '确定设置',
-          cancelButtonText: '取消',
-        }
-      )
-    } catch {
-      // 用户取消
-      return
-    }
+    showGitWarning.value = true
+    return
   }
 
+  doSave()
+}
+
+// 执行保存
+async function doSave() {
   try {
     await settingsStore.updateSettings({
       defaultDispatchMode: localMode.value,
     })
-    ElMessage.success('配置已保存')
+    toastStore.success('配置已保存')
     handleClose()
   } catch {
-    ElMessage.error('保存失败')
+    toastStore.error('保存失败')
   }
 }
 
@@ -212,6 +210,17 @@ function selectMode(mode: 'none' | 'git' | 'no-git') {
       </WsButton>
     </template>
   </WsModal>
+
+  <!-- Git 模式警告确认 -->
+  <WsConfirmDialog
+    v-model="showGitWarning"
+    title="Git 模式警告"
+    message="选择此选项后，启用派发时将自动使用 Git 模式（自动创建分支、提交、回滚）。此功能为实验性功能，可能会影响 Git 历史。确定要设置吗？"
+    type="warning"
+    confirm-text="确定设置"
+    cancel-text="取消"
+    @confirm="doSave"
+  />
 </template>
 
 <style scoped>

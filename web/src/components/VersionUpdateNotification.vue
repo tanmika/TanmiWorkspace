@@ -160,4 +160,22 @@ onMounted(() => {
   transform: translateY(-100%);
   opacity: 0;
 }
+
+/* 深色模式 - 白底黑字 */
+[data-theme="dark"] .version-notification {
+  background: var(--border-heavy);
+  color: #111;
+}
+
+[data-theme="dark"] .version-info {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] .update-link {
+  color: #111;
+}
+
+[data-theme="dark"] .dismiss-btn {
+  color: #111;
+}
 </style>

@@ -12,22 +12,21 @@ function goHome() {
   <div class="not-found">
     <div class="not-found-container">
       <!-- 装饰性艺术元素区域 -->
-      <div class="error-art">
-        <div class="decor-block-1"></div>
-        <div class="error-number">404</div>
+      <div class="error-code">
         <div class="decor-line"></div>
+        <div class="decor-block-1"></div>
         <div class="decor-block-2"></div>
+        <div class="error-number">404</div>
       </div>
 
       <!-- 文案区域 -->
-      <div class="error-content">
-        <h1 class="error-title">页面未找到</h1>
-        <p class="error-desc">您访问的页面不存在或已被移除</p>
-      </div>
+      <h1 class="error-title">页面未找到</h1>
+      <p class="error-desc">您访问的页面不存在或已被移除</p>
 
       <!-- 返回按钮 -->
       <button class="btn-secondary" @click="goHome">
-        ← 返回首页
+        <span class="arrow">←</span>
+        <span>返回首页</span>
       </button>
     </div>
   </div>
@@ -43,106 +42,105 @@ function goHome() {
 }
 
 .not-found-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 32px;
+  text-align: center;
+  padding: 40px;
 }
 
-/* 装饰性艺术元素区域 */
-.error-art {
+/* 404 数字容器 */
+.error-code {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 400px;
-  height: 200px;
+  display: inline-block;
+  margin-bottom: 32px;
 }
 
 /* 404 数字 */
 .error-number {
+  font-family: var(--mono-font);
   font-size: 160px;
   font-weight: 900;
-  font-family: var(--mono-font);
-  color: var(--text-main);
   line-height: 1;
+  color: var(--border-heavy);
   letter-spacing: -8px;
   position: relative;
-  z-index: 2;
+  z-index: 1;
 }
 
-/* 红色实心块 - 位于左上角 */
+/* 红色实心块 - 左上角 */
 .decor-block-1 {
   position: absolute;
+  top: -20px;
+  left: -30px;
   width: 60px;
   height: 60px;
   background: var(--accent-red);
-  top: 20px;
-  left: 80px;
-  z-index: 1;
+  z-index: 0;
 }
 
-/* 空心方框 - 位于右侧 */
+/* 空心方框 - 右下角 */
 .decor-block-2 {
   position: absolute;
+  bottom: 20px;
+  right: -20px;
   width: 40px;
   height: 40px;
   border: 4px solid var(--border-heavy);
-  background: transparent;
-  top: 80px;
-  right: 60px;
-  z-index: 1;
+  z-index: 2;
 }
 
 /* 红色横线穿过数字 */
 .decor-line {
   position: absolute;
-  width: 300px;
+  top: 50%;
+  left: -60px;
+  right: -60px;
   height: 4px;
   background: var(--accent-red);
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 3;
+  transform: translateY(-50%);
+  z-index: 0;
 }
 
-/* 文案区域 */
-.error-content {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
+/* 文案 */
 .error-title {
   font-size: 24px;
   font-weight: 700;
   color: var(--text-main);
-  margin: 0;
+  margin: 0 0 12px 0;
 }
 
 .error-desc {
   font-size: 14px;
   color: var(--text-secondary);
-  margin: 0;
+  margin: 0 0 32px 0;
 }
 
 /* 返回按钮 */
 .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   height: 40px;
   padding: 0 24px;
   font-size: 14px;
   font-weight: 600;
-  background: var(--card-bg);
-  border: 1px solid var(--border-heavy);
   color: var(--text-main);
+  background: var(--card-bg);
+  border: 2px solid var(--border-heavy);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .btn-secondary:hover {
-  background: var(--path-bg);
-  transform: translateY(-1px);
-  box-shadow: 2px 2px 0 var(--border-heavy);
+  background: var(--border-heavy);
+  color: #fff;
+}
+
+.btn-secondary .arrow {
+  font-size: 16px;
+}
+
+/* 深色模式 */
+[data-theme="dark"] .btn-secondary:hover {
+  background: var(--border-heavy);
+  color: #000;
 }
 </style>

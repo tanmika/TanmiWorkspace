@@ -78,6 +78,7 @@ function handleToggleExpand(e: Event) {
   padding: 6px 8px;
   background: var(--card-bg);
   border: 1px solid transparent;
+  border-left: 3px solid transparent;
   cursor: pointer;
   transition: all 0.1s;
 }
@@ -85,12 +86,17 @@ function handleToggleExpand(e: Event) {
 .tree-node-item:hover {
   background: var(--card-bg);
   border-color: var(--border-color);
+  border-left-color: transparent;
 }
 
 .tree-node-item.selected {
-  background: var(--card-bg);
+  background: rgba(217, 43, 43, 0.03);
   border-color: var(--border-heavy);
-  border-left: 3px solid var(--accent-red);
+  border-left-color: var(--accent-red);
+}
+
+[data-theme="dark"] .tree-node-item.selected {
+  background: rgba(217, 43, 43, 0.08);
 }
 
 /* 层级点容器 */
