@@ -5,6 +5,13 @@ import type { WorkspaceMdData, LogEntry, ProblemData, DocRef } from "../types/wo
 import type { NodeInfoData, NodeStatus, NodeType } from "../types/node.js";
 import type { DocRefWithStatus, TypedLogEntry } from "../types/context.js";
 import { formatShort } from "../utils/time.js";
+import {
+  validateMultilineContent,
+  validateSingleLineContent,
+  validateRules,
+  escapeTableCell,
+  unescapeTableCell,
+} from "../utils/contentValidation.js";
 
 /**
  * 解析后的 Markdown 数据
@@ -200,6 +207,15 @@ export class MarkdownStorage {
    * 写入 Workspace.md
    */
   async writeWorkspaceMd(projectRoot: string, workspaceId: string, data: WorkspaceMdData): Promise<void> {
+    // 验证内容格式
+    validateSingleLineContent(data.name, "工作区名称");
+    if (data.goal) {
+      validateMultilineContent(data.goal, "工作区目标");
+    }
+    if (data.rules.length > 0) {
+      validateRules(data.rules);
+    }
+
     const mdPath = this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
 
     const rulesContent = data.rules.length > 0
@@ -306,6 +322,18 @@ ${data.goal ?? ""}
    * 写入节点 Info.md
    */
   async writeNodeInfo(projectRoot: string, workspaceId: string, nodeId: string, data: NodeInfoData): Promise<void> {
+    // 验证内容格式
+    validateSingleLineContent(data.title, "节点标题");
+    if (data.requirement) {
+      validateMultilineContent(data.requirement, "需求描述");
+    }
+    if (data.notes) {
+      validateMultilineContent(data.notes, "备注");
+    }
+    if (data.conclusion) {
+      validateMultilineContent(data.conclusion, "结论");
+    }
+
     const infoPath = this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
 
     const docsContent = data.docs.length > 0
@@ -400,8 +428,8 @@ ${data.conclusion}
 
       const parts = line.split("|").map(p => p.trim()).filter(p => p);
       if (parts.length >= 3) {
-        // 将 <br> 还原为换行符
-        const event = (parts[2] || "").replace(/<br>/g, "\n");
+        // 还原转义的表格内容
+        const event = unescapeTableCell(parts[2] || "");
         logs.push({
           time: parts[0] || "",
           operator: parts[1] || "AI",
@@ -455,8 +483,8 @@ ${data.conclusion}
     }
 
     const formattedTime = formatShort(entry.time);
-    // 将换行符转义为 <br>，避免破坏 Markdown 表格格式
-    const escapedEvent = entry.event.replace(/\n/g, "<br>");
+    // 转义表格单元格内容（换行符和管道符）
+    const escapedEvent = escapeTableCell(entry.event);
     content += `| ${formattedTime} | ${entry.operator} | ${escapedEvent} |\n`;
 
     await this.fs.writeFile(logPath, content);
@@ -522,6 +550,14 @@ ${data.conclusion}
    * 写入问题
    */
   async writeProblem(projectRoot: string, workspaceId: string, data: ProblemData, nodeId?: string): Promise<void> {
+    // 验证内容格式（跳过默认占位符）
+    if (data.currentProblem && data.currentProblem !== "（暂无）") {
+      validateMultilineContent(data.currentProblem, "当前问题");
+    }
+    if (data.nextStep && data.nextStep !== "（暂无）") {
+      validateMultilineContent(data.nextStep, "下一步");
+    }
+
     const problemPath = nodeId
       ? this.fs.getNodeProblemPath(projectRoot, workspaceId, nodeId)
       : this.fs.getWorkspaceProblemPath(projectRoot, workspaceId);
@@ -637,8 +673,8 @@ ${data.nextStep}
       const cells = line.split("|").map(c => c.trim()).filter(Boolean);
       if (cells.length >= 3) {
         const operator = cells[1];
-        // 将 <br> 还原为换行符
-        const event = (cells[2] || "").replace(/<br>/g, "\n");
+        // 还原转义的表格内容
+        const event = unescapeTableCell(cells[2] || "");
         entries.push({
           timestamp: cells[0] || "",
           operator: operator === "AI" || operator === "Human" ? operator : "AI",
@@ -674,8 +710,8 @@ ${data.nextStep}
 `;
     }
 
-    // 将换行符转义为 <br>，避免破坏 Markdown 表格格式
-    const escapedEvent = entry.event.replace(/\n/g, "<br>");
+    // 转义表格单元格内容（换行符和管道符）
+    const escapedEvent = escapeTableCell(entry.event);
     const newLine = `| ${entry.timestamp} | ${entry.operator} | ${escapedEvent} |`;
     const updatedContent = content.trimEnd() + "\n" + newLine + "\n";
     await this.fs.writeFile(logPath, updatedContent);
@@ -890,6 +926,18 @@ ${data.nextStep}
     nodeId: string,
     data: NodeInfoData & { docsWithStatus?: DocRefWithStatus[] }
   ): Promise<void> {
+    // 验证内容格式
+    validateSingleLineContent(data.title, "节点标题");
+    if (data.requirement) {
+      validateMultilineContent(data.requirement, "需求描述");
+    }
+    if (data.notes) {
+      validateMultilineContent(data.notes, "备注");
+    }
+    if (data.conclusion) {
+      validateMultilineContent(data.conclusion, "结论");
+    }
+
     const infoPath = this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
 
     // 如果有 docsWithStatus，优先使用

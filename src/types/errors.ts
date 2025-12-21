@@ -17,6 +17,7 @@ export const ErrorCodes = {
   NODE_NOT_FOUND: "NODE_NOT_FOUND",
   PARENT_NOT_FOUND: "PARENT_NOT_FOUND",
   INVALID_TITLE: "INVALID_TITLE",
+  INVALID_CONTENT: "INVALID_CONTENT",
   CANNOT_DELETE_ROOT: "CANNOT_DELETE_ROOT",
 
   // 状态转换错误
@@ -99,6 +100,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   NODE_NOT_FOUND: "节点不存在",
   PARENT_NOT_FOUND: "父节点不存在",
   INVALID_TITLE: "标题不合法，不能包含特殊字符: / \\ : * ? \" < > |",
+  INVALID_CONTENT: "内容格式不合法，包含会破坏解析的字符",
   CANNOT_DELETE_ROOT: "无法删除根节点",
   INVALID_TRANSITION: "非法状态转换",
   CONCLUSION_REQUIRED: "complete/fail 动作必须提供 conclusion",
