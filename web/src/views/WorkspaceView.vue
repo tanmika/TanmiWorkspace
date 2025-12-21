@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Plus, Aim, Refresh, InfoFilled, List, Share, Document } from '@element-plus/icons-vue'
+// Element Plus icons (no longer used in header/sidebar)
 import { useWorkspaceStore, useNodeStore, useSettingsStore } from '@/stores'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
@@ -243,6 +243,7 @@ async function handleEnableDispatch() {
   }
 }
 
+// @ts-ignore - Reserved for future disable dispatch button
 function handleDisableDispatch() {
   showDisableDispatchDialog.value = true
 }
@@ -261,54 +262,43 @@ async function handleDispatchSuccess() {
     <!-- 头部 Header -->
     <header class="layout-header">
       <div class="header-left">
-        <WsButton variant="icon" @click="goBack">
-          <ArrowLeft />
-        </WsButton>
+        <button class="ws-btn text" @click="goBack" title="返回首页">&lt;</button>
         <h2 class="workspace-title">{{ workspaceStore.currentWorkspace?.name }}</h2>
-        <WsButton
-          variant="icon"
+        <button
+          class="ws-btn text"
           :class="{ active: showInfoBar }"
           @click="showInfoBar = !showInfoBar"
           title="切换信息栏"
-        >
-          <InfoFilled />
-        </WsButton>
+        >i</button>
       </div>
       <div class="header-right">
-        <WsButton variant="icon" @click="handleFocusCurrent" :disabled="isFocusing" title="聚焦当前任务">
-          <Aim />
-        </WsButton>
-        <WsButton variant="icon" @click="handleRefresh" :disabled="isRefreshing" title="刷新数据">
-          <Refresh />
-        </WsButton>
-        <WsButton variant="primary" @click="openCreateDialog">
-          <Plus style="width: 16px; height: 16px" />
-          新建节点
-        </WsButton>
+        <button class="ws-btn" @click="handleFocusCurrent" :disabled="isFocusing" title="聚焦当前任务">FOCUS</button>
+        <button class="ws-btn" @click="handleRefresh" :disabled="isRefreshing" title="刷新数据">SYNC</button>
+        <button class="ws-btn primary" @click="openCreateDialog">+ NEW</button>
       </div>
     </header>
 
     <!-- 工作区信息栏 InfoBar -->
     <transition name="slide">
       <div v-if="showInfoBar && workspaceStore.currentStatus" class="layout-infobar">
-        <div class="info-item">
-          <span class="info-label">目标</span>
+        <div class="info-item info-goal">
+          <span class="info-label">Goal / 目标</span>
           <span class="info-value">{{ workspaceStore.currentStatus.goal }}</span>
         </div>
-        <div class="info-item">
-          <span class="info-label">进度</span>
-          <div class="progress-container">
+        <div class="info-item info-progress">
+          <span class="info-label">Progress / 进度</span>
+          <div class="info-value">
             <div class="progress-track">
               <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
             </div>
-            <span class="info-value">
+            <span class="progress-text">
               {{ workspaceStore.currentStatus.completedNodes }}/{{ workspaceStore.currentStatus.totalNodes }}
             </span>
           </div>
         </div>
         <div class="info-item">
-          <span class="info-label">派发</span>
-          <div class="dispatch-controls">
+          <span class="info-label">Dispatch / 派发</span>
+          <div class="info-value">
             <span
               :class="[
                 'badge-status',
@@ -317,42 +307,31 @@ async function handleDispatchSuccess() {
               ]"
             >
               {{
-                workspaceStore.dispatchStatus === 'disabled' ? '未启用' :
-                workspaceStore.dispatchStatus === 'enabled' ? '已启用(无Git)' : '已启用(Git)'
+                workspaceStore.dispatchStatus === 'disabled' ? 'OFF' :
+                workspaceStore.dispatchStatus === 'enabled' ? 'ON' : 'GIT'
               }}
             </span>
-            <WsButton
+            <button
               v-if="workspaceStore.dispatchStatus === 'disabled'"
-              variant="primary"
-              size="sm"
+              class="ws-btn config-btn"
               :disabled="isEnablingDispatch"
               @click="handleEnableDispatch"
-            >
-              启用
-            </WsButton>
-            <div v-else class="dispatch-actions">
-              <WsButton variant="secondary" size="sm" @click="handleSwitchMode">
-                切换模式
-              </WsButton>
-              <WsButton variant="danger" size="sm" @click="handleDisableDispatch">
-                关闭
-              </WsButton>
-            </div>
+            >ENABLE</button>
+            <button v-else class="ws-btn config-btn" @click="handleSwitchMode">CONFIG</button>
           </div>
         </div>
-        <div v-if="hasRulesOrDocs" class="info-item">
-          <div class="info-tags">
-            <span v-if="workspaceStore.currentRules.length" class="info-tag rules" @click="showWorkspaceDetail = true">
-              {{ workspaceStore.currentRules.length }} 条规则
+        <div class="info-item" v-if="hasRulesOrDocs">
+          <span class="info-label">Links / 引用</span>
+          <div class="info-value">
+            <span v-if="workspaceStore.currentRules.length" class="tag-outline" @click="showWorkspaceDetail = true">
+              {{ workspaceStore.currentRules.length }} 规则
             </span>
-            <span v-if="workspaceStore.currentDocs.length" class="info-tag docs" @click="showWorkspaceDetail = true">
-              {{ workspaceStore.currentDocs.length }} 个文档
+            <span v-if="workspaceStore.currentDocs.length" class="tag-outline" @click="showWorkspaceDetail = true">
+              {{ workspaceStore.currentDocs.length }} 文档
             </span>
           </div>
-          <WsButton variant="primary" size="sm" @click="showWorkspaceDetail = true">
-            查看详情
-          </WsButton>
         </div>
+        <button class="ws-btn text details-btn" @click="showWorkspaceDetail = true">DETAILS ↓</button>
       </div>
     </transition>
 
@@ -361,34 +340,20 @@ async function handleDispatchSuccess() {
       <!-- 左侧：节点树 Sidebar -->
       <aside class="layout-sidebar" :style="{ width: sidebarWidth + 'px' }">
         <div class="sidebar-header">
-          <div class="sidebar-header-left">
-            <h3>任务树</h3>
-            <WsButton
-              variant="icon"
-              class="workspace-detail-btn"
-              @click="showWorkspaceDetail = true"
-              title="查看工作区详情"
-            >
-              <Document />
-            </WsButton>
-          </div>
+          <h3>Task Tree</h3>
           <div class="view-toggle">
-            <WsButton
-              variant="icon"
+            <button
+              class="ws-btn view-btn"
               :class="{ active: viewMode === 'list' }"
               @click="setViewMode('list')"
               title="列表视图"
-            >
-              <List />
-            </WsButton>
-            <WsButton
-              variant="icon"
+            >☰</button>
+            <button
+              class="ws-btn view-btn"
               :class="{ active: viewMode === 'graph' }"
               @click="setViewMode('graph')"
               title="图形视图"
-            >
-              <Share />
-            </WsButton>
+            >◇</button>
           </div>
         </div>
         <div class="sidebar-content">
@@ -599,16 +564,78 @@ async function handleDispatchSuccess() {
 .workspace-title {
   margin: 0;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-main);
 }
 
-.ws-button.active {
+/* 工作区操作按钮 */
+.ws-btn {
+  height: 28px;
+  padding: 0 10px;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.ws-btn:hover:not(:disabled) {
+  border-color: var(--border-heavy);
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--border-heavy);
+}
+
+.ws-btn:active:not(:disabled) {
+  transform: translate(0, 0);
+  box-shadow: none;
+}
+
+.ws-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ws-btn.text {
+  border: none;
+  background: transparent;
+  padding: 0 8px;
+  font-size: 14px;
+}
+
+.ws-btn.text:hover:not(:disabled) {
+  box-shadow: none;
+  background: rgba(0, 0, 0, 0.05);
+  transform: none;
+}
+
+.ws-btn.text.active {
   background: rgba(0, 0, 0, 0.1);
 }
 
-[data-theme="dark"] .ws-button.active {
+[data-theme="dark"] .ws-btn.text:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .ws-btn.text.active {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.ws-btn.primary {
+  background: var(--border-heavy);
+  border-color: var(--border-heavy);
+  color: #fff;
+}
+
+.ws-btn.primary:hover:not(:disabled) {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.2);
 }
 
 /* ===== 信息栏 InfoBar ===== */
@@ -659,7 +686,6 @@ async function handleDispatchSuccess() {
   width: 120px;
   height: 8px;
   background: var(--border-color);
-  border-radius: 4px;
   overflow: hidden;
 }
 
@@ -669,44 +695,49 @@ async function handleDispatchSuccess() {
   transition: width 0.3s ease;
 }
 
-/* 派发状态徽章 */
+/* 派发状态徽章 - 终端/军牌风格 */
 .badge-status {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 3px;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  min-width: 32px;
+  text-align: center;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.5px;
+  display: inline-block;
 }
 
 .badge-status.disabled {
-  background: #e0e0e0;
+  background: #eee;
   color: #666;
+  border: 1px solid #ddd;
 }
 
 .badge-status.enabled {
-  background: #d4edda;
-  color: #155724;
+  background: var(--accent-green);
+  color: #fff;
 }
 
 .badge-status.git {
-  background: #fff3cd;
-  color: #856404;
+  background: var(--accent-orange);
+  color: #000;
 }
 
 [data-theme="dark"] .badge-status.disabled {
   background: #333;
   color: #aaa;
+  border-color: #444;
 }
 
 [data-theme="dark"] .badge-status.enabled {
-  background: #1e4620;
-  color: #7bc67e;
+  background: var(--accent-green);
+  color: #fff;
 }
 
 [data-theme="dark"] .badge-status.git {
-  background: #4a3c1a;
-  color: #ffc107;
+  background: var(--accent-orange);
+  color: #000;
 }
 
 .dispatch-controls {
@@ -720,6 +751,44 @@ async function handleDispatchSuccess() {
   gap: 8px;
 }
 
+/* 配置按钮 */
+.config-btn {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+/* 进度文本 */
+.progress-text {
+  font-family: var(--mono-font);
+  font-size: 13px;
+}
+
+/* 引用标签 - outline 样式 */
+.tag-outline {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  background: var(--card-bg);
+  cursor: pointer;
+  text-transform: uppercase;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.tag-outline:hover {
+  border-color: var(--border-heavy);
+  color: var(--text-main);
+}
+
+/* DETAILS 按钮 */
+.details-btn {
+  margin-left: auto;
+  font-size: 10px;
+}
+
 /* 信息标签 */
 .info-tags {
   display: flex;
@@ -729,7 +798,6 @@ async function handleDispatchSuccess() {
 .info-tag {
   font-size: 12px;
   padding: 4px 10px;
-  border-radius: 3px;
   cursor: pointer;
   transition: opacity 0.2s;
 }
@@ -805,37 +873,38 @@ async function handleDispatchSuccess() {
   align-items: center;
 }
 
-.sidebar-header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .sidebar-header h3 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.workspace-detail-btn {
-  animation: pulse-highlight 2s ease-in-out infinite;
-}
-
-@keyframes pulse-highlight {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
 .view-toggle {
-  display: flex;
-  gap: 4px;
+  display: inline-flex;
+}
+
+.view-toggle .ws-btn.view-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-toggle .ws-btn.view-btn:first-child {
+  border-right: none;
+}
+
+.view-toggle .ws-btn.view-btn.active {
+  background: var(--border-heavy);
+  border-color: var(--border-heavy);
+  color: #fff;
 }
 
 .sidebar-content {
@@ -861,9 +930,7 @@ async function handleDispatchSuccess() {
 /* ===== 右侧内容区 Content ===== */
 .layout-content {
   flex: 1;
-  overflow: auto;
-  padding: 24px;
-  background: var(--card-bg);
+  overflow: hidden;
 }
 
 .empty-state {
@@ -966,14 +1033,12 @@ async function handleDispatchSuccess() {
   padding: 2px 8px;
   background: var(--border-color);
   color: var(--text-secondary);
-  border-radius: 10px;
   font-weight: 600;
 }
 
 .goal-content {
   padding: 12px;
   background: var(--bg-color);
-  border-radius: 4px;
   font-size: 14px;
   color: var(--text-main);
   line-height: 1.6;
@@ -1034,7 +1099,6 @@ async function handleDispatchSuccess() {
 .log-item {
   padding: 10px 12px;
   background: var(--bg-color);
-  border-radius: 4px;
   margin-bottom: 8px;
 }
 
@@ -1054,9 +1118,10 @@ async function handleDispatchSuccess() {
 .log-operator {
   font-family: var(--mono-font);
   font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 2px;
+  font-weight: 700;
+  padding: 2px 0;
+  width: 32px;
+  text-align: center;
   text-transform: uppercase;
 }
 
@@ -1149,7 +1214,6 @@ async function handleDispatchSuccess() {
   display: block;
   padding: 10px 16px;
   border: 2px solid var(--border-color);
-  border-radius: 4px;
   text-align: center;
   font-size: 13px;
   font-weight: 600;
@@ -1180,7 +1244,6 @@ async function handleDispatchSuccess() {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
   background: var(--card-bg);
   color: var(--text-main);
   font-size: 14px;
@@ -1202,7 +1265,6 @@ async function handleDispatchSuccess() {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
   background: var(--card-bg);
   color: var(--text-main);
   font-size: 14px;

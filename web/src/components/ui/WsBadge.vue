@@ -36,13 +36,10 @@ const badgeClass = computed(() => {
 
 <style scoped>
 .ws-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -50,18 +47,24 @@ const badgeClass = computed(() => {
 /* Active - 黑底 */
 .badge-active {
   background: var(--border-heavy);
-  color: var(--card-bg);
+  color: #fff;
 }
 
-/* Archived - 灰底 */
+/* Archived - 浅灰底 */
 .badge-archived {
-  background: var(--text-muted);
-  color: var(--card-bg);
+  background: var(--path-bg);
+  color: var(--text-muted);
 }
 
 /* Error - 红底 */
 .badge-error {
   background: var(--accent-red);
-  color: white;
+  color: #fff;
+}
+
+/* Dark Mode */
+[data-theme="dark"] .badge-active {
+  background: #fff;
+  color: #111;
 }
 </style>

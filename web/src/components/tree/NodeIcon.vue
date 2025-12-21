@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { NodeType, NodeStatus } from '@/types'
 
 const props = defineProps<{
@@ -6,17 +7,17 @@ const props = defineProps<{
   status: NodeStatus
 }>()
 
-// 是否为规划节点
-const isPlanning = props.type === 'planning'
+// 是否为规划节点 - 必须是 computed 才能响应式
+const isPlanning = computed(() => props.type === 'planning')
 </script>
 
 <template>
-  <div
-    :class="[
-      isPlanning ? 'node-plan' : 'node-exec',
-      status
-    ]"
-  ></div>
+  <!-- 规划节点需要外层容器保持对齐 -->
+  <div v-if="isPlanning" class="node-plan-wrapper">
+    <div :class="['node-plan', status]"></div>
+  </div>
+  <!-- 执行节点直接渲染 -->
+  <div v-else :class="['node-exec', status]"></div>
 </template>
 
 <style scoped>
@@ -24,55 +25,54 @@ const isPlanning = props.type === 'planning'
 .node-exec {
   width: 20px;
   height: 20px;
-  flex-shrink: 0;
+  box-sizing: border-box;
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 /* 执行节点: pending - 空心黑框 */
 .node-exec.pending {
   border: 2px solid var(--border-heavy);
-  background: transparent;
+  background: var(--card-bg);
 }
 
-/* 执行节点: implementing - 蓝白斜纹 */
+/* 执行节点: implementing - 蓝白斜纹 (施工中) */
 .node-exec.implementing {
-  background: linear-gradient(
-    135deg,
-    var(--accent-blue) 25%,
-    #ffffff 25%,
-    #ffffff 50%,
-    var(--accent-blue) 50%,
-    var(--accent-blue) 75%,
-    #ffffff 75%,
-    #ffffff
+  border: 2px solid var(--accent-blue);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--accent-blue),
+    var(--accent-blue) 3px,
+    #fff 3px,
+    #fff 6px
   );
-  background-size: 8px 8px;
 }
 
-/* 执行节点: validating - 橙色 + 白点 */
+/* 执行节点: validating - 橙色 + 中心白方点 */
 .node-exec.validating {
-  background: #f59e0b;
+  border: 2px solid var(--accent-orange);
+  background: var(--accent-orange);
 }
 
 .node-exec.validating::after {
   content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   width: 6px;
   height: 6px;
-  border-radius: 50%;
-  background: #ffffff;
+  background: #fff;
 }
 
 /* 执行节点: completed - 实心黑块 */
 .node-exec.completed {
+  border: 2px solid var(--border-heavy);
   background: var(--border-heavy);
 }
 
 /* 执行节点: failed - 红底白X */
 .node-exec.failed {
+  border: 2px solid var(--accent-red);
   background: var(--accent-red);
 }
 
@@ -84,7 +84,7 @@ const isPlanning = props.type === 'planning'
   left: 50%;
   width: 12px;
   height: 2px;
-  background: #ffffff;
+  background: #fff;
 }
 
 .node-exec.failed::before {
@@ -95,91 +95,93 @@ const isPlanning = props.type === 'planning'
   transform: translate(-50%, -50%) rotate(-45deg);
 }
 
-/* 规划节点 - 菱形 16x16, rotate 45deg */
-.node-plan {
-  width: 16px;
-  height: 16px;
-  transform: rotate(45deg);
+/* 规划节点容器 - 与执行节点统一宽度 */
+.node-plan-wrapper {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+}
+
+/* 规划节点 - 菱形 14x14, rotate 45deg */
+.node-plan {
+  width: 14px;
+  height: 14px;
+  transform: rotate(45deg);
+  box-sizing: border-box;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 规划节点: pending - 空心菱形 */
 .node-plan.pending {
   border: 2px solid var(--border-heavy);
-  background: transparent;
+  background: var(--card-bg);
 }
 
 /* 规划节点: planning - 紫色横纹 */
 .node-plan.planning {
-  background: linear-gradient(
+  border: 2px solid var(--accent-purple);
+  background: repeating-linear-gradient(
     0deg,
-    #9B59B6 25%,
-    #ffffff 25%,
-    #ffffff 50%,
-    #9B59B6 50%,
-    #9B59B6 75%,
-    #ffffff 75%,
-    #ffffff
+    var(--accent-purple),
+    var(--accent-purple) 2px,
+    #fff 2px,
+    #fff 4px
   );
-  background-size: 8px 8px;
 }
 
-/* 规划节点: monitoring - 蓝框 + 中心点 */
+/* 规划节点: monitoring - 蓝框 + 中心方点 */
 .node-plan.monitoring {
   border: 2px solid var(--accent-blue);
-  background: transparent;
+  background: #fff;
 }
 
 .node-plan.monitoring::after {
   content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   width: 4px;
   height: 4px;
-  border-radius: 50%;
   background: var(--accent-blue);
 }
 
 /* 规划节点: completed - 实心黑菱形 */
 .node-plan.completed {
+  border: 2px solid var(--border-heavy);
   background: var(--border-heavy);
 }
 
-/* 规划节点: cancelled - 灰色虚线 */
+/* 规划节点: cancelled - 灰色虚线框 */
 .node-plan.cancelled {
-  border: 2px dashed #999;
+  border: 2px dashed #9CA3AF;
   background: transparent;
 }
 
 /* 深色模式调整 */
 [data-theme="dark"] .node-exec.implementing {
-  background: linear-gradient(
-    135deg,
-    var(--accent-blue) 25%,
-    #1a1a1a 25%,
-    #1a1a1a 50%,
-    var(--accent-blue) 50%,
-    var(--accent-blue) 75%,
-    #1a1a1a 75%,
-    #1a1a1a
+  background: repeating-linear-gradient(
+    45deg,
+    var(--accent-blue),
+    var(--accent-blue) 3px,
+    #1a1a1a 3px,
+    #1a1a1a 6px
   );
-  background-size: 8px 8px;
 }
 
 [data-theme="dark"] .node-plan.planning {
-  background: linear-gradient(
+  background: repeating-linear-gradient(
     0deg,
-    #9B59B6 25%,
-    #1a1a1a 25%,
-    #1a1a1a 50%,
-    #9B59B6 50%,
-    #9B59B6 75%,
-    #1a1a1a 75%,
-    #1a1a1a
+    var(--accent-purple),
+    var(--accent-purple) 2px,
+    #1a1a1a 2px,
+    #1a1a1a 4px
   );
-  background-size: 8px 8px;
+}
+
+[data-theme="dark"] .node-plan.monitoring {
+  background: #1a1a1a;
 }
 </style>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Setting, InfoFilled } from '@element-plus/icons-vue'
 import { useSettingsStore } from '@/stores/settings'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
+import WsModal from '@/components/ui/WsModal.vue'
+import WsButton from '@/components/ui/WsButton.vue'
 
 const settingsStore = useSettingsStore()
 
@@ -88,297 +89,364 @@ async function handleSave() {
     ElMessage.error('保存失败')
   }
 }
+
+// 选择模式
+function selectMode(mode: 'none' | 'git' | 'no-git') {
+  localMode.value = mode
+}
 </script>
 
 <template>
-  <el-dialog
+  <WsModal
     :model-value="visible"
-    title="设置"
+    title="SETTINGS"
     width="600px"
+    @update:model-value="(val: boolean) => !val && handleClose()"
     @close="handleClose"
   >
     <div class="settings-content">
       <!-- 派发模式设置 -->
       <div class="setting-section">
-        <div class="section-header">
-          <el-icon :size="18" style="margin-right: 8px">
-            <Setting />
-          </el-icon>
-          <h3>启用派发时的行为</h3>
-        </div>
-        <div class="section-description">
+        <div class="setting-section-title">派发行为配置</div>
+        <div class="setting-section-desc">
           设置在工作区启用派发时的默认行为。已启用派发的工作区不受影响。
         </div>
 
-        <el-radio-group v-model="localMode" class="mode-radio-group">
-          <el-radio value="none" size="large">
-            <div class="radio-content">
-              <div class="radio-title">每次询问</div>
-              <div class="radio-desc">启用派发时弹窗让用户选择模式（推荐）</div>
+        <div class="radio-group">
+          <label
+            class="radio-card"
+            :class="{ selected: localMode === 'none' }"
+            @click="selectMode('none')"
+          >
+            <input type="radio" name="dispatch-mode" :checked="localMode === 'none'">
+            <div>
+              <span class="radio-card-title">每次询问 (Recommended)</span>
+              <span class="radio-card-desc">启用派发时弹窗让用户选择模式。</span>
             </div>
-          </el-radio>
+          </label>
 
-          <el-radio value="no-git" size="large">
-            <div class="radio-content">
-              <div class="radio-title">自动使用无Git模式</div>
-              <div class="radio-desc">直接启用派发，仅更新元数据，不影响代码仓库</div>
+          <label
+            class="radio-card"
+            :class="{ selected: localMode === 'no-git' }"
+            @click="selectMode('no-git')"
+          >
+            <input type="radio" name="dispatch-mode" :checked="localMode === 'no-git'">
+            <div>
+              <span class="radio-card-title">自动使用无 Git 模式</span>
+              <span class="radio-card-desc">直接启用派发，仅更新元数据，不影响代码仓库。</span>
             </div>
-          </el-radio>
+          </label>
 
-          <el-radio value="git" size="large">
-            <div class="radio-content">
-              <div class="radio-title">自动使用Git模式（实验功能）</div>
-              <div class="radio-desc">直接启用派发，自动创建分支、提交、回滚</div>
+          <label
+            class="radio-card"
+            :class="{ selected: localMode === 'git' }"
+            @click="selectMode('git')"
+          >
+            <input type="radio" name="dispatch-mode" :checked="localMode === 'git'">
+            <div>
+              <span class="radio-card-title">自动使用 Git 模式 (Experimental)</span>
+              <span class="radio-card-desc">直接启用派发，自动创建分支、提交、回滚。</span>
             </div>
-          </el-radio>
-        </el-radio-group>
+          </label>
+        </div>
 
         <!-- Git 模式警告 -->
-        <el-alert
-          v-if="localMode === 'git'"
-          type="warning"
-          :closable="false"
-          class="git-warning"
-        >
-          <template #title>
-            <div class="warning-title">实验功能警告</div>
-          </template>
-          <div class="warning-content">
-            <p>Git 模式可能带来以下风险：</p>
-            <ul>
-              <li>自动创建 <code>tanmi_workspace/process/*</code> 分支</li>
-              <li>任务完成时自动提交代码</li>
-              <li>测试失败时执行 <code>git reset --hard</code>（可能丢失未提交代码）</li>
-              <li>合并时可能产生冲突</li>
-            </ul>
-            <p style="margin-top: 8px; font-weight: 600;">
-              建议在生产环境使用前充分测试
-            </p>
-          </div>
-        </el-alert>
+        <div v-if="localMode === 'git'" class="warning-block">
+          <div class="warning-title">GIT MODE RISKS</div>
+          <ul class="warning-list">
+            <li>自动创建 <span class="code-tag">tanmi_workspace/process/*</span> 分支</li>
+            <li>任务完成时自动提交代码</li>
+            <li>测试失败时执行 <span class="code-tag">git reset --hard</span>（可能丢失未提交代码）</li>
+            <li>合并时可能产生冲突</li>
+          </ul>
+        </div>
 
         <!-- 无 Git 模式说明 -->
-        <el-alert
-          v-if="localMode === 'no-git'"
-          type="info"
-          :closable="false"
-          class="no-git-info"
-        >
-          <div class="info-content">
-            <p>无 Git 模式限制：</p>
-            <ul>
-              <li>测试失败时无法自动回滚</li>
-              <li>建议在执行前手动备份重要文件</li>
-            </ul>
-          </div>
-        </el-alert>
+        <div v-if="localMode === 'no-git'" class="info-block">
+          <div class="info-title">NO-GIT MODE LIMITS</div>
+          <ul class="info-list">
+            <li>测试失败时无法自动回滚</li>
+            <li>建议在执行前手动备份重要文件</li>
+          </ul>
+        </div>
       </div>
 
       <!-- 版本信息 -->
       <div class="setting-section version-section">
-        <div class="section-header">
-          <el-icon :size="18" style="margin-right: 8px">
-            <InfoFilled />
-          </el-icon>
-          <h3>版本信息</h3>
-        </div>
-        <div class="version-grid">
-          <div class="version-item">
-            <span class="version-label">后端版本</span>
-            <span class="version-value">v{{ devInfo?.packageVersion || '-' }}</span>
+        <div class="setting-section-title">版本信息</div>
+        <div class="tech-spec">
+          <div class="spec-item">
+            <label>BACKEND VERSION</label>
+            <div class="spec-value">v{{ devInfo?.packageVersion || '-' }}</div>
           </div>
-          <div class="version-item">
-            <span class="version-label">Node 版本</span>
-            <span class="version-value">{{ devInfo?.nodeVersion || '-' }}</span>
+          <div class="spec-item">
+            <label>NODE VERSION</label>
+            <div class="spec-value">{{ devInfo?.nodeVersion || '-' }}</div>
           </div>
-          <div class="version-item">
-            <span class="version-label">后端编译</span>
-            <span class="version-value">{{ formatTime(devInfo?.codeBuildTime) }}</span>
+          <div class="spec-item">
+            <label>后端编译</label>
+            <div class="spec-value">{{ formatTime(devInfo?.codeBuildTime) }}</div>
           </div>
-          <div class="version-item">
-            <span class="version-label">前端编译</span>
-            <span class="version-value">{{ formatTime(frontendBuildTime) }}</span>
+          <div class="spec-item">
+            <label>前端编译</label>
+            <div class="spec-value">{{ formatTime(frontendBuildTime) }}</div>
           </div>
-          <div class="version-item">
-            <span class="version-label">服务启动</span>
-            <span class="version-value">{{ formatTime(devInfo?.serverStartTime) }}</span>
+          <div class="spec-item">
+            <label>服务启动</label>
+            <div class="spec-value">{{ formatTime(devInfo?.serverStartTime) }}</div>
           </div>
         </div>
-        <el-alert
+        <div
           v-if="devInfo?.codeBuildTime && frontendBuildTime && devInfo.codeBuildTime !== frontendBuildTime"
-          type="warning"
-          :closable="false"
-          class="version-mismatch-warning"
+          class="spec-warning"
         >
-          <div class="warning-content">
-            前端和后端编译时间不一致，可能需要重新编译前端或刷新页面。
-          </div>
-        </el-alert>
+          [WARN] 前后端编译时间不一致，可能需要重新编译或刷新页面。
+        </div>
       </div>
     </div>
 
     <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="handleClose">取消</el-button>
-        <el-button type="primary" @click="handleSave" :loading="settingsStore.loading">
-          保存
-        </el-button>
-      </div>
+      <WsButton variant="cancel" @click="handleClose">取消</WsButton>
+      <WsButton variant="primary" @click="handleSave" :loading="settingsStore.loading">
+        保存更改
+      </WsButton>
     </template>
-  </el-dialog>
+  </WsModal>
 </template>
 
 <style scoped>
 .settings-content {
-  padding: 8px 0;
+  padding: 0;
 }
 
 .setting-section {
   margin-bottom: 24px;
 }
 
-.section-header {
+.setting-section:last-child {
+  margin-bottom: 0;
+}
+
+/* 章节标题 - 带红色条 */
+.setting-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
+  gap: 8px;
+  color: var(--text-main);
 }
 
-.section-header h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
+.setting-section-title::before {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 14px;
+  background: var(--accent-red);
 }
 
-.section-description {
-  color: #606266;
-  font-size: 14px;
+.setting-section-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
   margin-bottom: 16px;
   line-height: 1.5;
 }
 
-.mode-radio-group {
+/* 单选卡片组 */
+.radio-group {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: 100%;
 }
 
-.mode-radio-group :deep(.el-radio) {
-  margin-right: 0;
-  width: 100%;
-  height: auto;
-  padding: 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  transition: all 0.2s;
+.radio-card {
+  border: 1px solid var(--border-color);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--card-bg);
 }
 
-.mode-radio-group :deep(.el-radio:hover) {
-  border-color: #409eff;
-  background-color: #f0f9ff;
+.radio-card:hover {
+  border-color: var(--text-secondary);
 }
 
-.mode-radio-group :deep(.el-radio.is-checked) {
-  border-color: #409eff;
-  background-color: #ecf5ff;
+.radio-card input[type="radio"] {
+  margin-top: 4px;
+  accent-color: var(--border-heavy);
 }
 
-.radio-content {
-  margin-left: 8px;
+.radio-card.selected {
+  border-color: var(--border-heavy);
+  background: #fffcfc;
 }
 
-.radio-title {
+[data-theme="dark"] .radio-card.selected {
+  background: #1f1f1f;
+}
+
+.radio-card.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent-red);
+}
+
+.radio-card-title {
   font-weight: 600;
   font-size: 14px;
-  color: #303133;
   margin-bottom: 4px;
+  display: block;
+  color: var(--text-main);
 }
 
-.radio-desc {
-  font-size: 13px;
-  color: #909399;
+.radio-card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
-.git-warning,
-.no-git-info {
-  margin-top: 16px;
+/* 警告框 */
+.warning-block {
+  background: #fff8f0;
+  border: 1px solid #e6a23c;
+  border-left-width: 4px;
+  padding: 16px;
+  margin-top: 12px;
+}
+
+[data-theme="dark"] .warning-block {
+  background: #2a2010;
+  border-color: #b8860b;
 }
 
 .warning-title {
-  font-weight: 600;
-  font-size: 14px;
+  color: #d35400;
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  font-family: var(--mono-font);
+  letter-spacing: 0.5px;
 }
 
-.warning-content,
-.info-content {
-  font-size: 13px;
-  line-height: 1.6;
+[data-theme="dark"] .warning-title {
+  color: #f5a623;
 }
 
-.warning-content p,
-.info-content p {
-  margin: 0 0 8px 0;
-}
-
-.warning-content ul,
-.info-content ul {
+.warning-list {
   margin: 0;
   padding-left: 20px;
-}
-
-.warning-content li,
-.info-content li {
-  margin-bottom: 4px;
-}
-
-.warning-content code {
-  background: rgba(0, 0, 0, 0.1);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: 'Monaco', 'Menlo', monospace;
   font-size: 12px;
+  color: #885a0c;
+  line-height: 1.8;
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+[data-theme="dark"] .warning-list {
+  color: #d4a537;
 }
 
-/* 版本信息样式 */
+/* 信息框 */
+.info-block {
+  background: #f0f9ff;
+  border: 1px solid var(--accent-blue);
+  border-left-width: 4px;
+  padding: 16px;
+  margin-top: 12px;
+}
+
+[data-theme="dark"] .info-block {
+  background: #0a1929;
+  border-color: #1e88e5;
+}
+
+.info-title {
+  color: #1565c0;
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  font-family: var(--mono-font);
+  letter-spacing: 0.5px;
+}
+
+[data-theme="dark"] .info-title {
+  color: #64b5f6;
+}
+
+.info-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #1565c0;
+  line-height: 1.8;
+}
+
+[data-theme="dark"] .info-list {
+  color: #64b5f6;
+}
+
+.code-tag {
+  font-family: var(--mono-font);
+  background: rgba(255, 255, 255, 0.6);
+  padding: 1px 5px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 11px;
+}
+
+[data-theme="dark"] .code-tag {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 版本信息区 */
 .version-section {
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--border-color);
   padding-top: 20px;
 }
 
-.version-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  background: #f5f7fa;
+.tech-spec {
+  background: var(--path-bg);
+  border: 1px solid var(--border-color);
   padding: 16px;
-  border-radius: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
-.version-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.spec-item label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  font-family: var(--mono-font);
+  letter-spacing: 0.5px;
 }
 
-.version-label {
-  font-size: 12px;
-  color: #909399;
-}
-
-.version-value {
+.spec-item .spec-value {
   font-size: 14px;
-  color: #303133;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: var(--mono-font);
+  color: var(--text-main);
+  font-weight: 600;
 }
 
-.version-mismatch-warning {
+.spec-warning {
+  font-size: 12px;
+  color: #d97706;
   margin-top: 12px;
+  font-family: var(--mono-font);
+}
+
+[data-theme="dark"] .spec-warning {
+  color: #fbbf24;
 }
 </style>

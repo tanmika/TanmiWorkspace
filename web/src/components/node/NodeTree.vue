@@ -68,24 +68,26 @@ function isActivePath(nodeId: string): boolean {
 <template>
   <div class="node-tree">
     <div v-if="tree" class="tree-container">
-      <!-- Root node -->
+      <!-- Root node (depth=0, no expand button) -->
       <TreeNodeItem
         :node="tree"
         :is-focused="isFocused(tree.id)"
         :is-selected="isSelected(tree.id)"
         :is-active-path="isActivePath(tree.id)"
+        :depth="0"
         @click="handleNodeClick(tree)"
       />
-      <!-- Children -->
+      <!-- Children (depth starts at 1) -->
       <div
         v-if="tree.children && tree.children.length > 0"
-        :class="['tree-children', { 'active-path': isActivePath(tree.id) }]"
+        class="tree-children"
       >
         <TreeChildren
-          :children="tree.children"
+          :children="tree.children!"
           :selected-id="selectedId"
           :focus-id="focusId"
           :active-path-ids="activePathIds"
+          :depth="1"
           @select="handleNodeClick"
         />
       </div>
@@ -103,24 +105,7 @@ function isActivePath(nodeId: string): boolean {
   position: relative;
 }
 
-/* 子树容器 - 曼哈顿连线 */
 .tree-children {
-  margin-left: 11px;
-  border-left: 2px solid #999;
-  padding-left: 20px;
-}
-
-/* 选中路径加粗变黑 */
-.tree-children.active-path {
-  border-left-color: #111;
-}
-
-/* 深色模式 */
-[data-theme="dark"] .tree-children {
-  border-left-color: #666;
-}
-
-[data-theme="dark"] .tree-children.active-path {
-  border-left-color: #fff;
+  /* 简单缩进，无连接线 */
 }
 </style>

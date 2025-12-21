@@ -2,8 +2,8 @@
 import { computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore, useWorkspaceStore } from '@/stores'
-import { STATUS_CONFIG, NODE_TYPE_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type TransitionAction } from '@/types'
-import StatusIcon from '@/components/common/StatusIcon.vue'
+import { STATUS_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type TransitionAction } from '@/types'
+import NodeIcon from '@/components/tree/NodeIcon.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 
@@ -142,187 +142,144 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 </script>
 
 <template>
-  <div class="node-detail-panel" v-if="nodeMeta && currentNode">
+  <div class="node-detail-wrapper" v-if="nodeMeta && currentNode">
+    <div class="node-detail-panel">
     <!-- 头部区 -->
     <div class="detail-header">
-      <div class="header-title-row">
-        <StatusIcon :status="nodeMeta.status" :size="20" />
-        <h3>{{ currentNode.title }}</h3>
-      </div>
-      <div class="header-badges">
-        <span class="status-badge" :data-type="nodeType">
-          {{ NODE_TYPE_CONFIG[nodeType].label }}
-        </span>
-        <span class="status-badge" :data-status="nodeMeta.status">
+      <div class="header-main">
+        <NodeIcon :type="nodeMeta.type" :status="nodeMeta.status" />
+        <span class="node-status" :data-status="nodeMeta.status">
           {{ STATUS_CONFIG[nodeMeta.status].label }}
         </span>
-        <span
-          v-if="roleConfig"
-          class="status-badge"
-          :title="roleConfig.description"
-        >
-          {{ roleConfig.emoji }} {{ roleConfig.label }}
-        </span>
+        <span class="header-sep">·</span>
+        <span class="header-title">{{ currentNode.title }}</span>
+        <div class="header-badges">
+          <span
+            v-if="roleConfig"
+            class="role-badge"
+            :data-role="nodeRole"
+          >
+            {{ roleConfig.label.toUpperCase() }}
+          </span>
+          <span
+            v-if="nodeMeta.isolate"
+            class="isolate-tag"
+          >
+            ISOLATED
+          </span>
+        </div>
       </div>
-    </div>
-
-    <!-- 节点ID -->
-    <div class="detail-section">
-      <div class="node-id">
-        <span class="id-label">ID:</span>
-        <span class="id-value">{{ nodeMeta.id }}</span>
-      </div>
+      <div class="header-meta">ID: {{ nodeMeta.id }}</div>
     </div>
 
     <!-- 派发信息 -->
     <div v-if="dispatchInfo && dispatchConfig" class="detail-section">
-      <div class="panel-section">
-        <div class="panel-header">
-          <div class="panel-title">派发信息</div>
-          <span class="dispatch-status-badge" :data-status="dispatchInfo.status">
-            {{ dispatchConfig.emoji }} {{ dispatchConfig.label }}
-          </span>
+      <div class="section-title">
+        <span>Dispatch / 派发信息</span>
+        <span class="dispatch-status-badge" :data-status="dispatchInfo.status">
+          {{ dispatchConfig.label.toUpperCase() }}
+        </span>
+      </div>
+      <div class="dispatch-info">
+        <div class="dispatch-row">
+          <span class="dispatch-label">状态:</span>
+          <span class="dispatch-value">{{ dispatchConfig.description }}</span>
         </div>
-        <div class="panel-body">
-          <div class="dispatch-info">
-            <div class="dispatch-row">
-              <span class="dispatch-label">派发状态:</span>
-              <span class="dispatch-value">{{ dispatchConfig.description }}</span>
-            </div>
-            <div class="dispatch-row">
-              <span class="dispatch-label">开始标记:</span>
-              <span class="dispatch-marker">{{ dispatchInfo.startMarker }}</span>
-            </div>
-            <div class="dispatch-row" v-if="dispatchInfo.endMarker">
-              <span class="dispatch-label">结束标记:</span>
-              <span class="dispatch-marker">{{ dispatchInfo.endMarker }}</span>
-            </div>
-          </div>
+        <div class="dispatch-row">
+          <span class="dispatch-label">开始:</span>
+          <span class="dispatch-marker">{{ dispatchInfo.startMarker }}</span>
+        </div>
+        <div class="dispatch-row" v-if="dispatchInfo.endMarker">
+          <span class="dispatch-label">结束:</span>
+          <span class="dispatch-marker">{{ dispatchInfo.endMarker }}</span>
         </div>
       </div>
     </div>
 
     <!-- 需求描述 -->
     <div class="detail-section">
-      <div class="panel-section">
-        <div class="panel-header">
-          <div class="panel-title">需求描述</div>
-        </div>
-        <div class="panel-body">
-          <div class="note-box">
-            <MarkdownContent :content="currentNode.requirement || '暂无描述'" />
-          </div>
-        </div>
+      <div class="section-title">Requirement / 需求描述</div>
+      <div class="note-box">
+        <MarkdownContent :content="currentNode.requirement || '暂无描述'" />
       </div>
     </div>
 
     <!-- 文档引用 -->
     <div v-if="currentNode.docs?.length" class="detail-section">
-      <div class="panel-section">
-        <div class="panel-header">
-          <div class="panel-title">文档引用</div>
-        </div>
-        <div class="panel-body">
-          <div class="docs-list">
-            <div v-for="doc in currentNode.docs" :key="doc.path" class="docs-item">
-              <span class="docs-path">{{ doc.path }}</span>
-              <span class="docs-desc">{{ doc.description }}</span>
-              <span v-if="doc.status === 'expired'" class="docs-expired">已过期</span>
-            </div>
-          </div>
+      <div class="section-title">References / 文档引用</div>
+      <div class="docs-list">
+        <div v-for="doc in currentNode.docs" :key="doc.path" class="docs-item">
+          <span class="docs-path">{{ doc.path }}</span>
+          <span class="docs-desc">{{ doc.description }}</span>
+          <span v-if="doc.status === 'expired'" class="docs-expired">EXPIRED</span>
         </div>
       </div>
     </div>
 
     <!-- 备注 -->
     <div v-if="currentNode.note" class="detail-section">
-      <div class="panel-section">
-        <div class="panel-header">
-          <div class="panel-title">备注</div>
-        </div>
-        <div class="panel-body">
-          <div class="note-box">
-            <MarkdownContent :content="currentNode.note" />
-          </div>
-        </div>
+      <div class="section-title">Note / 备注</div>
+      <div class="note-box">
+        <MarkdownContent :content="currentNode.note" />
       </div>
     </div>
 
     <!-- 当前问题 -->
     <div v-if="currentNode.problem" class="detail-section">
-      <div class="panel-section">
-        <div class="panel-header">
-          <div class="panel-title">当前问题</div>
-        </div>
-        <div class="panel-body">
-          <div class="problem-box">
-            <div class="problem-title">WARNING</div>
-            <MarkdownContent :content="currentNode.problem" />
-          </div>
-        </div>
+      <div class="section-title">Problem / 当前问题</div>
+      <div class="problem-box">
+        <div class="problem-title">[!] Blocking Issue</div>
+        <MarkdownContent :content="currentNode.problem" />
       </div>
     </div>
 
     <!-- 结论（已完成节点） -->
     <div v-if="nodeMeta.conclusion" class="detail-section">
-      <div class="panel-section">
-        <div class="panel-header">
-          <div class="panel-title">结论</div>
-        </div>
-        <div class="panel-body">
-          <div class="conclusion-box">
-            <MarkdownContent :content="nodeMeta.conclusion" />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 执行日志 -->
-    <div class="detail-section">
-      <div class="panel-section">
-        <div class="panel-header">
-          <div class="panel-title">执行日志</div>
-        </div>
-        <div class="panel-body">
-          <div class="log-container" v-if="currentNode.logEntries?.length">
-            <div v-for="(entry, index) in currentNode.logEntries" :key="index" class="log-item">
-              <span class="log-time">{{ entry.timestamp }}</span>
-              <span class="log-operator" :class="getOperatorClass(entry.operator)">
-                {{ entry.operator }}
-              </span>
-              <span class="log-content">{{ entry.event }}</span>
-            </div>
-          </div>
-          <div v-else class="log-empty">暂无日志</div>
+      <div class="section-title">Conclusion / 执行结论</div>
+      <div class="conclusion-box">
+        <span class="conclusion-badge">DONE</span>
+        <div class="conclusion-content">
+          <MarkdownContent :content="nodeMeta.conclusion" />
         </div>
       </div>
     </div>
 
     <!-- 子节点结论（仅规划节点显示） -->
     <div v-if="isPlanning && context?.childConclusions?.length" class="detail-section">
-      <div class="panel-section">
-        <div class="panel-header">
-          <div class="panel-title">子节点结论</div>
-        </div>
-        <div class="panel-body">
-          <div class="child-conclusions">
-            <div
-              v-for="child in context.childConclusions"
-              :key="child.nodeId"
-              class="child-conclusion-item"
-            >
-              <div class="child-conclusion-header">
-                <StatusIcon :status="child.status" :size="14" />
-                <span class="child-conclusion-title">{{ child.title }}</span>
-              </div>
-              <div class="child-conclusion-content">{{ child.conclusion }}</div>
-            </div>
+      <div class="section-title">Child Conclusions / 子节点结论</div>
+      <div class="child-conclusions">
+        <div
+          v-for="child in context.childConclusions"
+          :key="child.nodeId"
+          class="child-conclusion-item"
+        >
+          <div class="child-conclusion-title">
+            <span class="child-node-icon" :data-status="child.status"></span>
+            {{ child.title }}
           </div>
+          <div class="child-conclusion-content">{{ child.conclusion || '待执行...' }}</div>
         </div>
       </div>
     </div>
 
-    <!-- 操作按钮区 -->
+    <!-- 执行日志 -->
+    <div class="detail-section">
+      <div class="section-title">Log / 执行日志</div>
+      <div class="log-container" v-if="currentNode.logEntries?.length">
+        <div v-for="(entry, index) in currentNode.logEntries" :key="index" class="log-item">
+          <span class="log-time">{{ entry.timestamp }}</span>
+          <span class="log-operator" :class="getOperatorClass(entry.operator)">
+            {{ entry.operator === 'AI' ? 'AI' : entry.operator === 'Human' ? 'USR' : 'SYS' }}
+          </span>
+          <span class="log-content">{{ entry.event }}</span>
+        </div>
+      </div>
+      <div v-else class="log-empty">暂无日志</div>
+    </div>
+
+    </div>
+
+    <!-- 操作按钮区（固定底部） -->
     <div class="action-bar">
       <div class="action-group">
         <WsButton
@@ -358,10 +315,18 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 </template>
 
 <style scoped>
+/* 外层容器 - flex 布局实现固定底部 */
+.node-detail-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--card-bg);
+}
+
 .node-detail-panel {
+  flex: 1;
+  overflow-y: auto;
   width: 100%;
-  max-width: 700px;
-  margin: 0 auto;
 }
 
 /* 头部区 */
@@ -370,37 +335,95 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   border-bottom: 1px solid var(--border-color);
 }
 
-.header-title-row {
+.header-main {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
-.header-title-row h3 {
-  margin: 0;
-  font-size: 18px;
+.node-status {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-main);
+  flex-shrink: 0;
+}
+
+.node-status[data-status="pending"] { color: var(--border-heavy); }
+.node-status[data-status="implementing"] { color: var(--accent-blue); }
+.node-status[data-status="validating"] { color: var(--accent-orange); }
+.node-status[data-status="planning"] { color: var(--accent-purple); }
+.node-status[data-status="monitoring"] { color: var(--accent-blue); }
+.node-status[data-status="completed"] { color: var(--border-heavy); }
+.node-status[data-status="failed"] { color: var(--accent-red); }
+.node-status[data-status="cancelled"] { color: var(--text-muted); }
+
+.header-sep {
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 700;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-badges {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 4px;
+.header-meta {
+  font-family: var(--mono-font), monospace;
   font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 角色徽章 */
+.role-badge {
+  font-family: var(--mono-font), monospace;
+  font-size: 10px;
   font-weight: 700;
+  padding: 2px 6px;
+  line-height: 1;
+  display: inline-block;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  background: var(--border-heavy);
-  color: var(--card-bg);
+}
+
+.role-badge[data-role="info-collection"] {
+  background: var(--accent-orange);
+  color: #000;
+}
+
+.role-badge[data-role="validation"] {
+  background: var(--accent-green);
+  color: #fff;
+}
+
+.role-badge[data-role="summary"] {
+  background: #909399;
+  color: #fff;
+}
+
+/* 隔离标签 */
+.isolate-tag {
+  font-family: var(--mono-font), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  line-height: 1;
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--accent-orange);
+  color: #000;
+  border: 1px dashed #000;
 }
 
 /* 内容区块 */
@@ -411,6 +434,19 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 
 .detail-section:last-child {
   border-bottom: none;
+}
+
+/* Section 标题 */
+.section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* 节点ID */
@@ -435,15 +471,20 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 .panel-section {
   background: var(--card-bg);
   border: 2px solid var(--border-heavy);
-  box-shadow: 4px 4px 0 rgba(0,0,0,0.1);
+  box-shadow: 8px 8px 0 rgba(0,0,0,0.15);
 }
 
 .panel-header {
-  padding: 12px 16px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: #fafafa;
+}
+
+[data-theme="dark"] .panel-header {
+  background: #1a1a1a;
 }
 
 .panel-title {
@@ -472,12 +513,11 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 .dispatch-status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
-  border-radius: 4px;
+  padding: 3px 8px;
   font-size: 11px;
   font-weight: 700;
-  background: #ecf5ff;
-  color: #409eff;
+  background: var(--accent-blue);
+  color: #fff;
 }
 
 .dispatch-info {
@@ -508,9 +548,8 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 
 .dispatch-marker {
   font-family: var(--mono-font), monospace;
-  background: #fafafa;
+  background: var(--path-bg);
   padding: 2px 8px;
-  border-radius: 4px;
   font-size: 12px;
   color: var(--text-main);
 }
@@ -521,8 +560,8 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 
 /* 备注框 */
 .note-box {
-  background: #fafafa;
-  border-left: 4px solid #999;
+  background: var(--path-bg);
+  border-left: 4px solid var(--border-heavy);
   padding: 16px;
   font-size: 13px;
   line-height: 1.6;
@@ -536,6 +575,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 /* 文档列表 */
 .docs-list {
   background: #fafafa;
+  border: 1px solid var(--border-color);
   border-left: 4px solid var(--accent-blue);
 }
 
@@ -573,55 +613,65 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 
 .docs-expired {
   font-size: 10px;
-  color: var(--accent-red);
-  background: #fff5f5;
+  color: #000;
+  background: var(--accent-orange);
   padding: 2px 6px;
-  border-radius: 4px;
-}
-
-[data-theme="dark"] .docs-expired {
-  background: #331111;
 }
 
 /* 问题框 */
 .problem-box {
-  background: #fffbeb;
-  border: 1px solid #f59e0b;
+  background: #fff8f0;
+  border: 1px solid var(--accent-orange);
+  border-left: 4px solid var(--accent-orange);
   padding: 16px;
 }
 
 [data-theme="dark"] .problem-box {
   background: #332a0a;
-  border-color: #f59e0b;
 }
 
 .problem-title {
-  font-size: 11px;
+  font-family: var(--mono-font), monospace;
+  font-size: 12px;
   font-weight: 700;
-  color: #b45309;
+  color: #d35400;
   text-transform: uppercase;
   margin-bottom: 8px;
 }
 
 /* 结论框 */
 .conclusion-box {
-  background: #fafafa;
+  background: #f4f4f4;
   border-left: 4px solid var(--border-heavy);
   padding: 16px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-main);
 }
 
 [data-theme="dark"] .conclusion-box {
   background: #1a1a1a;
 }
 
+.conclusion-badge {
+  font-family: var(--mono-font), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  background: var(--accent-green);
+  color: #fff;
+  margin-bottom: 8px;
+  display: inline-block;
+}
+
+.conclusion-content {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
 /* 日志容器 */
 .log-container {
   background: #fafafa;
-  border-left: 4px solid var(--border-heavy);
-  max-height: 300px;
+  border: 1px solid var(--border-color);
+  max-height: 200px;
   overflow-y: auto;
 }
 
@@ -632,9 +682,10 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 .log-item {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #eee;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 [data-theme="dark"] .log-item {
@@ -647,17 +698,19 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 
 .log-time {
   font-family: var(--mono-font), monospace;
-  font-size: 11px;
   color: var(--text-muted);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .log-operator {
+  font-family: var(--mono-font), monospace;
+  width: 32px;
+  text-align: center;
+  padding: 2px 0;
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 6px;
-  text-transform: uppercase;
-  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 .log-operator.ai {
@@ -666,7 +719,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 }
 
 .log-operator.usr {
-  background: #22c55e;
+  background: var(--accent-green);
   color: #fff;
 }
 
@@ -676,12 +729,8 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 }
 
 .log-content {
-  flex: 1;
-  font-size: 13px;
   color: var(--text-main);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
+  flex: 1;
 }
 
 .log-empty {
@@ -696,40 +745,66 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
 }
 
 .child-conclusion-item {
-  background: #fafafa;
-  border-left: 4px solid #999;
-  padding: 12px 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-[data-theme="dark"] .child-conclusion-item {
-  background: #1a1a1a;
-}
-
-.child-conclusion-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+.child-conclusion-item:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .child-conclusion-title {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-main);
+}
+
+/* 子节点图标 */
+.child-node-icon {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-heavy);
+  background: var(--border-heavy);
+  flex-shrink: 0;
+}
+
+.child-node-icon[data-status="pending"] {
+  background: transparent;
+  border-style: dashed;
+  border-color: #999;
+}
+
+.child-node-icon[data-status="implementing"] {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.child-node-icon[data-status="validating"] {
+  background: var(--accent-orange);
+  border-color: var(--accent-orange);
+}
+
+.child-node-icon[data-status="failed"] {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
 }
 
 .child-conclusion-content {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
-  padding-left: 22px;
+  padding-left: 20px;
 }
 
-/* 操作按钮区 */
+/* 操作按钮区 - 固定底部 */
 .action-bar {
   display: flex;
   justify-content: space-between;
@@ -738,6 +813,8 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   background: #fafafa;
   flex-wrap: wrap;
   gap: 12px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-color);
 }
 
 [data-theme="dark"] .action-bar {

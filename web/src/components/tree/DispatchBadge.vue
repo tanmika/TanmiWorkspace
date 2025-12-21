@@ -11,7 +11,7 @@ function getText(status: NodeDispatchStatus): string {
     case 'pending':
       return 'WAIT'
     case 'executing':
-      return 'RUN_'
+      return 'RUN'
     case 'testing':
       return 'TEST'
     case 'passed':
@@ -32,61 +32,67 @@ function getText(status: NodeDispatchStatus): string {
 
 <style scoped>
 .dispatch-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 6px;
-  font-family: monospace;
+  display: inline-block;
+  padding: 2px 5px;
+  font-family: var(--mono-font);
   font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  font-weight: 600;
-  border-radius: 2px;
-  flex-shrink: 0;
   letter-spacing: 0.5px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
-/* wait - 灰底 */
+/* WAIT - 灰底 + 灰边框 */
 .dispatch-badge.pending {
-  background: #e5e7eb;
-  color: #6b7280;
+  background: #eee;
+  color: #666;
+  border: 1px solid #ddd;
 }
 
-/* run - 蓝底 + 闪烁光标 */
+/* RUN - 蓝底 + 闪烁光标 */
 .dispatch-badge.executing {
   background: var(--accent-blue);
-  color: #ffffff;
-  animation: blink-cursor 1s step-end infinite;
+  color: #fff;
 }
 
-@keyframes blink-cursor {
-  0%, 50% {
-    opacity: 1;
-  }
-  51%, 100% {
-    opacity: 0.7;
+.dispatch-badge.executing::after {
+  content: '_';
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
   }
 }
 
-/* test - 橙底 */
+/* TEST - 橙底黑字 */
 .dispatch-badge.testing {
-  background: #f59e0b;
-  color: #ffffff;
+  background: var(--accent-orange);
+  color: #000;
 }
 
-/* pass - 黑底 */
+/* PASS - 黑底白字 */
 .dispatch-badge.passed {
   background: var(--border-heavy);
-  color: #ffffff;
+  color: #fff;
 }
 
-/* fail - 红底 */
+/* FAIL - 红底白字 */
 .dispatch-badge.failed {
   background: var(--accent-red);
-  color: #ffffff;
+  color: #fff;
 }
 
 /* 深色模式调整 */
 [data-theme="dark"] .dispatch-badge.pending {
   background: #374151;
   color: #9ca3af;
+  border-color: #4b5563;
+}
+
+[data-theme="dark"] .dispatch-badge.passed {
+  color: #111;
 }
 </style>

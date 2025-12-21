@@ -62,11 +62,11 @@ function goHome() {
 /* 404 数字 */
 .error-number {
   font-size: 160px;
-  font-weight: 700;
+  font-weight: 900;
   font-family: var(--mono-font);
   color: var(--text-main);
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -8px;
   position: relative;
   z-index: 2;
 }
@@ -87,7 +87,7 @@ function goHome() {
   position: absolute;
   width: 40px;
   height: 40px;
-  border: 3px solid var(--border-heavy);
+  border: 4px solid var(--border-heavy);
   background: transparent;
   top: 80px;
   right: 60px;
@@ -134,15 +134,15 @@ function goHome() {
   font-size: 14px;
   font-weight: 600;
   background: var(--card-bg);
-  border: 2px solid var(--border-heavy);
-  border-radius: 4px;
+  border: 1px solid var(--border-heavy);
   color: var(--text-main);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .btn-secondary:hover {
-  background: var(--border-heavy);
-  color: #fff;
+  background: var(--path-bg);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 var(--border-heavy);
 }
 </style>

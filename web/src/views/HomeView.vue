@@ -2,17 +2,11 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, ArrowRight, Box, RefreshRight, Sort, Setting, WarningFilled, Moon, Sunny } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@/stores'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
 import SettingsModal from '@/components/SettingsModal.vue'
-import WsButton from '@/components/ui/WsButton.vue'
-import WsInput from '@/components/ui/WsInput.vue'
-import WsSelect from '@/components/ui/WsSelect.vue'
-import WsBadge from '@/components/ui/WsBadge.vue'
 import WsModal from '@/components/ui/WsModal.vue'
-import WsEmpty from '@/components/ui/WsEmpty.vue'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
@@ -70,7 +64,16 @@ const statusFilter = ref<'all' | 'active' | 'archived' | 'error'>(savedPrefs.sta
 const searchQuery = ref('')
 const sortBy = ref<'updatedAt' | 'createdAt'>(savedPrefs.sortBy)
 const sortOrder = ref<'desc' | 'asc'>(savedPrefs.sortOrder)
+const sortSelectOpen = ref(false)
 theme.value = savedPrefs.theme
+
+// 点击其他地方关闭下拉
+function handleClickOutside() {
+  sortSelectOpen.value = false
+}
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
 
 // 开发信息
 const devInfo = ref<DevInfoResult | null>(null)
@@ -241,31 +244,60 @@ function toggleSortOrder() {
   sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
 }
 
-// Select 组件的选项
-const sortOptions = [
-  { label: '更新时间', value: 'updatedAt' },
-  { label: '创建时间', value: 'createdAt' }
-]
+
+// Badge 样式
+function getBadgeClass(status: string) {
+  if (status === 'active') return 'badge-active'
+  if (status === 'error') return 'badge-error'
+  return 'badge-archived'
+}
+
+function getBadgeText(status: string) {
+  if (status === 'active') return 'Active'
+  if (status === 'error') return 'Error'
+  return 'Archived'
+}
 </script>
 
 <template>
   <div class="home-view">
     <!-- 头部 -->
     <header class="header">
-      <div class="logo">TanmiWorkspace</div>
+      <div class="logo">
+        <div class="logo-icon"></div>
+        <div class="logo-text">
+          <span class="bold">Tanm<i class="red-dot">i</i></span><span class="light">Workspace</span>
+        </div>
+      </div>
       <div class="header-actions">
-        <WsButton variant="icon" @click="toggleTheme" :title="theme === 'light' ? '切换到深色模式' : '切换到浅色模式'" class="theme-toggle">
-          <Moon v-if="theme === 'light'" style="width: 18px; height: 18px;" />
-          <Sunny v-else style="width: 18px; height: 18px;" />
-        </WsButton>
-        <WsButton variant="secondary" @click="showSettingsModal = true">
-          <Setting style="width: 16px; height: 16px;" />
+        <button class="theme-toggle" @click="toggleTheme" :title="theme === 'light' ? '切换到深色模式' : '切换到浅色模式'">
+          <svg v-if="theme === 'light'" class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg v-else class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+        <button class="btn btn-secondary" @click="showSettingsModal = true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <line x1="1" y1="3" x2="15" y2="3"/>
+            <rect x="10" y="1" width="3" height="4" fill="currentColor" stroke="none"/>
+            <line x1="1" y1="8" x2="15" y2="8"/>
+            <rect x="4" y="6" width="3" height="4" fill="currentColor" stroke="none"/>
+            <line x1="1" y1="13" x2="15" y2="13"/>
+            <rect x="8" y="11" width="3" height="4" fill="currentColor" stroke="none"/>
+          </svg>
           设置
-        </WsButton>
-        <WsButton variant="primary" @click="showCreateDialog = true">
-          <Plus style="width: 16px; height: 16px;" />
-          新建工作区
-        </WsButton>
+        </button>
+        <button class="btn btn-primary" @click="showCreateDialog = true">+ 新建工作区</button>
       </div>
     </header>
 
@@ -273,150 +305,93 @@ const sortOptions = [
     <div class="filter-bar">
       <div class="filter-left">
         <div class="tabs">
-          <button
-            class="tab"
-            :class="{ active: statusFilter === 'all' }"
-            @click="statusFilter = 'all'"
-          >
-            全部
-          </button>
-          <button
-            class="tab"
-            :class="{ active: statusFilter === 'active' }"
-            @click="statusFilter = 'active'"
-          >
-            活跃
-          </button>
-          <button
-            class="tab"
-            :class="{ active: statusFilter === 'archived' }"
-            @click="statusFilter = 'archived'"
-          >
-            已归档
-          </button>
-          <button
-            class="tab"
-            :class="{ active: statusFilter === 'error' }"
-            @click="statusFilter = 'error'"
-          >
-            错误
-          </button>
+          <div class="tab" :class="{ active: statusFilter === 'all' }" @click="statusFilter = 'all'">全部</div>
+          <div class="tab" :class="{ active: statusFilter === 'active' }" @click="statusFilter = 'active'">活跃</div>
+          <div class="tab" :class="{ active: statusFilter === 'archived' }" @click="statusFilter = 'archived'">已归档</div>
+          <div class="tab" :class="{ active: statusFilter === 'error' }" @click="statusFilter = 'error'">错误</div>
         </div>
-        <WsInput
-          v-model="searchQuery"
-          placeholder="搜索名称或路径..."
-          class="search-input-wrapper"
-        />
+        <input type="text" class="search-input" v-model="searchQuery" placeholder="搜索名称或路径...">
       </div>
       <div class="filter-right">
-        <WsSelect
-          v-model="sortBy"
-          :options="sortOptions"
-          class="sort-select"
-        />
-        <WsButton variant="icon" @click="toggleSortOrder" :title="sortOrder === 'desc' ? '降序' : '升序'">
-          <Sort style="width: 16px; height: 16px;" />
-          {{ sortOrder === 'desc' ? '↓' : '↑' }}
-        </WsButton>
+        <div class="custom-select" :class="{ open: sortSelectOpen }">
+          <div class="custom-select-trigger" @click.stop="sortSelectOpen = !sortSelectOpen">{{ sortBy === 'updatedAt' ? '更新时间' : '创建时间' }}</div>
+          <div class="custom-select-dropdown">
+            <div class="custom-select-option" :class="{ selected: sortBy === 'createdAt' }" @click="sortBy = 'createdAt'; sortSelectOpen = false">创建时间</div>
+            <div class="custom-select-option" :class="{ selected: sortBy === 'updatedAt' }" @click="sortBy = 'updatedAt'; sortSelectOpen = false">更新时间</div>
+          </div>
+        </div>
+        <button class="btn btn-icon" :class="{ desc: sortOrder === 'desc' }" @click="toggleSortOrder" title="切换排序方向">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M7 10l5 5 5-5"/>
+          </svg>
+        </button>
       </div>
     </div>
 
-    <!-- 工作区列表 -->
-    <div class="workspace-list" v-loading="workspaceStore.loading">
-      <WsEmpty
-        v-if="filteredWorkspaces.length === 0"
-        :title="searchQuery ? '没有匹配的工作区' : '暂无工作区'"
-      />
-      <div v-else class="workspace-grid">
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <!-- 空状态 -->
+      <div v-if="filteredWorkspaces.length === 0 && !workspaceStore.loading" class="empty-state">
+        <div class="empty-state-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="12" y1="8" x2="12" y2="16"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+        </div>
+        <div class="empty-state-title">{{ searchQuery ? '没有匹配的工作区' : '暂无工作区' }}</div>
+        <div class="empty-state-desc">创建一个新的工作区来开始管理你的任务</div>
+        <button class="btn btn-primary" @click="showCreateDialog = true">+ 新建工作区</button>
+      </div>
+
+      <!-- 卡片网格 -->
+      <div v-else class="card-grid" v-loading="workspaceStore.loading">
         <div
           v-for="ws in filteredWorkspaces"
           :key="ws.id"
           class="card"
-          :class="{ 'error-card': ws.status === 'error' }"
+          :class="{ archived: ws.status === 'archived' }"
         >
           <div class="card-header">
-            <span class="name">{{ ws.name }}</span>
-            <WsBadge
-              :variant="ws.status === 'active' ? 'active' : ws.status === 'error' ? 'error' : 'archived'"
-            >
-              {{ ws.status === 'active' ? '活跃' : ws.status === 'error' ? '错误' : '已归档' }}
-            </WsBadge>
+            <h3 class="card-title">{{ ws.name }}</h3>
+            <span class="badge" :class="getBadgeClass(ws.status)">{{ getBadgeText(ws.status) }}</span>
           </div>
           <div class="card-body">
-            <div class="project-path" :title="ws.projectRoot">
-              {{ getShortPath(ws.projectRoot) }}
-            </div>
-            <div class="meta">
-              <span>创建于 {{ formatTime(ws.createdAt) }}</span>
-              <span>更新于 {{ formatTime(ws.updatedAt) }}</span>
+            <div class="path-box" :title="ws.projectRoot">{{ getShortPath(ws.projectRoot) }}</div>
+            <div class="meta-info">
+              <span>Created: {{ formatTime(ws.createdAt) }}</span>
+              <span>Updated: {{ formatTime(ws.updatedAt) }}</span>
             </div>
           </div>
           <div class="card-footer">
-            <!-- 错误状态的工作区 -->
             <template v-if="ws.status === 'error'">
-              <WsButton variant="accent" size="sm" @click="showErrorInfo(ws)">
-                <WarningFilled style="width: 14px; height: 14px;" />
-                查看错误
-              </WsButton>
-              <WsButton variant="danger" size="sm" @click="handleDelete(ws.id, ws.name)">
-                <Delete style="width: 14px; height: 14px;" />
-                删除
-              </WsButton>
+              <button class="btn btn-accent" @click="showErrorInfo(ws)">查看错误</button>
+              <button class="btn btn-danger" @click="handleDelete(ws.id, ws.name)">删除</button>
             </template>
-            <!-- 正常状态的工作区 -->
             <template v-else>
-              <WsButton variant="ghost" size="sm" @click="handleEnter(ws)">
-                <ArrowRight style="width: 14px; height: 14px;" />
-                进入
-              </WsButton>
-              <WsButton
-                v-if="ws.status === 'active'"
-                variant="ghost"
-                size="sm"
-                @click="handleArchive(ws.id, ws.name)"
-              >
-                <Box style="width: 14px; height: 14px;" />
-                归档
-              </WsButton>
-              <WsButton
-                v-else
-                variant="accent"
-                size="sm"
-                @click="handleRestore(ws.id, ws.name)"
-              >
-                <RefreshRight style="width: 14px; height: 14px;" />
-                恢复
-              </WsButton>
-              <WsButton variant="danger" size="sm" @click="handleDelete(ws.id, ws.name)">
-                <Delete style="width: 14px; height: 14px;" />
-                删除
-              </WsButton>
+              <button class="btn btn-accent" @click="handleEnter(ws)">进入 ></button>
+              <button v-if="ws.status === 'active'" class="btn btn-ghost" @click="handleArchive(ws.id, ws.name)">归档</button>
+              <button v-else class="btn btn-ghost" @click="handleRestore(ws.id, ws.name)">恢复</button>
+              <button class="btn btn-danger" @click="handleDelete(ws.id, ws.name)">删除</button>
             </template>
           </div>
         </div>
       </div>
-    </div>
+    </main>
 
     <!-- 创建对话框 -->
-    <WsModal v-model="showCreateDialog" title="新建工作区">
-      <el-form :model="createForm" label-width="80px">
-        <el-form-item label="名称" required>
-          <el-input v-model="createForm.name" placeholder="输入工作区名称" />
-        </el-form-item>
-        <el-form-item label="目标" required>
-          <el-input
-            v-model="createForm.goal"
-            type="textarea"
-            :rows="3"
-            placeholder="描述工作区的目标"
-          />
-        </el-form-item>
-      </el-form>
+    <WsModal v-model="showCreateDialog" title="NEW WORKSPACE">
+      <div class="form-group">
+        <label class="form-label">工作区名称</label>
+        <input type="text" class="form-input" v-model="createForm.name" placeholder="输入工作区名称...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">目标描述</label>
+        <textarea class="form-input form-textarea" v-model="createForm.goal" placeholder="描述工作区的目标..." rows="3"></textarea>
+      </div>
       <template #footer>
-        <WsButton variant="secondary" @click="showCreateDialog = false">取消</WsButton>
-        <WsButton variant="primary" @click="handleCreate" :disabled="workspaceStore.loading">
-          创建
-        </WsButton>
+        <button class="btn btn-cancel" @click="showCreateDialog = false">取消</button>
+        <button class="btn btn-primary" @click="handleCreate" :disabled="workspaceStore.loading">创建</button>
       </template>
     </WsModal>
 
@@ -432,31 +407,89 @@ const sortOptions = [
 
 <style scoped>
 .home-view {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
   min-height: 100vh;
-  background: var(--bg-color);
+  background-color: var(--bg-color);
+  background-image: radial-gradient(var(--bg-dot) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 /* Header */
 .header {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 32px;
+  height: 64px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding: 16px 0;
+  justify-content: space-between;
   position: sticky;
   top: 0;
-  background: var(--bg-color);
-  z-index: 10;
+  z-index: 100;
 }
 
 .logo {
-  font-size: 24px;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+}
+
+.logo-icon {
+  width: 24px;
+  height: 24px;
+  position: relative;
+}
+
+.logo-icon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  background-color: var(--logo-block);
+}
+
+.logo-icon::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  background-color: var(--accent-red);
+  box-shadow: 0 0 0 2px var(--logo-outline);
+}
+
+.logo-text {
+  font-size: 20px;
+  line-height: 1;
   color: var(--text-main);
+  margin-left: 12px;
+}
+
+.logo-text .bold {
+  font-weight: 800;
   letter-spacing: -0.5px;
+}
+
+.logo-text .light {
+  font-weight: 300;
+  opacity: 0.7;
+}
+
+.logo-text .red-dot {
+  position: relative;
+  font-style: normal;
+}
+
+.logo-text .red-dot::after {
+  content: '';
+  position: absolute;
+  top: 0.18em;
+  left: 0.06em;
+  width: 0.17em;
+  height: 0.17em;
+  background-color: var(--accent-red);
+  border-radius: 50%;
 }
 
 .header-actions {
@@ -466,151 +499,498 @@ const sortOptions = [
 }
 
 .theme-toggle {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-heavy);
+  color: var(--text-main);
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--border-heavy);
+  color: var(--accent-red);
+  background: var(--path-bg);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 var(--border-heavy);
+}
+
+.theme-toggle .icon-sun,
+.theme-toggle .icon-moon {
+  width: 18px;
+  height: 18px;
 }
 
 /* Filter Bar */
 .filter-bar {
-  margin-bottom: 24px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 32px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
+  justify-content: space-between;
 }
 
 .filter-left {
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  flex: 1;
+  gap: 24px;
 }
 
 .filter-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 /* Tabs */
 .tabs {
   display: flex;
-  gap: 4px;
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 2px;
+  gap: 0;
 }
 
 .tab {
-  padding: 6px 16px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
+  padding: 16px 20px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  border-bottom: 3px solid transparent;
+  transition: all 0.15s ease;
+  user-select: none;
 }
 
 .tab:hover {
-  background: var(--bg-color);
   color: var(--text-main);
 }
 
 .tab.active {
-  background: var(--border-heavy);
-  color: var(--card-bg);
+  color: var(--text-main);
+  border-bottom-color: var(--border-heavy);
 }
 
 /* Search Input */
-.search-input-wrapper {
+.search-input {
+  font-size: 14px;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 2px solid var(--border-color);
+  background: transparent;
   width: 240px;
+  outline: none;
+  transition: border-color 0.15s ease;
+  color: var(--text-main);
 }
 
-/* Sort Select */
-.sort-select {
-  width: 130px;
+.search-input:focus {
+  border-bottom-color: var(--border-heavy);
 }
 
-/* Workspace Grid */
-.workspace-grid {
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Custom Select */
+.custom-select {
+  position: relative;
+  width: 160px;
+}
+
+.custom-select-trigger {
+  height: 36px;
+  padding: 0 32px 0 12px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.custom-select-trigger::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid var(--text-main);
+  transition: transform 0.15s ease;
+}
+
+.custom-select.open .custom-select-trigger::after {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.custom-select-trigger:hover,
+.custom-select.open .custom-select-trigger {
+  border-color: var(--border-heavy);
+}
+
+.custom-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-heavy);
+  border-top: none;
+  display: none;
+  z-index: 100;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.2);
+}
+
+.custom-select.open .custom-select-dropdown {
+  display: block;
+}
+
+.custom-select-option {
+  padding: 10px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  border-left: 3px solid transparent;
+}
+
+.custom-select-option:hover {
+  background: var(--path-bg);
+  border-left-color: var(--accent-red);
+}
+
+.custom-select-option.selected {
+  background: var(--card-footer);
+  font-weight: 600;
+  border-left-color: var(--border-heavy);
+}
+
+/* Main Content */
+.main-content {
+  padding: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Card Grid */
+.card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 20px;
 }
 
 /* Card */
 .card {
   background: var(--card-bg);
-  border: 2px solid var(--border-heavy);
-  border-radius: 8px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--border-heavy);
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
 }
 
 .card:hover {
   transform: translate(-4px, -4px);
-  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.15);
+  box-shadow: 4px 4px 0px var(--border-heavy);
+  border-color: var(--border-heavy);
+  border-left-color: var(--accent-red);
 }
 
-[data-theme="dark"] .card:hover {
-  box-shadow: 8px 8px 0 rgba(255, 255, 255, 0.1);
+.card.archived {
+  border-left-color: var(--path-border);
 }
 
-.card.error-card {
-  border-color: var(--accent-red);
-  background: var(--card-bg);
+.card.archived .card-title {
+  color: var(--text-muted);
+}
+
+.card.archived:hover {
+  border-left-color: var(--text-muted);
 }
 
 .card-header {
+  padding: 20px 20px 12px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  align-items: flex-start;
 }
 
-.card-header .name {
-  font-weight: 600;
+.card-title {
   font-size: 16px;
+  font-weight: 700;
   color: var(--text-main);
+  line-height: 1.3;
+  margin: 0;
 }
 
-.card-body .project-path {
-  color: var(--text-secondary);
-  font-size: 12px;
+.card-body {
+  padding: 0 20px 16px;
+}
+
+.path-box {
+  background: var(--path-bg);
+  padding: 10px 12px;
   font-family: var(--mono-font);
-  background: var(--bg-color);
-  padding: 6px 10px;
-  border-radius: 4px;
-  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--path-border);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid var(--border-color);
+  margin-bottom: 12px;
 }
 
-.card-body .meta {
+.card.archived .path-box {
+  color: var(--text-muted);
+  border-left-color: var(--border-color);
+}
+
+.meta-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--mono-font);
   display: flex;
   flex-direction: column;
   gap: 4px;
-  color: var(--text-muted);
-  font-size: 12px;
 }
 
 .card-footer {
-  margin-top: 16px;
-  padding-top: 16px;
   border-top: 1px solid var(--border-color);
+  padding: 12px 20px;
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  justify-content: space-evenly;
+  gap: 16px;
+  background: var(--card-footer);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  height: 36px;
+  padding: 0 16px;
+}
+
+.btn-primary {
+  background: var(--border-heavy);
+  color: #fff;
+  border: 1px solid var(--border-heavy);
+}
+
+.btn-primary:hover {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 #111;
+}
+
+.btn-secondary {
+  background: var(--card-bg);
+  color: var(--text-main);
+  border: 1px solid var(--border-heavy);
+}
+
+.btn-secondary:hover {
+  background: var(--path-bg);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 var(--border-heavy);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.btn-ghost:hover {
+  color: var(--text-main);
+  background: var(--path-bg);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.btn-danger:hover {
+  color: var(--accent-red);
+  background: #fff5f5;
+}
+
+.btn-accent {
+  background: transparent;
+  color: var(--accent-red);
+  border: 1px solid transparent;
+}
+
+.btn-accent:hover {
+  background: #fff5f5;
+}
+
+.btn-cancel {
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-cancel:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-main);
+}
+
+.btn-icon {
+  width: 36px;
+  padding: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+}
+
+.btn-icon:hover {
+  border-color: var(--border-heavy);
+  color: var(--accent-red);
+}
+
+.btn-icon.desc svg {
+  transform: rotate(180deg);
+}
+
+/* Badge */
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  letter-spacing: 0.5px;
+}
+
+.badge-active {
+  background: var(--border-heavy);
+  color: #fff;
+}
+
+.badge-archived {
+  background: var(--path-bg);
+  color: var(--text-muted);
+}
+
+.badge-error {
+  background: var(--accent-red);
+  color: #fff;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 80px 40px;
+  color: var(--text-muted);
+}
+
+.empty-state-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 24px;
+  background: var(--path-bg);
+  border: 2px dashed var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.empty-state-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.empty-state-desc {
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+/* Form */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.form-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-main);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.form-input:focus {
+  border-color: var(--border-heavy);
+}
+
+.form-textarea {
+  height: auto;
+  padding: 12px;
+  resize: vertical;
+}
+
+/* Dark Mode Overrides */
+[data-theme="dark"] .btn-primary {
+  background: #fff;
+  border-color: #fff;
+  color: #111;
+}
+
+[data-theme="dark"] .btn-primary:hover {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+  color: #fff;
+  box-shadow: 2px 2px 0 #fff;
+}
+
+[data-theme="dark"] .badge-active {
+  background: #fff;
+  color: #111;
+}
+
+[data-theme="dark"] .btn-danger:hover {
+  background: rgba(217, 43, 43, 0.2);
+}
+
+[data-theme="dark"] .btn-accent:hover {
+  background: rgba(217, 43, 43, 0.2);
 }
 
 /* 开发模式标识 */

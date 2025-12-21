@@ -56,7 +56,7 @@ onMounted(() => {
       class="version-notification"
     >
       <div class="notification-content">
-        <span class="notification-icon">🎉</span>
+        <span class="version-tag">NEW</span>
         <span class="notification-text">
           TanmiWorkspace 有新版本可用！
           <span class="version-info">
@@ -84,16 +84,17 @@ onMounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  height: 44px;
+  background: var(--border-heavy);
+  color: #fff;
   z-index: 9998;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .notification-content {
   max-width: 1200px;
+  height: 100%;
   margin: 0 auto;
-  padding: 10px 20px;
+  padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -101,8 +102,13 @@ onMounted(() => {
   font-size: 14px;
 }
 
-.notification-icon {
-  font-size: 16px;
+.version-tag {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  background: var(--accent-red);
+  text-transform: uppercase;
 }
 
 .notification-text {
@@ -110,28 +116,28 @@ onMounted(() => {
 }
 
 .version-info {
-  font-family: 'SF Mono', Consolas, monospace;
-  background: rgba(255, 255, 255, 0.2);
+  font-family: var(--mono-font);
+  background: rgba(255, 255, 255, 0.15);
   padding: 2px 8px;
-  border-radius: 4px;
   margin-left: 8px;
 }
 
 .update-link {
-  color: white;
+  color: #fff;
   text-decoration: underline;
   font-weight: 500;
   white-space: nowrap;
+  transition: color 0.15s ease;
 }
 
 .update-link:hover {
-  opacity: 0.9;
+  color: var(--accent-orange);
 }
 
 .dismiss-btn {
   background: transparent;
   border: none;
-  color: white;
+  color: #fff;
   cursor: pointer;
   padding: 4px 8px;
   font-size: 14px;

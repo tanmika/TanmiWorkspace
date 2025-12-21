@@ -1,22 +1,37 @@
 :root {
   --bg-color: #f0f2f5;
+  --bg-dot: #ccc;
   --card-bg: #ffffff;
+  --card-footer: #fafafa;
   --text-main: #111;
   --text-secondary: #666;
   --text-muted: #999;
   --accent-red: #D92B2B;
   --accent-blue: #3b82f6;
+  --accent-purple: #9333EA;
+  --accent-green: #5A9A7A;
+  --accent-orange: #F59E0B;
   --border-color: #e0e0e0;
   --border-heavy: #111;
+  --logo-block: #111;
+  --logo-outline: #fff;
+  --path-bg: #f4f4f4;
+  --path-border: #ccc;
   --mono-font: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
 }
 
 [data-theme="dark"] {
   --bg-color: #111111;
+  --bg-dot: #333;
   --card-bg: #1a1a1a;
+  --card-footer: #141414;
   --text-main: #ffffff;
   --text-secondary: #aaa;
   --text-muted: #777;
   --border-color: #333;
   --border-heavy: #fff;
+  --logo-block: #fff;
+  --logo-outline: #111;
+  --path-bg: #252525;
+  --path-border: #444;
 }

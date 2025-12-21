@@ -2,7 +2,7 @@
   <Teleport to="body">
     <Transition name="modal-fade">
       <div v-if="modelValue" class="modal-overlay" @click="handleOverlayClick">
-        <div class="modal" @click.stop>
+        <div class="modal" :style="{ maxWidth: width }" @click.stop>
           <div class="modal-header">
             <slot name="header">
               {{ title }}
@@ -30,11 +30,13 @@ interface Props {
   modelValue: boolean
   title?: string
   closeOnClickOutside?: boolean
+  width?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   title: '',
-  closeOnClickOutside: true
+  closeOnClickOutside: true,
+  width: '560px'
 })
 
 const emit = defineEmits<{
@@ -71,22 +73,23 @@ const handleOverlayClick = () => {
 
 .modal {
   background: var(--card-bg);
-  border-radius: 8px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  max-width: 600px;
+  border: 2px solid var(--border-heavy);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.15);
+  max-width: 560px;
   width: 100%;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-color);
 }
 
 .modal-header {
-  padding: 20px 24px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--border-color);
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 800;
   color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -97,21 +100,17 @@ const handleOverlayClick = () => {
   border: none;
   cursor: pointer;
   padding: 4px;
+  font-size: 24px;
+  line-height: 1;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: color 0.2s ease;
-  border-radius: 4px;
 }
 
 .modal-close:hover {
-  color: var(--text-main);
-  background: rgba(0, 0, 0, 0.05);
-}
-
-[data-theme="dark"] .modal-close:hover {
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent-red);
 }
 
 .modal-body {
@@ -124,6 +123,7 @@ const handleOverlayClick = () => {
 .modal-footer {
   padding: 16px 24px;
   border-top: 1px solid var(--border-color);
+  background: var(--card-footer);
   display: flex;
   gap: 12px;
   justify-content: flex-end;

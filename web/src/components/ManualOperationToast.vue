@@ -41,7 +41,7 @@ function handleClose() {
   <Transition name="slide-up">
     <div v-if="show" class="manual-operation-toast">
       <div class="toast-content">
-        <span class="toast-icon">!</span>
+        <span class="toast-badge">INFO</span>
         <div class="toast-text">
           <div class="toast-title">操作已记录</div>
           <div class="toast-message">
@@ -62,22 +62,28 @@ function handleClose() {
   right: 20px;
   z-index: 9999;
   max-width: 400px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border-radius: 8px;
-  overflow: hidden;
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.1);
 }
 
 .toast-content {
-  background: white;
-  border-left: 4px solid #409eff;
+  background: var(--card-bg);
+  border: 2px solid var(--border-heavy);
+  border-left: 6px solid var(--accent-blue);
   padding: 16px 20px;
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  position: relative;
 }
 
-.toast-icon {
-  font-size: 24px;
+.toast-badge {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  background: var(--accent-blue);
+  color: #fff;
+  text-transform: uppercase;
   flex-shrink: 0;
 }
 
@@ -89,27 +95,27 @@ function handleClose() {
 .toast-title {
   font-weight: 600;
   font-size: 15px;
-  color: #303133;
+  color: var(--text-main);
   margin-bottom: 4px;
 }
 
 .toast-message {
   font-size: 13px;
-  color: #606266;
+  color: var(--text-secondary);
   line-height: 1.5;
   margin-bottom: 4px;
 }
 
 .toast-hint {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .close-btn {
   background: transparent;
   border: none;
-  color: #909399;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 4px;
   font-size: 16px;
