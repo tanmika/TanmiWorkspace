@@ -9,6 +9,12 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.7.1
+    requirement: 修复 Claude Code MCP 配置路径错误
+    conclusion: |-
+      - Claude Code MCP 配置路径修复: 修正 setup 命令写入正确的配置文件路径
+      - 文档配置路径修复: 更新 README.md 和配置方式.md 中的配置文件路径说明
+    note: ""
   - version: 1.7.0
     requirement: WebUI 迁移到基于构成主义的设计系统，新增新手教程和版本更新提示功能
     conclusion: |-

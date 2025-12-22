@@ -11,6 +11,15 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.7.1] - 2025-12-22
+
+### Fixed
+
+- **Claude Code MCP 配置路径修复**: 修正 setup 命令写入正确的配置文件路径
+  - MCP 服务器配置 → `~/.claude.json`
+  - 权限配置 → `~/.claude/settings.local.json`
+- **文档配置路径修复**: 更新 README.md 和配置方式.md 中的配置文件路径说明
+
 ## [1.7.0] - 2025-12-22
 
 ### Added

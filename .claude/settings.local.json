@@ -115,7 +115,11 @@
       "Bash([ -s \"$NVM_DIR/nvm.sh\" ])",
       "Bash(. \"$NVM_DIR/nvm.sh\")",
       "WebFetch(domain:bundlephobia.com)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(~/.tanmi-workspace-dev/config.json)",
+      "Bash(jq:*)",
+      "Bash(~/.tanmi-workspace-dev/config.json curl -s http://127.0.0.1:3001/api/config)"
     ]
   }
 }
