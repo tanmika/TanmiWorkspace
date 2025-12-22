@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 48" width="280" height="48">
+  <!-- 图标：黑色大方块 -->
+  <rect x="4" y="4" width="32" height="32" fill="#111"/>
+  <!-- 图标：红色小方块（带白边） -->
+  <rect x="24" y="24" width="20" height="20" fill="#fff"/>
+  <rect x="26" y="26" width="16" height="16" fill="#D92020"/>
+
+  <!-- 文字：Tanmı（粗体） -->
+  <text x="56" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="800" fill="#111" letter-spacing="-0.5">Tanmı</text>
+  <!-- ı 上的红点 -->
+  <circle cx="119" cy="12" r="2.5" fill="#D92020"/>
+
+  <!-- 文字：Workspace（细体半透明） -->
+  <text x="126" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="300" fill="#111" opacity="0.7">Workspace</text>
+</svg>

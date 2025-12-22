@@ -1,6 +1,10 @@
-# TanmiWorkspace
+<p align="center">
+  <img src="docs/logo.svg" alt="TanmiWorkspace" height="48">
+</p>
 
-面向 AI 编程助手的分形任务跟踪系统，通过 MCP 协议提供结构化的任务管理能力。
+<p align="center">面向 AI 编程助手的分形任务跟踪系统，通过 MCP 协议提供结构化的任务管理能力。</p>
+
+---
 
 ## 核心特性
 
