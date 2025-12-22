@@ -9,19 +9,30 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.7.0
+    requirement: WebUI 迁移到基于构成主义的设计系统，新增新手教程和版本更新提示功能
+    conclusion: |-
+      - 新手教程工作区: 自动为新用户创建教程工作区，介绍核心概念和使用方法
+      - 版本更新提示系统: 升级后自动创建版本更新工作区，展示新版本功能变更
+      - 主页刷新按钮: WebUI 主页新增 SYNC 按钮，支持手动刷新工作区列表
+      - 前后端版本一致性检测: 设置页面显示编译时间差异警告，提醒重新编译
+      - WebUI 设计系统全面升级: 从 Element Plus 迁移到基于构成主义的设计系统，统一视觉风格
+      - Logo 与空状态优化: 全新 Logo 设计，404 页面和服务未启动页面适配新风格
+      - 节点详情样式优化: NodeDetail、NodeIcon、日志显示等组件样式修复
+    note: ""
   - version: 1.6.4
-    requirement: "修复 workspace_update_rules 的目录路径问题"
+    requirement: 修复 workspace_update_rules 的目录路径问题
     conclusion: "- updateRules dirName 修复: 修复 `workspace_update_rules` 方法中仍使用 workspaceId 导致的 WORKSPACE_NOT_FOUND 错误"
     note: ""
   - version: 1.6.3
-    requirement: "全面修复目录名相关的遗留问题"
+    requirement: 全面修复目录名相关的遗留问题
     conclusion: |-
       - dirName 全面修复: 修复 SessionService、DispatchService、WorkspaceService 中仍使用 workspaceId 作为目录名的遗留问题
       - 新增 getWorkspaceLocation 方法: JsonStorage 新增统一获取 projectRoot 和 dirName 的方法，避免后续出错
       - 私有方法参数命名统一: WorkspaceService 私有方法参数从 workspaceId 改为 wsDirName，提升代码可读性
     note: ""
   - version: 1.6.2
-    requirement: "优化派发流程体验，增加测试覆盖"
+    requirement: 优化派发流程体验，增加测试覆盖
     conclusion: |-
       - 派发节点自动完成: `node_dispatch_complete` 成功时自动将节点标记为 completed，失败时标记为 failed
       - 父节点完成提醒: 完成子节点时，检测父规划节点是否所有子任务已完成，给出完成提醒
@@ -32,13 +43,13 @@ versions:
       - 派发状态语义: 执行完成后 `dispatch.status` 改为 `passed/failed`（原 `testing`），保留对象供 WebUI 显示历史
     note: ""
   - version: 1.6.1
-    requirement: "支持旧数据平滑迁移到可读目录名格式"
+    requirement: 支持旧数据平滑迁移到可读目录名格式
     conclusion: |-
       - 旧数据目录迁移: 存储版本升级到 5.0，自动将旧工作区和节点目录从 UUID 格式迁移为可读格式
       - 节点标题同步目录名: `node_update` 修改标题时自动同步更新目录名
     note: ""
   - version: 1.6.0
-    requirement: "提升本地文件浏览体验，让目录名更易读"
+    requirement: 提升本地文件浏览体验，让目录名更易读
     conclusion: |-
       - 可读目录名: 工作区和节点目录从 UUID 格式改为 `名称_短ID` 格式（如 `UI优化_mjb65az5`），提升本地查看体验
       - 统一版本管理: 合并 index.json 和 graph.json 版本号为 STORAGE_VERSION 4.0
@@ -47,13 +58,13 @@ versions:
       - 向后兼容: 使用 `dirName || id` 回退机制兼容旧数据
     note: ""
   - version: 1.5.1
-    requirement: "让 AI 能感知用户在 WebUI 的手动操作"
+    requirement: 让 AI 能感知用户在 WebUI 的手动操作
     conclusion: |-
       - WebUI 手动操作感知: AI 可感知用户在 WebUI 的手动操作，新增 `get_pending_changes` 工具
       - 前端 API 错误提示: 修复错误响应未显示后端具体错误信息的问题
     note: ""
   - version: 1.5.0
-    requirement: "简化安装流程，支持 npm 全局安装"
+    requirement: 简化安装流程，支持 npm 全局安装
     conclusion: |-
       - npm 包发布支持: 可通过 `npm install -g tanmi-workspace` 全局安装
       - setup 配置向导: `tanmi-workspace setup` 交互式配置命令，支持 `--claude-code`、`--cursor`、`--status` 参数
@@ -63,7 +74,7 @@ versions:
       - 文档优化: 更新 README 和配置指南，简化安装流程
     note: ""
   - version: 1.4.1
-    requirement: "优化 Git 派发的稳定性和灵活性"
+    requirement: 优化 Git 派发的稳定性和灵活性
     conclusion: |-
       - 派发模式切换功能: 支持在已启用派发模式时切换 Git/无Git 模式
       - Git 派发鲁棒性优化: 自动将工作区目录添加到 `.git/info/exclude`，防止元数据干扰 Git 操作
@@ -71,7 +82,7 @@ versions:
       - 派发权限控制优化: 完善派发模式下的状态变更权限检查
     note: ""
   - version: 1.4.0
-    requirement: "增强 AI 引导能力，防止 AI 编造用户确认"
+    requirement: 增强 AI 引导能力，防止 AI 编造用户确认
     conclusion: |-
       - Confirmation Token 机制: 关键操作需用户确认时生成一次性 token，防止 AI 编造用户确认
       - 场景感知引导系统: 22 个场景的三级引导（L0 提示词 / L1 简要 / L2 详细），自动嵌入工具返回
@@ -82,7 +93,7 @@ versions:
       - 工作区索引错误处理优化: 增强索引文件损坏时的容错能力
     note: ""
   - version: 1.3.0
-    requirement: "支持多 Agent 协作，任务可派发给其他会话"
+    requirement: 支持多 Agent 协作，任务可派发给其他会话
     conclusion: |-
       - 派发功能: `dispatch_enable`/`dispatch_disable` 工具，支持多 Agent 协作
       - 派发模式 Git 可选化: 派发时可选择是否创建 Git 分支
@@ -91,7 +102,7 @@ versions:
       - workspace_init 参数验证: 修复参数验证和 undefined 输出问题
     note: ""
   - version: 1.2.0
-    requirement: "支持从 OpenSpec 导入任务，强制 AI 执行特定行为"
+    requirement: 支持从 OpenSpec 导入任务，强制 AI 执行特定行为
     conclusion: |-
       - OpenSpec 导入功能: 将 OpenSpec 变更规范导入为 TanmiWorkspace 工作区
       - actionRequired 机制: 结构化字段强制 AI 执行特定行为（询问用户、展示计划、检查文档）
@@ -104,7 +115,7 @@ versions:
       - workspace_list updatedAt 同步: 修复更新时间不同步问题
     note: ""
   - version: 1.1.0
-    requirement: "扩展编辑器支持，增加工作区归档能力"
+    requirement: 扩展编辑器支持，增加工作区归档能力
     conclusion: |-
       - Cursor Hooks 支持: `beforeSubmitPrompt` 事件，支持 Cursor 编辑器
       - Hook 智能提醒功能: 日志超时、问题未解决、计划确认等多种提醒场景
@@ -122,7 +133,7 @@ versions:
       - 添加 2.0 版本规划：统一事件机制
     note: ""
   - version: 1.0.0
-    requirement: "TanmiWorkspace 首个正式版本"
+    requirement: TanmiWorkspace 首个正式版本
     conclusion: |-
       - 核心 MCP 工具: 工作区管理（init/list/get/delete/status）、节点管理（create/get/list/update/delete/move）
       - 分形任务结构: 支持任务的无限层级嵌套
