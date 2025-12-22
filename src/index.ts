@@ -161,11 +161,21 @@ function createMcpServer(services: Services): Server {
             throw new TanmiError("INVALID_PARAMS", "缺少必填参数 'goal'（工作区目标描述）");
           }
 
+          // 验证 scenario 参数（可选）
+          const validScenarios = ['feature', 'summary', 'optimize', 'debug', 'misc'];
+          if (args?.scenario !== undefined && !validScenarios.includes(args.scenario as string)) {
+            throw new TanmiError(
+              "INVALID_PARAMS",
+              `无效的 scenario 参数: "${args.scenario}"。有效值为: ${validScenarios.join(', ')}`
+            );
+          }
+
           result = await services.workspace.init({
             name: args.name as string,
             goal: args.goal as string,
             rules: args?.rules as string[] | undefined,
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
+            scenario: args?.scenario as 'feature' | 'summary' | 'optimize' | 'debug' | 'misc' | undefined,
           });
           break;
         }

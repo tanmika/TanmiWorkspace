@@ -377,6 +377,41 @@ export const TOOLS_QUICK_REFERENCE = `
 `;
 
 /**
+ * 场景化引导内容 - 针对不同任务场景的规划引导
+ */
+export const SCENARIO_GUIDANCE: Record<import('../types/workspace.js').TaskScenario, string> = {
+  feature: `Feature 场景引导：
+1. 先完成信息收集节点，重点收集：
+   - 需求澄清：用户角色、功能描述、验收标准
+   - 技术调研：相关模块、依赖、接口
+2. 创建技术设计节点（可选创建 alternatives 讨论多方案）
+3. 任务分解时默认 isNeedTest=true`,
+
+  summary: `Summary 场景引导：
+1. 信息收集重点：分析范围、现有结构
+2. 输出总结文档，无需测试`,
+
+  optimize: `Optimize 场景引导：
+1. 信息收集重点：现有实现、当前性能基准
+2. 优化后需对比验证，默认启用测试`,
+
+  debug: `Debug 场景引导：
+1. 信息收集重点：错误现象、复现步骤、日志
+2. 采用假设-验证循环，默认启用回归测试`,
+
+  misc: `Misc 场景：自由规划模式，按需创建节点。`
+};
+
+/**
+ * 获取场景引导内容
+ * @param scenario 任务场景类型
+ * @returns 场景引导文本
+ */
+export function getScenarioGuidance(scenario: import('../types/workspace.js').TaskScenario): string {
+  return SCENARIO_GUIDANCE[scenario] || SCENARIO_GUIDANCE.misc;
+}
+
+/**
  * 场景化指导
  */
 export const SCENARIO_GUIDES: Record<string, string> = {

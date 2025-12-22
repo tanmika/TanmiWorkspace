@@ -20,6 +20,13 @@ export type GuidanceScenario =
   | "workspace_archived"          // 工作区归档时
   | "workspace_restored"          // 工作区恢复时
 
+  // 任务场景相关（workspace_init 时基于 scenario 参数）
+  | "scenario_feature"            // 功能开发场景
+  | "scenario_summary"            // 文档总结场景
+  | "scenario_optimize"           // 性能优化场景
+  | "scenario_debug"              // 问题调试场景
+  | "scenario_misc"               // 杂项场景
+
   // 节点创建
   | "node_create_planning"        // 创建规划节点后
   | "node_create_execution"       // 创建执行节点后

@@ -117,6 +117,227 @@ workspace_restore({ workspaceId: "..." })
     relatedHelpTopics: ["resume_task"],
   },
 
+  // ==================== 任务场景引导 ====================
+
+  scenario_feature: {
+    scenario: "scenario_feature",
+    l0: "功能开发场景。建议流程：需求澄清 → 技术调研 → 设计 → 分解 → 执行+测试。",
+    l1: `功能开发推荐流程：
+1. 需求澄清 - 确认功能边界和验收标准
+2. 技术调研 - 评估技术方案和依赖
+3. 技术设计 - 设计接口、数据结构
+4. 任务分解 - 拆分为可测试的子任务
+5. 执行+测试 - 编码并编写测试用例`,
+    l2: `## 功能开发场景
+
+此场景适用于新功能开发，强调需求分析和测试验证。
+
+### 推荐工作流
+1. **需求澄清** - 创建规划节点明确功能需求
+   - 用户故事和场景
+   - 验收标准（WHEN/THEN）
+   - 功能边界和限制
+
+2. **技术调研** - 评估实现方案
+   - 现有代码结构分析
+   - 技术选型和依赖
+   - 风险评估
+
+3. **技术设计** - 设计实现方案
+   - API/接口设计
+   - 数据结构设计
+   - 模块划分
+
+4. **任务分解** - 创建执行节点
+   - 核心功能实现
+   - 边界情况处理
+   - 测试用例编写
+
+5. **执行+测试** - 实现并验证
+   - 默认 isNeedTest=true
+   - 编写单元测试
+   - 集成测试验证
+
+### 注意事项
+- 功能开发默认需要测试
+- 使用 acceptanceCriteria 明确验收标准
+- 考虑向后兼容性`,
+    relatedHelpTopics: ["start_task", "node_workflow"],
+    metadata: { priority: 70 },
+  },
+
+  scenario_summary: {
+    scenario: "scenario_summary",
+    l0: "文档总结场景。建议流程：文档扫描 → 分析维度 → 分析执行 → 输出总结。",
+    l1: `文档总结推荐流程：
+1. 文档扫描 - 确定要分析的文档范围
+2. 分析维度 - 确定总结的角度和重点
+3. 分析执行 - 阅读文档并提取关键信息
+4. 输出总结 - 生成结构化总结文档`,
+    l2: `## 文档总结场景
+
+此场景适用于文档分析、代码总结、知识梳理等任务。
+
+### 推荐工作流
+1. **文档扫描** - 确定分析范围
+   - 使用 Glob 查找相关文档
+   - 使用 node_reference 引用文档
+   - 确认文档版本和时效性
+
+2. **分析维度** - 确定总结角度
+   - 技术架构总结
+   - API 使用说明
+   - 最佳实践提炼
+   - 变更历史梳理
+
+3. **分析执行** - 提取关键信息
+   - 阅读并理解文档
+   - 提取核心概念
+   - 识别关联关系
+
+4. **输出总结** - 生成文档
+   - 结构化组织内容
+   - 补充缺失的元信息
+   - 提供示例和说明
+
+### 注意事项
+- 默认 isNeedTest=false（不需要测试）
+- 输出应该是文档而非代码
+- 关注可读性和结构化`,
+    relatedHelpTopics: ["start_task"],
+    metadata: { priority: 60 },
+  },
+
+  scenario_optimize: {
+    scenario: "scenario_optimize",
+    l0: "性能优化场景。建议流程：性能基准(前) → 优化方案 → 执行+测试 → 性能基准(后) → 对比验收。",
+    l1: `性能优化推荐流程：
+1. 性能基准(前) - 测量当前性能指标
+2. 优化方案 - 分析瓶颈并设计优化方案
+3. 执行+测试 - 实施优化并验证正确性
+4. 性能基准(后) - 测量优化后性能
+5. 对比验收 - 验证优化效果`,
+    l2: `## 性能优化场景
+
+此场景适用于性能优化、资源消耗降低等任务。
+
+### 推荐工作流
+1. **性能基准(前)** - 建立基线
+   - 测量关键性能指标
+   - 记录资源使用情况
+   - 确定优化目标
+
+2. **优化方案** - 分析和设计
+   - 性能分析定位瓶颈
+   - 评估优化方案
+   - 权衡性能与可维护性
+
+3. **执行+测试** - 实施优化
+   - 实现优化方案
+   - 确保功能正确性
+   - 编写性能测试
+
+4. **性能基准(后)** - 测量结果
+   - 使用相同测试场景
+   - 记录优化后指标
+   - 验证无性能回退
+
+5. **对比验收** - 验证效果
+   - 对比前后数据
+   - 确认达到优化目标
+   - 记录优化结论
+
+### 注意事项
+- 默认 isNeedTest=true
+- 必须进行性能对比验证
+- 关注优化的副作用`,
+    relatedHelpTopics: ["start_task"],
+    metadata: { priority: 65 },
+  },
+
+  scenario_debug: {
+    scenario: "scenario_debug",
+    l0: "问题调试场景。建议流程：错误分析 → 假设 → 验证 → (循环) → 修复+回归测试。",
+    l1: `问题调试推荐流程：
+1. 错误分析 - 复现问题并收集信息
+2. 假设 - 提出可能的原因
+3. 验证 - 验证假设是否成立
+4. 循环 - 如假设不成立，重复2-3
+5. 修复+回归测试 - 修复并验证`,
+    l2: `## 问题调试场景
+
+此场景适用于 bug 修复、问题排查等任务。
+
+### 推荐工作流
+1. **错误分析** - 理解问题
+   - 复现问题
+   - 收集错误信息和日志
+   - 确定影响范围
+
+2. **假设** - 提出可能原因
+   - 分析代码逻辑
+   - 检查相关变更
+   - 列出可能的根因
+
+3. **验证** - 测试假设
+   - 编写测试用例
+   - 调试验证
+   - 排除或确认原因
+
+4. **循环** - 持续迭代
+   - 如假设不成立，提出新假设
+   - 使用 problem_update 记录进展
+   - 必要时 fail 并寻求帮助
+
+5. **修复+回归测试** - 解决问题
+   - 实施修复方案
+   - 编写回归测试
+   - 验证不影响其他功能
+
+### 注意事项
+- 默认 isNeedTest=true
+- 使用 problem_update 记录调试过程
+- 编写回归测试防止复发`,
+    relatedHelpTopics: ["task_blocked"],
+    metadata: { priority: 70 },
+  },
+
+  scenario_misc: {
+    scenario: "scenario_misc",
+    l0: "杂项场景。自由规划任务流程，根据具体情况灵活调整。",
+    l1: `杂项场景建议：
+1. 分析任务性质和目标
+2. 确定是否需要测试
+3. 自由规划执行流程
+4. 根据实际情况调整`,
+    l2: `## 杂项场景
+
+此场景用于不属于其他场景的任务，提供最大灵活性。
+
+### 工作流建议
+1. **分析任务** - 理解任务性质
+   - 确定任务类型
+   - 评估复杂度
+   - 识别依赖
+
+2. **规划执行** - 制定方案
+   - 自由规划流程
+   - 灵活调整策略
+   - 参考其他场景经验
+
+3. **执行验证** - 完成任务
+   - 根据需要决定是否测试
+   - 记录执行过程
+   - 验证结果
+
+### 注意事项
+- 默认 isNeedTest=false
+- 灵活运用各种工具
+- 可参考其他场景的最佳实践`,
+    relatedHelpTopics: ["start_task"],
+    metadata: { priority: 50 },
+  },
+
   // ==================== 节点创建 ====================
 
   node_create_planning: {
@@ -604,4 +825,26 @@ export function getGuidanceConfig(
   scenario: GuidanceScenario
 ): GuidanceConfig | null {
   return GUIDANCE_CONFIGS[scenario] || null;
+}
+
+/**
+ * 将 TaskScenario 转换为 GuidanceScenario
+ */
+export function taskScenarioToGuidance(
+  taskScenario: "feature" | "summary" | "optimize" | "debug" | "misc"
+): GuidanceScenario {
+  switch (taskScenario) {
+    case "feature":
+      return "scenario_feature";
+    case "summary":
+      return "scenario_summary";
+    case "optimize":
+      return "scenario_optimize";
+    case "debug":
+      return "scenario_debug";
+    case "misc":
+      return "scenario_misc";
+    default:
+      return "scenario_misc";
+  }
 }

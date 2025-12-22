@@ -1,6 +1,20 @@
 // src/types/workspace.ts
 
 /**
+ * 任务场景类型
+ */
+export type TaskScenario = 'feature' | 'summary' | 'optimize' | 'debug' | 'misc';
+
+/**
+ * 场景配置（用于引导生成）
+ */
+export interface ScenarioConfig {
+  scenario: TaskScenario;
+  isNeedTest: boolean;        // 默认是否需要测试
+  baseGuidance: string[];     // 基础引导步骤
+}
+
+/**
  * 工作区索引 - 存储在 ~/.tanmi-workspace/index.json（全局）
  */
 export interface WorkspaceIndex {
@@ -68,6 +82,7 @@ export interface WorkspaceConfig {
   createdAt: string;
   updatedAt: string;
   rootNodeId: string;               // 默认 "root"
+  scenario?: TaskScenario;          // 任务场景类型（可选，默认 misc）
   dispatch?: DispatchConfig;        // 派发配置（可选）
   pendingManualChanges?: ManualChange[];  // 待处理的手动变更记录（上限 20 条）
 }
@@ -118,6 +133,7 @@ export interface WorkspaceInitParams {
   name: string;
   goal: string;
   projectRoot?: string;             // 项目根目录，默认为当前工作目录
+  scenario?: TaskScenario;          // 任务场景类型（可选，默认 misc）
   rules?: string[];
   docs?: DocRef[];
 }

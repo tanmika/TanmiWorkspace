@@ -37,6 +37,7 @@ import { generateWorkspaceId, generateWorkspaceDirName, generateNodeDirName } fr
 import { now } from "../utils/time.js";
 import { validateWorkspaceName, validateProjectRoot } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
+import { taskScenarioToGuidance, getGuidanceConfig } from "../prompts/guidanceContent.js";
 
 /**
  * 获取 HTTP 服务端口
@@ -125,6 +126,9 @@ export class WorkspaceService {
     const rootNodeId = "root";
     const rootNodeDirName = "root";  // 根节点目录名固定为 "root"
 
+    // 5.1 处理场景参数（默认 misc）
+    const scenario = params.scenario || 'misc';
+
     // 6. 创建项目内目录结构（使用可读的目录名）
     await this.fs.ensureProjectDir(projectRoot);
     await this.fs.ensureWorkspaceDir(projectRoot, wsDirName);
@@ -140,6 +144,7 @@ export class WorkspaceService {
       createdAt: currentTime,
       updatedAt: currentTime,
       rootNodeId,
+      scenario,  // 保存场景类型
     };
     await this.json.writeWorkspaceConfig(projectRoot, wsDirName, config);
 
@@ -240,6 +245,9 @@ export class WorkspaceService {
       hint += `\n\n📭 未在项目中发现 .md 文档文件。`;
     }
 
+    // 生成场景化引导内容
+    const scenarioGuidance = this.getScenarioGuidance(scenario);
+
     // 构建返回结果
     const result: WorkspaceInitResult = {
       workspaceId,
@@ -270,7 +278,7 @@ export class WorkspaceService {
 
       result.actionRequired = {
         type: "ask_user",
-        message: "项目中发现了文档文件，请询问用户是否需要将这些文档添加到工作区的文档引用中，以便后续任务参考。",
+        message: `项目中发现了文档文件，请询问用户是否需要将这些文档添加到工作区的文档引用中，以便后续任务参考。\n\n${scenarioGuidance}`,
         data: actionData,
         confirmationToken,
       };
@@ -289,7 +297,7 @@ export class WorkspaceService {
 
       result.actionRequired = {
         type: "ask_user",
-        message: "项目中未发现文档文件，请询问用户是否有相关的需求文档、设计文档或 API 文档可供参考。",
+        message: `项目中未发现文档文件，请询问用户是否有相关的需求文档、设计文档或 API 文档可供参考。\n\n${scenarioGuidance}`,
         data: actionData,
         confirmationToken,
       };
@@ -1200,5 +1208,42 @@ export class WorkspaceService {
     config.pendingManualChanges = [];
     config.updatedAt = now();
     await this.json.writeWorkspaceConfig(projectRoot, dirName, config);
+  }
+
+  /**
+   * 获取场景化引导内容（用于 workspace_init）
+   * @param scenario 任务场景类型
+   * @returns 场景引导文本
+   */
+  private getScenarioGuidance(scenario: import("../types/workspace.js").TaskScenario): string {
+    const guidanceScenario = taskScenarioToGuidance(scenario);
+    const config = getGuidanceConfig(guidanceScenario);
+
+    if (!config) {
+      return "";
+    }
+
+    // 返回 L1 级别的引导内容（关键步骤列表）
+    return `**📋 ${this.getScenarioDisplayName(scenario)}场景引导**\n${config.l1}`;
+  }
+
+  /**
+   * 获取场景显示名称
+   */
+  private getScenarioDisplayName(scenario: import("../types/workspace.js").TaskScenario): string {
+    switch (scenario) {
+      case "feature":
+        return "功能开发";
+      case "summary":
+        return "文档总结";
+      case "optimize":
+        return "性能优化";
+      case "debug":
+        return "问题调试";
+      case "misc":
+        return "杂项任务";
+      default:
+        return "通用";
+    }
   }
 }
