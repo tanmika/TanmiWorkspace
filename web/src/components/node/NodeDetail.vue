@@ -418,6 +418,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 .header-title {
   font-size: 16px;
   font-weight: 700;
+  color: var(--text-main);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -451,6 +452,10 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 .type-badge[data-type="execution"] {
   background: var(--border-heavy);
   color: #fff;
+}
+
+[data-theme="dark"] .type-badge[data-type="execution"] {
+  color: #181818;
 }
 
 .type-badge[data-type="planning"] {
@@ -807,6 +812,11 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 .log-operator.ai {
   background: #111;
   color: #fff;
+}
+
+[data-theme="dark"] .log-operator.ai {
+  background: #E0E0E0;
+  color: #181818;
 }
 
 .log-operator.usr {

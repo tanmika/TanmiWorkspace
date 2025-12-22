@@ -15,10 +15,18 @@ import WsModal from '@/components/ui/WsModal.vue'
 // Toast store
 const toastStore = useToastStore()
 
-// 主题
-const theme = ref<'light' | 'dark'>(
-  (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light'
-)
+// 主题 - 从 localStorage 读取
+function getSavedTheme(): 'light' | 'dark' {
+  try {
+    const prefs = JSON.parse(localStorage.getItem('tanmi-workspace-home-preferences') || '{}')
+    return prefs.theme || 'light'
+  } catch {
+    return 'light'
+  }
+}
+const theme = ref<'light' | 'dark'>(getSavedTheme())
+// 立即应用主题
+document.documentElement.setAttribute('data-theme', theme.value)
 
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light'
@@ -1023,6 +1031,10 @@ async function handleDispatchSuccess() {
   color: #fff;
 }
 
+[data-theme="dark"] .view-toggle .ws-btn.view-btn.active {
+  color: #181818;
+}
+
 .sidebar-content {
   flex: 1;
   overflow: auto;
@@ -1299,6 +1311,11 @@ async function handleDispatchSuccess() {
 .log-operator.ai {
   background: #111;
   color: #fff;
+}
+
+[data-theme="dark"] .log-operator.ai {
+  background: #E0E0E0;
+  color: #181818;
 }
 
 .log-operator.usr {

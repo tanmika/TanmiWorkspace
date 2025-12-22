@@ -96,6 +96,7 @@ const devInfo = ref<DevInfoResult | null>(null)
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light'
   document.documentElement.setAttribute('data-theme', theme.value)
+  savePreferences()
 }
 
 // 刷新状态
@@ -390,7 +391,7 @@ function getBadgeText(status: string) {
           :class="{ archived: ws.status === 'archived' }"
         >
           <div class="card-header">
-            <h3 class="card-title">{{ ws.name }}</h3>
+            <h3 class="card-title" @click="ws.status !== 'error' && handleEnter(ws)">{{ ws.name }}</h3>
             <span class="badge" :class="getBadgeClass(ws.status)">{{ getBadgeText(ws.status) }}</span>
           </div>
           <div class="card-body">
@@ -782,7 +783,14 @@ function getBadgeText(status: string) {
   font-weight: 700;
   color: var(--text-main);
   line-height: 1.3;
-  margin: 0;
+  margin: -8px;
+  padding: 8px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.card-title:hover {
+  color: var(--accent-red);
 }
 
 .card-body {
