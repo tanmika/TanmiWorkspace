@@ -55,7 +55,8 @@ npm install
 npm run build
 ```
 
-然后编辑 AI 工具的 MCP 配置（如 `~/.claude/settings.json`）：
+然后在 AI 工具的 MCP 配置文件中添加：
+
 ```json
 {
   "mcpServers": {
@@ -66,6 +67,17 @@ npm run build
   }
 }
 ```
+
+各平台配置文件位置：
+
+| 平台 | 配置文件路径 |
+|------|-------------|
+| Claude Code | `~/.claude.json` 或项目下 `.mcp.json` |
+| Cursor | `~/.cursor/mcp.json` 或项目下 `.cursor/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| 其他 | 参考对应工具的 MCP 配置文档 |
+
+> Claude Code 也可使用命令：`claude mcp add tanmi-workspace -s user -- node /path/to/dist/index.js`
 
 > 详细配置说明见 [配置方式.md](配置方式.md)
 
@@ -466,8 +478,11 @@ web/
 - [ ] **文档生命周期管理** - 基于继承生命周期的文档管理和派发机制，支持自动清理过期文档
 - [ ] **对话恢复增强** - 更稳定的会话恢复机制，支持工作区 UUID 匹配，避免 ID 变化导致恢复失败
 - [ ] **AI 任务派发** - 支持主 AI 将执行节点派发给其他 AI 执行，根据返回结果进行下一步操作（多 Agent 协作）
-- [ ] **MCP 权限自动配置** - 自动化 MCP 权限配置流程，减少手动编辑配置文件的步骤
+- [x] **MCP 权限自动配置** - ~~自动化 MCP 权限配置流程，减少手动编辑配置文件的步骤~~ 已实现：`tanmi-workspace setup` 自动检测环境并配置 MCP 服务器和权限
 - [x] **OpenSpec 集成** - ~~接管 OpenSpec 流程、导入 OpenSpec 结果、同步生成 OpenSpec 跟踪，提供开关启用/禁用~~ 已实现导入功能：workspace_import_guide/list + openspec-import.cjs 脚本
+- [x] **新手教程系统** - 自动为新用户创建教程工作区，介绍核心概念和使用方法
+- [x] **版本更新提示** - 升级后自动创建版本更新工作区，展示新版本功能变更
+- [x] **WebUI 设计系统升级** - 从 Element Plus 迁移到基于构成主义的自定义设计系统
 - [ ] **智能验证节点** - 加强验证节点能力，让 AI 能更智能地判断是否需要验证，并自动执行验证流程
 - [x] **场景感知引导系统** - ~~将部分静态 prompt 改为 Hook 动态注入~~ 已实现：22 个场景的三级引导系统（L0/L1/L2），自动嵌入工具返回 + Confirmation Token 防止 AI 编造确认
 - [ ] **WebUI 编辑与 AI 同步** - 实现 WebUI 中的节点编辑功能（需求、结论等），变更能实时同步给 AI 会话

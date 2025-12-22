@@ -16,7 +16,8 @@ const execAsync = promisify(exec);
 // 路径配置
 const HOME = homedir();
 const CLAUDE_HOME = join(HOME, ".claude");
-const CLAUDE_SETTINGS = join(CLAUDE_HOME, "settings.json");
+const CLAUDE_JSON = join(HOME, ".claude.json"); // MCP 配置
+const CLAUDE_SETTINGS_LOCAL = join(CLAUDE_HOME, "settings.local.json"); // 权限配置
 const CURSOR_HOME = join(HOME, ".cursor");
 const CURSOR_MCP = join(CURSOR_HOME, "mcp.json");
 const TANMI_SCRIPTS = join(HOME, ".tanmi-workspace", "scripts");
@@ -57,17 +58,24 @@ async function detectEnvironment(): Promise<Environment> {
     // Claude CLI 不可用
   }
 
-  // 检测 Claude MCP 配置
+  // 检测 Claude MCP 配置 - 从 ~/.claude.json 读取
   let claudeMcpConfigured = false;
-  let claudePermissionConfigured = false;
-  if (existsSync(CLAUDE_SETTINGS)) {
+  if (existsSync(CLAUDE_JSON)) {
     try {
-      const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf-8"));
-      // 检查 mcpServers 或通过 claude mcp list 检查
-      if (settings.mcpServers?.["tanmi-workspace"]) {
+      const claudeJson = JSON.parse(readFileSync(CLAUDE_JSON, "utf-8"));
+      if (claudeJson.mcpServers?.["tanmi-workspace"]) {
         claudeMcpConfigured = true;
       }
-      // 检查权限
+    } catch {
+      // 解析失败
+    }
+  }
+
+  // 检测 Claude 权限配置 - 从 ~/.claude/settings.local.json 读取
+  let claudePermissionConfigured = false;
+  if (existsSync(CLAUDE_SETTINGS_LOCAL)) {
+    try {
+      const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS_LOCAL, "utf-8"));
       if (settings.permissions?.allow?.some((p: string) =>
         p === "mcp__tanmi-workspace" || p.startsWith("mcp__tanmi-workspace__")
       )) {
@@ -150,28 +158,24 @@ async function configureClaudeMcp(env: Environment): Promise<boolean> {
     }
   }
 
-  // 手动配置
+  // 手动配置 - 写入 ~/.claude.json
   try {
-    if (!existsSync(CLAUDE_HOME)) {
-      mkdirSync(CLAUDE_HOME, { recursive: true });
+    let claudeJson: Record<string, unknown> = {};
+    if (existsSync(CLAUDE_JSON)) {
+      claudeJson = JSON.parse(readFileSync(CLAUDE_JSON, "utf-8"));
     }
 
-    let settings: Record<string, unknown> = {};
-    if (existsSync(CLAUDE_SETTINGS)) {
-      settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf-8"));
+    if (!claudeJson.mcpServers) {
+      claudeJson.mcpServers = {};
     }
 
-    if (!settings.mcpServers) {
-      settings.mcpServers = {};
-    }
-
-    (settings.mcpServers as Record<string, unknown>)["tanmi-workspace"] = {
+    (claudeJson.mcpServers as Record<string, unknown>)["tanmi-workspace"] = {
       command: "npx",
       args: ["tanmi-workspace"],
     };
 
-    writeFileSync(CLAUDE_SETTINGS, JSON.stringify(settings, null, 2));
-    console.log(colors.green("  ✓ MCP 配置已写入 " + CLAUDE_SETTINGS));
+    writeFileSync(CLAUDE_JSON, JSON.stringify(claudeJson, null, 2));
+    console.log(colors.green("  ✓ MCP 配置已写入 " + CLAUDE_JSON));
     return true;
   } catch (error) {
     console.log(colors.red("  ✗ 配置失败: " + error));
@@ -179,14 +183,18 @@ async function configureClaudeMcp(env: Environment): Promise<boolean> {
   }
 }
 
-// 配置 Claude Code 权限
+// 配置 Claude Code 权限 - 写入 ~/.claude/settings.local.json
 async function configureClaudePermission(): Promise<boolean> {
   console.log("\n" + colors.blue("配置 Claude Code 权限..."));
 
   try {
+    if (!existsSync(CLAUDE_HOME)) {
+      mkdirSync(CLAUDE_HOME, { recursive: true });
+    }
+
     let settings: Record<string, unknown> = {};
-    if (existsSync(CLAUDE_SETTINGS)) {
-      settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf-8"));
+    if (existsSync(CLAUDE_SETTINGS_LOCAL)) {
+      settings = JSON.parse(readFileSync(CLAUDE_SETTINGS_LOCAL, "utf-8"));
     }
 
     if (!settings.permissions) {
@@ -205,7 +213,7 @@ async function configureClaudePermission(): Promise<boolean> {
 
     if (!hasPermission) {
       permissions.allow.push("mcp__tanmi-workspace");
-      writeFileSync(CLAUDE_SETTINGS, JSON.stringify(settings, null, 2));
+      writeFileSync(CLAUDE_SETTINGS_LOCAL, JSON.stringify(settings, null, 2));
       console.log(colors.green("  ✓ 权限已添加: mcp__tanmi-workspace"));
     } else {
       console.log(colors.green("  ✓ 权限已存在"));
