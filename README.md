@@ -62,7 +62,7 @@ npm run build
   "mcpServers": {
     "tanmi-workspace": {
       "command": "node",
-      "args": ["/path/to/TanmiWorkspace/dist/index.js"]
+      "args": ["/path/to/TanmiWorkspace/dist/check-node-version.js"]
     }
   }
 }
@@ -77,7 +77,7 @@ npm run build
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 | 其他 | 参考对应工具的 MCP 配置文档 |
 
-> Claude Code 也可使用命令：`claude mcp add tanmi-workspace -s user -- node /path/to/dist/index.js`
+> Claude Code 也可使用命令：`claude mcp add tanmi-workspace -s user -- node /path/to/dist/check-node-version.js`
 
 > 详细配置说明见 [配置方式.md](配置方式.md)
 

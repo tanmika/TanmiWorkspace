@@ -416,10 +416,7 @@ npm run build:all
   "mcpServers": {
     "tanmi-workspace": {
       "command": "node",
-      "args": ["/path/to/tanmi-workspace/dist/index.js"],
-      "env": {
-        "TANMI_PROJECT_ROOT": "/path/to/tanmi-workspace"
-      }
+      "args": ["/path/to/tanmi-workspace/dist/check-node-version.js"]
     }
   }
 }
