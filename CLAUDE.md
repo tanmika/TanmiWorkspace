@@ -52,6 +52,10 @@
 
 1. 更新 `CHANGELOG.md` 记录变更
 2. 更新 `package.json` 版本号
-3. 提交：`[Chore] Release vX.Y.Z`
-4. 打 tag：`git tag vX.Y.Z`
-5. 推送：`git push && git push --tags`
+3. 同步版本说明：`npx tsx scripts/sync-versions.ts`
+4. 填写 `docs/version-notes.yaml` 中新版本的 `requirement` 字段
+5. 提交：`[Chore] Release vX.Y.Z`
+6. 打 tag：`git tag vX.Y.Z`
+7. 推送：`git push && git push --tags`
+
+> 注意：`version-notes.yaml` 用于生成版本更新工作区，`requirement` 是简短描述，`conclusion` 自动从 CHANGELOG 提取。

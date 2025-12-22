@@ -9,6 +9,16 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.7.2
+    requirement: SSE 实时更新、紧凑子结论渲染、Noto Emoji 单色字体、夜间模式优化
+    conclusion: |-
+      - SSE 实时更新: 后端操作（节点变更、日志追加等）自动推送到前端，无需手动刷新
+      - CompactMarkdown 组件: 子节点结论紧凑渲染，换行转分隔符，21行压缩为数行
+      - Noto Emoji 单色字体: 统一 emoji 风格，符合构成主义设计语言
+      - 夜间模式优化: 柔和文字颜色(#E0E0E0)、平滑主题切换过渡
+      - Markdown 样式增强: 红色点缀（列表■、代码块边框等）统一
+      - 版本更新弹窗: 新版本提示改为弹窗形式，点击跳转查看
+    note: ""
   - version: 1.7.1
     requirement: 修复 Claude Code MCP 配置路径错误
     conclusion: |-
