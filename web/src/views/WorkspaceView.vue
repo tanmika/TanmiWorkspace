@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 // Element Plus icons (no longer used in header/sidebar)
 import { useWorkspaceStore, useNodeStore, useSettingsStore, useToastStore } from '@/stores'
+import { getGlobalSSE } from '@/composables/useSSE'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
@@ -215,7 +216,29 @@ async function handleFocusCurrent() {
 watch(workspaceId, loadWorkspace)
 
 // 初始加载
-onMounted(loadWorkspace)
+onMounted(() => {
+  loadWorkspace()
+
+  // 连接 SSE 并监听更新事件
+  const sse = getGlobalSSE()
+  sse.connect()
+
+  // 监听节点更新事件
+  sse.on('node_updated', (event) => {
+    if (event.workspaceId === workspaceId.value) {
+      console.log('[SSE] 收到节点更新，刷新数据')
+      nodeStore.fetchNodeTree()
+    }
+  })
+
+  // 监听日志更新事件
+  sse.on('log_updated', (event) => {
+    if (event.workspaceId === workspaceId.value) {
+      console.log('[SSE] 收到日志更新，刷新数据')
+      workspaceStore.fetchWorkspace(workspaceId.value)
+    }
+  })
+})
 
 // 返回首页
 function goBack() {

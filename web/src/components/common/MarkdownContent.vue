@@ -30,6 +30,7 @@ const renderedContent = computed(() => {
   line-height: 1.6;
   word-wrap: break-word;
   color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif, 'Noto Emoji';
 }
 
 .markdown-content :deep(h1),

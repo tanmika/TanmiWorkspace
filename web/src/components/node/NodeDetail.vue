@@ -5,6 +5,7 @@ import { STATUS_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type Transitio
 import NodeIcon from '@/components/tree/NodeIcon.vue'
 import DispatchBadge from '@/components/tree/DispatchBadge.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
+import CompactMarkdown from '@/components/common/CompactMarkdown.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsPromptDialog from '@/components/ui/WsPromptDialog.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
@@ -283,7 +284,9 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
             <span class="child-node-icon" :data-status="child.status" :data-incomplete="!child.conclusion"></span>
             {{ child.title }}
           </div>
-          <div v-if="child.conclusion" class="child-conclusion-content">{{ child.conclusion }}</div>
+          <div v-if="child.conclusion" class="child-conclusion-content">
+            <CompactMarkdown :content="child.conclusion" />
+          </div>
           <div v-else class="child-conclusion-pending">-- waiting for completion --</div>
         </div>
       </div>
@@ -832,6 +835,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 .log-content {
   color: var(--text-main);
   flex: 1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Noto Emoji';
 }
 
 .log-empty {
@@ -866,6 +870,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   align-items: center;
   gap: 8px;
   color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Noto Emoji';
 }
 
 /* 子节点图标 */
@@ -921,9 +926,6 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 }
 
 .child-conclusion-content {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
   padding-left: 20px;
 }
 
