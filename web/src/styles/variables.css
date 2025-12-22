@@ -20,12 +20,24 @@
   --mono-font: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
 }
 
+/* 全局主题过渡 */
+*,
+*::before,
+*::after {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Emoji 单色字体 */
+.emoji {
+  font-family: 'Noto Emoji', sans-serif;
+}
+
 [data-theme="dark"] {
-  --bg-color: #111111;
-  --bg-dot: #333;
-  --card-bg: #1a1a1a;
-  --card-footer: #141414;
-  --text-main: #ffffff;
+  --bg-color: #181818;
+  --bg-dot: #444;
+  --card-bg: #212121;
+  --card-footer: #1c1c1c;
+  --text-main: #E0E0E0;
   --text-secondary: #aaa;
   --text-muted: #777;
   --accent-red: #E84545;
@@ -33,10 +45,10 @@
   --accent-orange: #F5A623;
   --accent-green: #6AAA8A;
   --accent-purple: #A855F7;
-  --border-color: #333;
-  --border-heavy: #fff;
-  --logo-block: #fff;
-  --logo-outline: #111;
-  --path-bg: #252525;
-  --path-border: #444;
+  --border-color: #383838;
+  --border-heavy: #E0E0E0;
+  --logo-block: #E0E0E0;
+  --logo-outline: #181818;
+  --path-bg: #2a2a2a;
+  --path-border: #484848;
 }

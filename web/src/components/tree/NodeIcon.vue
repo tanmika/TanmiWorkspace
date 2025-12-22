@@ -185,4 +185,13 @@ const isPlanning = computed(() => props.type === 'planning')
   background: #1a1a1a;
 }
 
+[data-theme="dark"] .node-exec.validating::after {
+  background: #181818;
+}
+
+[data-theme="dark"] .node-exec.failed::before,
+[data-theme="dark"] .node-exec.failed::after {
+  background: #181818;
+}
+
 </style>

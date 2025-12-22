@@ -3,6 +3,7 @@
 
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getServices } from "../services.js";
+import { eventService } from "../EventService.js";
 import type {
   LogAppendParams,
   ProblemUpdateParams,
@@ -42,7 +43,9 @@ export async function logRoutes(fastify: FastifyInstance): Promise<void> {
         operator: request.body.operator,
         event: request.body.event,
       };
-      return services.log.append(params);
+      const result = await services.log.append(params);
+      eventService.emitLogUpdate(request.params.wid, "workspace");
+      return result;
     }
   );
 
@@ -58,7 +61,9 @@ export async function logRoutes(fastify: FastifyInstance): Promise<void> {
         operator: request.body.operator,
         event: request.body.event,
       };
-      return services.log.append(params);
+      const result = await services.log.append(params);
+      eventService.emitLogUpdate(request.params.wid, request.params.nid);
+      return result;
     }
   );
 
@@ -73,7 +78,9 @@ export async function logRoutes(fastify: FastifyInstance): Promise<void> {
         problem: request.body.problem,
         nextStep: request.body.nextStep,
       };
-      return services.log.updateProblem(params);
+      const result = await services.log.updateProblem(params);
+      eventService.emitNodeUpdate(request.params.wid);
+      return result;
     }
   );
 
@@ -89,7 +96,9 @@ export async function logRoutes(fastify: FastifyInstance): Promise<void> {
         problem: request.body.problem,
         nextStep: request.body.nextStep,
       };
-      return services.log.updateProblem(params);
+      const result = await services.log.updateProblem(params);
+      eventService.emitNodeUpdate(request.params.wid, request.params.nid);
+      return result;
     }
   );
 
@@ -102,7 +111,9 @@ export async function logRoutes(fastify: FastifyInstance): Promise<void> {
       const params: ProblemClearParams = {
         workspaceId: request.params.wid,
       };
-      return services.log.clearProblem(params);
+      const result = await services.log.clearProblem(params);
+      eventService.emitNodeUpdate(request.params.wid);
+      return result;
     }
   );
 
@@ -116,7 +127,9 @@ export async function logRoutes(fastify: FastifyInstance): Promise<void> {
         workspaceId: request.params.wid,
         nodeId: request.params.nid,
       };
-      return services.log.clearProblem(params);
+      const result = await services.log.clearProblem(params);
+      eventService.emitNodeUpdate(request.params.wid, request.params.nid);
+      return result;
     }
   );
 }

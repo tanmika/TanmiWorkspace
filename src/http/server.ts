@@ -9,6 +9,7 @@ import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { ensureBaseSetup } from "./services.js";
+import { eventService } from "./EventService.js";
 
 // ESM 下获取 __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -60,6 +61,43 @@ export async function createServer(): Promise<FastifyInstance> {
     status: "ok",
     timestamp: new Date().toISOString(),
   }));
+
+  // SSE 事件流端点
+  server.get("/api/events", async (request, reply) => {
+    // 设置 SSE 响应头
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+    });
+
+    // 注册客户端
+    const clientId = eventService.addClient(reply);
+    server.log.info(`SSE 客户端连接: ${clientId}, 当前连接数: ${eventService.getClientCount()}`);
+
+    // 发送初始连接确认
+    reply.raw.write(`data: ${JSON.stringify({ type: "connected", clientId })}\n\n`);
+
+    // 保持连接（心跳）
+    const heartbeat = setInterval(() => {
+      try {
+        reply.raw.write(`: heartbeat\n\n`);
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 30000);
+
+    // 清理
+    reply.raw.on("close", () => {
+      clearInterval(heartbeat);
+      eventService.removeClient(clientId);
+      server.log.info(`SSE 客户端断开: ${clientId}, 剩余连接数: ${eventService.getClientCount()}`);
+    });
+
+    // 不要调用 reply.send()，保持连接打开
+    return reply;
+  });
 
   // 版本检查接口（公开）
   server.get("/api/version", async () => {

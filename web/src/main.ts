@@ -3,6 +3,8 @@ import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+// @ts-ignore - Font import has no type declarations
+import '@fontsource/noto-emoji'
 
 import App from './App.vue'
 import router from './router'

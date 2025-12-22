@@ -31,5 +31,6 @@ const config = computed(() => STATUS_CONFIG[props.status])
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-family: 'Noto Emoji', sans-serif;
 }
 </style>
