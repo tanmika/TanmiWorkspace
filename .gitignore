@@ -18,6 +18,7 @@ plan/
 # IDE / Editor
 .idea/
 .vscode/
+.claude/settings.local.json
 *.swp
 *.swo
 *.sw?
