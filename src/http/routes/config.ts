@@ -15,8 +15,11 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * GET /api/config - 获取全局配置
+   * 同时检查并创建新手教程工作区（如果尚未创建）
    */
   fastify.get("/config", async () => {
+    // 检查并创建新手教程（静默执行，不阻塞）
+    await services.tutorial.ensureTutorial();
     return services.config.get();
   });
 
@@ -32,4 +35,12 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
       return services.config.set(params);
     }
   );
+
+  /**
+   * POST /api/tutorial/trigger - 手动触发创建教程工作区
+   * 用于设置页面连续点击版本号5次触发
+   */
+  fastify.post("/tutorial/trigger", async () => {
+    return services.tutorial.manualTriggerTutorial();
+  });
 }

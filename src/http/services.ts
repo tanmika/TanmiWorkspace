@@ -14,6 +14,7 @@ import { LogService } from "../services/LogService.js";
 import { SessionService } from "../services/SessionService.js";
 import { DispatchService } from "../services/DispatchService.js";
 import { ConfigService } from "../services/ConfigService.js";
+import { TutorialService } from "../services/TutorialService.js";
 import { HelpService } from "../tools/help.js";
 
 export interface Services {
@@ -30,6 +31,7 @@ export interface Services {
   session: SessionService;
   dispatch: DispatchService;
   config: ConfigService;
+  tutorial: TutorialService;
   help: HelpService;
 }
 
@@ -63,6 +65,11 @@ export function createServices(): Services {
   // 设置 WorkspaceService 依赖（用于清除手动变更）
   context.setWorkspaceService(workspace);
 
+  const log = new LogService(json, md, fs);
+  const reference = new ReferenceService(json, md, fs);
+  const dispatch = new DispatchService(json, md, fs, config);
+  const tutorial = new TutorialService(workspace, node, state, log, context, reference, dispatch, config);
+
   servicesInstance = {
     fs,
     json,
@@ -72,11 +79,12 @@ export function createServices(): Services {
     node,
     state,
     context,
-    reference: new ReferenceService(json, md, fs),
-    log: new LogService(json, md, fs),
+    reference,
+    log,
     session: new SessionService(sessionStorage, json, md, fs),
-    dispatch: new DispatchService(json, md, fs, config),
+    dispatch,
     config,
+    tutorial,
     help: new HelpService(),
   };
 

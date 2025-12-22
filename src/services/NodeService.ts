@@ -902,4 +902,50 @@ export class NodeService {
       newParentId,
     };
   }
+
+  /**
+   * 重新排序节点的子节点
+   * @param workspaceId 工作区 ID
+   * @param nodeId 父节点 ID
+   * @param orderedChildIds 排序后的子节点 ID 数组
+   */
+  async reorderChildren(params: {
+    workspaceId: string;
+    nodeId: string;
+    orderedChildIds: string[];
+  }): Promise<void> {
+    const { workspaceId, nodeId, orderedChildIds } = params;
+
+    // 1. 获取 projectRoot 和 wsDirName
+    const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
+
+    // 2. 读取图结构
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
+
+    // 3. 验证节点存在
+    const nodeMeta = graph.nodes[nodeId];
+    if (!nodeMeta) {
+      throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
+    }
+
+    // 4. 验证所有子节点 ID 都在 orderedChildIds 中
+    const currentChildren = new Set(nodeMeta.children);
+    const newChildren = new Set(orderedChildIds);
+
+    if (currentChildren.size !== newChildren.size) {
+      throw new TanmiError("INVALID_TRANSITION", "子节点数量不匹配");
+    }
+
+    for (const childId of orderedChildIds) {
+      if (!currentChildren.has(childId)) {
+        throw new TanmiError("NODE_NOT_FOUND", `子节点 "${childId}" 不存在`);
+      }
+    }
+
+    // 5. 更新子节点顺序
+    nodeMeta.children = orderedChildIds;
+
+    // 6. 保存图结构
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
+  }
 }

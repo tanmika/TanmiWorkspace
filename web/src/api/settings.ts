@@ -6,6 +6,7 @@ import client from './client'
 export interface GlobalSettings {
   version: '1.0'
   defaultDispatchMode: 'none' | 'git' | 'no-git'
+  tutorialVersion?: string  // 已创建的教程版本
 }
 
 export interface SettingsGetResult {
@@ -15,6 +16,11 @@ export interface SettingsGetResult {
 export interface SettingsUpdateResult {
   success: boolean
   config: GlobalSettings
+}
+
+export interface TutorialTriggerResult {
+  created: boolean
+  message: string
 }
 
 export const settingsApi = {
@@ -32,5 +38,12 @@ export const settingsApi = {
     defaultDispatchMode?: 'none' | 'git' | 'no-git'
   }): Promise<SettingsUpdateResult> {
     return client.put('/config', params)
+  },
+
+  /**
+   * 手动触发创建教程工作区
+   */
+  async triggerTutorial(): Promise<TutorialTriggerResult> {
+    return client.post('/tutorial/trigger')
   },
 }

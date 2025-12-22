@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastStore } from '@/stores/toast'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
+import { settingsApi } from '@/api/settings'
 import WsModal from '@/components/ui/WsModal.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
@@ -14,6 +15,20 @@ const toastStore = useToastStore()
 const devInfo = ref<DevInfoResult | null>(null)
 const frontendBuildTime = __BUILD_TIME__
 
+// 计算前后端编译时间差异是否超过100秒
+const buildTimeDiffTooLarge = computed(() => {
+  if (!devInfo.value?.codeBuildTime || !frontendBuildTime) return false
+  const backendTime = new Date(devInfo.value.codeBuildTime).getTime()
+  const frontendTime = new Date(frontendBuildTime).getTime()
+  const diffSeconds = Math.abs(backendTime - frontendTime) / 1000
+  return diffSeconds > 100
+})
+
+// 版本点击计数（连续点击5次触发教程创建）
+const versionClickCount = ref(0)
+const versionClickTimer = ref<number | null>(null)
+const tutorialTriggering = ref(false)
+
 // Props
 interface Props {
   visible: boolean
@@ -24,6 +39,7 @@ const props = defineProps<Props>()
 // Emits
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
+  (e: 'tutorialCreated'): void
 }>()
 
 // 本地状态
@@ -91,6 +107,46 @@ async function doSave() {
 // 选择模式
 function selectMode(mode: 'none' | 'git' | 'no-git') {
   localMode.value = mode
+}
+
+// 版本号点击处理（连续点击5次触发教程创建 - 彩蛋功能）
+async function handleVersionClick() {
+  if (tutorialTriggering.value) return
+
+  // 清除之前的计时器
+  if (versionClickTimer.value) {
+    clearTimeout(versionClickTimer.value)
+  }
+
+  // 增加点击计数
+  versionClickCount.value++
+
+  // 达到5次触发教程创建
+  if (versionClickCount.value >= 5) {
+    versionClickCount.value = 0
+    tutorialTriggering.value = true
+
+    try {
+      const result = await settingsApi.triggerTutorial()
+      if (result.created) {
+        toastStore.info('叮~')
+        emit('tutorialCreated')
+      } else {
+        // 彩蛋：已存在时显示喵~
+        toastStore.info('喵~')
+      }
+    } catch (e) {
+      console.error('[Tutorial] trigger failed:', e)
+    } finally {
+      tutorialTriggering.value = false
+    }
+    return
+  }
+
+  // 设置1秒超时重置计数
+  versionClickTimer.value = window.setTimeout(() => {
+    versionClickCount.value = 0
+  }, 1000)
 }
 </script>
 
@@ -175,7 +231,14 @@ function selectMode(mode: 'none' | 'git' | 'no-git') {
         <div class="tech-spec">
           <div class="spec-item">
             <label>BACKEND VERSION</label>
-            <div class="spec-value">v{{ devInfo?.packageVersion || '-' }}</div>
+            <div
+              class="spec-value version-clickable"
+              :class="{ 'version-clicking': versionClickCount > 2 }"
+              @click="handleVersionClick"
+            >
+              v{{ devInfo?.packageVersion || '-' }}
+              <span v-if="versionClickCount > 2" class="click-indicator">{{ versionClickCount }}/5</span>
+            </div>
           </div>
           <div class="spec-item">
             <label>NODE VERSION</label>
@@ -195,10 +258,10 @@ function selectMode(mode: 'none' | 'git' | 'no-git') {
           </div>
         </div>
         <div
-          v-if="devInfo?.codeBuildTime && frontendBuildTime && devInfo.codeBuildTime !== frontendBuildTime"
+          v-if="buildTimeDiffTooLarge"
           class="spec-warning"
         >
-          [WARN] 前后端编译时间不一致，可能需要重新编译或刷新页面。
+          [WARN] 前后端编译时间不一致，若为版本更新后需要指示 AI 重新编译前后端
         </div>
       </div>
     </div>
@@ -457,5 +520,30 @@ function selectMode(mode: 'none' | 'git' | 'no-git') {
 
 [data-theme="dark"] .spec-warning {
   color: #fbbf24;
+}
+
+/* 版本号可点击样式（彩蛋，隐藏交互反馈） */
+.version-clickable {
+  cursor: text;  /* 隐藏可点击的暗示 */
+  user-select: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 只在点击超过2次后才显示反馈 */
+.version-clicking {
+  color: var(--accent-red);
+  transition: color 0.15s ease;
+}
+
+.click-indicator {
+  font-size: 10px;
+  background: var(--accent-red);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
 }
 </style>

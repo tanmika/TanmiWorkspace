@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { useServiceStore, useToastStore } from '@/stores'
+import { useServiceStore, useToastStore, useSettingsStore } from '@/stores'
 import ServiceUnavailable from '@/components/ServiceUnavailable.vue'
 import VersionUpdateNotification from '@/components/VersionUpdateNotification.vue'
 import ManualOperationToast from '@/components/ManualOperationToast.vue'
@@ -8,10 +8,12 @@ import WsToastContainer from '@/components/ui/WsToastContainer.vue'
 
 const serviceStore = useServiceStore()
 const toastStore = useToastStore()
+const settingsStore = useSettingsStore()
 
-// 启动时检查服务状态
+// 启动时检查服务状态并加载配置
 onMounted(() => {
   serviceStore.checkHealth()
+  settingsStore.loadSettings()
 })
 </script>
 

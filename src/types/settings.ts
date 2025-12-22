@@ -7,6 +7,8 @@
 export interface GlobalConfig {
   version: "1.0";
   defaultDispatchMode: "none" | "git" | "no-git";
+  tutorialCreated?: boolean;  // 教程工作区是否已创建（只创建一次）
+  tutorialVersion?: string;   // 上次运行的系统版本，版本变更时创建更新工作区
 }
 
 /**

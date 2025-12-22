@@ -1,12 +1,13 @@
 // 树形布局工具 - 将 NodeTreeItem 转换为 Vue Flow 格式
 import type { Node, Edge } from '@vue-flow/core'
-import type { NodeTreeItem, NodeDispatchInfo } from '@/types'
+import type { NodeTreeItem, NodeDispatchInfo, NodeRole } from '@/types'
 
 // 节点数据类型
 export interface GraphNodeData {
   title: string
   type: NodeTreeItem['type']
   status: NodeTreeItem['status']
+  role?: NodeRole
   dispatch?: NodeDispatchInfo
   isFocused: boolean
   isSelected: boolean
@@ -126,6 +127,7 @@ export function transformTreeToFlow(params: TransformParams): TransformResult {
         title: node.title,
         type: node.type,
         status: node.status,
+        role: node.role,
         dispatch: node.dispatch,
         isFocused: node.id === focusId,
         isSelected: node.id === selectedId,

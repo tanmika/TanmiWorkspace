@@ -845,12 +845,15 @@ async function handleDispatchSuccess() {
   font-family: var(--mono-font);
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 0 8px;
   min-width: 32px;
+  height: 20px;
+  line-height: 20px;
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   display: inline-block;
+  box-sizing: border-box;
 }
 
 .badge-status.disabled {

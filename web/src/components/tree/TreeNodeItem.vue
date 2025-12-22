@@ -2,6 +2,7 @@
 import type { NodeTreeItem } from '@/types'
 import FocusCrosshair from './FocusCrosshair.vue'
 import NodeIcon from './NodeIcon.vue'
+import RoleBadge from './RoleBadge.vue'
 import DispatchBadge from './DispatchBadge.vue'
 
 const props = defineProps<{
@@ -63,6 +64,9 @@ function handleToggleExpand(e: Event) {
       :status="node.status"
     />
     <span class="node-title">{{ node.title }}</span>
+    <!-- 角色标牌 -->
+    <RoleBadge :role="node.role" />
+    <!-- 派发徽章 -->
     <DispatchBadge
       v-if="node.dispatch"
       :status="node.dispatch.status"

@@ -184,4 +184,5 @@ const isPlanning = computed(() => props.type === 'planning')
 [data-theme="dark"] .node-plan.monitoring {
   background: #1a1a1a;
 }
+
 </style>

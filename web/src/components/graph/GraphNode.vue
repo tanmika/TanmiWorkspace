@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
-import type { NodeType, NodeStatus, NodeDispatchInfo } from '@/types'
+import type { NodeType, NodeStatus, NodeDispatchInfo, NodeRole } from '@/types'
 import NodeIcon from '@/components/tree/NodeIcon.vue'
 import FocusCrosshair from '@/components/tree/FocusCrosshair.vue'
+import RoleBadge from '@/components/tree/RoleBadge.vue'
 import DispatchBadge from '@/components/tree/DispatchBadge.vue'
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
     title: string
     type: NodeType
     status: NodeStatus
+    role?: NodeRole
     dispatch?: NodeDispatchInfo
     isFocused: boolean
     isSelected: boolean
@@ -48,6 +50,9 @@ const nodeClass = computed(() => ({
 
       <!-- 节点标签 -->
       <span class="node-label">{{ data.title }}</span>
+
+      <!-- 角色标牌 -->
+      <RoleBadge :role="data.role" />
 
       <!-- 派发徽章 -->
       <DispatchBadge

@@ -98,6 +98,26 @@ function toggleTheme() {
   document.documentElement.setAttribute('data-theme', theme.value)
 }
 
+// 刷新状态
+const isRefreshing = ref(false)
+
+// 刷新数据
+async function handleRefresh() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await workspaceStore.fetchWorkspaces('all')
+    toastStore.success('刷新成功')
+  } catch {
+    toastStore.error('刷新失败')
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+// 暴露刷新方法给外部调用
+defineExpose({ handleRefresh })
+
 // 加载工作区列表和开发信息
 onMounted(async () => {
   // 应用保存的主题
@@ -300,6 +320,9 @@ function getBadgeText(status: string) {
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
           </svg>
         </button>
+        <button class="btn btn-secondary" @click="handleRefresh" :disabled="isRefreshing" title="刷新数据">
+          <span :class="{ 'spin': isRefreshing }">⇄</span> SYNC
+        </button>
         <button class="btn btn-secondary" @click="showSettingsModal = true">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <line x1="1" y1="3" x2="15" y2="3"/>
@@ -410,7 +433,7 @@ function getBadgeText(status: string) {
     </WsModal>
 
     <!-- 设置弹窗 -->
-    <SettingsModal v-model:visible="showSettingsModal" />
+    <SettingsModal v-model:visible="showSettingsModal" @tutorial-created="handleRefresh" />
 
     <!-- 开发模式标识 -->
     <div v-if="devInfo?.available" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">
@@ -901,6 +924,17 @@ function getBadgeText(status: string) {
 
 .btn-icon.desc svg {
   transform: rotate(180deg);
+}
+
+/* 刷新图标旋转动画 */
+.spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Badge */
