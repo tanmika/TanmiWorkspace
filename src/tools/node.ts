@@ -87,6 +87,18 @@ export const nodeCreateTool: Tool = {
         enum: ["info_collection", "validation", "summary"],
         description: "节点角色（可选）：info_collection=信息收集节点，完成时自动归档规则和文档到工作区",
       },
+      acceptanceCriteria: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            when: { type: "string", description: "触发条件" },
+            then: { type: "string", description: "期望结果" },
+          },
+          required: ["when", "then"],
+        },
+        description: "验收标准（WHEN/THEN 格式）",
+      },
       isNeedTest: {
         type: "boolean",
         description: `是否需要测试（可选，仅执行节点或规划节点有效）。设为 true 时系统会自动处理：

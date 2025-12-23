@@ -18,6 +18,14 @@ export type NodeRole =
   | "summary";         // 汇总：预留，用于汇总类任务
 
 /**
+ * 验收标准 - WHEN/THEN 格式
+ */
+export interface AcceptanceCriteria {
+  when: string;   // 触发条件，如 "用户点击登录按钮"
+  then: string;   // 期望结果，如 "显示登录成功提示"
+}
+
+/**
  * 节点派发状态 - 用于跟踪派发执行进度
  */
 export type NodeDispatchStatus =
@@ -122,6 +130,9 @@ export interface NodeMeta {
   createdAt: string;
   updatedAt: string;
 
+  // ===== 验收标准（可选）=====
+  acceptanceCriteria?: AcceptanceCriteria[];  // 验收标准（WHEN/THEN 格式）
+
   // ===== 派发相关字段（可选）=====
   dispatch?: NodeDispatchInfo;      // 派发信息（仅执行节点使用）
 }
@@ -140,6 +151,7 @@ export interface NodeInfoData {
   docs: DocRef[];
   notes: string;
   conclusion: string;
+  acceptanceCriteria?: AcceptanceCriteria[];  // 验收标准（WHEN/THEN 格式）
 }
 
 /**
@@ -169,6 +181,7 @@ export interface NodeCreateParams {
   docs?: DocRef[];
   rulesHash?: string;               // 规则哈希（用于验证 AI 已阅读规则）
   role?: NodeRole;                  // 节点角色（可选）
+  acceptanceCriteria?: AcceptanceCriteria[];  // 验收标准（WHEN/THEN 格式）
 
   // ===== 测试节点附属化参数（可选）=====
   isNeedTest?: boolean;             // 是否需要测试（仅执行节点有效）

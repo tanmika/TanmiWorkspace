@@ -94,7 +94,7 @@ export class NodeService {
    * 创建节点
    */
   async create(params: NodeCreateParams): Promise<NodeCreateResult> {
-    const { workspaceId, parentId, type, title, requirement = "", docs = [], role, isNeedTest, testRequirement } = params;
+    const { workspaceId, parentId, type, title, requirement = "", docs = [], role, acceptanceCriteria, isNeedTest, testRequirement } = params;
 
     // 1. 获取 projectRoot 和 wsDirName
     const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
@@ -193,6 +193,7 @@ export class NodeService {
       docs,
       notes: "",
       conclusion: "",
+      acceptanceCriteria,
     };
     await this.md.writeNodeInfo(projectRoot, wsDirName, nodeDirName, nodeInfo);
 
@@ -212,6 +213,7 @@ export class NodeService {
       references: [],
       conclusion: null,
       role,  // 节点角色（可选）
+      acceptanceCriteria,  // 验收标准（可选）
       createdAt: currentTime,
       updatedAt: currentTime,
     };
@@ -241,6 +243,7 @@ export class NodeService {
         docs,
         notes: "",
         conclusion: "",
+        acceptanceCriteria,
       };
       await this.md.writeNodeInfo(projectRoot, wsDirName, nodeDirName, updatedNodeInfo);
 
@@ -261,6 +264,7 @@ export class NodeService {
         docs,
         notes: "",
         conclusion: "",
+        acceptanceCriteria,
       };
       await this.md.writeNodeInfo(projectRoot, wsDirName, execNodeDirName, execNodeInfo);
       await this.md.createEmptyLog(projectRoot, wsDirName, execNodeDirName);
@@ -275,6 +279,7 @@ export class NodeService {
         isolate: false,
         references: [],
         conclusion: null,
+        acceptanceCriteria,
         createdAt: currentTime,
         updatedAt: currentTime,
       };

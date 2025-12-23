@@ -2,7 +2,7 @@
 
 import type { FileSystemAdapter } from "./FileSystemAdapter.js";
 import type { WorkspaceMdData, LogEntry, ProblemData, DocRef } from "../types/workspace.js";
-import type { NodeInfoData, NodeStatus, NodeType } from "../types/node.js";
+import type { NodeInfoData, NodeStatus, NodeType, AcceptanceCriteria } from "../types/node.js";
 import type { DocRefWithStatus, TypedLogEntry } from "../types/context.js";
 import { formatShort } from "../utils/time.js";
 import {
@@ -271,6 +271,25 @@ ${data.goal ?? ""}
       requirement = reqMatch[1].trim();
     }
 
+    // 解析验收标准
+    const acceptanceCriteria: AcceptanceCriteria[] = [];
+    const acMatch = parsed.content.match(/## 验收标准\n\n\| 条件 \(WHEN\) \| 期望结果 \(THEN\) \|\n\|[-\s|]+\|\n([\s\S]*?)(?=\n## |$)/);
+    if (acMatch) {
+      const acContent = acMatch[1].trim();
+      if (acContent) {
+        const acLines = acContent.split("\n").filter(line => line.startsWith("|"));
+        for (const line of acLines) {
+          const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+          if (cells.length >= 2) {
+            acceptanceCriteria.push({
+              when: unescapeTableCell(cells[0]),
+              then: unescapeTableCell(cells[1])
+            });
+          }
+        }
+      }
+    }
+
     // 解析文档引用
     const docs: DocRef[] = [];
     const docsMatch = parsed.content.match(/## 文档引用\n\n(?:>.*\n\n)?([\s\S]*?)(?=\n## |$)/);
@@ -314,7 +333,8 @@ ${data.goal ?? ""}
       requirement,
       docs,
       notes,
-      conclusion
+      conclusion,
+      acceptanceCriteria: acceptanceCriteria.length > 0 ? acceptanceCriteria : undefined
     };
   }
 
@@ -340,6 +360,20 @@ ${data.goal ?? ""}
       ? data.docs.map(doc => `- [${doc.description}](${doc.path})`).join("\n")
       : "";
 
+    // 渲染验收标准表格
+    let acceptanceCriteriaContent = "";
+    if (data.acceptanceCriteria && data.acceptanceCriteria.length > 0) {
+      const rows = data.acceptanceCriteria.map(ac =>
+        `| ${escapeTableCell(ac.when)} | ${escapeTableCell(ac.then)} |`
+      ).join("\n");
+      acceptanceCriteriaContent = `\n## 验收标准
+
+| 条件 (WHEN) | 期望结果 (THEN) |
+|-------------|-----------------|
+${rows}
+`;
+    }
+
     const typeLabel = data.type === "planning" ? "规划" : "执行";
 
     const content = `---
@@ -358,7 +392,7 @@ ${typeLabel}节点
 ## 需求
 
 ${data.requirement ?? ""}
-
+${acceptanceCriteriaContent}
 ## 文档引用
 
 > 格式：- [文件名](路径) - 说明 (状态)
@@ -793,6 +827,25 @@ ${data.nextStep}
       requirement = reqMatch[1].trim();
     }
 
+    // 解析验收标准
+    const acceptanceCriteria: AcceptanceCriteria[] = [];
+    const acMatch = parsed.content.match(/## 验收标准\n\n\| 条件 \(WHEN\) \| 期望结果 \(THEN\) \|\n\|[-\s|]+\|\n([\s\S]*?)(?=\n## |$)/);
+    if (acMatch) {
+      const acContent = acMatch[1].trim();
+      if (acContent) {
+        const acLines = acContent.split("\n").filter(line => line.startsWith("|"));
+        for (const line of acLines) {
+          const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+          if (cells.length >= 2) {
+            acceptanceCriteria.push({
+              when: unescapeTableCell(cells[0]),
+              then: unescapeTableCell(cells[1])
+            });
+          }
+        }
+      }
+    }
+
     // 解析文档引用（含状态）
     const docsWithStatus: DocRefWithStatus[] = [];
     const docs: DocRef[] = [];
@@ -846,6 +899,7 @@ ${data.nextStep}
       docsWithStatus,
       notes,
       conclusion,
+      acceptanceCriteria: acceptanceCriteria.length > 0 ? acceptanceCriteria : undefined
     };
   }
 
@@ -948,6 +1002,20 @@ ${data.nextStep}
       docsContent = data.docs.map(doc => `- [${doc.description}](${doc.path})`).join("\n");
     }
 
+    // 渲染验收标准表格
+    let acceptanceCriteriaContent = "";
+    if (data.acceptanceCriteria && data.acceptanceCriteria.length > 0) {
+      const rows = data.acceptanceCriteria.map(ac =>
+        `| ${escapeTableCell(ac.when)} | ${escapeTableCell(ac.then)} |`
+      ).join("\n");
+      acceptanceCriteriaContent = `\n## 验收标准
+
+| 条件 (WHEN) | 期望结果 (THEN) |
+|-------------|-----------------|
+${rows}
+`;
+    }
+
     const typeLabel = data.type === "planning" ? "规划" : "执行";
 
     const content = `---
@@ -966,7 +1034,7 @@ ${typeLabel}节点
 ## 需求
 
 ${data.requirement ?? ""}
-
+${acceptanceCriteriaContent}
 ## 文档引用
 
 > 格式：- [文件名](路径) - 说明 (状态)
