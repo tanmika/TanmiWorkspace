@@ -108,3 +108,79 @@ export async function ensureBaseSetup(): Promise<void> {
   const services = getServices();
   await services.fs.ensureIndex();
 }
+
+// ============================================================================
+// HTTP 路由辅助方法 - dirName 解析
+// ============================================================================
+// ⚠️ 重要：workspaceId/nodeId 与 wsDirName/nodeDirName 的区别
+//
+// - workspaceId: 工作区唯一标识符（不可变）
+// - wsDirName: 工作区实际目录名（可能与 workspaceId 不同，存储在 index.json 中）
+//
+// - nodeId: 节点唯一标识符（不可变）
+// - nodeDirName: 节点实际目录名（存储在 graph.json 的 nodes[nodeId].dirName 中）
+//
+// 所有访问文件系统的操作必须使用 dirName，不能直接使用 ID
+// 使用以下辅助函数进行统一解析，避免遗漏导致的路径错误
+// ============================================================================
+
+export interface DirNameResolution {
+  projectRoot: string;
+  wsDirName: string;
+}
+
+export interface FullDirNameResolution extends DirNameResolution {
+  nodeDirName: string;
+}
+
+/**
+ * 解析工作区 dirName
+ * 将 workspaceId 转换为实际的目录名
+ *
+ * @example
+ * const { projectRoot, wsDirName } = await resolveWsDirName("ws-abc123");
+ * // wsDirName 用于后续文件系统操作
+ */
+export async function resolveWsDirName(workspaceId: string): Promise<DirNameResolution> {
+  const services = getServices();
+  const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+  const wsEntry = await services.json.findWorkspaceEntry(workspaceId);
+  const wsDirName = wsEntry?.dirName || workspaceId;
+  return { projectRoot, wsDirName };
+}
+
+/**
+ * 解析节点 dirName
+ * 需要先有 projectRoot 和 wsDirName（可通过 resolveWsDirName 获取）
+ *
+ * @example
+ * const nodeDirName = await resolveNodeDirName(projectRoot, wsDirName, "node-xyz");
+ * // nodeDirName 用于访问节点目录（如 Info.md, Log.md）
+ */
+export async function resolveNodeDirName(
+  projectRoot: string,
+  wsDirName: string,
+  nodeId: string
+): Promise<string> {
+  const services = getServices();
+  const graph = await services.json.readGraph(projectRoot, wsDirName);
+  const node = graph.nodes[nodeId];
+  return node?.dirName || nodeId;
+}
+
+/**
+ * 解析工作区和节点的 dirName（组合方法）
+ * 一次性获取所有需要的目录名，适用于节点级别操作
+ *
+ * @example
+ * const { projectRoot, wsDirName, nodeDirName } = await resolveDirNames("ws-abc", "node-xyz");
+ * await md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+ */
+export async function resolveDirNames(
+  workspaceId: string,
+  nodeId: string
+): Promise<FullDirNameResolution> {
+  const { projectRoot, wsDirName } = await resolveWsDirName(workspaceId);
+  const nodeDirName = await resolveNodeDirName(projectRoot, wsDirName, nodeId);
+  return { projectRoot, wsDirName, nodeDirName };
+}

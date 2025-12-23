@@ -254,7 +254,8 @@ export class SessionService {
     // 获取聚焦节点信息（优先使用 graph.currentFocus 作为权威来源）
     const focusNodeId = graph.currentFocus || binding.focusedNodeId;
     if (focusNodeId && graph.nodes[focusNodeId]) {
-      const nodeInfo = await this.md.readNodeInfo(projectRoot, dirName, focusNodeId);
+      const nodeDirName = graph.nodes[focusNodeId].dirName || focusNodeId;
+      const nodeInfo = await this.md.readNodeInfo(projectRoot, dirName, nodeDirName);
       result.focusedNode = {
         id: focusNodeId,
         title: nodeInfo.title,
