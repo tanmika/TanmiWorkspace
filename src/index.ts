@@ -30,6 +30,7 @@ import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
 import type { TransitionAction, ReferenceAction } from "./types/index.js";
+import { validateAndCorrectParams } from "./utils/paramValidator.js";
 import { logMcpStart, logMcpEnd, logMcpError } from "./utils/sessionLogger.js";
 import { formatManualChangeReminder } from "./utils/manualChangeFormatter.js";
 import { devLog } from "./utils/devLog.js";
@@ -103,33 +104,61 @@ function createMcpServer(services: Services): Server {
     }
   );
 
+  // 所有工具列表
+  const allTools = [
+    ...workspaceTools,
+    ...nodeTools,
+    ...stateTools,
+    ...contextTools,
+    ...logTools,
+    ...sessionTools,
+    ...helpTools,
+    ...importTools,
+    ...dispatchTools,
+    ...configTools,
+  ];
+
+  // 创建工具名到 Tool 定义的映射（用于参数验证）
+  const toolMap = new Map(allTools.map(tool => [tool.name, tool]));
+
   // 注册工具列表处理器
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      ...workspaceTools,
-      ...nodeTools,
-      ...stateTools,
-      ...contextTools,
-      ...logTools,
-      ...sessionTools,
-      ...helpTools,
-      ...importTools,
-      ...dispatchTools,
-      ...configTools,
-    ],
+    tools: allTools,
   }));
 
   // 注册工具调用处理器
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
+    const { name, arguments: rawArgs } = request.params;
     const startTime = Date.now();
 
     // 记录 MCP 调用开始
-    logMcpStart(name, args as Record<string, unknown> || {});
+    logMcpStart(name, rawArgs as Record<string, unknown> || {});
 
     try {
       // 确保基础目录存在
       await services.fs.ensureIndex();
+
+      // 参数验证与自动纠错
+      let args = rawArgs as Record<string, unknown> | undefined;
+      let paramWarnings: string[] = [];
+
+      const tool = toolMap.get(name);
+      if (tool) {
+        const validation = validateAndCorrectParams(
+          name,
+          rawArgs as Record<string, unknown> | undefined,
+          tool
+        );
+
+        // 如果有错误，抛出异常
+        if (validation.errors.length > 0) {
+          throw new TanmiError("UNKNOWN_PARAMS", validation.errors.join("\n"));
+        }
+
+        // 使用纠正后的参数
+        args = validation.correctedArgs;
+        paramWarnings = validation.warnings;
+      }
 
       let result: unknown;
 
@@ -497,6 +526,12 @@ function createMcpServer(services: Services): Server {
 
       // 检查并附加手动变更提醒（针对工作区相关工具）
       let responseText = JSON.stringify(result, null, 2);
+
+      // 附加参数纠正警告
+      if (paramWarnings.length > 0) {
+        responseText = responseText + "\n\n⚠️ " + paramWarnings.join("\n⚠️ ");
+      }
+
       const workspaceId = args?.workspaceId as string | undefined;
 
       // 排除 context_get 和 workspace_get（它们会清除变更，所以不需要提醒）
