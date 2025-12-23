@@ -3,6 +3,12 @@
 
 // ========== 基础类型 ==========
 
+// 验收标准 - WHEN/THEN 格式
+export interface AcceptanceCriteria {
+  when: string   // 触发条件
+  then: string   // 期望结果
+}
+
 export type WorkspaceStatus = 'active' | 'archived' | 'error'
 
 // 工作区错误信息
@@ -109,6 +115,7 @@ export interface NodeMeta {
   conclusion: string | null
   role?: NodeRole
   dispatch?: NodeDispatchInfo
+  acceptanceCriteria?: AcceptanceCriteria[]
   createdAt: string
   updatedAt: string
 }
@@ -146,6 +153,7 @@ export interface ContextChainItem {
   conclusion?: string
   problem?: string
   logEntries?: TypedLogEntry[]
+  acceptanceCriteria?: AcceptanceCriteria[]
 }
 
 export interface ChildConclusionItem {

@@ -1,6 +1,6 @@
 // src/types/context.ts
 
-import type { NodeStatus } from "./node.js";
+import type { NodeStatus, AcceptanceCriteria } from "./node.js";
 import type { DispatchConfig } from "./workspace.js";
 
 /**
@@ -33,6 +33,7 @@ export interface ContextChainItem {
   conclusion?: string;         // 已完成节点的结论
   problem?: string;
   logEntries?: TypedLogEntry[];     // 根据 maxLogEntries 截断后的日志
+  acceptanceCriteria?: AcceptanceCriteria[];  // 验收标准
 }
 
 /**

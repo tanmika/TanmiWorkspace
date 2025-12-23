@@ -228,6 +228,31 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
       </div>
     </div>
 
+    <!-- 验收标准 -->
+    <div v-if="currentNode.acceptanceCriteria?.length" class="detail-section">
+      <div class="section-title">Acceptance Criteria / 验收标准</div>
+      <div class="acceptance-table">
+        <div class="acceptance-header">
+          <div class="acceptance-col-when">条件 (WHEN)</div>
+          <div class="acceptance-col-then">期望结果 (THEN)</div>
+        </div>
+        <div class="acceptance-body">
+          <div
+            v-for="(criteria, index) in currentNode.acceptanceCriteria"
+            :key="index"
+            class="acceptance-row"
+          >
+            <div class="acceptance-col-when">
+              <MarkdownContent :content="criteria.when" />
+            </div>
+            <div class="acceptance-col-then">
+              <MarkdownContent :content="criteria.then" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 文档引用 -->
     <div v-if="currentNode.docs?.length" class="detail-section">
       <div class="section-title">References / 文档引用</div>
@@ -659,6 +684,75 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 
 [data-theme="dark"] .note-box {
   background: #1a1a1a;
+}
+
+/* 验收标准表格 */
+.acceptance-table {
+  background: #fafafa;
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--accent-green);
+  overflow: hidden;
+}
+
+[data-theme="dark"] .acceptance-table {
+  background: #1a1a1a;
+}
+
+.acceptance-header {
+  display: flex;
+  background: #f0f0f0;
+  border-bottom: 2px solid var(--border-heavy);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-main);
+}
+
+[data-theme="dark"] .acceptance-header {
+  background: #2a2a2a;
+}
+
+.acceptance-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.acceptance-row {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.acceptance-row:last-child {
+  border-bottom: none;
+}
+
+.acceptance-col-when,
+.acceptance-col-then {
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.acceptance-col-when {
+  flex: 0 0 40%;
+  border-right: 1px solid var(--border-color);
+  background: #fcfcfc;
+}
+
+[data-theme="dark"] .acceptance-col-when {
+  background: #1e1e1e;
+}
+
+.acceptance-col-then {
+  flex: 1;
+}
+
+.acceptance-header .acceptance-col-when,
+.acceptance-header .acceptance-col-then {
+  padding: 10px 16px;
+  color: var(--text-main);
 }
 
 /* 文档列表 */

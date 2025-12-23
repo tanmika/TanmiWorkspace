@@ -378,6 +378,8 @@ export class ContextService {
       note: info.notes,
       // 内容数据以 Info.md 为权威来源
       conclusion: info.conclusion || undefined,
+      // 验收标准从 graph.json 获取
+      acceptanceCriteria: nodeMeta.acceptanceCriteria,
     };
 
     // 包含日志
