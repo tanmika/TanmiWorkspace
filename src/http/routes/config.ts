@@ -43,4 +43,72 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post("/tutorial/trigger", async () => {
     return services.tutorial.manualTriggerTutorial();
   });
+
+  /**
+   * GET /api/installation-status - 获取插件安装状态
+   * 返回各平台组件的安装情况和版本信息
+   */
+  fastify.get("/installation-status", async () => {
+    const meta = await services.installation.read();
+    const currentVersion = services.installation.getPackageVersion();
+
+    // 构建各平台状态
+    const platforms = {
+      claudeCode: {
+        name: "Claude Code",
+        enabled: false,
+        version: null as string | null,
+        needsUpdate: false,
+        components: {
+          hooks: false,
+          mcp: false,
+          agents: false,
+          skills: false,
+        },
+      },
+      cursor: {
+        name: "Cursor",
+        enabled: false,
+        version: null as string | null,
+        needsUpdate: false,
+        components: {
+          hooks: false,
+          mcp: false,
+          agents: false,
+          skills: false,
+        },
+      },
+      codex: {
+        name: "Codex",
+        enabled: false,
+        version: null as string | null,
+        needsUpdate: false,
+        components: {
+          hooks: false,
+          mcp: false,
+          agents: false,
+          skills: false,
+        },
+      },
+    };
+
+    // 填充实际数据
+    for (const [key, platform] of Object.entries(platforms)) {
+      const info = meta.global.platforms[key as keyof typeof meta.global.platforms];
+      if (info?.enabled) {
+        platform.enabled = true;
+        platform.version = info.version;
+        platform.needsUpdate = info.version !== currentVersion;
+        platform.components.hooks = info.components.hooks || false;
+        platform.components.mcp = info.components.mcp || false;
+        // agents 和 skills 暂时从 projects 字段获取（待实现）
+      }
+    }
+
+    return {
+      currentVersion,
+      platforms,
+      updateCommand: "bash ~/.tanmi-workspace/scripts/install-global.sh",
+    };
+  });
 }

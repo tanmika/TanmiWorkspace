@@ -27,6 +27,18 @@ TANMI_HOME="$HOME/.tanmi-workspace"
 TANMI_SCRIPTS="$TANMI_HOME/scripts"
 TANMI_SHARED="$TANMI_SCRIPTS/shared"
 
+# 版本跟踪脚本
+UPDATE_META_SCRIPT="$SCRIPT_DIR/update-installation-meta.cjs"
+
+# 获取包版本（从 package.json）
+get_package_version() {
+    if [ -f "$PROJECT_ROOT/package.json" ] && check_jq; then
+        jq -r '.version' "$PROJECT_ROOT/package.json"
+    else
+        echo "0.0.0"
+    fi
+}
+
 # Claude Code 配置
 CLAUDE_HOME="$HOME/.claude"
 CLAUDE_SETTINGS="$CLAUDE_HOME/settings.json"
@@ -177,6 +189,12 @@ configure_claude_hooks() {
     mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
 
     success "Hooks 已配置到 $CLAUDE_SETTINGS"
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        local version=$(get_package_version)
+        node "$UPDATE_META_SCRIPT" update claudeCode hooks "$version"
+    fi
 }
 
 # 卸载 Claude Code Hook 系统
@@ -194,6 +212,11 @@ uninstall_claude_hooks() {
         jq 'del(.hooks)' "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp"
         mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
         success "已从 $CLAUDE_SETTINGS 移除 hooks 配置"
+    fi
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        node "$UPDATE_META_SCRIPT" remove claudeCode hooks
     fi
 
     success "Claude Code Hook 系统已卸载"
@@ -266,6 +289,12 @@ configure_cursor_hooks() {
     fi
 
     success "Hooks 已配置到 $CURSOR_HOOKS"
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        local version=$(get_package_version)
+        node "$UPDATE_META_SCRIPT" update cursor hooks "$version"
+    fi
 }
 
 # 卸载 Cursor Hook 系统
@@ -283,6 +312,11 @@ uninstall_cursor_hooks() {
         jq 'del(.hooks.beforeSubmitPrompt) | del(.hooks.afterMCPExecution)' "$CURSOR_HOOKS" > "${CURSOR_HOOKS}.tmp"
         mv "${CURSOR_HOOKS}.tmp" "$CURSOR_HOOKS"
         success "已从 $CURSOR_HOOKS 移除 hooks 配置"
+    fi
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        node "$UPDATE_META_SCRIPT" remove cursor hooks
     fi
 
     success "Cursor Hook 系统已卸载"
@@ -335,6 +369,11 @@ install_dispatch_agents() {
     success "派发 Agent 已安装到 $agents_dir/"
     info "  - tanmi-executor.md (任务执行者)"
     info "  - tanmi-tester.md (任务测试者)"
+
+    # 更新安装元信息
+    if [ -f "$PROJECT_ROOT/scripts/update-installation-meta.cjs" ]; then
+        node "$PROJECT_ROOT/scripts/update-installation-meta.cjs" project-update "$target_dir" agents "$VERSION"
+    fi
 }
 
 # 卸载派发 Agent
@@ -360,6 +399,11 @@ uninstall_dispatch_agents() {
     if [ -d "$agents_dir" ] && [ -z "$(ls -A "$agents_dir")" ]; then
         rmdir "$agents_dir"
         success "已删除空目录 $agents_dir"
+    fi
+
+    # 更新安装元信息
+    if [ -f "$PROJECT_ROOT/scripts/update-installation-meta.cjs" ]; then
+        node "$PROJECT_ROOT/scripts/update-installation-meta.cjs" project-remove "$target_dir" agents
     fi
 
     success "派发 Agent 模板已卸载"

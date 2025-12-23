@@ -4,6 +4,8 @@ import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
 import type { SessionBindingStorage, SessionBinding } from "../storage/SessionBindingStorage.js";
+import type { InstallationService } from "./InstallationService.js";
+import type { InstallationWarning } from "../types/settings.js";
 import { TanmiError } from "../types/errors.js";
 
 /**
@@ -63,6 +65,7 @@ export interface SessionStatusBoundResult {
     requirement?: string;
   };
   rules: string[];
+  installationWarnings?: InstallationWarning[];
 }
 
 /**
@@ -100,12 +103,21 @@ export interface GetPendingChangesResult {
  * 管理 Claude Code 会话与工作区的绑定关系
  */
 export class SessionService {
+  private installationService: InstallationService | null = null;
+
   constructor(
     private sessionStorage: SessionBindingStorage,
     private json: JsonStorage,
     private md: MarkdownStorage,
     private fs: FileSystemAdapter
   ) {}
+
+  /**
+   * 设置 InstallationService 依赖（延迟注入避免循环依赖）
+   */
+  setInstallationService(service: InstallationService): void {
+    this.installationService = service;
+  }
 
   /**
    * 绑定会话到工作区
@@ -264,7 +276,59 @@ export class SessionService {
       };
     }
 
+    // 检查安装警告
+    const warnings = await this.checkInstallationWarnings();
+    if (warnings.length > 0) {
+      result.installationWarnings = warnings;
+    }
+
     return result;
+  }
+
+  /**
+   * 检查安装版本警告
+   */
+  private async checkInstallationWarnings(): Promise<InstallationWarning[]> {
+    if (!this.installationService) {
+      return [];
+    }
+
+    const warnings: InstallationWarning[] = [];
+
+    try {
+      const meta = await this.installationService.read();
+      const currentVersion = this.installationService.getPackageVersion();
+
+      // 检查各平台版本
+      for (const platform of ["claudeCode", "cursor", "codex"] as const) {
+        const platformInfo = meta.global.platforms[platform];
+        if (platformInfo?.enabled && platformInfo.version !== currentVersion) {
+          // 版本不匹配，检查各组件
+          if (platformInfo.components.hooks) {
+            warnings.push({
+              platform,
+              component: "hooks",
+              installedVersion: platformInfo.version,
+              currentVersion,
+              message: `${platform} Hook 版本过旧 (${platformInfo.version} → ${currentVersion})，建议更新`,
+            });
+          }
+          if (platformInfo.components.mcp) {
+            warnings.push({
+              platform,
+              component: "mcp",
+              installedVersion: platformInfo.version,
+              currentVersion,
+              message: `${platform} MCP 版本过旧 (${platformInfo.version} → ${currentVersion})`,
+            });
+          }
+        }
+      }
+    } catch {
+      // 检查失败时静默，不影响主功能
+    }
+
+    return warnings;
   }
 
   /**

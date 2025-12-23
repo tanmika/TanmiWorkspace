@@ -15,6 +15,8 @@ import { SessionService } from "../services/SessionService.js";
 import { DispatchService } from "../services/DispatchService.js";
 import { ConfigService } from "../services/ConfigService.js";
 import { TutorialService } from "../services/TutorialService.js";
+import { InstallationService } from "../services/InstallationService.js";
+import { DetectionService } from "../services/DetectionService.js";
 import { HelpService } from "../tools/help.js";
 
 export interface Services {
@@ -32,6 +34,8 @@ export interface Services {
   dispatch: DispatchService;
   config: ConfigService;
   tutorial: TutorialService;
+  installation: InstallationService;
+  detection: DetectionService;
   help: HelpService;
 }
 
@@ -70,6 +74,17 @@ export function createServices(): Services {
   const dispatch = new DispatchService(json, md, fs, config);
   const tutorial = new TutorialService(workspace, node, state, log, context, reference, dispatch, config);
 
+  // 创建独立服务实例
+  const session = new SessionService(sessionStorage, json, md, fs);
+  const installation = new InstallationService();
+  const detection = new DetectionService();
+  const help = new HelpService();
+
+  // 设置服务依赖
+  session.setInstallationService(installation);
+  help.setInstallationService(installation);
+  context.setInstallationService(installation);
+
   servicesInstance = {
     fs,
     json,
@@ -81,11 +96,13 @@ export function createServices(): Services {
     context,
     reference,
     log,
-    session: new SessionService(sessionStorage, json, md, fs),
+    session,
     dispatch,
     config,
     tutorial,
-    help: new HelpService(),
+    installation,
+    detection,
+    help,
   };
 
   return servicesInstance;

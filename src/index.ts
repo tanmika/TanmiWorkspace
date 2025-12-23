@@ -408,7 +408,7 @@ function createMcpServer(services: Services): Server {
 
         // Help 工具
         case "tanmi_help":
-          result = services.help.getHelp(args?.topic as HelpTopic);
+          result = await services.help.getHelp(args?.topic as HelpTopic);
           break;
 
         case "tanmi_prompt":
@@ -682,11 +682,55 @@ function createMcpServer(services: Services): Server {
 }
 
 // ============================================================================
+// 启动检测
+// ============================================================================
+async function runStartupDetection(services: Services): Promise<void> {
+  try {
+    // 运行检测
+    const detectionResults = await services.detection.detectAll();
+
+    // 读取当前 meta
+    const meta = await services.installation.read();
+
+    // 检查是否需要更新 meta（检测到的组件与 meta 记录不一致）
+    let needsUpdate = false;
+
+    for (const platform of ["claudeCode", "cursor", "codex"] as const) {
+      const detected = detectionResults[platform];
+      const recorded = meta.global.platforms[platform];
+
+      if (detected?.detected && !recorded?.enabled) {
+        // 检测到已安装但未记录，更新 meta
+        await services.installation.updatePlatform(platform, {
+          enabled: true,
+          components: {
+            hooks: detected.components.hooks.installed,
+            mcp: detected.components.mcp.installed,
+          },
+        });
+        needsUpdate = true;
+        logMcp(`检测到 ${platform} 组件已安装，已更新 meta`);
+      }
+    }
+
+    if (!needsUpdate) {
+      logMcp("启动检测完成，无需更新");
+    }
+  } catch (err) {
+    // 检测失败不影响启动，只记录警告
+    logMcp(`启动检测失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// ============================================================================
 // 主函数
 // ============================================================================
 async function main() {
   // 1. 创建共享服务实例
   const services = createServices();
+
+  // 1.1 后台运行启动检测（不阻塞启动）
+  runStartupDetection(services);
 
   // 2. 尝试启动 HTTP server（后台）
   const httpServer = await startHttpServerInBackground(HTTP_PORT);

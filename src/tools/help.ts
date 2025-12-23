@@ -3,6 +3,8 @@
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { HELP_TOPICS, getFullInstructions, USER_PROMPTS } from "../prompts/instructions.js";
+import type { InstallationService } from "../services/InstallationService.js";
+import type { PlatformType } from "../types/settings.js";
 
 /**
  * 帮助工具定义
@@ -28,6 +30,7 @@ export const helpTools: Tool[] = [
 - guide: 如何引导不熟悉的用户
 - docs: 文档引用管理（派发、查找、生命周期）
 - dispatch: 派发模式（subagent 执行、自动验证、失败回滚）
+- status: 插件安装状态（查看各平台组件版本）
 - all: 获取完整指南
 
 **使用场景**：
@@ -39,8 +42,8 @@ export const helpTools: Tool[] = [
       properties: {
         topic: {
           type: "string",
-          description: "帮助主题：overview, workflow, tools, start, resume, session_restore, blocked, split, complete, progress, guide, docs, dispatch, all",
-          enum: ["overview", "workflow", "tools", "start", "resume", "session_restore", "blocked", "split", "complete", "progress", "guide", "docs", "dispatch", "all"]
+          description: "帮助主题：overview, workflow, tools, start, resume, session_restore, blocked, split, complete, progress, guide, docs, dispatch, status, all",
+          enum: ["overview", "workflow", "tools", "start", "resume", "session_restore", "blocked", "split", "complete", "progress", "guide", "docs", "dispatch", "status", "all"]
         }
       },
       required: ["topic"]
@@ -82,7 +85,7 @@ export const helpTools: Tool[] = [
 /**
  * 帮助主题类型
  */
-export type HelpTopic = "overview" | "workflow" | "tools" | "start" | "resume" | "session_restore" | "blocked" | "split" | "complete" | "progress" | "guide" | "docs" | "dispatch" | "all";
+export type HelpTopic = "overview" | "workflow" | "tools" | "start" | "resume" | "session_restore" | "blocked" | "split" | "complete" | "progress" | "guide" | "docs" | "dispatch" | "status" | "all";
 
 /**
  * 提示模板类型
@@ -93,10 +96,19 @@ export type PromptTemplate = "welcome" | "confirm_workspace" | "confirm_plan" | 
  * 帮助服务
  */
 export class HelpService {
+  private installationService: InstallationService | null = null;
+
+  /**
+   * 设置 InstallationService 依赖
+   */
+  setInstallationService(service: InstallationService): void {
+    this.installationService = service;
+  }
+
   /**
    * 获取帮助内容
    */
-  getHelp(topic: HelpTopic): { topic: string; title: string; content: string } {
+  async getHelp(topic: HelpTopic): Promise<{ topic: string; title: string; content: string }> {
     if (topic === "all") {
       return {
         topic: "all",
@@ -105,12 +117,21 @@ export class HelpService {
       };
     }
 
+    // 动态内容：插件安装状态
+    if (topic === "status") {
+      return {
+        topic: "status",
+        title: "插件安装状态",
+        content: await this.generateStatusContent()
+      };
+    }
+
     const helpTopic = HELP_TOPICS[topic];
     if (!helpTopic) {
       return {
         topic: "error",
         title: "未知主题",
-        content: `未找到主题: ${topic}\n\n可用主题: ${Object.keys(HELP_TOPICS).join(", ")}, all`
+        content: `未找到主题: ${topic}\n\n可用主题: ${Object.keys(HELP_TOPICS).join(", ")}, status, all`
       };
     }
 
@@ -119,6 +140,75 @@ export class HelpService {
       title: helpTopic.title,
       content: helpTopic.content
     };
+  }
+
+  /**
+   * 生成插件安装状态内容
+   */
+  private async generateStatusContent(): Promise<string> {
+    if (!this.installationService) {
+      return "⚠️ 无法获取安装状态（服务未初始化）";
+    }
+
+    try {
+      const meta = await this.installationService.read();
+      const currentVersion = this.installationService.getPackageVersion();
+
+      const platforms: Array<{
+        name: string;
+        platform: PlatformType;
+        hooks: string;
+        mcp: string;
+        agents: string;
+        skills: string;
+        version: string;
+        status: string;
+      }> = [
+        { name: "Claude Code", platform: "claudeCode", hooks: "-", mcp: "-", agents: "-", skills: "-", version: "-", status: "未安装" },
+        { name: "Cursor", platform: "cursor", hooks: "-", mcp: "-", agents: "-", skills: "-", version: "-", status: "未安装" },
+        { name: "Codex", platform: "codex", hooks: "-", mcp: "-", agents: "-", skills: "-", version: "-", status: "未安装" },
+      ];
+
+      for (const p of platforms) {
+        const info = meta.global.platforms[p.platform];
+        if (info?.enabled) {
+          p.hooks = info.components.hooks ? "✅" : "-";
+          p.mcp = info.components.mcp ? "✅" : "-";
+          p.version = info.version;
+
+          if (info.version === currentVersion) {
+            p.status = "✅ 最新";
+          } else {
+            p.status = "⚠️ 需更新";
+          }
+        }
+      }
+
+      const table = [
+        "| 平台 | Hooks | MCP | Agents | Skills | 版本 | 状态 |",
+        "|------|-------|-----|--------|--------|------|------|",
+        ...platforms.map(p =>
+          `| ${p.name} | ${p.hooks} | ${p.mcp} | ${p.agents} | ${p.skills} | ${p.version} | ${p.status} |`
+        )
+      ].join("\n");
+
+      return `# 插件安装状态
+
+${table}
+
+**当前版本**: ${currentVersion}
+**更新命令**: \`bash ~/.tanmi-workspace/scripts/install-global.sh\`
+
+## 组件说明
+
+- **Hooks**: 自动注入工作区上下文到会话
+- **MCP**: MCP 服务器配置
+- **Agents**: 派发执行器 (tanmi-executor, tanmi-tester)
+- **Skills**: 自定义技能（即将支持）
+`;
+    } catch (err) {
+      return `⚠️ 获取安装状态失败: ${err instanceof Error ? err.message : String(err)}`;
+    }
   }
 
   /**

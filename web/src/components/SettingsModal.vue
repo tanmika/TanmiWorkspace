@@ -3,7 +3,7 @@ import { ref, watch, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastStore } from '@/stores/toast'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
-import { settingsApi } from '@/api/settings'
+import { settingsApi, type InstallationStatusResult } from '@/api/settings'
 import WsModal from '@/components/ui/WsModal.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
@@ -14,6 +14,9 @@ const toastStore = useToastStore()
 // 版本信息
 const devInfo = ref<DevInfoResult | null>(null)
 const frontendBuildTime = __BUILD_TIME__
+
+// 插件安装状态
+const installationStatus = ref<InstallationStatusResult | null>(null)
 
 // 计算前后端编译时间差异是否超过100秒
 const buildTimeDiffTooLarge = computed(() => {
@@ -53,11 +56,16 @@ watch(() => props.visible, async (isVisible) => {
   if (isVisible) {
     await settingsStore.loadSettings()
     localMode.value = settingsStore.settings.defaultDispatchMode
-    // 加载版本信息
-    try {
-      devInfo.value = await workspaceApi.getDevInfo()
-    } catch {
-      // 忽略
+    // 并行加载版本信息和插件状态
+    const [devInfoRes, installRes] = await Promise.allSettled([
+      workspaceApi.getDevInfo(),
+      settingsApi.getInstallationStatus()
+    ])
+    if (devInfoRes.status === 'fulfilled') {
+      devInfo.value = devInfoRes.value
+    }
+    if (installRes.status === 'fulfilled') {
+      installationStatus.value = installRes.value
     }
   }
 })
@@ -262,6 +270,130 @@ async function handleVersionClick() {
           class="spec-warning"
         >
           [WARN] 前后端编译时间不一致，若为版本更新后需要指示 AI 重新编译前后端
+        </div>
+      </div>
+
+      <!-- 插件详情 -->
+      <div class="setting-section plugin-section">
+        <div class="setting-section-title">插件详情</div>
+        <div class="setting-section-desc">
+          各平台的 TanmiWorkspace 组件安装状态
+        </div>
+
+        <div v-if="installationStatus" class="platform-grid">
+          <!-- Claude Code -->
+          <div
+            class="platform-card"
+            :class="{ enabled: installationStatus.platforms.claudeCode.enabled }"
+          >
+            <div class="platform-header">
+              <span class="platform-name">Claude Code</span>
+              <span
+                v-if="installationStatus.platforms.claudeCode.enabled"
+                class="platform-status"
+                :class="{ outdated: installationStatus.platforms.claudeCode.needsUpdate }"
+              >
+                {{ installationStatus.platforms.claudeCode.needsUpdate ? '需更新' : '已安装' }}
+              </span>
+              <span v-else class="platform-status disabled">未安装</span>
+            </div>
+            <div class="platform-version" v-if="installationStatus.platforms.claudeCode.enabled">
+              v{{ installationStatus.platforms.claudeCode.version }}
+            </div>
+            <div class="component-list">
+              <span class="component-item" :class="{ active: installationStatus.platforms.claudeCode.components.mcp }">
+                MCP
+              </span>
+              <span class="component-item" :class="{ active: installationStatus.platforms.claudeCode.components.hooks }">
+                Hooks
+              </span>
+              <span class="component-item" :class="{ active: installationStatus.platforms.claudeCode.components.agents }">
+                Agents
+              </span>
+              <span class="component-item" :class="{ active: installationStatus.platforms.claudeCode.components.skills }">
+                Skills
+              </span>
+            </div>
+          </div>
+
+          <!-- Cursor -->
+          <div
+            class="platform-card"
+            :class="{ enabled: installationStatus.platforms.cursor.enabled }"
+          >
+            <div class="platform-header">
+              <span class="platform-name">Cursor</span>
+              <span
+                v-if="installationStatus.platforms.cursor.enabled"
+                class="platform-status"
+                :class="{ outdated: installationStatus.platforms.cursor.needsUpdate }"
+              >
+                {{ installationStatus.platforms.cursor.needsUpdate ? '需更新' : '已安装' }}
+              </span>
+              <span v-else class="platform-status disabled">未安装</span>
+            </div>
+            <div class="platform-version" v-if="installationStatus.platforms.cursor.enabled">
+              v{{ installationStatus.platforms.cursor.version }}
+            </div>
+            <div class="component-list">
+              <span class="component-item" :class="{ active: installationStatus.platforms.cursor.components.mcp }">
+                MCP
+              </span>
+              <span class="component-item" :class="{ active: installationStatus.platforms.cursor.components.hooks }">
+                Hooks
+              </span>
+              <span class="component-item" :class="{ active: installationStatus.platforms.cursor.components.agents }">
+                Agents
+              </span>
+              <span class="component-item" :class="{ active: installationStatus.platforms.cursor.components.skills }">
+                Skills
+              </span>
+            </div>
+          </div>
+
+          <!-- Codex -->
+          <div
+            class="platform-card"
+            :class="{ enabled: installationStatus.platforms.codex.enabled }"
+          >
+            <div class="platform-header">
+              <span class="platform-name">Codex</span>
+              <span
+                v-if="installationStatus.platforms.codex.enabled"
+                class="platform-status"
+                :class="{ outdated: installationStatus.platforms.codex.needsUpdate }"
+              >
+                {{ installationStatus.platforms.codex.needsUpdate ? '需更新' : '已安装' }}
+              </span>
+              <span v-else class="platform-status disabled">未安装</span>
+            </div>
+            <div class="platform-version" v-if="installationStatus.platforms.codex.enabled">
+              v{{ installationStatus.platforms.codex.version }}
+            </div>
+            <div class="component-list">
+              <span class="component-item" :class="{ active: installationStatus.platforms.codex.components.mcp }">
+                MCP
+              </span>
+              <span class="component-item" :class="{ active: installationStatus.platforms.codex.components.hooks }">
+                Hooks
+              </span>
+              <span class="component-item" :class="{ active: installationStatus.platforms.codex.components.agents }">
+                Agents
+              </span>
+              <span class="component-item" :class="{ active: installationStatus.platforms.codex.components.skills }">
+                Skills
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="plugin-loading">
+          加载中...
+        </div>
+
+        <div class="update-hint">
+          <span class="hint-label">更新命令</span>
+          <code class="hint-code">bash ~/.tanmi-workspace/scripts/install-global.sh</code>
         </div>
       </div>
     </div>
@@ -545,5 +677,132 @@ async function handleVersionClick() {
   padding: 2px 6px;
   border-radius: 10px;
   font-weight: 600;
+}
+
+/* 插件详情区 */
+.plugin-section {
+  border-top: 1px solid var(--border-color);
+  padding-top: 20px;
+}
+
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.platform-card {
+  border: 1px solid var(--border-color);
+  padding: 12px;
+  background: var(--card-bg);
+  opacity: 0.6;
+  transition: all 0.2s ease;
+}
+
+.platform-card.enabled {
+  opacity: 1;
+  border-color: var(--border-heavy);
+}
+
+.platform-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.platform-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.platform-status {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-family: var(--mono-font);
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+[data-theme="dark"] .platform-status {
+  background: #1b3d1f;
+  color: #81c784;
+}
+
+.platform-status.outdated {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+[data-theme="dark"] .platform-status.outdated {
+  background: #3d2a10;
+  color: #ffb74d;
+}
+
+.platform-status.disabled {
+  background: var(--path-bg);
+  color: var(--text-muted);
+}
+
+.platform-version {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--mono-font);
+  margin-bottom: 8px;
+}
+
+.component-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.component-item {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--path-bg);
+  color: var(--text-muted);
+  border-radius: 2px;
+  font-family: var(--mono-font);
+}
+
+.component-item.active {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+[data-theme="dark"] .component-item.active {
+  background: #0d2137;
+  color: #64b5f6;
+}
+
+.plugin-loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 20px;
+  font-size: 13px;
+}
+
+.update-hint {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.hint-label {
+  color: var(--text-muted);
+}
+
+.hint-code {
+  font-family: var(--mono-font);
+  background: var(--path-bg);
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 </style>

@@ -19,6 +19,7 @@ import { now } from "../utils/time.js";
 import { devLog } from "../utils/devLog.js";
 import { GuidanceService } from "./GuidanceService.js";
 import type { GuidanceContext } from "../types/guidance.js";
+import type { InstallationService } from "./InstallationService.js";
 
 /**
  * 上下文服务
@@ -27,6 +28,7 @@ import type { GuidanceContext } from "../types/guidance.js";
 export class ContextService {
   private guidanceService: GuidanceService;
   private workspaceService?: any; // WorkspaceService - 避免循环依赖，通过 setter 注入
+  private installationService?: InstallationService;
 
   constructor(
     private json: JsonStorage,
@@ -41,6 +43,13 @@ export class ContextService {
    */
   setWorkspaceService(workspaceService: any): void {
     this.workspaceService = workspaceService;
+  }
+
+  /**
+   * 设置 InstallationService 依赖（用于项目组件版本检查）
+   */
+  setInstallationService(service: InstallationService): void {
+    this.installationService = service;
   }
 
   /**
@@ -162,7 +171,25 @@ export class ContextService {
       }
     }
 
-    // 11. 返回结果
+    // 11. 检查项目组件版本
+    let projectWarning: ContextGetResult["projectWarning"];
+    if (this.installationService && !isArchived) {
+      try {
+        const projectCheck = await this.installationService.checkProjectUpdate(projectRoot);
+        if (projectCheck.needsUpdate && projectCheck.hasAgents) {
+          projectWarning = {
+            message: `项目 Agents 版本过旧 (${projectCheck.installedVersion} → ${projectCheck.currentVersion})，建议执行 bash ~/.tanmi-workspace/scripts/install-global.sh --dispatch-agents 更新`,
+            installedVersion: projectCheck.installedVersion!,
+            currentVersion: projectCheck.currentVersion,
+          };
+        }
+      } catch (error) {
+        // 检查失败不影响主流程
+        devLog.warn("项目组件版本检查失败", { projectRoot, error });
+      }
+    }
+
+    // 12. 返回结果
     return {
       workspace: {
         goal: workspaceData.goal,
@@ -176,6 +203,7 @@ export class ContextService {
       childConclusions,
       hint,
       guidance: guidance.content,
+      ...(projectWarning && { projectWarning }),
     };
   }
 
