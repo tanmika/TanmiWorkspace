@@ -12,7 +12,6 @@ import type {
   ContextFocusResult,
   ContextChainItem,
   ChildConclusionItem,
-  DocRefWithStatus,
   TypedLogEntry,
 } from "../types/context.js";
 import { TanmiError } from "../types/errors.js";
@@ -87,9 +86,8 @@ export class ContextService {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
 
-    // 3. 读取工作区 Workspace.md，提取 goal/rules/docs（仅 active）
-    const workspaceData = await this.md.readWorkspaceMdWithStatus(projectRoot, wsDirName, isArchived);
-    const activeDocs = this.filterActiveRefs(workspaceData.docsWithStatus);
+    // 3. 读取工作区 Workspace.md，提取 goal/rules/docs
+    const workspaceData = await this.md.readWorkspaceMdFull(projectRoot, wsDirName, isArchived);
 
     // 4. 构建上下文链（从根到当前节点）
     const chain = await this.buildContextChain(projectRoot, wsDirName, nodeId, graph, {
@@ -145,7 +143,7 @@ export class ContextService {
       nodeType: nodeMeta.type,
       nodeStatus: nodeMeta.status,
       hasChildren: nodeMeta.children.length > 0,
-      hasDocs: activeDocs.length > 0,
+      hasDocs: workspaceData.docs.length > 0,
     };
     const guidance = this.guidanceService.generateFromContext(guidanceContext, 0);
 
@@ -170,7 +168,7 @@ export class ContextService {
         goal: workspaceData.goal,
         rules: workspaceData.rules,
         rulesHash,
-        docs: activeDocs,
+        docs: workspaceData.docs,
         dispatch,
       },
       chain,
@@ -367,14 +365,13 @@ export class ContextService {
   ): Promise<ContextChainItem> {
     const nodeMeta = graph.nodes[nodeId];
     const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
-    const info = await this.md.readNodeInfoWithStatus(projectRoot, wsDirName, nodeDirName, isArchived);
-    const docs = this.filterActiveRefs(info.docsWithStatus);
+    const info = await this.md.readNodeInfoFull(projectRoot, wsDirName, nodeDirName, isArchived);
 
     const item: ContextChainItem = {
       nodeId,
       title: info.title,
       requirement: info.requirement,
-      docs,
+      docs: info.docs,
       note: info.notes,
       // 内容数据以 Info.md 为权威来源
       conclusion: info.conclusion || undefined,
@@ -400,13 +397,6 @@ export class ContextService {
     }
 
     return item;
-  }
-
-  /**
-   * 过滤活跃引用
-   */
-  private filterActiveRefs(docs: DocRefWithStatus[]): DocRefWithStatus[] {
-    return docs.filter(d => d.status === "active");
   }
 
   /**

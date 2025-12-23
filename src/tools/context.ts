@@ -99,11 +99,9 @@ export const nodeIsolateTool: Tool = {
  */
 export const nodeReferenceTool: Tool = {
   name: "node_reference",
-  description: `管理文档/节点引用的生命周期：
-- add: 添加新引用（status=active）
-- remove: 删除引用
-- expire: 标记引用过期（移出上下文窗口，保留审计记录）
-- activate: 重新激活过期引用`,
+  description: `管理节点的文档/节点引用：
+- add: 添加新引用
+- remove: 删除引用`,
   inputSchema: {
     type: "object",
     properties: {
@@ -121,7 +119,7 @@ export const nodeReferenceTool: Tool = {
       },
       action: {
         type: "string",
-        enum: ["add", "remove", "expire", "activate"],
+        enum: ["add", "remove"],
         description: "操作类型",
       },
       description: {

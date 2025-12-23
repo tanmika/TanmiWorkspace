@@ -1,16 +1,10 @@
 // src/types/context.ts
 
 import type { NodeStatus } from "./node.js";
-import type { DispatchConfig } from "./workspace.js";
+import type { DispatchConfig, DocRef } from "./workspace.js";
 
-/**
- * 文档引用（含状态）
- */
-export interface DocRefWithStatus {
-  path: string;
-  description: string;
-  status: "active" | "expired";
-}
+// 重新导出 DocRef 以保持向后兼容
+export type { DocRef };
 
 /**
  * 带类型的日志条目（Phase 2）
@@ -28,7 +22,7 @@ export interface ContextChainItem {
   nodeId: string;
   title: string;
   requirement: string;
-  docs: DocRefWithStatus[];    // 仅包含 status == 'active' 的引用
+  docs: DocRef[];
   note: string;
   conclusion?: string;         // 已完成节点的结论
   problem?: string;
@@ -53,11 +47,11 @@ export interface ContextGetResult {
     goal: string;
     rules: string[];
     rulesHash: string;           // 规则哈希（用于 node_create 验证）
-    docs: DocRefWithStatus[];  // 仅包含 status == 'active' 的引用
+    docs: DocRef[];
     dispatch?: DispatchConfig;   // 派发配置（如果启用）
   };
   chain: ContextChainItem[];   // 从根到当前节点的上下文链
-  references: ContextChainItem[]; // 跨节点引用（仅 active）
+  references: ContextChainItem[]; // 跨节点引用
   childConclusions: ChildConclusionItem[]; // 子节点结论冒泡
   hint?: string;                // 工作流提示
   guidance?: string;            // 场景感知引导内容（L0 级别）
@@ -113,7 +107,7 @@ export interface NodeIsolateResult {
 /**
  * node_reference 操作类型
  */
-export type ReferenceAction = "add" | "remove" | "expire" | "activate";
+export type ReferenceAction = "add" | "remove";
 
 /**
  * node_reference 输入
@@ -131,7 +125,7 @@ export interface NodeReferenceParams {
  */
 export interface NodeReferenceResult {
   success: boolean;
-  references: DocRefWithStatus[];
+  references: DocRef[];
 }
 
 // ========== 日志和问题 API 类型 ==========
