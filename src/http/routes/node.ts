@@ -233,7 +233,13 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
       let manualOperationRecorded = false;
       try {
         const projectRoot = await services.workspace.resolveProjectRoot(request.params.wid);
-        const nodeInfo = await services.md.readNodeInfo(projectRoot, request.params.wid, request.params.nid);
+        // 获取正确的 dirName
+        const wsEntry = await services.json.findWorkspaceEntry(request.params.wid);
+        const wsDirName = wsEntry?.dirName || request.params.wid;
+        const graph = await services.json.readGraph(projectRoot, wsDirName);
+        const node = graph.nodes[request.params.nid];
+        const nodeDirName = node?.dirName || request.params.nid;
+        const nodeInfo = await services.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
         // 构建更新内容描述
         const updates: string[] = [];
@@ -273,7 +279,13 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
       let nodeName = request.params.nid;
       try {
         const projectRoot = await services.workspace.resolveProjectRoot(request.params.wid);
-        const nodeInfo = await services.md.readNodeInfo(projectRoot, request.params.wid, request.params.nid);
+        // 获取正确的 dirName
+        const wsEntry = await services.json.findWorkspaceEntry(request.params.wid);
+        const wsDirName = wsEntry?.dirName || request.params.wid;
+        const graph = await services.json.readGraph(projectRoot, wsDirName);
+        const node = graph.nodes[request.params.nid];
+        const nodeDirName = node?.dirName || request.params.nid;
+        const nodeInfo = await services.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
         nodeName = nodeInfo.title;
       } catch {
         // 读取失败使用节点 ID

@@ -115,6 +115,16 @@ export async function createServer(): Promise<FastifyInstance> {
     let latestVersion: string | null = null;
     let updateAvailable = false;
 
+    // 语义化版本比较：v1 > v2 返回 true
+    const semverGreaterThan = (v1: string, v2: string): boolean => {
+      const parse = (v: string) => v.split(".").map(Number);
+      const [a1, a2, a3] = parse(v1);
+      const [b1, b2, b3] = parse(v2);
+      if (a1 !== b1) return a1 > b1;
+      if (a2 !== b2) return a2 > b2;
+      return a3 > b3;
+    };
+
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
@@ -129,7 +139,8 @@ export async function createServer(): Promise<FastifyInstance> {
         const data = await response.json() as { version?: string };
         latestVersion = data.version || null;
         if (latestVersion && currentVersion !== "unknown") {
-          updateAvailable = latestVersion !== currentVersion;
+          // 只有当 npm 版本大于当前版本时才提示更新
+          updateAvailable = semverGreaterThan(latestVersion, currentVersion);
         }
       }
     } catch {
