@@ -10,6 +10,7 @@
 - 后端: `npx tsc`
 - 前端: `cd web && npm run build`
 - 开发服务器: `npm run dev:all` 或分别启动
+- **开发测试**: `./scripts/dev-rebuild.sh` (编译前后端 + 重启开发服务)
 
 ## 注意事项
 

@@ -194,7 +194,14 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         rootId: request.query.rootId,
         depth: request.query.depth ? parseInt(request.query.depth, 10) : undefined,
       };
-      return services.node.list(params);
+      try {
+        return await services.node.list(params);
+      } catch (error) {
+        // 节点加载失败时标记工作区为 error 状态
+        const message = error instanceof Error ? error.message : "节点加载失败";
+        await services.workspace.markAsError(request.params.wid, "node_corrupted", message);
+        throw error;
+      }
     }
   );
 
