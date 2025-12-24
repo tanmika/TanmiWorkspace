@@ -287,6 +287,7 @@ export class SessionService {
 
   /**
    * 检查安装版本警告
+   * 使用组件级版本检查，每个组件独立比较版本
    */
   private async checkInstallationWarnings(): Promise<InstallationWarning[]> {
     if (!this.installationService) {
@@ -299,27 +300,34 @@ export class SessionService {
       const meta = await this.installationService.read();
       const currentVersion = this.installationService.getPackageVersion();
 
-      // 检查各平台版本
+      // 组件名称映射（用于生成友好的警告消息）
+      const componentNames: Record<string, string> = {
+        hooks: "Hook",
+        mcp: "MCP",
+        agents: "Dispatch Agents",
+        skills: "Skills",
+      };
+
+      // 检查各平台的组件版本
       for (const platform of ["claudeCode", "cursor", "codex"] as const) {
         const platformInfo = meta.global.platforms[platform];
-        if (platformInfo?.enabled && platformInfo.version !== currentVersion) {
-          // 版本不匹配，检查各组件
-          if (platformInfo.components.hooks) {
+        if (!platformInfo?.enabled) continue;
+
+        // 遍历每个组件检查版本
+        for (const [componentKey, componentInfo] of Object.entries(platformInfo.components)) {
+          // 类型断言：componentInfo 可能是 ComponentInfo
+          const info = componentInfo as { installed?: boolean; version?: string };
+          if (!info?.installed || !info.version) continue;
+
+          // 版本不匹配时生成警告
+          if (info.version !== currentVersion) {
+            const friendlyName = componentNames[componentKey] || componentKey;
             warnings.push({
               platform,
-              component: "hooks",
-              installedVersion: platformInfo.version,
+              component: componentKey as "hooks" | "mcp" | "agents" | "skills",
+              installedVersion: info.version,
               currentVersion,
-              message: `${platform} Hook 版本过旧 (${platformInfo.version} → ${currentVersion})，建议更新`,
-            });
-          }
-          if (platformInfo.components.mcp) {
-            warnings.push({
-              platform,
-              component: "mcp",
-              installedVersion: platformInfo.version,
-              currentVersion,
-              message: `${platform} MCP 版本过旧 (${platformInfo.version} → ${currentVersion})`,
+              message: `${platform} ${friendlyName} 版本过旧 (${info.version} → ${currentVersion})，建议更新`,
             });
           }
         }

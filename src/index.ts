@@ -691,6 +691,7 @@ async function runStartupDetection(services: Services): Promise<void> {
 
     // 读取当前 meta
     const meta = await services.installation.read();
+    const currentVersion = services.installation.getPackageVersion();
 
     // 检查是否需要更新 meta（检测到的组件与 meta 记录不一致）
     let needsUpdate = false;
@@ -699,17 +700,66 @@ async function runStartupDetection(services: Services): Promise<void> {
       const detected = detectionResults[platform];
       const recorded = meta.global.platforms[platform];
 
-      if (detected?.detected && !recorded?.enabled) {
-        // 检测到已安装但未记录，更新 meta
-        await services.installation.updatePlatform(platform, {
-          enabled: true,
-          components: {
-            hooks: detected.components.hooks.installed,
-            mcp: detected.components.mcp.installed,
+      if (detected?.detected) {
+        // 构建组件状态（使用新的 ComponentInfo 结构）
+        const components: {
+          hooks: { installed: boolean; version?: string };
+          mcp: { installed: boolean; version?: string };
+          agents?: { installed: boolean; version?: string };
+          skills?: { installed: boolean; version?: string };
+        } = {
+          hooks: {
+            installed: detected.components.hooks.installed,
+            // 如果检测到已安装但 meta 没有记录版本，说明是新检测到的，使用当前版本
+            version: detected.components.hooks.installed
+              ? (recorded?.components?.hooks?.version || currentVersion)
+              : undefined,
           },
-        });
-        needsUpdate = true;
-        logMcp(`检测到 ${platform} 组件已安装，已更新 meta`);
+          mcp: {
+            installed: detected.components.mcp.installed,
+            version: detected.components.mcp.installed
+              ? (recorded?.components?.mcp?.version || currentVersion)
+              : undefined,
+          },
+        };
+
+        // Claude Code 平台特有的 agents 和 skills 组件
+        if (platform === "claudeCode") {
+          if (detected.components.agents) {
+            components.agents = {
+              installed: detected.components.agents.installed,
+              version: detected.components.agents.installed
+                ? (recorded?.components?.agents?.version || currentVersion)
+                : undefined,
+            };
+          }
+          if (detected.components.skills) {
+            components.skills = {
+              installed: detected.components.skills.installed,
+              version: detected.components.skills.installed
+                ? (recorded?.components?.skills?.version || currentVersion)
+                : undefined,
+            };
+          }
+        }
+
+        // 检查是否有变更需要同步（比较 installed 状态）
+        const hooksChanged = components.hooks.installed !== recorded?.components?.hooks?.installed;
+        const mcpChanged = components.mcp.installed !== recorded?.components?.mcp?.installed;
+        const agentsChanged = platform === "claudeCode" &&
+          components.agents?.installed !== recorded?.components?.agents?.installed;
+        const skillsChanged = platform === "claudeCode" &&
+          components.skills?.installed !== recorded?.components?.skills?.installed;
+
+        if (!recorded?.enabled || hooksChanged || mcpChanged || agentsChanged || skillsChanged) {
+          // 检测到组件状态变更，更新 meta
+          await services.installation.updatePlatform(platform, {
+            enabled: true,
+            components,
+          });
+          needsUpdate = true;
+          logMcp(`检测到 ${platform} 组件状态变更，已更新 meta`);
+        }
       }
     }
 

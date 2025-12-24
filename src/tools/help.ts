@@ -172,15 +172,30 @@ export class HelpService {
       for (const p of platforms) {
         const info = meta.global.platforms[p.platform];
         if (info?.enabled) {
-          p.hooks = info.components.hooks ? "✅" : "-";
-          p.mcp = info.components.mcp ? "✅" : "-";
-          p.version = info.version;
+          // 检查各组件安装状态
+          p.hooks = info.components.hooks?.installed ? "✅" : "-";
+          p.mcp = info.components.mcp?.installed ? "✅" : "-";
+          p.agents = info.components.agents?.installed ? "✅" : "-";
+          p.skills = info.components.skills?.installed ? "✅" : "-";
 
-          if (info.version === currentVersion) {
-            p.status = "✅ 最新";
-          } else {
-            p.status = "⚠️ 需更新";
+          // 从组件中提取版本信息（取第一个已安装组件的版本）
+          let foundVersion: string | undefined;
+          let hasOutdated = false;
+
+          for (const comp of Object.values(info.components)) {
+            const compInfo = comp as { installed?: boolean; version?: string };
+            if (compInfo?.installed && compInfo.version) {
+              if (!foundVersion) {
+                foundVersion = compInfo.version;
+              }
+              if (compInfo.version !== currentVersion) {
+                hasOutdated = true;
+              }
+            }
           }
+
+          p.version = foundVersion || "-";
+          p.status = hasOutdated ? "⚠️ 需更新" : "✅ 最新";
         }
       }
 

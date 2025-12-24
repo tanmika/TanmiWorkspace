@@ -52,17 +52,26 @@ export interface ConfigSetResult {
 export type PlatformType = "claudeCode" | "cursor" | "codex";
 
 /**
+ * 组件安装信息
+ */
+export interface ComponentInfo {
+  installed: boolean;
+  version?: string;  // 安装时的版本，未安装时为 undefined
+}
+
+/**
  * 平台组件安装信息
  */
 export interface PlatformInstallation {
   enabled: boolean;
   installedAt: string;  // ISO timestamp
-  version: string;      // 安装时的包版本，如 "1.7.2"
   components: {
-    hooks: boolean;
-    mcp: boolean;
-    agentsMd?: boolean;  // Codex 特有
-    modes?: boolean;     // Cursor 特有
+    hooks: ComponentInfo;
+    mcp: ComponentInfo;
+    agents?: ComponentInfo;    // Claude Code 特有（dispatch agents）
+    skills?: ComponentInfo;    // Claude Code 特有（skills 模板）
+    agentsMd?: ComponentInfo;  // Codex 特有
+    modes?: ComponentInfo;     // Cursor 特有
   };
 }
 

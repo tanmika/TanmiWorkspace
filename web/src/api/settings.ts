@@ -23,30 +23,34 @@ export interface TutorialTriggerResult {
   message: string
 }
 
+// 组件状态（组件级版本跟踪）
+export interface ComponentStatus {
+  installed: boolean
+  version: string | null
+  outdated: boolean
+}
+
 // 平台组件状态
 export interface PlatformComponents {
-  hooks: boolean
-  mcp: boolean
-  agents: boolean
-  skills: boolean
+  mcp: ComponentStatus
+  hooks: ComponentStatus
+  agents: ComponentStatus
+  skills: ComponentStatus
 }
 
 // 平台安装状态
 export interface PlatformStatus {
   name: string
   enabled: boolean
-  version: string | null
-  needsUpdate: boolean
   components: PlatformComponents
 }
 
-// 安装状态响应
+// 安装状态响应（移除 codex）
 export interface InstallationStatusResult {
   currentVersion: string
   platforms: {
     claudeCode: PlatformStatus
     cursor: PlatformStatus
-    codex: PlatformStatus
   }
   updateCommand: string
 }

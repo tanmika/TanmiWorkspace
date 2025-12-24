@@ -25,7 +25,7 @@ const metaPath = path.join(os.homedir(), baseDir, 'installation-meta.json');
 
 // 支持的平台和组件
 const PLATFORMS = ['claudeCode', 'cursor', 'codex'];
-const COMPONENTS = ['hooks', 'mcp', 'agentsMd', 'modes', 'agents'];
+const COMPONENTS = ['hooks', 'mcp', 'agentsMd', 'modes', 'agents', 'skills'];
 
 /**
  * 读取元信息
@@ -72,61 +72,66 @@ function writeMeta(meta) {
 
 /**
  * 更新平台组件信息
+ * 新结构：每个组件有独立的 installed 和 version 字段
  */
 function updatePlatform(platform, component, version) {
   const meta = readMeta();
   const now = new Date().toISOString();
+  const componentVersion = version || meta.global.packageVersion || '0.0.0';
 
   // 初始化平台信息
   if (!meta.global.platforms[platform]) {
     meta.global.platforms[platform] = {
       enabled: true,
       installedAt: now,
-      version: version || meta.global.packageVersion || '0.0.0',
       components: {
-        hooks: false,
-        mcp: false
+        hooks: { installed: false },
+        mcp: { installed: false }
       }
     };
 
     // 平台特有组件
     if (platform === 'claudeCode') {
-      meta.global.platforms[platform].components.agents = false;
+      meta.global.platforms[platform].components.agents = { installed: false };
+      meta.global.platforms[platform].components.skills = { installed: false };
     }
     if (platform === 'codex') {
-      meta.global.platforms[platform].components.agentsMd = false;
+      meta.global.platforms[platform].components.agentsMd = { installed: false };
     }
     if (platform === 'cursor') {
-      meta.global.platforms[platform].components.modes = false;
+      meta.global.platforms[platform].components.modes = { installed: false };
     }
   }
 
-  // 更新组件状态
+  // 更新组件状态（组件级别版本）
   const platformInfo = meta.global.platforms[platform];
-  platformInfo.components[component] = true;
+  platformInfo.components[component] = {
+    installed: true,
+    version: componentVersion
+  };
 
-  // 更新版本（如果提供）
+  // 更新全局包版本
   if (version) {
-    platformInfo.version = version;
     meta.global.packageVersion = version;
   }
 
   writeMeta(meta);
-  console.log(`✓ 已更新 ${platform}.${component} 到 installation-meta.json`);
+  console.log(`✓ 已更新 ${platform}.${component} (v${componentVersion}) 到 installation-meta.json`);
 }
 
 /**
  * 移除平台组件信息
+ * 新结构：设置 installed: false，清除 version
  */
 function removePlatformComponent(platform, component) {
   const meta = readMeta();
 
   if (meta.global.platforms[platform]) {
-    meta.global.platforms[platform].components[component] = false;
+    meta.global.platforms[platform].components[component] = { installed: false };
 
-    // 检查是否所有组件都已禁用
+    // 检查是否所有组件都未安装
     const components = meta.global.platforms[platform].components;
-    const allDisabled = Object.values(components).every(v => v === false);
+    const allDisabled = Object.values(components).every(c => !c.installed);
 
     if (allDisabled) {
       meta.global.platforms[platform].enabled = false;
@@ -139,12 +144,13 @@ function removePlatformComponent(platform, component) {
 
 /**
  * 显示当前状态
+ * 新结构：显示每个组件的安装状态和版本
  */
 function showStatus() {
   const meta = readMeta();
   console.log('\n安装元信息:');
   console.log('  路径:', metaPath);
-  console.log('  版本:', meta.global.packageVersion);
+  console.log('  包版本:', meta.global.packageVersion);
   console.log('  首次安装:', meta.global.installedAt);
   console.log('  最后更新:', meta.global.lastUpdatedAt);
   console.log('\n平台状态:');
@@ -152,8 +158,15 @@ function showStatus() {
   for (const [platform, info] of Object.entries(meta.global.platforms)) {
     console.log(`  ${platform}:`);
     console.log(`    启用: ${info.enabled}`);
-    console.log(`    版本: ${info.version}`);
-    console.log(`    组件:`, info.components);
+    console.log(`    安装时间: ${info.installedAt}`);
+    console.log(`    组件:`);
+    for (const [compName, compInfo] of Object.entries(info.components)) {
+      if (compInfo.installed) {
+        console.log(`      ${compName}: ✓ (v${compInfo.version || '未知'})`);
+      } else {
+        console.log(`      ${compName}: ✗`);
+      }
+    }
   }
 }
 

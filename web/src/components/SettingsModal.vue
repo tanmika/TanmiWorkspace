@@ -3,7 +3,7 @@ import { ref, watch, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastStore } from '@/stores/toast'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
-import { settingsApi, type InstallationStatusResult } from '@/api/settings'
+import { settingsApi, type InstallationStatusResult, type PlatformStatus, type ComponentStatus } from '@/api/settings'
 import WsModal from '@/components/ui/WsModal.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
@@ -81,6 +81,26 @@ function formatTime(isoString?: string | null) {
     minute: '2-digit',
     second: '2-digit',
   })
+}
+
+// 检查平台是否有过期组件
+function hasOutdatedComponent(platform: PlatformStatus): boolean {
+  const comps = platform.components
+  return comps.mcp.outdated || comps.hooks.outdated || comps.agents.outdated || comps.skills.outdated
+}
+
+// 获取组件徽章样式类
+function getComponentClass(comp: ComponentStatus): string {
+  if (!comp.installed) return ''
+  if (comp.outdated) return 'active outdated'
+  return 'active'
+}
+
+// 获取状态指示器样式类
+function getIndicatorClass(comp: ComponentStatus): string {
+  if (!comp.installed) return 'not-installed'
+  if (comp.outdated) return 'outdated'
+  return 'installed'
 }
 
 // 关闭弹窗
@@ -291,27 +311,21 @@ async function handleVersionClick() {
               <span
                 v-if="installationStatus.platforms.claudeCode.enabled"
                 class="platform-status"
-                :class="{ outdated: installationStatus.platforms.claudeCode.needsUpdate }"
+                :class="{ outdated: hasOutdatedComponent(installationStatus.platforms.claudeCode) }"
               >
-                {{ installationStatus.platforms.claudeCode.needsUpdate ? '需更新' : '已安装' }}
+                {{ hasOutdatedComponent(installationStatus.platforms.claudeCode) ? '需更新' : '已安装' }}
               </span>
               <span v-else class="platform-status disabled">未安装</span>
             </div>
-            <div class="platform-version" v-if="installationStatus.platforms.claudeCode.enabled">
-              v{{ installationStatus.platforms.claudeCode.version }}
-            </div>
-            <div class="component-list">
-              <span class="component-item" :class="{ active: installationStatus.platforms.claudeCode.components.mcp }">
-                MCP
-              </span>
-              <span class="component-item" :class="{ active: installationStatus.platforms.claudeCode.components.hooks }">
-                Hooks
-              </span>
-              <span class="component-item" :class="{ active: installationStatus.platforms.claudeCode.components.agents }">
-                Agents
-              </span>
-              <span class="component-item" :class="{ active: installationStatus.platforms.claudeCode.components.skills }">
-                Skills
+            <div class="component-grid">
+              <span
+                v-for="comp in ['mcp', 'hooks', 'agents', 'skills']"
+                :key="comp"
+                class="component-item"
+                :class="getComponentClass(installationStatus.platforms.claudeCode.components[comp as keyof typeof installationStatus.platforms.claudeCode.components])"
+              >
+                <span class="status-indicator" :class="getIndicatorClass(installationStatus.platforms.claudeCode.components[comp as keyof typeof installationStatus.platforms.claudeCode.components])"></span>
+                {{ comp.charAt(0).toUpperCase() + comp.slice(1) }}
               </span>
             </div>
           </div>
@@ -326,62 +340,21 @@ async function handleVersionClick() {
               <span
                 v-if="installationStatus.platforms.cursor.enabled"
                 class="platform-status"
-                :class="{ outdated: installationStatus.platforms.cursor.needsUpdate }"
+                :class="{ outdated: hasOutdatedComponent(installationStatus.platforms.cursor) }"
               >
-                {{ installationStatus.platforms.cursor.needsUpdate ? '需更新' : '已安装' }}
+                {{ hasOutdatedComponent(installationStatus.platforms.cursor) ? '需更新' : '已安装' }}
               </span>
               <span v-else class="platform-status disabled">未安装</span>
             </div>
-            <div class="platform-version" v-if="installationStatus.platforms.cursor.enabled">
-              v{{ installationStatus.platforms.cursor.version }}
-            </div>
-            <div class="component-list">
-              <span class="component-item" :class="{ active: installationStatus.platforms.cursor.components.mcp }">
-                MCP
-              </span>
-              <span class="component-item" :class="{ active: installationStatus.platforms.cursor.components.hooks }">
-                Hooks
-              </span>
-              <span class="component-item" :class="{ active: installationStatus.platforms.cursor.components.agents }">
-                Agents
-              </span>
-              <span class="component-item" :class="{ active: installationStatus.platforms.cursor.components.skills }">
-                Skills
-              </span>
-            </div>
-          </div>
-
-          <!-- Codex -->
-          <div
-            class="platform-card"
-            :class="{ enabled: installationStatus.platforms.codex.enabled }"
-          >
-            <div class="platform-header">
-              <span class="platform-name">Codex</span>
+            <div class="component-grid">
               <span
-                v-if="installationStatus.platforms.codex.enabled"
-                class="platform-status"
-                :class="{ outdated: installationStatus.platforms.codex.needsUpdate }"
+                v-for="comp in ['mcp', 'hooks', 'agents', 'skills']"
+                :key="comp"
+                class="component-item"
+                :class="getComponentClass(installationStatus.platforms.cursor.components[comp as keyof typeof installationStatus.platforms.cursor.components])"
               >
-                {{ installationStatus.platforms.codex.needsUpdate ? '需更新' : '已安装' }}
-              </span>
-              <span v-else class="platform-status disabled">未安装</span>
-            </div>
-            <div class="platform-version" v-if="installationStatus.platforms.codex.enabled">
-              v{{ installationStatus.platforms.codex.version }}
-            </div>
-            <div class="component-list">
-              <span class="component-item" :class="{ active: installationStatus.platforms.codex.components.mcp }">
-                MCP
-              </span>
-              <span class="component-item" :class="{ active: installationStatus.platforms.codex.components.hooks }">
-                Hooks
-              </span>
-              <span class="component-item" :class="{ active: installationStatus.platforms.codex.components.agents }">
-                Agents
-              </span>
-              <span class="component-item" :class="{ active: installationStatus.platforms.codex.components.skills }">
-                Skills
+                <span class="status-indicator" :class="getIndicatorClass(installationStatus.platforms.cursor.components[comp as keyof typeof installationStatus.platforms.cursor.components])"></span>
+                {{ comp.charAt(0).toUpperCase() + comp.slice(1) }}
               </span>
             </div>
           </div>
@@ -687,7 +660,7 @@ async function handleVersionClick() {
 
 .platform-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
 
@@ -746,28 +719,46 @@ async function handleVersionClick() {
   color: var(--text-muted);
 }
 
-.platform-version {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-family: var(--mono-font);
-  margin-bottom: 8px;
-}
-
-.component-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+/* 组件网格（2x2 布局） */
+.component-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 12px;
 }
 
 .component-item {
-  font-size: 10px;
-  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  padding: 4px 8px;
   background: var(--path-bg);
   color: var(--text-muted);
-  border-radius: 2px;
   font-family: var(--mono-font);
 }
 
+/* 状态指示器（8x8 小方块） */
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.status-indicator.installed {
+  background: var(--accent-blue);
+}
+
+.status-indicator.outdated {
+  background: #f59e0b;
+}
+
+.status-indicator.not-installed {
+  border: 1px solid var(--text-muted);
+  background: transparent;
+}
+
+/* 已安装状态 */
 .component-item.active {
   background: #e3f2fd;
   color: #1565c0;
@@ -776,6 +767,17 @@ async function handleVersionClick() {
 [data-theme="dark"] .component-item.active {
   background: #0d2137;
   color: #64b5f6;
+}
+
+/* 过期状态 */
+.component-item.outdated {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+[data-theme="dark"] .component-item.outdated {
+  background: #431407;
+  color: #fb923c;
 }
 
 .plugin-loading {

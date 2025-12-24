@@ -3,10 +3,13 @@
 import * as path from "node:path";
 import * as os from "node:os";
 import * as fs from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type {
   InstallationMeta,
   PlatformType,
   PlatformInstallation,
+  ComponentInfo,
 } from "../types/settings.js";
 import { DEFAULT_INSTALLATION_META } from "../types/settings.js";
 
@@ -31,9 +34,19 @@ export class InstallationService {
    */
   private loadPackageVersion(): string {
     try {
-      // 在运行时动态获取版本，避免硬编码
-      // 实际版本通过 npm/node 环境变量或 package.json 读取
-      return process.env.npm_package_version || "0.0.0";
+      // 优先使用 npm 环境变量
+      if (process.env.npm_package_version) {
+        return process.env.npm_package_version;
+      }
+
+      // 从 package.json 读取（支持直接 node 运行）
+      // import.meta.url 指向 dist/services/InstallationService.js
+      // package.json 在 ../../package.json
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const pkgPath = path.join(__dirname, "..", "..", "package.json");
+      const pkgContent = readFileSync(pkgPath, "utf-8");
+      const pkg = JSON.parse(pkgContent);
+      return pkg.version || "0.0.0";
     } catch {
       return "0.0.0";
     }
@@ -104,21 +117,81 @@ export class InstallationService {
     const now = new Date().toISOString();
 
     const existing = meta.global.platforms[platform];
+
     meta.global.platforms[platform] = {
       enabled: info.enabled ?? existing?.enabled ?? true,
       installedAt: existing?.installedAt ?? now,
-      version: info.version ?? this.packageVersion,
       components: {
-        hooks: info.components?.hooks ?? existing?.components?.hooks ?? false,
-        mcp: info.components?.mcp ?? existing?.components?.mcp ?? false,
+        hooks: this.mergeComponent(existing?.components?.hooks, info.components?.hooks),
+        mcp: this.mergeComponent(existing?.components?.mcp, info.components?.mcp),
+        ...(platform === "claudeCode" && {
+          agents: this.mergeComponent(existing?.components?.agents, info.components?.agents),
+          skills: this.mergeComponent(existing?.components?.skills, info.components?.skills),
+        }),
         ...(platform === "codex" && {
-          agentsMd: info.components?.agentsMd ?? existing?.components?.agentsMd ?? false,
+          agentsMd: this.mergeComponent(existing?.components?.agentsMd, info.components?.agentsMd),
         }),
         ...(platform === "cursor" && {
-          modes: info.components?.modes ?? existing?.components?.modes ?? false,
+          modes: this.mergeComponent(existing?.components?.modes, info.components?.modes),
         }),
       },
     };
+
+    await this.write(meta);
+    return meta;
+  }
+
+  /**
+   * 合并组件信息
+   */
+  private mergeComponent(
+    existing: ComponentInfo | undefined,
+    update: ComponentInfo | undefined
+  ): ComponentInfo {
+    if (!update) {
+      return existing ?? { installed: false };
+    }
+    return {
+      installed: update.installed,
+      version: update.installed ? (update.version ?? this.packageVersion) : undefined,
+    };
+  }
+
+  /**
+   * 更新单个组件
+   */
+  async updateComponent(
+    platform: PlatformType,
+    component: string,
+    installed: boolean,
+    version?: string
+  ): Promise<InstallationMeta> {
+    const meta = await this.read();
+    const now = new Date().toISOString();
+
+    // 确保平台存在
+    if (!meta.global.platforms[platform]) {
+      meta.global.platforms[platform] = {
+        enabled: true,
+        installedAt: now,
+        components: {
+          hooks: { installed: false },
+          mcp: { installed: false },
+        },
+      };
+    }
+
+    const platformInfo = meta.global.platforms[platform]!;
+    (platformInfo.components as Record<string, ComponentInfo>)[component] = {
+      installed,
+      version: installed ? (version ?? this.packageVersion) : undefined,
+    };
+
+    // 检查是否所有组件都未安装
+    const allDisabled = Object.values(platformInfo.components).every(
+      (c) => !(c as ComponentInfo).installed
+    );
+    platformInfo.enabled = !allDisabled;
 
     await this.write(meta);
     return meta;
@@ -133,22 +206,37 @@ export class InstallationService {
   }
 
   /**
-   * 检查平台是否需要更新
-   * 比较已安装版本与当前包版本
+   * 检查平台组件版本
+   * 返回需要更新的组件列表
    */
-  async checkPlatformUpdate(platform: PlatformType): Promise<{
-    needsUpdate: boolean;
-    installedVersion: string | null;
+  async checkComponentUpdates(platform: PlatformType): Promise<Array<{
+    component: string;
+    installedVersion: string;
     currentVersion: string;
-  }> {
+  }>> {
     const platformInfo = await this.getPlatform(platform);
-    const installedVersion = platformInfo?.version ?? null;
+    if (!platformInfo) {
+      return [];
+    }
 
-    return {
-      needsUpdate: installedVersion !== null && installedVersion !== this.packageVersion,
-      installedVersion,
-      currentVersion: this.packageVersion,
-    };
+    const outdated: Array<{
+      component: string;
+      installedVersion: string;
+      currentVersion: string;
+    }> = [];
+
+    for (const [name, info] of Object.entries(platformInfo.components)) {
+      const componentInfo = info as ComponentInfo;
+      if (componentInfo.installed && componentInfo.version && componentInfo.version !== this.packageVersion) {
+        outdated.push({
+          component: name,
+          installedVersion: componentInfo.version,
+          currentVersion: this.packageVersion,
+        });
+      }
+    }
+
+    return outdated;
   }
 
   /**

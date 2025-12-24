@@ -20,7 +20,12 @@ const CLAUDE_JSON = join(HOME, ".claude.json"); // MCP 配置
 const CLAUDE_SETTINGS_LOCAL = join(CLAUDE_HOME, "settings.local.json"); // 权限配置
 const CURSOR_HOME = join(HOME, ".cursor");
 const CURSOR_MCP = join(CURSOR_HOME, "mcp.json");
-const TANMI_SCRIPTS = join(HOME, ".tanmi-workspace", "scripts");
+const IS_DEV = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
+const TANMI_BASE = IS_DEV ? ".tanmi-workspace-dev" : ".tanmi-workspace";
+const TANMI_SCRIPTS = join(HOME, TANMI_BASE, "scripts");
+// update-installation-meta.cjs 位于 npm 包根目录的 scripts 目录
+// __dirname = dist/cli/, 所以需要 ../../scripts/
+const UPDATE_META_SCRIPT = join(__dirname, "..", "..", "scripts", "update-installation-meta.cjs");
 
 // 颜色输出
 const colors = {
@@ -30,6 +35,31 @@ const colors = {
   blue: (s: string) => `\x1b[34m${s}\x1b[0m`,
   bold: (s: string) => `\x1b[1m${s}\x1b[0m`,
 };
+
+// 获取包版本
+function getPackageVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+// 更新安装元信息
+function updateInstallationMeta(platform: string, component: string): void {
+  if (!existsSync(UPDATE_META_SCRIPT)) {
+    return; // 脚本不存在，跳过
+  }
+  try {
+    const version = getPackageVersion();
+    execSync(`node "${UPDATE_META_SCRIPT}" update ${platform} ${component} ${version}`, {
+      stdio: "ignore",
+    });
+  } catch {
+    // 静默失败，不影响主流程
+  }
+}
 
 // 检测环境
 interface Environment {
@@ -152,6 +182,7 @@ async function configureClaudeMcp(env: Environment): Promise<boolean> {
       console.log("  执行: claude mcp add tanmi-workspace -s user -- npx tanmi-workspace");
       await execAsync("claude mcp add tanmi-workspace -s user -- npx tanmi-workspace");
       console.log(colors.green("  ✓ MCP 服务器已添加"));
+      updateInstallationMeta("claudeCode", "mcp");
       return true;
     } catch (error) {
       console.log(colors.yellow("  ⚠ claude mcp add 失败，尝试手动配置..."));
@@ -176,6 +207,7 @@ async function configureClaudeMcp(env: Environment): Promise<boolean> {
 
     writeFileSync(CLAUDE_JSON, JSON.stringify(claudeJson, null, 2));
     console.log(colors.green("  ✓ MCP 配置已写入 " + CLAUDE_JSON));
+    updateInstallationMeta("claudeCode", "mcp");
     return true;
   } catch (error) {
     console.log(colors.red("  ✗ 配置失败: " + error));
@@ -251,6 +283,7 @@ async function configureCursorMcp(): Promise<boolean> {
 
     writeFileSync(CURSOR_MCP, JSON.stringify(mcp, null, 2));
     console.log(colors.green("  ✓ MCP 配置已写入 " + CURSOR_MCP));
+    updateInstallationMeta("cursor", "mcp");
     return true;
   } catch (error) {
     console.log(colors.red("  ✗ 配置失败: " + error));
