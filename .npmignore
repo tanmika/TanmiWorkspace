@@ -1,0 +1,20 @@
+# 开发文件
+src/
+web/src/
+web/node_modules/
+tests/
+docs/
+.github/
+.vscode/
+
+# 配置文件
+tsconfig.json
+.eslintrc*
+.prettierrc*
+jest.config.*
+vitest.config.*
+
+# 其他
+*.log
+.DS_Store
+coverage/

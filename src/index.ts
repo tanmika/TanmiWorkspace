@@ -16,6 +16,10 @@ import type { FastifyInstance } from "fastify";
 import { createServices, type Services } from "./http/services.js";
 import { createServer } from "./http/server.js";
 import { isPortInUse } from "./utils/port.js";
+import { handleOldProcess, writePidInfo, removePidFile, getPidFilePath } from "./utils/processManager.js";
+import { createRequire } from "module";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { workspaceTools } from "./tools/workspace.js";
 import { nodeTools } from "./tools/node.js";
 import { stateTools } from "./tools/state.js";
@@ -39,8 +43,8 @@ import { devLog } from "./utils/devLog.js";
 // 配置
 // ============================================================================
 const IS_DEV = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
-// 开发模式默认端口 3001，正式模式默认端口 3000
-const DEFAULT_PORT = IS_DEV ? "3001" : "3000";
+// 开发模式默认端口 19541，正式模式默认端口 19540
+const DEFAULT_PORT = IS_DEV ? "19541" : "19540";
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? DEFAULT_PORT, 10);
 const DISABLE_HTTP = process.env.DISABLE_HTTP === "true";
 
@@ -58,6 +62,23 @@ function logHttp(message: string): void {
 }
 
 // ============================================================================
+// 获取当前版本
+// ============================================================================
+function getCurrentVersion(): string {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const require = createRequire(import.meta.url);
+    const pkg = require(join(__dirname, "..", "package.json"));
+    return pkg.version;
+  } catch {
+    return "0.0.0";
+  }
+}
+
+const CURRENT_VERSION = getCurrentVersion();
+
+// ============================================================================
 // HTTP Server 后台启动
 // ============================================================================
 async function startHttpServerInBackground(port: number): Promise<FastifyInstance | null> {
@@ -70,16 +91,43 @@ async function startHttpServerInBackground(port: number): Promise<FastifyInstanc
   // 使用与 server.ts 一致的 host 设置（默认 127.0.0.1，可通过环境变量覆盖）
   const host = process.env.TANMI_HOST || "127.0.0.1";
 
-  // 检测端口占用（使用相同的 host）
+  // 处理旧版本进程
+  const canStart = handleOldProcess(port, CURRENT_VERSION, logHttp);
+  if (!canStart) {
+    // 检查是否是因为相同版本已在运行（不是真正的错误）
+    if (await isPortInUse(port, host)) {
+      logHttp(`相同版本已在运行，复用现有服务`);
+    }
+    return null;
+  }
+
+  // 再次检测端口占用（处理非 tanmi-workspace 进程占用的情况）
   if (await isPortInUse(port, host)) {
-    logHttp(`端口 ${host}:${port} 已被占用，跳过 HTTP 启动`);
+    logHttp(`端口 ${host}:${port} 被其他服务占用，跳过 HTTP 启动`);
     return null;
   }
 
   try {
     const server = await createServer();
     await server.listen({ port, host });
-    logHttp(`Listening on http://${host}:${port}`);
+    logHttp(`Listening on http://${host}:${port} (v${CURRENT_VERSION})`);
+
+    // 写入 PID 信息
+    writePidInfo({
+      pid: process.pid,
+      port,
+      version: CURRENT_VERSION,
+      startedAt: new Date().toISOString(),
+    });
+
+    // 进程退出时清理
+    const cleanup = () => {
+      removePidFile();
+    };
+    process.on("exit", cleanup);
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
+
     return server;
   } catch (err) {
     logHttp(`启动失败: ${err instanceof Error ? err.message : String(err)}`);

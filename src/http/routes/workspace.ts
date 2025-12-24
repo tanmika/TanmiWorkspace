@@ -286,4 +286,30 @@ export async function workspaceRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
   );
+
+  /**
+   * POST /api/workspaces/:id/reload - 重新加载错误状态的工作区
+   * 尝试重新加载工作区和节点树，如果成功则清除错误状态
+   */
+  fastify.post<{ Params: WorkspaceIdParams }>(
+    "/workspaces/:id/reload",
+    { schema: workspaceIdParamsSchema },
+    async (request: FastifyRequest<{ Params: WorkspaceIdParams }>) => {
+      const workspaceId = request.params.id;
+      try {
+        // 尝试获取工作区详情
+        await services.workspace.get({ workspaceId });
+        // 尝试获取节点树（这会验证节点文件是否完整）
+        await services.node.list({ workspaceId });
+        // 全部成功，清除错误状态
+        await services.workspace.clearError(workspaceId);
+        return { success: true, message: "工作区已成功重新加载" };
+      } catch (error) {
+        // 加载失败，更新错误信息
+        const message = error instanceof Error ? error.message : "重新加载失败";
+        await services.workspace.markAsError(workspaceId, "node_corrupted", message);
+        return { success: false, message };
+      }
+    }
+  );
 }

@@ -219,7 +219,35 @@ function showErrorInfo(ws: WorkspaceEntry) {
 
   errorDialogTitle.value = `工作区「${ws.name}」出错`
   errorDialogMessage.value = message
+  currentErrorWorkspace.value = ws
   showErrorDialog.value = true
+}
+
+// 当前错误工作区（用于重新加载）
+const currentErrorWorkspace = ref<WorkspaceEntry | null>(null)
+const isReloading = ref(false)
+
+// 重新加载错误工作区
+async function handleReload() {
+  if (!currentErrorWorkspace.value || isReloading.value) return
+
+  isReloading.value = true
+  try {
+    const result = await workspaceApi.reload(currentErrorWorkspace.value.id)
+    if (result.success) {
+      toastStore.success('重新加载成功', result.message)
+      showErrorDialog.value = false
+      // 刷新工作区列表
+      await workspaceStore.fetchWorkspaces('all')
+    } else {
+      toastStore.error('重新加载失败', result.message)
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '重新加载失败'
+    toastStore.error('重新加载失败', message)
+  } finally {
+    isReloading.value = false
+  }
 }
 
 // 格式化时间
@@ -437,7 +465,7 @@ function getBadgeText(status: string) {
     <SettingsModal v-model:visible="showSettingsModal" @tutorial-created="handleRefresh" />
 
     <!-- 开发模式标识 -->
-    <div v-if="devInfo?.available" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">
+    <div v-if="devInfo?.isDev" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">
       DEV
     </div>
 
@@ -454,7 +482,10 @@ function getBadgeText(status: string) {
     <WsModal v-model="showErrorDialog" :title="errorDialogTitle" width="480px">
       <div class="error-message-box">{{ errorDialogMessage }}</div>
       <template #footer>
-        <button class="btn btn-primary" @click="showErrorDialog = false">知道了</button>
+        <button class="btn btn-secondary" @click="handleReload" :disabled="isReloading">
+          {{ isReloading ? '加载中...' : '重新加载' }}
+        </button>
+        <button class="btn btn-primary" @click="showErrorDialog = false">关闭</button>
       </template>
     </WsModal>
   </div>

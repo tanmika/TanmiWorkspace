@@ -40,11 +40,11 @@ import { devLog } from "../utils/devLog.js";
 
 /**
  * 获取 HTTP 服务端口
- * 开发模式默认 3001，正式模式默认 3000
+ * 开发模式默认 19541，正式模式默认 19540
  */
 function getHttpPort(): number {
   const isDev = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
-  const defaultPort = isDev ? "3001" : "3000";
+  const defaultPort = isDev ? "19541" : "19540";
   return parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? defaultPort, 10);
 }
 
@@ -1105,15 +1105,20 @@ export class WorkspaceService {
     errorType: WorkspaceErrorInfo["type"],
     message: string
   ): Promise<WorkspaceErrorInfo> {
+    // 更新索引中的状态
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+
+    // 保存原始状态（仅当不是已经处于 error 状态时）
+    const previousStatus = wsEntry?.status !== "error" ? wsEntry?.status as "active" | "archived" : wsEntry?.errorInfo?.previousStatus;
+
     const errorInfo: WorkspaceErrorInfo = {
       message,
       detectedAt: now(),
       type: errorType,
+      previousStatus,
     };
 
-    // 更新索引中的状态
-    const index = await this.json.readIndex();
-    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
     if (wsEntry) {
       wsEntry.status = "error";
       wsEntry.errorInfo = errorInfo;
@@ -1129,13 +1134,15 @@ export class WorkspaceService {
 
   /**
    * 清除工作区的错误状态（用于修复后）
+   * 恢复为错误前的原始状态（active 或 archived）
    * @param workspaceId 工作区 ID
    */
   async clearError(workspaceId: string): Promise<void> {
     const index = await this.json.readIndex();
     const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
     if (wsEntry && wsEntry.status === "error") {
-      wsEntry.status = "active";
+      // 恢复为原始状态，默认为 active
+      wsEntry.status = wsEntry.errorInfo?.previousStatus || "active";
       delete wsEntry.errorInfo;
       wsEntry.updatedAt = now();
       await this.json.writeIndex(index);

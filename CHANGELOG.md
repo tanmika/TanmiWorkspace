@@ -11,6 +11,47 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.8.2] - 2025-12-24
+
+### Fixed
+
+- **npm 包前端资源**: 添加 `web/.npmignore` 覆盖 `web/.gitignore`，确保 `web/dist` 被正确包含
+
+## [1.8.1] - 2025-12-24
+
+### Fixed
+
+- **npm 包前端资源**: 添加 `.npmignore` 确保 `web/dist` 被正确包含（未生效）
+- **生产环境日志**: 修复 pino-pretty 开发依赖在生产环境报错问题
+
+### Improved
+
+- **Settings 版本信息**: 生产环境显示基本版本信息，调试信息仅开发模式可见
+
+### Added
+
+- **发布脚本**: `scripts/release.sh` 自动化发布流程，确保前后端同步编译
+
+## [1.8.0] - 2025-12-24
+
+### Added
+
+- **WebUI 独立启动命令**: `tanmi-workspace webui [start|stop|restart|status]` 支持独立管理 WebUI 服务
+- **进程管理与版本检测**: PID 文件跟踪、旧进程自动替换、前后端版本不匹配警告
+- **端口迁移**: 3000/3001 → 19540/19541，启动时自动检测并关闭旧端口服务
+- **索引重建脚本**: `scripts/rebuild-index.cjs` 用于恢复损坏的工作区索引
+- **MCP 工具参数容错**: 自动修复常见参数错误（如 nodeId 误传为 workspaceId）
+- **tanmi_help server 主题**: 服务器状态与自检指南，帮助 AI 诊断服务问题
+
+### Changed
+
+- **移除文档 active/expired 状态机制**: 简化文档引用管理，文档生命周期随节点状态自动管理
+
+### Fixed
+
+- **HTTP 路由 dirName 解析**: 修复版本比较和目录名解析导致的 404 错误
+- **dirName 参数规范化**: 统一使用 dirName 替代 workspaceId 作为目录名参数
+
 ## [1.7.2] - 2025-12-22
 
 ### Added

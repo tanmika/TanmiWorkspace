@@ -59,8 +59,8 @@ TanmiWorkspace 是一个**分形任务跟踪系统**，帮助你（AI）和用�
 TanmiWorkspace 提供可视化 Web 界面。所有 workspace 相关的工具返回值都包含 \`webUrl\` 字段。
 
 **端口规则**：
-- 正式环境：\`http://localhost:3000/workspace/{workspaceId}\`
-- 开发环境（TANMI_DEV=true）：\`http://localhost:3001/workspace/{workspaceId}\`
+- 正式环境：\`http://localhost:19540/workspace/{workspaceId}\`
+- 开发环境（TANMI_DEV=true）：\`http://localhost:19541/workspace/{workspaceId}\`
 
 **重要边界**：
 - 你**无法看到** Web UI 的界面，也**无法控制**用户的浏览器
@@ -1092,6 +1092,67 @@ ${outputs.map(o => `- ${o}`).join('\n')}
 };
 
 /**
+ * 服务器状态与自检指南
+ */
+export const SERVER_STATUS_GUIDE = `
+# 服务器状态与自检
+
+## 端口配置
+- **正式环境**: 19540
+- **开发环境** (TANMI_DEV=true): 19541
+
+## CLI 命令
+用户可通过以下命令管理 WebUI 服务：
+\`\`\`bash
+tanmi-workspace webui          # 启动服务
+tanmi-workspace webui stop     # 停止服务
+tanmi-workspace webui restart  # 重启服务
+tanmi-workspace webui status   # 查看状态
+\`\`\`
+
+## 常见问题自检
+
+### 1. 服务未启动
+**现象**: API 调用失败、超时
+**自检**:
+- 检查返回值中是否有错误信息
+- 建议用户执行 \`tanmi-workspace webui status\` 查看服务状态
+
+### 2. 版本不匹配
+**现象**: 数据格式异常、功能缺失、WebUI 显示版本警告
+**原因**: npm 更新后 MCP 服务未重启，前后端版本不一致
+**解决**:
+- 用户需重启 Claude Code / Cursor 以重新加载 MCP 服务
+- 或执行 \`tanmi-workspace webui restart\` 重启 WebUI
+
+### 3. 端口被占用
+**现象**: 服务启动失败
+**解决**:
+- 使用 \`HTTP_PORT=19542 tanmi-workspace webui\` 指定其他端口
+- 或停止占用该端口的其他服务
+
+## PID 文件位置
+- 正式环境: \`~/.tanmi-workspace/webui.pid\`
+- 开发环境: \`~/.tanmi-workspace-dev/webui.pid\`
+
+## 端口迁移（从旧版本升级）
+从 v1.7.x 之前的版本升级时，端口从 3000/3001 迁移到 19540/19541。
+系统会**自动检测并关闭**旧端口上的 tanmi-workspace 服务，并提示用户：
+\`\`\`
+[迁移] 检测到旧版本服务在端口 3000 运行
+[迁移] 端口已从 3000 迁移到 19540/19541
+[迁移] 提示：新版本 WebUI 地址为 http://localhost:19540
+[迁移] 请更新浏览器书签
+\`\`\`
+
+## 如何告知用户
+当遇到服务相关问题时，可以这样引导用户：
+> "看起来 TanmiWorkspace 服务可能未启动或版本不匹配。
+> 请在终端执行 \`tanmi-workspace webui status\` 查看服务状态。
+> 如果需要重启，执行 \`tanmi-workspace webui restart\`。"
+`;
+
+/**
  * tanmi_help 工具的帮助内容
  */
 export const HELP_TOPICS: Record<string, { title: string; content: string }> = {
@@ -1150,6 +1211,10 @@ export const HELP_TOPICS: Record<string, { title: string; content: string }> = {
   "dispatch": {
     title: "派发模式",
     content: SCENARIO_GUIDES["dispatch_mode"]
+  },
+  "server": {
+    title: "服务器状态与自检",
+    content: SERVER_STATUS_GUIDE
   }
 };
 

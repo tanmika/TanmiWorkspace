@@ -9,6 +9,31 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.8.2
+    requirement: 修复 npm 包 web/dist 未包含问题
+    conclusion: "- npm 包前端资源: 添加 `web/.npmignore` 覆盖 `web/.gitignore`，确保 `web/dist` 被正确包含"
+    note: ""
+  - version: 1.8.1
+    requirement: 修复 npm 包前端资源缺失和 pino-pretty 生产环境报错
+    conclusion: |-
+      - npm 包前端资源: 添加 `.npmignore` 确保 `web/dist` 被正确包含
+      - 生产环境日志: 修复 pino-pretty 开发依赖在生产环境报错问题
+      - Settings 版本信息: 生产环境显示基本版本信息，调试信息仅开发模式可见
+      - 发布脚本: `scripts/release.sh` 自动化发布流程，确保前后端同步编译
+    note: ""
+  - version: 1.8.0
+    requirement: WebUI 独立启动命令、端口迁移 19540、进程管理与版本检测、MCP 参数容错
+    conclusion: |-
+      - WebUI 独立启动命令: `tanmi-workspace webui [start|stop|restart|status]` 支持独立管理 WebUI 服务
+      - 进程管理与版本检测: PID 文件跟踪、旧进程自动替换、前后端版本不匹配警告
+      - 端口迁移: 3000/3001 → 19540/19541，启动时自动检测并关闭旧端口服务
+      - 索引重建脚本: `scripts/rebuild-index.cjs` 用于恢复损坏的工作区索引
+      - MCP 工具参数容错: 自动修复常见参数错误（如 nodeId 误传为 workspaceId）
+      - tanmi_help server 主题: 服务器状态与自检指南，帮助 AI 诊断服务问题
+      - 移除文档 active/expired 状态机制: 简化文档引用管理，文档生命周期随节点状态自动管理
+      - HTTP 路由 dirName 解析: 修复版本比较和目录名解析导致的 404 错误
+      - dirName 参数规范化: 统一使用 dirName 替代 workspaceId 作为目录名参数
+    note: ""
   - version: 1.7.2
     requirement: SSE 实时更新、紧凑子结论渲染、Noto Emoji 单色字体、夜间模式优化
     conclusion: |-
