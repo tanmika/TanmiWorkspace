@@ -373,9 +373,12 @@ session_status({
 ```
 tanmi-workspace/
 ├── plugin/
+│   ├── hooks/
+│   │   └── hooks.json.deprecated    # 废弃：原 Hook 配置模板（已改为脚本内联生成）
 │   └── scripts/
 │       ├── hook-entry.cjs           # Claude Code 入口脚本
 │       ├── cursor-hook-entry.cjs    # Cursor 入口脚本
+│       ├── openspec-import.cjs      # OpenSpec 导入脚本（代码直接引用，不安装）
 │       └── shared/                  # 共享模块
 │           ├── config.cjs           # 配置常量
 │           ├── utils.cjs            # 工具函数
@@ -383,11 +386,16 @@ tanmi-workspace/
 │           ├── workspace.cjs        # 工作区数据读取 + 日志/问题解析
 │           ├── context.cjs          # 上下文生成
 │           ├── reminder.cjs         # 智能提醒分析模块
+│           ├── logger.cjs           # 日志记录
 │           └── index.cjs            # 统一导出
+├── templates/
+│   ├── tanmi-executor.md            # 派发执行器 Agent 模板
+│   └── tanmi-tester.md              # 派发测试器 Agent 模板
 ```
 
 ### 安装后的目录
 
+**全局 Hook 脚本**（`~/.tanmi-workspace/`）：
 ```
 ~/.tanmi-workspace/
 ├── scripts/
@@ -395,6 +403,14 @@ tanmi-workspace/
 │   ├── cursor-hook-entry.cjs        # Cursor 入口
 │   └── shared/                      # 共享模块
 │       └── *.cjs
+├── installation-meta.json           # 安装状态记录
+```
+
+**全局 Dispatch Agents**（`~/.claude/agents/`）：
+```
+~/.claude/agents/
+├── tanmi-executor.md                # 派发执行器（所有项目可用）
+└── tanmi-tester.md                  # 派发测试器（所有项目可用）
 ```
 
 ### Claude Code 配置 (~/.claude/settings.json)

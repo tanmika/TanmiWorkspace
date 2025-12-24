@@ -337,10 +337,10 @@ cleanup_shared_if_unused() {
 }
 
 # ============================================================================
-# Dispatch Agent 安装（项目级）
+# Dispatch Agent 安装（全局）
 # ============================================================================
 
-# 安装派发 Agent 到当前项目
+# 安装派发 Agent 到用户全局目录
 install_dispatch_agents() {
     info "安装派发 Agent 模板..."
 
@@ -355,9 +355,8 @@ install_dispatch_agents() {
         return 1
     fi
 
-    # 获取目标项目目录（当前工作目录）
-    local target_dir="${TARGET_PROJECT:-$(pwd)}"
-    local agents_dir="$target_dir/.claude/agents"
+    # 安装到用户全局目录
+    local agents_dir="$CLAUDE_HOME/agents"
 
     # 创建 agents 目录
     mkdir -p "$agents_dir"
@@ -371,8 +370,9 @@ install_dispatch_agents() {
     info "  - tanmi-tester.md (任务测试者)"
 
     # 更新安装元信息
-    if [ -f "$PROJECT_ROOT/scripts/update-installation-meta.cjs" ]; then
-        node "$PROJECT_ROOT/scripts/update-installation-meta.cjs" project-update "$target_dir" agents "$VERSION"
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        local version=$(get_package_version)
+        node "$UPDATE_META_SCRIPT" update claudeCode agents "$version"
     fi
 }
 
@@ -380,9 +380,8 @@ install_dispatch_agents() {
 uninstall_dispatch_agents() {
     info "卸载派发 Agent 模板..."
 
-    # 获取目标项目目录
-    local target_dir="${TARGET_PROJECT:-$(pwd)}"
-    local agents_dir="$target_dir/.claude/agents"
+    # 从用户全局目录卸载
+    local agents_dir="$CLAUDE_HOME/agents"
 
     # 删除模板文件
     if [ -f "$agents_dir/tanmi-executor.md" ]; then
@@ -402,8 +401,8 @@ uninstall_dispatch_agents() {
     fi
 
     # 更新安装元信息
-    if [ -f "$PROJECT_ROOT/scripts/update-installation-meta.cjs" ]; then
-        node "$PROJECT_ROOT/scripts/update-installation-meta.cjs" project-remove "$target_dir" agents
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        node "$UPDATE_META_SCRIPT" remove claudeCode agents
     fi
 
     success "派发 Agent 模板已卸载"
@@ -431,7 +430,7 @@ show_menu() {
     echo "  5) 卸载 Cursor Hook"
     echo "  6) 全部 Hook 卸载"
     echo ""
-    echo "派发功能（项目级，安装到当前目录）："
+    echo "派发功能（全局）："
     echo ""
     echo "  7) 安装派发 Agent 模板"
     echo "  8) 卸载派发 Agent 模板"
@@ -515,7 +514,7 @@ main() {
                 echo "  --uninstall-cursor-hooks 卸载 Cursor Hook 系统"
                 echo "  --uninstall-hooks        卸载所有 Hook 系统"
                 echo ""
-                echo "派发 Agent 选项（项目级，安装到当前目录）:"
+                echo "派发 Agent 选项（全局）:"
                 echo "  --dispatch-agents        安装派发 Agent 模板"
                 echo "  --uninstall-dispatch-agents 卸载派发 Agent 模板"
                 echo ""

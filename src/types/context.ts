@@ -55,11 +55,6 @@ export interface ContextGetResult {
   childConclusions: ChildConclusionItem[]; // 子节点结论冒泡
   hint?: string;                // 工作流提示
   guidance?: string;            // 场景感知引导内容（L0 级别）
-  projectWarning?: {            // 项目组件版本警告
-    message: string;
-    installedVersion: string;
-    currentVersion: string;
-  };
 }
 
 // ========== API 输入输出类型 ==========

@@ -7,7 +7,6 @@ import type {
   InstallationMeta,
   PlatformType,
   PlatformInstallation,
-  ProjectInstallation,
 } from "../types/settings.js";
 import { DEFAULT_INSTALLATION_META } from "../types/settings.js";
 
@@ -126,45 +125,11 @@ export class InstallationService {
   }
 
   /**
-   * 更新项目组件安装信息
-   */
-  async updateProject(
-    projectPath: string,
-    info: Partial<ProjectInstallation>
-  ): Promise<InstallationMeta> {
-    const meta = await this.read();
-    const now = new Date().toISOString();
-
-    if (!meta.projects) {
-      meta.projects = {};
-    }
-
-    const existing = meta.projects[projectPath];
-    meta.projects[projectPath] = {
-      installedAt: existing?.installedAt ?? now,
-      version: info.version ?? this.packageVersion,
-      agents: info.agents ?? existing?.agents ?? false,
-      skills: info.skills ?? existing?.skills ?? false,
-    };
-
-    await this.write(meta);
-    return meta;
-  }
-
-  /**
    * 获取指定平台的安装信息
    */
   async getPlatform(platform: PlatformType): Promise<PlatformInstallation | undefined> {
     const meta = await this.read();
     return meta.global.platforms[platform];
-  }
-
-  /**
-   * 获取指定项目的安装信息
-   */
-  async getProject(projectPath: string): Promise<ProjectInstallation | undefined> {
-    const meta = await this.read();
-    return meta.projects?.[projectPath];
   }
 
   /**
@@ -183,29 +148,6 @@ export class InstallationService {
       needsUpdate: installedVersion !== null && installedVersion !== this.packageVersion,
       installedVersion,
       currentVersion: this.packageVersion,
-    };
-  }
-
-  /**
-   * 检查项目组件是否需要更新
-   * 比较已安装版本与当前包版本
-   */
-  async checkProjectUpdate(projectPath: string): Promise<{
-    needsUpdate: boolean;
-    installedVersion: string | null;
-    currentVersion: string;
-    hasAgents: boolean;
-    hasSkills: boolean;
-  }> {
-    const projectInfo = await this.getProject(projectPath);
-    const installedVersion = projectInfo?.version ?? null;
-
-    return {
-      needsUpdate: installedVersion !== null && installedVersion !== this.packageVersion,
-      installedVersion,
-      currentVersion: this.packageVersion,
-      hasAgents: projectInfo?.agents ?? false,
-      hasSkills: projectInfo?.skills ?? false,
     };
   }
 

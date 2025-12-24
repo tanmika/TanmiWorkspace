@@ -67,18 +67,8 @@ export interface PlatformInstallation {
 }
 
 /**
- * 项目组件安装信息
- */
-export interface ProjectInstallation {
-  installedAt: string;  // ISO timestamp
-  version: string;      // 安装时的包版本
-  agents: boolean;      // tanmi-executor + tanmi-tester agents
-  skills: boolean;      // skills 是否已安装（预留）
-}
-
-/**
  * 安装元信息
- * 记录全局和项目级别的组件安装状态
+ * 记录全局组件安装状态
  */
 export interface InstallationMeta {
   schemaVersion: "1.0";
@@ -91,9 +81,6 @@ export interface InstallationMeta {
       cursor?: PlatformInstallation;
       codex?: PlatformInstallation;
     };
-  };
-  projects?: {
-    [projectPath: string]: ProjectInstallation;
   };
 }
 
