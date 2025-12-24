@@ -9,6 +9,10 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.8.2
+    requirement: 修复 npm 包 web/dist 未包含问题
+    conclusion: "- npm 包前端资源: 添加 `web/.npmignore` 覆盖 `web/.gitignore`，确保 `web/dist` 被正确包含"
+    note: ""
   - version: 1.8.1
     requirement: 修复 npm 包前端资源缺失和 pino-pretty 生产环境报错
     conclusion: |-

@@ -11,11 +11,17 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.8.2] - 2025-12-24
+
+### Fixed
+
+- **npm 包前端资源**: 添加 `web/.npmignore` 覆盖 `web/.gitignore`，确保 `web/dist` 被正确包含
+
 ## [1.8.1] - 2025-12-24
 
 ### Fixed
 
-- **npm 包前端资源**: 添加 `.npmignore` 确保 `web/dist` 被正确包含
+- **npm 包前端资源**: 添加 `.npmignore` 确保 `web/dist` 被正确包含（未生效）
 - **生产环境日志**: 修复 pino-pretty 开发依赖在生产环境报错问题
 
 ### Improved
