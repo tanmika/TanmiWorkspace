@@ -1,61 +1,77 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useServiceStore } from '@/stores/service'
+import { useToastStore } from '@/stores/toast'
 
 const serviceStore = useServiceStore()
+const toastStore = useToastStore()
 
-const isVisible = computed(() => !serviceStore.isAvailable)
+const isVisible = computed(() => serviceStore.versionMismatch)
 
-async function handleRetry() {
-  await serviceStore.checkHealth()
-  if (serviceStore.isAvailable) {
-    // 服务恢复，刷新页面
-    window.location.reload()
+async function handleRestart() {
+  try {
+    await navigator.clipboard.writeText('tanmi-workspace webui restart')
+    toastStore.success('命令已复制，请在终端执行')
+  } catch {
+    toastStore.info('请在终端执行: tanmi-workspace webui restart')
   }
+}
+
+function handleRefresh() {
+  window.location.reload()
 }
 </script>
 
 <template>
   <Transition name="fade">
-    <div v-if="isVisible" class="service-unavailable">
+    <div v-if="isVisible" class="version-mismatch">
       <div class="container">
         <!-- 警告图标 -->
         <div class="warning-icon"></div>
 
         <!-- 文案区域 -->
-        <h2 class="service-title">服务未启动</h2>
-        <p class="service-desc">
-          TanmiWorkspace 后端服务当前不可用，<br>
-          请通过以下方式启动：
+        <h2 class="warning-title">版本不匹配</h2>
+        <p class="warning-desc">
+          前后端版本不一致，可能导致功能异常或数据损坏，<br>
+          请通过以下方式同步版本：
         </p>
 
-        <!-- 启动方式 -->
+        <!-- 版本信息 -->
         <div class="method-block">
-          <div class="method-item">
-            <div class="method-title">方式一：通过 MCP 服务启动</div>
-            <div class="method-desc">与链接了 MCP 服务的终端或服务交互，后端会自动启动</div>
+          <div class="version-row">
+            <span class="version-label">前端版本</span>
+            <span class="version-value">{{ serviceStore.frontendVersion }}</span>
           </div>
-          <div class="method-item">
-            <div class="method-title">方式二：手动启动 WebUI 服务</div>
-            <div class="command-block">
-              <span>tanmi-workspace webui</span>
-              <span class="copy-hint">CLICK TO COPY</span>
-            </div>
-            <div class="method-desc" style="margin-top: 8px; margin-bottom: 0;">
-              管理命令：stop (停止) | restart (重启) | status (状态)
-            </div>
+          <div class="version-row">
+            <span class="version-label">后端版本</span>
+            <span class="version-value error">{{ serviceStore.backendVersion }}</span>
           </div>
         </div>
 
-        <!-- 重试按钮 -->
-        <button class="btn" @click="handleRetry">重新检测</button>
+        <!-- 解决方式 -->
+        <div class="method-block">
+          <div class="method-item">
+            <div class="method-title">方式一：重启 WebUI 服务</div>
+            <div class="command-block" @click="handleRestart">
+              <span>tanmi-workspace webui restart</span>
+              <span class="copy-hint">CLICK TO COPY</span>
+            </div>
+          </div>
+          <div class="method-item">
+            <div class="method-title">方式二：重启 AI 编辑器</div>
+            <div class="method-desc">重启 Claude Code / Cursor 以加载新版本 MCP 服务</div>
+          </div>
+        </div>
+
+        <!-- 按钮 -->
+        <button class="btn" @click="handleRefresh">刷新页面</button>
       </div>
     </div>
   </Transition>
 </template>
 
 <style scoped>
-.service-unavailable {
+.version-mismatch {
   position: fixed;
   top: 0;
   left: 0;
@@ -65,7 +81,7 @@ async function handleRetry() {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 10000;
 }
 
 .container {
@@ -79,7 +95,7 @@ async function handleRetry() {
 .warning-icon {
   width: 64px;
   height: 64px;
-  border: 4px solid var(--accent-orange, #F59E0B);
+  border: 4px solid var(--accent-red, #E53E3E);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -90,21 +106,20 @@ async function handleRetry() {
   font-family: var(--mono-font);
   font-size: 32px;
   font-weight: 900;
-  color: var(--accent-orange, #F59E0B);
+  color: var(--accent-red, #E53E3E);
 }
 
 /* 标题 */
-.service-title {
+.warning-title {
   font-size: 24px;
   font-weight: 700;
   margin: 0 0 12px 0;
-  text-transform: uppercase;
   letter-spacing: 2px;
   color: var(--text-main);
 }
 
 /* 描述 */
-.service-desc {
+.warning-desc {
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0 0 32px 0;
@@ -148,7 +163,28 @@ async function handleRetry() {
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
-  margin-bottom: 12px;
+}
+
+/* 版本信息行 */
+.version-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.version-label {
+  color: var(--text-secondary);
+}
+
+.version-value {
+  font-family: var(--mono-font);
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.version-value.error {
+  color: var(--accent-red, #E53E3E);
 }
 
 /* 命令块 */
@@ -158,11 +194,12 @@ async function handleRetry() {
   font-family: var(--mono-font);
   font-size: 13px;
   color: #d4d4d4;
-  border-left: 4px solid var(--accent-orange, #F59E0B);
+  border-left: 4px solid var(--accent-red, #E53E3E);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
+  cursor: pointer;
 }
 .command-block .copy-hint {
   font-size: 10px;
@@ -198,7 +235,7 @@ async function handleRetry() {
 }
 
 /* 深色模式 */
-[data-theme="dark"] .service-unavailable {
+[data-theme="dark"] .version-mismatch {
   background: rgba(26, 26, 26, 0.98);
 }
 

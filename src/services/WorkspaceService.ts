@@ -40,11 +40,11 @@ import { devLog } from "../utils/devLog.js";
 
 /**
  * 获取 HTTP 服务端口
- * 开发模式默认 3001，正式模式默认 3000
+ * 开发模式默认 19541，正式模式默认 19540
  */
 function getHttpPort(): number {
   const isDev = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
-  const defaultPort = isDev ? "3001" : "3000";
+  const defaultPort = isDev ? "19541" : "19540";
   return parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? defaultPort, 10);
 }
 

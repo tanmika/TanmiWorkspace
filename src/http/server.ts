@@ -236,7 +236,7 @@ export async function createServer(): Promise<FastifyInstance> {
 /**
  * 启动服务器
  */
-export async function startServer(port: number = 3000): Promise<FastifyInstance> {
+export async function startServer(port: number = 19540): Promise<FastifyInstance> {
   const server = await createServer();
   const modeLabel = IS_DEV ? "[DEV]" : "[PROD]";
   const dataDir = IS_DEV ? ".tanmi-workspace-dev" : ".tanmi-workspace";

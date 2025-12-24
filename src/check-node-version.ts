@@ -72,10 +72,39 @@ checkForUpdates();
 // 检查子命令
 const subcommand = process.argv[2];
 
-if (subcommand === "setup") {
-  // 执行 setup 命令
-  import("./cli/setup.js").then((m) => m.default());
-} else {
-  // 版本检查通过，加载主模块
-  import("./index.js");
+switch (subcommand) {
+  case "setup":
+    // 执行 setup 命令
+    import("./cli/setup.js").then((m) => m.default());
+    break;
+  case "webui":
+    // 执行 webui 命令
+    import("./cli/webui.js").then((m) => m.default());
+    break;
+  case "help":
+  case "--help":
+  case "-h":
+    console.log(`
+TanmiWorkspace - AI 工作区管理系统
+
+用法: tanmi-workspace [command]
+
+命令:
+  (无)      启动 MCP 服务器 (供 Claude Code/Cursor 调用)
+  webui     启动/管理 WebUI 服务
+  setup     交互式安装配置
+
+WebUI 子命令:
+  tanmi-workspace webui          启动 WebUI
+  tanmi-workspace webui stop     停止 WebUI
+  tanmi-workspace webui status   查看状态
+
+更多帮助:
+  tanmi-workspace webui help     WebUI 详细帮助
+  tanmi-workspace setup          安装向导
+`);
+    break;
+  default:
+    // 版本检查通过，加载主模块 (MCP Server)
+    import("./index.js");
 }
