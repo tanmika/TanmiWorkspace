@@ -1,0 +1,16 @@
+{
+  "$schema": "./component-versions.schema.json",
+  "description": "组件最低版本要求配置 - 仅当用户安装版本低于此处指定版本时才提示更新",
+  "claudeCode": {
+    "mcp": "1.0.0",
+    "hooks": "1.8.0",
+    "agents": "1.8.0",
+    "skills": "1.0.0"
+  },
+  "cursor": {
+    "mcp": "1.0.0",
+    "hooks": "1.0.0",
+    "agents": "1.0.0",
+    "skills": "1.0.0"
+  }
+}

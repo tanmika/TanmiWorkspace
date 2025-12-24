@@ -22,8 +22,12 @@ if [ ! -d "$PROJECT_ROOT/plugin/scripts" ]; then
     fi
 fi
 
-# 全局安装目录
-TANMI_HOME="$HOME/.tanmi-workspace"
+# 全局安装目录（支持开发环境）
+if [ "$TANMI_DEV" = "true" ]; then
+    TANMI_HOME="$HOME/.tanmi-workspace-dev"
+else
+    TANMI_HOME="$HOME/.tanmi-workspace"
+fi
 TANMI_SCRIPTS="$TANMI_HOME/scripts"
 TANMI_SHARED="$TANMI_SCRIPTS/shared"
 

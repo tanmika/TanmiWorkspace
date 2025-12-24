@@ -1,9 +1,35 @@
 // src/http/routes/config.ts
 // 全局配置相关 API 路由
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getServices } from "../services.js";
 import type { ConfigSetParams } from "../../types/settings.js";
+
+// 组件最低版本配置类型
+interface ComponentVersionsConfig {
+  claudeCode: Record<string, string>;
+  cursor: Record<string, string>;
+}
+
+// 加载组件最低版本配置
+function loadComponentVersions(): ComponentVersionsConfig {
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    // 从 dist/http/routes/ 回到项目根目录的 config/
+    const configPath = path.join(__dirname, "..", "..", "..", "config", "component-versions.json");
+    const content = readFileSync(configPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    // 如果配置文件不存在，返回空配置（不会触发任何过期提示）
+    return {
+      claudeCode: {},
+      cursor: {},
+    };
+  }
+}
 
 // 请求类型定义
 interface ConfigUpdateBody {
@@ -68,6 +94,7 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get("/installation-status", async () => {
     const meta = await services.installation.read();
     const currentVersion = services.installation.getPackageVersion();
+    const componentVersions = loadComponentVersions();
 
     // 组件状态类型
     type ComponentStatus = {
@@ -84,23 +111,32 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
     });
 
     // 构建组件状态
+    // minVersion: 该组件的最低要求版本，来自 component-versions.json
     const buildComponentStatus = (
-      compInfo: { installed?: boolean; version?: string } | boolean | undefined
+      compInfo: { installed?: boolean; version?: string } | boolean | undefined,
+      minVersion: string | undefined
     ): ComponentStatus => {
-      // 兼容旧格式（boolean）：已安装的统一标记为过期
+      // 兼容旧格式（boolean）：已安装但无版本信息
+      // 只有当 minVersion > 1.0.0 时才标记为过期（说明该组件有重要更新）
       if (typeof compInfo === "boolean") {
+        const outdated = minVersion ? isVersionLessThan("1.0.0", minVersion) : false;
         return compInfo
-          ? { installed: true, version: null, outdated: true }
+          ? { installed: true, version: null, outdated }
           : defaultComponent();
       }
       // 新格式
       if (!compInfo?.installed) {
         return defaultComponent();
       }
+      // 如果没有配置最低版本，则不显示过期
+      // 如果有最低版本，则比较用户版本是否低于最低版本
+      const outdated = minVersion
+        ? isVersionLessThan(compInfo.version || null, minVersion)
+        : false;
       return {
         installed: true,
         version: compInfo.version || null,
-        outdated: isVersionLessThan(compInfo.version || null, currentVersion),
+        outdated,
       };
     };
 
@@ -131,12 +167,13 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
     // 填充实际数据
     for (const [key, platform] of Object.entries(platforms)) {
       const info = meta.global.platforms[key as keyof typeof meta.global.platforms];
+      const versions = componentVersions[key as keyof ComponentVersionsConfig] || {};
       if (info?.enabled) {
         platform.enabled = true;
-        platform.components.mcp = buildComponentStatus(info.components.mcp);
-        platform.components.hooks = buildComponentStatus(info.components.hooks);
-        platform.components.agents = buildComponentStatus(info.components.agents);
-        platform.components.skills = buildComponentStatus(info.components.skills);
+        platform.components.mcp = buildComponentStatus(info.components.mcp, versions.mcp);
+        platform.components.hooks = buildComponentStatus(info.components.hooks, versions.hooks);
+        platform.components.agents = buildComponentStatus(info.components.agents, versions.agents);
+        platform.components.skills = buildComponentStatus(info.components.skills, versions.skills);
       }
     }
 

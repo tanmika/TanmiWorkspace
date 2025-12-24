@@ -7,11 +7,16 @@
 import { select, confirm } from "@inquirer/prompts";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { execSync, exec } from "child_process";
 import { promisify } from "util";
+import { fileURLToPath } from "url";
 
 const execAsync = promisify(exec);
+
+// ES module 兼容：获取当前文件目录
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // 路径配置
 const HOME = homedir();
@@ -39,7 +44,8 @@ const colors = {
 // 获取包版本
 function getPackageVersion(): string {
   try {
-    const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
+    // __dirname = dist/cli/, 所以需要 ../../ 到项目根目录
+    const pkg = JSON.parse(readFileSync(join(__dirname, "..", "..", "package.json"), "utf-8"));
     return pkg.version || "0.0.0";
   } catch {
     return "0.0.0";

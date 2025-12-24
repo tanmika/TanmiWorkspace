@@ -89,13 +89,6 @@ function hasOutdatedComponent(platform: PlatformStatus): boolean {
   return comps.mcp.outdated || comps.hooks.outdated || comps.agents.outdated || comps.skills.outdated
 }
 
-// 获取组件徽章样式类
-function getComponentClass(comp: ComponentStatus): string {
-  if (!comp.installed) return ''
-  if (comp.outdated) return 'active outdated'
-  return 'active'
-}
-
 // 获取状态指示器样式类
 function getIndicatorClass(comp: ComponentStatus): string {
   if (!comp.installed) return 'not-installed'
@@ -253,6 +246,91 @@ async function handleVersionClick() {
         </div>
       </div>
 
+      <!-- 插件详情 -->
+      <div class="setting-section plugin-section">
+        <div class="setting-section-title">插件详情</div>
+        <div class="setting-section-desc">
+          各平台的组件安装状态
+        </div>
+
+        <div v-if="installationStatus" class="platform-grid">
+          <!-- Claude Code -->
+          <div class="platform-card">
+            <div class="platform-label">
+              <span class="platform-name">CLAUDE CODE</span>
+              <span
+                class="platform-status"
+                :class="{
+                  installed: installationStatus.platforms.claudeCode.enabled && !hasOutdatedComponent(installationStatus.platforms.claudeCode),
+                  outdated: installationStatus.platforms.claudeCode.enabled && hasOutdatedComponent(installationStatus.platforms.claudeCode),
+                  disabled: !installationStatus.platforms.claudeCode.enabled
+                }"
+              >
+                {{ !installationStatus.platforms.claudeCode.enabled ? 'NOT INSTALLED' : (hasOutdatedComponent(installationStatus.platforms.claudeCode) ? 'UPDATE' : 'INSTALLED') }}
+              </span>
+            </div>
+            <div class="component-box">
+              <div
+                v-for="comp in ['mcp', 'hooks', 'agents', 'skills']"
+                :key="comp"
+                class="component-cell"
+              >
+                <span
+                  class="status-block"
+                  :class="getIndicatorClass(installationStatus.platforms.claudeCode.components[comp as keyof typeof installationStatus.platforms.claudeCode.components])"
+                ></span>
+                <span
+                  class="component-name"
+                  :class="getIndicatorClass(installationStatus.platforms.claudeCode.components[comp as keyof typeof installationStatus.platforms.claudeCode.components])"
+                >{{ comp.charAt(0).toUpperCase() + comp.slice(1) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cursor -->
+          <div class="platform-card">
+            <div class="platform-label">
+              <span class="platform-name">CURSOR</span>
+              <span
+                class="platform-status"
+                :class="{
+                  installed: installationStatus.platforms.cursor.enabled && !hasOutdatedComponent(installationStatus.platforms.cursor),
+                  outdated: installationStatus.platforms.cursor.enabled && hasOutdatedComponent(installationStatus.platforms.cursor),
+                  disabled: !installationStatus.platforms.cursor.enabled
+                }"
+              >
+                {{ !installationStatus.platforms.cursor.enabled ? 'NOT INSTALLED' : (hasOutdatedComponent(installationStatus.platforms.cursor) ? 'UPDATE' : 'INSTALLED') }}
+              </span>
+            </div>
+            <div class="component-box">
+              <div
+                v-for="comp in ['mcp', 'hooks', 'agents', 'skills']"
+                :key="comp"
+                class="component-cell"
+              >
+                <span
+                  class="status-block"
+                  :class="getIndicatorClass(installationStatus.platforms.cursor.components[comp as keyof typeof installationStatus.platforms.cursor.components])"
+                ></span>
+                <span
+                  class="component-name"
+                  :class="getIndicatorClass(installationStatus.platforms.cursor.components[comp as keyof typeof installationStatus.platforms.cursor.components])"
+                >{{ comp.charAt(0).toUpperCase() + comp.slice(1) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="plugin-loading">
+          加载中...
+        </div>
+
+        <div class="command-bar">
+          <span class="command-label">插件安装方式</span>
+          <span class="command-text">npx tanmi-workspace setup</span>
+        </div>
+      </div>
+
       <!-- 版本信息 -->
       <div class="setting-section version-section">
         <div class="setting-section-title">版本信息</div>
@@ -293,83 +371,6 @@ async function handleVersionClick() {
           class="spec-warning"
         >
           [WARN] 前后端编译时间不一致，若为版本更新后需要指示 AI 重新编译前后端
-        </div>
-      </div>
-
-      <!-- 插件详情 -->
-      <div class="setting-section plugin-section">
-        <div class="setting-section-title">插件详情</div>
-        <div class="setting-section-desc">
-          各平台的 TanmiWorkspace 组件安装状态
-        </div>
-
-        <div v-if="installationStatus" class="platform-grid">
-          <!-- Claude Code -->
-          <div
-            class="platform-card"
-            :class="{ enabled: installationStatus.platforms.claudeCode.enabled }"
-          >
-            <div class="platform-header">
-              <span class="platform-name">Claude Code</span>
-              <span
-                v-if="installationStatus.platforms.claudeCode.enabled"
-                class="platform-status"
-                :class="{ outdated: hasOutdatedComponent(installationStatus.platforms.claudeCode) }"
-              >
-                {{ hasOutdatedComponent(installationStatus.platforms.claudeCode) ? '需更新' : '已安装' }}
-              </span>
-              <span v-else class="platform-status disabled">未安装</span>
-            </div>
-            <div class="component-grid">
-              <span
-                v-for="comp in ['mcp', 'hooks', 'agents', 'skills']"
-                :key="comp"
-                class="component-item"
-                :class="getComponentClass(installationStatus.platforms.claudeCode.components[comp as keyof typeof installationStatus.platforms.claudeCode.components])"
-              >
-                <span class="status-indicator" :class="getIndicatorClass(installationStatus.platforms.claudeCode.components[comp as keyof typeof installationStatus.platforms.claudeCode.components])"></span>
-                {{ comp.charAt(0).toUpperCase() + comp.slice(1) }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Cursor -->
-          <div
-            class="platform-card"
-            :class="{ enabled: installationStatus.platforms.cursor.enabled }"
-          >
-            <div class="platform-header">
-              <span class="platform-name">Cursor</span>
-              <span
-                v-if="installationStatus.platforms.cursor.enabled"
-                class="platform-status"
-                :class="{ outdated: hasOutdatedComponent(installationStatus.platforms.cursor) }"
-              >
-                {{ hasOutdatedComponent(installationStatus.platforms.cursor) ? '需更新' : '已安装' }}
-              </span>
-              <span v-else class="platform-status disabled">未安装</span>
-            </div>
-            <div class="component-grid">
-              <span
-                v-for="comp in ['mcp', 'hooks', 'agents', 'skills']"
-                :key="comp"
-                class="component-item"
-                :class="getComponentClass(installationStatus.platforms.cursor.components[comp as keyof typeof installationStatus.platforms.cursor.components])"
-              >
-                <span class="status-indicator" :class="getIndicatorClass(installationStatus.platforms.cursor.components[comp as keyof typeof installationStatus.platforms.cursor.components])"></span>
-                {{ comp.charAt(0).toUpperCase() + comp.slice(1) }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div v-else class="plugin-loading">
-          加载中...
-        </div>
-
-        <div class="update-hint">
-          <span class="hint-label">更新命令</span>
-          <code class="hint-code">bash ~/.tanmi-workspace/scripts/install-global.sh</code>
         </div>
       </div>
     </div>
@@ -661,128 +662,6 @@ async function handleVersionClick() {
   padding-top: 20px;
 }
 
-.platform-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.platform-card {
-  border: 1px solid var(--border-color);
-  padding: 12px;
-  background: var(--card-bg);
-  opacity: 0.6;
-  transition: all 0.2s ease;
-}
-
-.platform-card.enabled {
-  opacity: 1;
-  border-color: var(--border-heavy);
-}
-
-.platform-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.platform-name {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text-main);
-}
-
-.platform-status {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 2px;
-  font-family: var(--mono-font);
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-[data-theme="dark"] .platform-status {
-  background: #1b3d1f;
-  color: #81c784;
-}
-
-.platform-status.outdated {
-  background: #fff3e0;
-  color: #e65100;
-}
-
-[data-theme="dark"] .platform-status.outdated {
-  background: #3d2a10;
-  color: #ffb74d;
-}
-
-.platform-status.disabled {
-  background: var(--path-bg);
-  color: var(--text-muted);
-}
-
-/* 组件网格（2x2 布局） */
-.component-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.component-item {
-  display: flex;
-  align-items: center;
-  font-size: 11px;
-  padding: 4px 8px;
-  background: var(--path-bg);
-  color: var(--text-muted);
-  font-family: var(--mono-font);
-}
-
-/* 状态指示器（8x8 小方块） */
-.status-indicator {
-  width: 8px;
-  height: 8px;
-  margin-right: 6px;
-  flex-shrink: 0;
-}
-
-.status-indicator.installed {
-  background: var(--accent-blue);
-}
-
-.status-indicator.outdated {
-  background: #f59e0b;
-}
-
-.status-indicator.not-installed {
-  border: 1px solid var(--text-muted);
-  background: transparent;
-}
-
-/* 已安装状态 */
-.component-item.active {
-  background: #e3f2fd;
-  color: #1565c0;
-}
-
-[data-theme="dark"] .component-item.active {
-  background: #0d2137;
-  color: #64b5f6;
-}
-
-/* 过期状态 */
-.component-item.outdated {
-  background: #fff7ed;
-  color: #c2410c;
-}
-
-[data-theme="dark"] .component-item.outdated {
-  background: #431407;
-  color: #fb923c;
-}
-
 .plugin-loading {
   text-align: center;
   color: var(--text-muted);
@@ -790,24 +669,169 @@ async function handleVersionClick() {
   font-size: 13px;
 }
 
-.update-hint {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
-.hint-label {
+/* 平台卡片：无边框容器 */
+.platform-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 平台标签行：名称 + 状态 */
+.platform-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+}
+
+/* 平台名称：小号粗体 */
+.platform-name {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+/* 平台状态标签 */
+.platform-status {
+  font-family: var(--mono-font);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  letter-spacing: 0.3px;
+}
+
+/* 已安装：黑底白字 */
+.platform-status.installed {
+  background: #000;
+  color: #fff;
+}
+
+[data-theme="dark"] .platform-status.installed {
+  background: #fff;
+  color: #000;
+}
+
+/* 需更新：红底白字 */
+.platform-status.outdated {
+  background: #D92424;
+  color: #fff;
+}
+
+/* 未安装：灰色 */
+.platform-status.disabled {
+  background: transparent;
+  color: #999;
+  border: 1px solid #ccc;
+}
+
+[data-theme="dark"] .platform-status.disabled {
+  color: #666;
+  border-color: #444;
+}
+
+/* 组件框：细灰边框，无内部分割 */
+.component-box {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+}
+
+[data-theme="dark"] .component-box {
+  border-color: #444;
+}
+
+/* 单元格：无边框 */
+.component-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 状态方块：8x8 */
+.status-block {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+/* 已安装：实心黑色方块 */
+.status-block.installed {
+  background: #000;
+}
+
+[data-theme="dark"] .status-block.installed {
+  background: #fff;
+}
+
+/* 需更新：实心红色方块 */
+.status-block.outdated {
+  background: #D92424;
+}
+
+/* 未安装：空心方块 */
+.status-block.not-installed {
+  background: transparent;
+  border: 1px solid #bbb;
+}
+
+[data-theme="dark"] .status-block.not-installed {
+  border-color: #555;
+}
+
+/* 组件名称 */
+.component-name {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  color: #000;
+}
+
+[data-theme="dark"] .component-name {
+  color: #fff;
+}
+
+.component-name.outdated {
+  color: #D92424;
+}
+
+.component-name.not-installed {
+  color: #999;
+}
+
+[data-theme="dark"] .component-name.not-installed {
+  color: #666;
+}
+
+/* 命令栏：引用风格 */
+.command-bar {
+  margin-top: 12px;
+  padding-left: 12px;
+  border-left: 2px solid #ddd;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+[data-theme="dark"] .command-bar {
+  border-left-color: #444;
+}
+
+.command-label {
+  font-size: 10px;
   color: var(--text-muted);
 }
 
-.hint-code {
+.command-text {
   font-family: var(--mono-font);
-  background: var(--path-bg);
-  padding: 4px 8px;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
   font-size: 11px;
+  color: var(--text-secondary);
 }
 </style>
