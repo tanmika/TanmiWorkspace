@@ -100,7 +100,7 @@ export const CORE_WORKFLOW = `
     ↓
 在信息收集节点中：
   - 扫描项目根目录一级菜单，分析结构
-  - 查找文档文件夹(./Doc/, ./docs/, ./documentation/)
+  - 查找文档文件夹(./Doc/, ./assets/, ./documentation/)
   - 查找规则文件夹(./RULE/, ./rules/)
   - 阅读 README 和项目配置
   - 收集环境配置、路径信息等
@@ -471,8 +471,8 @@ node_transition({
 - 测试覆盖率 > 80%
 
 ## 文档
-- ./docs/API.md: API 设计文档
-- ./docs/架构.md: 系统架构说明
+- ./assets/API.md: API 设计文档
+- ./assets/架构.md: 系统架构说明
 \`
 })
 // 系统会自动将规则和文档追加到工作区
@@ -830,7 +830,7 @@ node_create({
   title: "实现登录 API",
   requirement: "实现用户名密码登录接口",
   docs: [
-    { path: "./docs/api-spec.md", description: "API 规范文档" },
+    { path: "./assets/api-spec.md", description: "API 规范文档" },
     { path: "./src/auth/types.ts", description: "认证类型定义" }
   ]
 })

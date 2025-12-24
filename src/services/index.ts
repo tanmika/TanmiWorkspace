@@ -10,6 +10,7 @@ export { SessionService } from "./SessionService.js";
 export { GuidanceService } from "./GuidanceService.js";
 export { DispatchService } from "./DispatchService.js";
 export { ConfigService } from "./ConfigService.js";
+export { MemoService } from "./MemoService.js";
 export type {
   DispatchPrepareResult,
   DispatchCompleteResult,

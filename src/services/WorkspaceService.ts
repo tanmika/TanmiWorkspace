@@ -523,10 +523,35 @@ export class WorkspaceService {
       output = await this.generateBoxStatus(projectRoot, wsDirName, config, graph, workspaceMdData, summary, isArchived);
     }
 
+    // 收集 memo 信息
+    const memosIndex = graph.memos || {};
+    const memosList = Object.values(memosIndex);
+
+    // 收集所有已使用的 tags
+    const allTagsSet = new Set<string>();
+    memosList.forEach(memo => {
+      memo.tags.forEach(tag => allTagsSet.add(tag));
+    });
+    const allTags = Array.from(allTagsSet).sort();
+
+    // 按更新时间倒序排序
+    memosList.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
     return {
       output,
       summary,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
+      memos: memosList.length > 0 ? {
+        items: memosList.map(m => ({
+          id: m.id,
+          title: m.title,
+          summary: m.summary,
+          tags: m.tags,
+          updatedAt: m.updatedAt,
+        })),
+        allTags,
+        totalCount: memosList.length,
+      } : undefined,
     };
   }
 

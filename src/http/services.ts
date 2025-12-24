@@ -14,6 +14,7 @@ import { LogService } from "../services/LogService.js";
 import { SessionService } from "../services/SessionService.js";
 import { DispatchService } from "../services/DispatchService.js";
 import { ConfigService } from "../services/ConfigService.js";
+import { MemoService } from "../services/MemoService.js";
 import { TutorialService } from "../services/TutorialService.js";
 import { HelpService } from "../tools/help.js";
 
@@ -31,6 +32,7 @@ export interface Services {
   session: SessionService;
   dispatch: DispatchService;
   config: ConfigService;
+  memo: MemoService;
   tutorial: TutorialService;
   help: HelpService;
 }
@@ -62,12 +64,15 @@ export function createServices(): Services {
   workspace.setStateService(state);
   node.setStateService(state);
 
-  // 设置 WorkspaceService 依赖（用于清除手动变更）
-  context.setWorkspaceService(workspace);
-
   const log = new LogService(json, md, fs);
   const reference = new ReferenceService(json, md, fs);
   const dispatch = new DispatchService(json, md, fs, config);
+  const memo = new MemoService(json, md, fs);
+
+  // 设置 WorkspaceService 依赖（用于清除手动变更）
+  context.setWorkspaceService(workspace);
+  // 设置 MemoService 依赖（用于获取 memo 内容）
+  context.setMemoService(memo);
   const tutorial = new TutorialService(workspace, node, state, log, context, reference, dispatch, config);
 
   servicesInstance = {
@@ -84,6 +89,7 @@ export function createServices(): Services {
     session: new SessionService(sessionStorage, json, md, fs),
     dispatch,
     config,
+    memo,
     tutorial,
     help: new HelpService(),
   };

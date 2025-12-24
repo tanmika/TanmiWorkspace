@@ -14,6 +14,7 @@ import type {
   ChildConclusionItem,
   DocRefWithStatus,
   TypedLogEntry,
+  MemoReferenceItem,
 } from "../types/context.js";
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
@@ -28,6 +29,7 @@ import type { GuidanceContext } from "../types/guidance.js";
 export class ContextService {
   private guidanceService: GuidanceService;
   private workspaceService?: any; // WorkspaceService - 避免循环依赖，通过 setter 注入
+  private memoService?: any; // MemoService - 通过 setter 注入
 
   constructor(
     private json: JsonStorage,
@@ -42,6 +44,13 @@ export class ContextService {
    */
   setWorkspaceService(workspaceService: any): void {
     this.workspaceService = workspaceService;
+  }
+
+  /**
+   * 设置 MemoService 依赖（用于获取 memo 内容）
+   */
+  setMemoService(memoService: any): void {
+    this.memoService = memoService;
   }
 
   /**
@@ -99,12 +108,36 @@ export class ContextService {
       reverseLog,
     }, isArchived);
 
-    // 5. 收集跨节点引用
+    // 5. 收集跨节点引用和 memo 引用
     const nodeMeta = graph.nodes[nodeId];
     const references: ContextChainItem[] = [];
-    for (const refNodeId of nodeMeta.references) {
-      if (graph.nodes[refNodeId]) {
-        const refItem = await this.buildSingleContextItem(projectRoot, wsDirName, refNodeId, graph, {
+    const memoReferences: MemoReferenceItem[] = [];
+
+    for (const ref of nodeMeta.references) {
+      // 检查是否为 memo 引用
+      if (ref.startsWith("memo://")) {
+        const memoId = ref.substring(7); // 去掉 "memo://" 前缀
+        try {
+          if (this.memoService) {
+            const memoResult = await this.memoService.get({
+              workspaceId,
+              memoId,
+            });
+            memoReferences.push({
+              memoId: memoResult.memo.id,
+              title: memoResult.memo.title,
+              summary: memoResult.memo.summary,
+              content: memoResult.memo.content,
+              tags: memoResult.memo.tags,
+            });
+          }
+        } catch (error) {
+          // Memo 不存在或读取失败，跳过
+          devLog.warn("获取 memo 失败", { memoId, error });
+        }
+      } else if (graph.nodes[ref]) {
+        // 节点引用
+        const refItem = await this.buildSingleContextItem(projectRoot, wsDirName, ref, graph, {
           includeLog,
           maxLogEntries,
           includeProblem,
@@ -175,6 +208,7 @@ export class ContextService {
       },
       chain,
       references,
+      memoReferences,
       childConclusions,
       hint,
       guidance: guidance.content,

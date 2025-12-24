@@ -25,6 +25,13 @@ export function generateNodeId(): string {
 }
 
 /**
+ * 生成备忘 ID
+ */
+export function generateMemoId(): string {
+  return `memo-${generateId()}`;
+}
+
+/**
  * 从 ID 中提取短 ID（时间戳部分，8位）
  * @param id 完整 ID（如 ws-mjb65az5-0wcjuu 或 node-mjb6mj4h-a60yht）
  * @returns 短 ID（如 mjb65az5）

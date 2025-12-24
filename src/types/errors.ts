@@ -31,6 +31,9 @@ export const ErrorCodes = {
   REFERENCE_NOT_FOUND: "REFERENCE_NOT_FOUND",
   REFERENCE_EXISTS: "REFERENCE_EXISTS",
 
+  // 备忘错误
+  MEMO_NOT_FOUND: "MEMO_NOT_FOUND",
+
   // 日志错误
   LOG_APPEND_FAILED: "LOG_APPEND_FAILED",
 
@@ -109,6 +112,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   CONFIRMATION_MISMATCH: "confirmation token 对应的节点不匹配",
   REFERENCE_NOT_FOUND: "引用不存在",
   REFERENCE_EXISTS: "引用已存在",
+  MEMO_NOT_FOUND: "备忘不存在",
   LOG_APPEND_FAILED: "日志追加失败",
   INVALID_NODE_TYPE: "节点类型无效，必须是 planning 或 execution",
   EXECUTION_CANNOT_HAVE_CHILDREN: "执行节点不能创建子节点",

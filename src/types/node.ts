@@ -110,6 +110,7 @@ export interface NodeGraph {
   version: string;
   currentFocus: string | null;      // 当前聚焦的节点 ID
   nodes: Record<string, NodeMeta>;
+  memos?: Record<string, import("./memo.js").MemoListItem>;  // 备忘索引（可选）
 }
 
 /**

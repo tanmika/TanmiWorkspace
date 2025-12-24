@@ -274,6 +274,17 @@ export interface WorkspaceStatusResult {
     currentFocus: string | null;
   };
   webUrl: string;                     // Web UI 访问地址
+  memos?: {                           // 备忘信息（可选）
+    items: Array<{
+      id: string;
+      title: string;
+      summary: string;
+      tags: string[];
+      updatedAt: string;
+    }>;
+    allTags: string[];                // 所有已使用的标签
+    totalCount: number;               // 备忘总数
+  };
 }
 
 /**

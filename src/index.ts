@@ -26,6 +26,7 @@ import { helpTools, type HelpTopic, type PromptTemplate } from "./tools/help.js"
 import { importTools } from "./tools/import.js";
 import { dispatchTools } from "./tools/dispatch.js";
 import { configTools } from "./tools/config.js";
+import { memoTools } from "./tools/memo.js";
 import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
@@ -116,6 +117,7 @@ function createMcpServer(services: Services): Server {
       ...importTools,
       ...dispatchTools,
       ...configTools,
+      ...memoTools,
     ],
   }));
 
@@ -495,6 +497,54 @@ function createMcpServer(services: Services): Server {
         case "config_set": {
           const defaultDispatchMode = args?.defaultDispatchMode as "none" | "git" | "no-git" | undefined;
           result = await services.config.set({ defaultDispatchMode });
+          break;
+        }
+
+        // Memo 工具
+        case "memo_create": {
+          result = await services.memo.create({
+            workspaceId: args?.workspaceId as string,
+            title: args?.title as string,
+            summary: args?.summary as string,
+            content: args?.content as string,
+            tags: args?.tags as string[] | undefined,
+          });
+          break;
+        }
+
+        case "memo_list": {
+          result = await services.memo.list({
+            workspaceId: args?.workspaceId as string,
+            tags: args?.tags as string[] | undefined,
+          });
+          break;
+        }
+
+        case "memo_get": {
+          result = await services.memo.get({
+            workspaceId: args?.workspaceId as string,
+            memoId: args?.memoId as string,
+          });
+          break;
+        }
+
+        case "memo_update": {
+          result = await services.memo.update({
+            workspaceId: args?.workspaceId as string,
+            memoId: args?.memoId as string,
+            title: args?.title as string | undefined,
+            summary: args?.summary as string | undefined,
+            content: args?.content as string | undefined,
+            tags: args?.tags as string[] | undefined,
+          });
+          break;
+        }
+
+        case "memo_delete": {
+          result = await services.memo.delete({
+            workspaceId: args?.workspaceId as string,
+            memoId: args?.memoId as string,
+          });
           break;
         }
 

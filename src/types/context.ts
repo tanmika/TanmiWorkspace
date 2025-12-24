@@ -47,6 +47,17 @@ export interface ChildConclusionItem {
 }
 
 /**
+ * Memo 引用项
+ */
+export interface MemoReferenceItem {
+  memoId: string;
+  title: string;
+  summary: string;
+  content: string;
+  tags: string[];
+}
+
+/**
  * context_get 结果
  */
 export interface ContextGetResult {
@@ -59,6 +70,7 @@ export interface ContextGetResult {
   };
   chain: ContextChainItem[];   // 从根到当前节点的上下文链
   references: ContextChainItem[]; // 跨节点引用（仅 active）
+  memoReferences: MemoReferenceItem[]; // Memo 引用
   childConclusions: ChildConclusionItem[]; // 子节点结论冒泡
   hint?: string;                // 工作流提示
   guidance?: string;            // 场景感知引导内容（L0 级别）

@@ -169,6 +169,26 @@ export class FileSystemAdapter {
     return path.join(projectRoot, this.localDirName, wsDirName, "nodes");
   }
 
+  // ========== 备忘路径方法 ==========
+
+  /**
+   * 获取备忘目录路径
+   * @param wsDirName 工作区目录名
+   * @param memoId 备忘 ID
+   */
+  getMemoDir(projectRoot: string, wsDirName: string, memoId: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "memos", memoId);
+  }
+
+  /**
+   * 获取备忘内容文件路径
+   * @param wsDirName 工作区目录名
+   * @param memoId 备忘 ID
+   */
+  getMemoContentPath(projectRoot: string, wsDirName: string, memoId: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "memos", memoId, "Content.md");
+  }
+
   // ========== 归档路径方法 ==========
 
   /**
@@ -323,6 +343,20 @@ export class FileSystemAdapter {
    */
   async deleteFile(filePath: string): Promise<void> {
     await fs.unlink(filePath);
+  }
+
+  /**
+   * 确保目录存在（通用方法）
+   */
+  async ensureDir(dirPath: string): Promise<void> {
+    await this.mkdir(dirPath);
+  }
+
+  /**
+   * 删除目录或文件（通用方法）
+   */
+  async remove(targetPath: string): Promise<void> {
+    await this.rmdir(targetPath);
   }
 
   // ========== 初始化 ==========

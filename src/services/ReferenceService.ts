@@ -108,23 +108,40 @@ export class ReferenceService {
     const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, wsDirName, nodeDirName);
     let docs = nodeInfo.docsWithStatus;
 
-    // 4. 判断是节点引用还是文档引用
-    const isNodeReference = graph.nodes[targetIdOrPath] !== undefined;
+    // 4. 判断引用类型：节点引用、备忘引用或文档引用
+    const isMemoReference = targetIdOrPath.startsWith("memo://");
+    let isNodeReference = false;
+
+    if (isMemoReference) {
+      // 提取 memo ID 并验证备忘是否存在
+      const memoId = targetIdOrPath.substring(7); // 去掉 "memo://" 前缀
+      const memosIndex = graph.memos || {};
+      if (!memosIndex[memoId]) {
+        throw new TanmiError("MEMO_NOT_FOUND", `备忘 "${memoId}" 不存在`);
+      }
+    } else {
+      // 检查是否是节点引用
+      isNodeReference = graph.nodes[targetIdOrPath] !== undefined;
+    }
 
     // 5. 根据 action 执行操作
     switch (action) {
       case "add":
-        docs = this.addReference(docs, targetIdOrPath, description || "", isNodeReference);
+        docs = this.addReference(docs, targetIdOrPath, description || "", isNodeReference, isMemoReference);
         // 如果是节点引用，同步更新 graph.json 的 references 数组
         if (isNodeReference && !nodeMeta.references.includes(targetIdOrPath)) {
+          nodeMeta.references.push(targetIdOrPath);
+        }
+        // 如果是备忘引用，同步更新 graph.json 的 references 数组
+        if (isMemoReference && !nodeMeta.references.includes(targetIdOrPath)) {
           nodeMeta.references.push(targetIdOrPath);
         }
         break;
 
       case "remove":
         docs = this.removeReference(docs, targetIdOrPath);
-        // 如果是节点引用，同步更新 graph.json 的 references 数组
-        if (isNodeReference) {
+        // 如果是节点引用或备忘引用，同步更新 graph.json 的 references 数组
+        if (isNodeReference || isMemoReference) {
           nodeMeta.references = nodeMeta.references.filter(
             id => id !== targetIdOrPath
           );
@@ -178,7 +195,8 @@ export class ReferenceService {
     docs: DocRefWithStatus[],
     targetIdOrPath: string,
     description: string,
-    isNodeReference: boolean
+    isNodeReference: boolean,
+    isMemoReference: boolean
   ): DocRefWithStatus[] {
     // 检查是否已存在
     const exists = docs.some(d => d.path === targetIdOrPath);
@@ -186,10 +204,18 @@ export class ReferenceService {
       throw new TanmiError("REFERENCE_EXISTS", `引用 "${targetIdOrPath}" 已存在`);
     }
 
+    // 生成默认描述
+    let defaultDescription = targetIdOrPath;
+    if (isNodeReference) {
+      defaultDescription = `节点引用: ${targetIdOrPath}`;
+    } else if (isMemoReference) {
+      defaultDescription = `备忘引用: ${targetIdOrPath}`;
+    }
+
     // 添加新引用
     const newRef: DocRefWithStatus = {
       path: targetIdOrPath,
-      description: description || (isNodeReference ? `节点引用: ${targetIdOrPath}` : targetIdOrPath),
+      description: description || defaultDescription,
       status: "active",
     };
 

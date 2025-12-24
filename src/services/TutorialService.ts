@@ -590,16 +590,24 @@ export class TutorialService {
 
   /**
    * 读取版本说明文件
+   * 向后兼容：优先尝试 assets/，回退到 docs/
    */
   private async readVersionNotes(): Promise<VersionNote[]> {
-    try {
-      const notesPath = path.join(process.cwd(), "docs/version-notes.yaml");
-      const content = await fs.readFile(notesPath, "utf-8");
-      const data = YAML.parse(content) as VersionNotesFile;
-      return data.versions || [];
-    } catch {
-      return [];
+    const paths = [
+      path.join(process.cwd(), "assets/version-notes.yaml"),
+      path.join(process.cwd(), "docs/version-notes.yaml"), // 向后兼容旧目录
+    ];
+
+    for (const notesPath of paths) {
+      try {
+        const content = await fs.readFile(notesPath, "utf-8");
+        const data = YAML.parse(content) as VersionNotesFile;
+        return data.versions || [];
+      } catch {
+        continue;
+      }
     }
+    return [];
   }
 
   /**
