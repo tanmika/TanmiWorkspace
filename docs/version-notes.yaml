@@ -9,6 +9,14 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.8.1
+    requirement: 修复 npm 包前端资源缺失和 pino-pretty 生产环境报错
+    conclusion: |-
+      - npm 包前端资源: 添加 `.npmignore` 确保 `web/dist` 被正确包含
+      - 生产环境日志: 修复 pino-pretty 开发依赖在生产环境报错问题
+      - Settings 版本信息: 生产环境显示基本版本信息，调试信息仅开发模式可见
+      - 发布脚本: `scripts/release.sh` 自动化发布流程，确保前后端同步编译
+    note: ""
   - version: 1.8.0
     requirement: WebUI 独立启动命令、端口迁移 19540、进程管理与版本检测、MCP 参数容错
     conclusion: |-

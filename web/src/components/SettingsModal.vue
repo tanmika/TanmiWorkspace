@@ -244,21 +244,24 @@ async function handleVersionClick() {
             <label>NODE VERSION</label>
             <div class="spec-value">{{ devInfo?.nodeVersion || '-' }}</div>
           </div>
-          <div class="spec-item">
-            <label>后端编译</label>
-            <div class="spec-value">{{ formatTime(devInfo?.codeBuildTime) }}</div>
-          </div>
-          <div class="spec-item">
-            <label>前端编译</label>
-            <div class="spec-value">{{ formatTime(frontendBuildTime) }}</div>
-          </div>
-          <div class="spec-item">
-            <label>服务启动</label>
-            <div class="spec-value">{{ formatTime(devInfo?.serverStartTime) }}</div>
-          </div>
+          <!-- 调试信息（仅开发模式显示） -->
+          <template v-if="devInfo?.isDev">
+            <div class="spec-item">
+              <label>后端编译</label>
+              <div class="spec-value">{{ formatTime(devInfo?.codeBuildTime) }}</div>
+            </div>
+            <div class="spec-item">
+              <label>前端编译</label>
+              <div class="spec-value">{{ formatTime(frontendBuildTime) }}</div>
+            </div>
+            <div class="spec-item">
+              <label>服务启动</label>
+              <div class="spec-value">{{ formatTime(devInfo?.serverStartTime) }}</div>
+            </div>
+          </template>
         </div>
         <div
-          v-if="buildTimeDiffTooLarge"
+          v-if="buildTimeDiffTooLarge && devInfo?.isDev"
           class="spec-warning"
         >
           [WARN] 前后端编译时间不一致，若为版本更新后需要指示 AI 重新编译前后端
