@@ -437,7 +437,7 @@ function getBadgeText(status: string) {
     <SettingsModal v-model:visible="showSettingsModal" @tutorial-created="handleRefresh" />
 
     <!-- 开发模式标识 -->
-    <div v-if="devInfo?.available" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">
+    <div v-if="devInfo?.isDev" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">
       DEV
     </div>
 
