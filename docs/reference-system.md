@@ -139,21 +139,6 @@ interface NodeCreateParams {
 }
 ```
 
-### node_split
-
-同样新增 `docs` 参数：
-
-```typescript
-interface NodeSplitParams {
-  workspaceId: string;
-  parentId: string;
-  title: string;
-  requirement: string;
-  inheritContext?: boolean;
-  docs?: DocRef[];  // 新增：派发给子节点的文档
-}
-```
-
 ## 最佳实践
 
 1. **任务开始时**：先扫描项目结构，记录相关文档到工作区
