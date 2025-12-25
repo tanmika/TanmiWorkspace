@@ -18,6 +18,7 @@ import type {
 } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
+import { validateMultilineContent } from "../utils/contentValidation.js";
 import type { DocRef } from "../types/workspace.js";
 import { randomBytes } from "crypto";
 import { GuidanceService } from "./GuidanceService.js";
@@ -239,7 +240,12 @@ export class StateService {
     const currentTime = now();
     const timestamp = formatShort(currentTime);
 
-    // 6. 更新 graph.json 中的节点状态和 conclusion
+    // 6. 验证 conclusion 格式（在任何写入操作之前验证，避免数据不一致）
+    if (conclusion) {
+      validateMultilineContent(conclusion, "结论");
+    }
+
+    // 7. 更新 graph.json 中的节点状态和 conclusion
     nodeMeta.status = newStatus;
     nodeMeta.updatedAt = currentTime;
     if (conclusion) {
@@ -247,7 +253,7 @@ export class StateService {
       nodeMeta.conclusion = conclusion.replace(/\\n/g, "\n");
     }
 
-    // 6.1 父节点状态级联（仅执行节点 start/reopen 时）
+    // 7.1 父节点状态级联（仅执行节点 start/reopen 时）
     const cascadeMessages: string[] = [];
     if (nodeType === "execution" && (action === "start" || action === "reopen")) {
       // 当执行节点开始时，确保父规划节点处于 monitoring 状态
@@ -279,21 +285,21 @@ export class StateService {
       }
     }
 
-    // 6.2 自动切换焦点到当前节点（start/reopen 时）
+    // 7.2 自动切换焦点到当前节点（start/reopen 时）
     if (action === "start" || action === "reopen") {
       graph.currentFocus = nodeId;
     }
 
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 7. 更新 Info.md 的 frontmatter 和结论部分
+    // 8. 更新 Info.md 的 frontmatter 和结论部分
     const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
     await this.md.updateNodeStatus(projectRoot, wsDirName, nodeDirName, newStatus);
     if (conclusion) {
       await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
     }
 
-    // 8. 追加日志记录
+    // 9. 追加日志记录
     const logEvent = this.buildLogEvent(nodeType, action, currentStatus, newStatus, reason);
     await this.md.appendTypedLogEntry(projectRoot, wsDirName, {
       timestamp,
@@ -301,7 +307,7 @@ export class StateService {
       event: logEvent,
     }, nodeDirName);
 
-    // 9. 如果是 complete/cancel，清空 Problem.md
+    // 10. 如果是 complete/cancel，清空 Problem.md
     if (action === "complete" || action === "cancel") {
       await this.md.writeProblem(projectRoot, wsDirName, {
         currentProblem: "（暂无）",
@@ -309,24 +315,24 @@ export class StateService {
       }, nodeDirName);
     }
 
-    // 9.1 信息收集节点 complete 时自动归档规则和文档
+    // 10.1 信息收集节点 complete 时自动归档规则和文档
     let archiveResult: { rules: string[]; docs: DocRef[] } | null = null;
     if (nodeMeta.role === "info_collection" && action === "complete" && conclusion) {
       archiveResult = await this.archiveInfoCollection(projectRoot, wsDirName, conclusion);
     }
 
-    // 9.2 complete 时获取节点的文档引用（用于提醒更新）
+    // 10.2 complete 时获取节点的文档引用（用于提醒更新）
     let nodeDocRefs: DocRef[] = [];
     if (action === "complete") {
       const nodeInfo = await this.md.readNodeInfoFull(projectRoot, wsDirName, nodeDirName);
       nodeDocRefs = nodeInfo.docs;
     }
 
-    // 9. 更新工作区配置的 updatedAt（使用前面已读取的 config）
+    // 11. 更新工作区配置的 updatedAt（使用前面已读取的 config）
     config.updatedAt = currentTime;
     await this.json.writeWorkspaceConfig(projectRoot, wsDirName, config);
 
-    // 11. 同步更新索引中的 updatedAt（确保 workspace_list 返回正确时间）
+    // 12. 同步更新索引中的 updatedAt（确保 workspace_list 返回正确时间）
     const index = await this.json.readIndex();
     const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
     if (wsEntry) {
@@ -334,7 +340,7 @@ export class StateService {
       await this.json.writeIndex(index);
     }
 
-    // 12. 返回结果
+    // 13. 返回结果
     const result: NodeTransitionResult = {
       success: true,
       previousStatus: currentStatus,
