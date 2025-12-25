@@ -33,7 +33,8 @@ export const nodeCreateTool: Tool = {
   - /path/to/doc1: 文档1描述
   - /path/to/doc2: 文档2描述
   \`\`\`
-- 其他角色（validation, summary）：预留，暂不使用
+- info_summary：信息总结，从已有信息中提取结构化内容
+- validation：预留，暂不使用
 
 **重要约束**：
 - 只有规划节点可以创建子节点
@@ -84,8 +85,8 @@ export const nodeCreateTool: Tool = {
       },
       role: {
         type: "string",
-        enum: ["info_collection", "validation", "summary"],
-        description: "节点角色（可选）：info_collection=信息收集节点，完成时自动归档规则和文档到工作区",
+        enum: ["info_collection", "info_summary", "validation"],
+        description: "节点角色（可选）：info_collection=信息收集节点，info_summary=信息总结节点",
       },
       acceptanceCriteria: {
         type: "array",

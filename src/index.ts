@@ -315,7 +315,7 @@ function createMcpServer(services: Services): Server {
             requirement: args?.requirement as string | undefined,
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
             rulesHash: args?.rulesHash as string | undefined,
-            role: args?.role as "info_collection" | "validation" | "summary" | undefined,
+            role: args?.role as "info_collection" | "info_summary" | "validation" | undefined,
             acceptanceCriteria: args?.acceptanceCriteria as Array<{ when: string; then: string }> | undefined,
             isNeedTest: args?.isNeedTest as boolean | undefined,
             testRequirement: args?.testRequirement as string | undefined,

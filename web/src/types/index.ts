@@ -23,7 +23,7 @@ export interface WorkspaceErrorInfo {
 export type NodeType = 'planning' | 'execution'
 
 // 节点角色
-export type NodeRole = 'info_collection' | 'validation' | 'summary'
+export type NodeRole = 'info_collection' | 'info_summary' | 'validation'
 
 // 执行节点状态
 export type ExecutionStatus = 'pending' | 'implementing' | 'validating' | 'completed' | 'failed'
@@ -397,28 +397,6 @@ export const STATUS_CONFIG: Record<NodeStatus, StatusConfig> = {
   },
 }
 
-// 工作区状态配置
-export const WORKSPACE_STATUS_CONFIG: Record<WorkspaceStatus, StatusConfig> = {
-  active: {
-    icon: 'CircleCheck',
-    color: '#67C23A',
-    label: '活跃',
-    emoji: '🟢',
-  },
-  archived: {
-    icon: 'Box',
-    color: '#909399',
-    label: '已归档',
-    emoji: '📦',
-  },
-  error: {
-    icon: 'WarningFilled',
-    color: '#F56C6C',
-    label: '错误',
-    emoji: '⚠️',
-  },
-}
-
 // 节点类型配置
 export interface NodeTypeConfig {
   label: string
@@ -443,7 +421,6 @@ export const NODE_TYPE_CONFIG: Record<NodeType, NodeTypeConfig> = {
 export interface NodeRoleConfig {
   label: string
   color: string
-  emoji: string
   description: string
 }
 
@@ -451,20 +428,17 @@ export const NODE_ROLE_CONFIG: Record<NodeRole, NodeRoleConfig> = {
   info_collection: {
     label: 'INFO',
     color: '#E6A23C',
-    emoji: '📋',
     description: '收集项目信息，完成时自动归档规则和文档到工作区',
+  },
+  info_summary: {
+    label: 'SUMM',
+    color: '#909399',
+    description: '信息总结，从已有信息中提取结构化内容',
   },
   validation: {
     label: 'VALID',
     color: '#67C23A',
-    emoji: '✔️',
     description: '验证类任务（预留）',
-  },
-  summary: {
-    label: 'SUMM',
-    color: '#909399',
-    emoji: '📝',
-    description: '汇总类任务（预留）',
   },
 }
 
@@ -473,7 +447,6 @@ export interface DispatchStatusConfig {
   label: string
   color: string
   bgColor: string
-  emoji: string
   description: string
 }
 
@@ -482,35 +455,30 @@ export const DISPATCH_STATUS_CONFIG: Record<NodeDispatchStatus, DispatchStatusCo
     label: '待派发',
     color: '#909399',
     bgColor: '#f4f4f5',
-    emoji: '⏳',
     description: '等待派发执行',
   },
   executing: {
     label: '执行中',
     color: '#409EFF',
     bgColor: '#ecf5ff',
-    emoji: '🔄',
     description: 'Subagent 正在执行',
   },
   testing: {
     label: '测试中',
     color: '#E6A23C',
     bgColor: '#fdf6ec',
-    emoji: '🧪',
     description: '测试节点验证中',
   },
   passed: {
     label: '已通过',
     color: '#67C23A',
     bgColor: '#f0f9eb',
-    emoji: '✅',
     description: '测试通过',
   },
   failed: {
     label: '已失败',
     color: '#F56C6C',
     bgColor: '#fef0f0',
-    emoji: '❌',
     description: '执行或测试失败',
   },
 }

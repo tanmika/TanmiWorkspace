@@ -14,8 +14,8 @@ export type NodeType =
  */
 export type NodeRole =
   | "info_collection"  // 信息收集：调研、分析，完成时自动归档到工作区规则和文档
-  | "validation"       // 验证：预留，用于验证类任务
-  | "summary";         // 汇总：预留，用于汇总类任务
+  | "info_summary"     // 信息总结：从已有信息中提取结构化内容
+  | "validation";      // 验证：预留，用于验证类任务
 
 /**
  * 验收标准 - WHEN/THEN 格式
