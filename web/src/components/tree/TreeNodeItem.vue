@@ -21,8 +21,8 @@ const emit = defineEmits<{
   toggleExpand: []
 }>()
 
-// 检测是否为 memo 节点（通过 id 前缀）
-const isMemo = computed(() => props.node.id.startsWith('memo-'))
+// 检测是否为 memo 节点（通过 id 前缀或抽屉节点）
+const isMemo = computed(() => props.node.id.startsWith('memo-') || props.node.id === '__memo_drawer__')
 
 // 计算层级点数量（有子节点时最后一个位置留给展开按钮）
 const depthDots = props.depth ? (props.hasChildren ? props.depth - 1 : props.depth) : 0
@@ -68,6 +68,7 @@ function handleToggleExpand(e: Event) {
       :status="node.status"
       :is-memo="isMemo"
       :content-length="node.contentLength"
+      :memo-count="node.memoCount"
     />
     <span class="node-title">{{ node.title }}</span>
     <!-- 角色标牌 -->

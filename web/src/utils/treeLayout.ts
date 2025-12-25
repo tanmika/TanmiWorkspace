@@ -12,8 +12,9 @@ export interface GraphNodeData {
   isFocused: boolean
   isSelected: boolean
   isActivePath: boolean
-  isMemoDrawer?: boolean  // 标识为memo抽屉虚拟节点
-  memoCount?: number      // memo数量
+  isMemoNode?: boolean    // 标识为memo相关节点（用于显示六边形图标）
+  contentLength?: number  // memo内容长度（用于六边形内横线数量）
+  memoCount?: number      // memo抽屉：备忘数量（用于六边形内横线数量）
 }
 
 // 布局配置
@@ -72,7 +73,7 @@ export interface TransformParams {
   focusId: string | null
   selectedId: string | null
   config?: Partial<LayoutConfig>
-  memoCount?: number  // memo总数
+  memoNodeIds?: Set<string>  // memo 相关节点 ID 集合（用于标记虚线和图标）
 }
 
 // 转换结果
@@ -86,7 +87,7 @@ export interface TransformResult {
  * 使用两阶段布局：先计算子树高度，再定位节点
  */
 export function transformTreeToFlow(params: TransformParams): TransformResult {
-  const { tree, focusId, selectedId, config: configOverride, memoCount = 0 } = params
+  const { tree, focusId, selectedId, config: configOverride, memoNodeIds = new Set() } = params
   const config = { ...defaultConfig, ...configOverride }
 
   const nodes: Node<GraphNodeData>[] = []
@@ -121,6 +122,9 @@ export function transformTreeToFlow(params: TransformParams): TransformResult {
     // 计算节点的垂直中心位置
     const nodeY = (yStart + yEnd) / 2 - config.nodeHeight / 2
 
+    // 判断是否为 memo 相关节点
+    const isMemoNode = memoNodeIds.has(node.id)
+
     // 添加节点
     nodes.push({
       id: node.id,
@@ -135,12 +139,17 @@ export function transformTreeToFlow(params: TransformParams): TransformResult {
         isFocused: node.id === focusId,
         isSelected: node.id === selectedId,
         isActivePath: activePath.has(node.id),
+        isMemoNode,
+        contentLength: node.contentLength,
+        memoCount: node.memoCount,
       },
     })
 
     // 添加边（从父节点到当前节点）
     if (parentId) {
       const isHighlight = activePath.has(parentId) && activePath.has(node.id)
+      // memo 相关节点使用虚线
+      const isMemoEdge = memoNodeIds.has(parentId) || memoNodeIds.has(node.id)
 
       edges.push({
         id: `${parentId}-${node.id}`,
@@ -149,7 +158,9 @@ export function transformTreeToFlow(params: TransformParams): TransformResult {
         type: 'smoothstep',
         style: isHighlight
           ? { stroke: 'var(--accent-red)', strokeWidth: 2.5 }
-          : { stroke: '#bbb', strokeWidth: 2 },
+          : isMemoEdge
+            ? { stroke: '#999', strokeWidth: 1.5, strokeDasharray: '8 4' }
+            : { stroke: '#bbb', strokeWidth: 2 },
         pathOptions: { borderRadius: 0, offset: 0 },
         zIndex: isHighlight ? 10 : 0,
       })
@@ -174,48 +185,6 @@ export function transformTreeToFlow(params: TransformParams): TransformResult {
   // 从根节点开始布局
   const totalHeight = subtreeHeights.get(tree.id) || config.nodeHeight
   positionNode(tree, 0, 0, totalHeight, null)
-
-  // 添加 MEMO 抽屉虚拟节点（如果有memo）
-  if (memoCount > 0) {
-    const memoNodeId = '__memo_drawer__'
-    const rootNode = nodes.find(n => n.id === tree.id)
-
-    if (rootNode) {
-      // memo节点放在根节点正下方，距离为一个节点高度+间距
-      const memoY = rootNode.position.y + config.nodeHeight + config.verticalGap
-
-      nodes.push({
-        id: memoNodeId,
-        type: 'custom',
-        position: { x: rootNode.position.x, y: memoY },
-        data: {
-          title: `MEMO (${memoCount})`,
-          type: 'planning',  // 使用planning类型样式
-          status: 'completed',  // 使用completed状态（绿色）
-          isFocused: false,
-          isSelected: false,
-          isActivePath: false,
-          isMemoDrawer: true,
-          memoCount,
-        },
-      })
-
-      // 添加长虚线连接根节点到memo抽屉
-      edges.push({
-        id: `${tree.id}-${memoNodeId}`,
-        source: tree.id,
-        target: memoNodeId,
-        type: 'smoothstep',
-        style: {
-          stroke: '#999',
-          strokeWidth: 1.5,
-          strokeDasharray: '8 4',  // 长虚线样式
-        },
-        pathOptions: { borderRadius: 0, offset: 0 },
-        zIndex: 0,
-      })
-    }
-  }
 
   return { nodes, edges }
 }

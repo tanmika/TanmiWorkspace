@@ -174,19 +174,19 @@ export class FileSystemAdapter {
   /**
    * 获取备忘目录路径
    * @param wsDirName 工作区目录名
-   * @param memoId 备忘 ID
+   * @param memoDirName 备忘目录名（格式：{title}_{shortId}）
    */
-  getMemoDir(projectRoot: string, wsDirName: string, memoId: string): string {
-    return path.join(projectRoot, this.localDirName, wsDirName, "memos", memoId);
+  getMemoDir(projectRoot: string, wsDirName: string, memoDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "memos", memoDirName);
   }
 
   /**
    * 获取备忘内容文件路径
    * @param wsDirName 工作区目录名
-   * @param memoId 备忘 ID
+   * @param memoDirName 备忘目录名（格式：{title}_{shortId}）
    */
-  getMemoContentPath(projectRoot: string, wsDirName: string, memoId: string): string {
-    return path.join(projectRoot, this.localDirName, wsDirName, "memos", memoId, "Content.md");
+  getMemoContentPath(projectRoot: string, wsDirName: string, memoDirName: string): string {
+    return path.join(projectRoot, this.localDirName, wsDirName, "memos", memoDirName, "Content.md");
   }
 
   // ========== 归档路径方法 ==========

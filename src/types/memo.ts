@@ -61,6 +61,7 @@ export interface MemoListItem {
   summary: string;
   tags: string[];
   contentLength: number;  // 内容长度（用于UI显示横线数量）
+  dirName: string;        // 目录名，格式：{title}_{shortId}
   createdAt: string;
   updatedAt: string;
 }

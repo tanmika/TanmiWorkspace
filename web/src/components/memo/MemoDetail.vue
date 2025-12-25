@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useMemoStore, useWorkspaceStore } from '@/stores'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
+import NodeIcon from '@/components/tree/NodeIcon.vue'
+import WsButton from '@/components/ui/WsButton.vue'
+import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 
 const props = defineProps<{
   memoId: string
+}>()
+
+const emit = defineEmits<{
+  deleted: []
 }>()
 
 const memoStore = useMemoStore()
@@ -13,12 +20,32 @@ const workspaceStore = useWorkspaceStore()
 // 从 store 获取 memo 数据
 const memo = computed(() => memoStore.currentMemo)
 
+// 删除弹窗状态
+const showDeleteDialog = ref(false)
+
 // 加载 memo 数据
 async function loadMemo() {
   if (!props.memoId || !workspaceStore.currentWorkspace?.id) return
 
   try {
     await memoStore.fetchMemo(workspaceStore.currentWorkspace.id, props.memoId)
+  } catch {
+    // 错误已在 store 中处理
+  }
+}
+
+// 显示删除确认弹窗
+function handleDelete() {
+  showDeleteDialog.value = true
+}
+
+// 确认删除
+async function confirmDelete() {
+  if (!props.memoId || !workspaceStore.currentWorkspace?.id) return
+
+  try {
+    await memoStore.deleteMemo(workspaceStore.currentWorkspace.id, props.memoId)
+    emit('deleted')
   } catch {
     // 错误已在 store 中处理
   }
@@ -41,7 +68,9 @@ watch(() => props.memoId, () => {
       <!-- 头部区 -->
       <div class="detail-header">
         <div class="header-main">
-          <span class="memo-badge">MEMO</span>
+          <NodeIcon type="execution" status="pending" :is-memo="true" :content-length="memo.contentLength" />
+          <span class="memo-type">MEMO</span>
+          <span class="header-sep">·</span>
           <span class="header-title">{{ memo.title }}</span>
         </div>
         <div class="header-meta">ID: {{ memo.id }}</div>
@@ -88,6 +117,31 @@ watch(() => props.memoId, () => {
         </div>
       </div>
     </div>
+
+    <!-- 操作按钮区（固定底部） -->
+    <div class="action-bar">
+      <div class="action-group"></div>
+      <div class="action-group">
+        <WsButton
+          variant="danger"
+          size="sm"
+          @click="handleDelete"
+        >
+          删除
+        </WsButton>
+      </div>
+    </div>
+
+    <!-- 删除确认弹窗 -->
+    <WsConfirmDialog
+      v-model="showDeleteDialog"
+      title="删除确认"
+      message="确定要删除此备忘吗？此操作不可撤销。"
+      confirm-text="删除"
+      cancel-text="取消"
+      type="danger"
+      @confirm="confirmDelete"
+    />
   </div>
   <div v-else-if="memoStore.loading" class="memo-loading">
     加载中...
@@ -125,17 +179,17 @@ watch(() => props.memoId, () => {
   margin-bottom: 8px;
 }
 
-.memo-badge {
-  font-family: var(--mono-font), monospace;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 6px;
-  line-height: 1;
-  display: inline-block;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: var(--accent-green);
-  color: #fff;
+.memo-type {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-green);
+  flex-shrink: 0;
+}
+
+.header-sep {
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 .header-title {
@@ -275,5 +329,27 @@ watch(() => props.memoId, () => {
   text-align: center;
   color: var(--text-muted);
   font-size: 14px;
+}
+
+/* 操作按钮区 - 固定底部 */
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #fafafa;
+  flex-wrap: wrap;
+  gap: 12px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .action-bar {
+  background: #1a1a1a;
+}
+
+.action-group {
+  display: flex;
+  gap: 8px;
 }
 </style>

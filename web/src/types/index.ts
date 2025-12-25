@@ -135,6 +135,7 @@ export interface NodeTreeItem {
   role?: NodeRole
   dispatch?: NodeDispatchInfo
   contentLength?: number  // MEMO 节点专用：内容长度
+  memoCount?: number      // MEMO 抽屉专用：备忘数量
   children: NodeTreeItem[]
 }
 
@@ -525,6 +526,7 @@ export interface Memo {
   summary: string
   content: string
   tags: string[]
+  contentLength?: number  // 内容长度（用于UI显示横线数量）
   createdAt: string
   updatedAt: string
 }
@@ -538,6 +540,7 @@ export interface MemoListItem {
   summary: string
   tags: string[]
   contentLength: number  // 内容长度（用于UI显示横线数量）
+  dirName: string        // 目录名，格式：{title}_{shortId}
   createdAt: string
   updatedAt: string
 }

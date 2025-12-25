@@ -33,12 +33,12 @@ export function generateMemoId(): string {
 
 /**
  * 从 ID 中提取短 ID（时间戳部分，8位）
- * @param id 完整 ID（如 ws-mjb65az5-0wcjuu 或 node-mjb6mj4h-a60yht）
+ * @param id 完整 ID（如 ws-mjb65az5-0wcjuu 或 node-mjb6mj4h-a60yht 或 memo-mjktac6h-49y2xe）
  * @returns 短 ID（如 mjb65az5）
  */
 export function extractShortId(id: string): string {
-  // 移除前缀（ws- 或 node-），取时间戳部分
-  const withoutPrefix = id.replace(/^(ws-|node-)/, "");
+  // 移除前缀（ws-、node- 或 memo-），取时间戳部分
+  const withoutPrefix = id.replace(/^(ws-|node-|memo-)/, "");
   return withoutPrefix.split("-")[0];
 }
 
@@ -76,6 +76,17 @@ export function generateNodeDirName(title: string, nodeId: string): string {
     return "root";
   }
   const shortId = extractShortId(nodeId);
+  const safeTitle = sanitizeName(title);
+  return `${safeTitle}_${shortId}`;
+}
+
+/**
+ * 生成备忘目录名
+ * 格式：{sanitized_title}_{short_id}
+ * 示例：长备忘_mjktac6h
+ */
+export function generateMemoDirName(title: string, memoId: string): string {
+  const shortId = extractShortId(memoId);
   const safeTitle = sanitizeName(title);
   return `${safeTitle}_${shortId}`;
 }

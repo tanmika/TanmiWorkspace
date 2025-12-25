@@ -9,7 +9,8 @@ export const memoApi = {
   },
 
   // 获取单个 memo 的完整内容
-  get(workspaceId: string, memoId: string): Promise<Memo> {
-    return client.get(`/workspaces/${workspaceId}/memos/${memoId}`)
+  async get(workspaceId: string, memoId: string): Promise<Memo> {
+    const result = await client.get(`/workspaces/${workspaceId}/memos/${memoId}`) as { memo: Memo }
+    return result.memo
   },
 }

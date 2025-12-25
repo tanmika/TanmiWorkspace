@@ -7,6 +7,7 @@ const props = defineProps<{
   status: NodeStatus
   isMemo?: boolean
   contentLength?: number  // MEMO 内容长度，用于显示横线数量
+  memoCount?: number      // MEMO 抽屉：备忘数量，用于显示横线数量
 }>()
 
 // 是否为规划节点 - 必须是 computed 才能响应式
@@ -14,6 +15,13 @@ const isPlanning = computed(() => props.type === 'planning')
 
 // 计算横线数量（1-3条）
 const memoLines = computed(() => {
+  // 抽屉节点：按备忘数量计算
+  if (props.memoCount !== undefined) {
+    if (props.memoCount <= 3) return 1
+    if (props.memoCount <= 8) return 2
+    return 3
+  }
+  // 单个备忘：按内容长度计算
   if (!props.contentLength) return 1
   if (props.contentLength < 500) return 1
   if (props.contentLength <= 1000) return 2
@@ -221,28 +229,30 @@ const memoLines = computed(() => {
   gap: 1px;
 }
 
-/* 六边形背景（边框效果）*/
+/* 六边形背景（边框效果）- 正六边形，使用 aspect-ratio 保持比例 */
 .node-memo::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 17px;  /* 20 * cos(30deg) ≈ 17.32 */
+  transform: translate(-50%, -50%);
   background: var(--accent-green);
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
 }
 
 /* 六边形内部（背景色）*/
 .node-memo::after {
   content: '';
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: calc(100% - 4px);
-  height: calc(100% - 4px);
+  top: 50%;
+  left: 50%;
+  width: 16px;  /* 20 - 4 for border */
+  height: 14px;  /* 17 - 3 for border */
+  transform: translate(-50%, -50%);
   background: var(--card-bg);
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
 }
 
 /* 横线样式 */
@@ -260,16 +270,20 @@ const memoLines = computed(() => {
   justify-content: center;
 }
 
-/* 2条横线 */
+/* 2条横线 - 间距2px */
 .node-memo.lines-2 {
   justify-content: center;
   gap: 2px;
 }
 
-/* 3条横线时填满 */
+/* 3条横线 - 均匀分布，间距2px */
 .node-memo.lines-3 {
   justify-content: center;
-  gap: 1px;
+  gap: 2px;
+}
+
+.node-memo.lines-3 .memo-line {
+  height: 1.5px;  /* 略细以适应空间 */
 }
 
 </style>

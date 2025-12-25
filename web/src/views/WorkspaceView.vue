@@ -8,6 +8,7 @@ import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
 import MemoDetail from '@/components/memo/MemoDetail.vue'
+import MemoDrawerDetail from '@/components/memo/MemoDrawerDetail.vue'
 import EnableDispatchDialog from '@/components/dispatch/EnableDispatchDialog.vue'
 import DisableDispatchDialog from '@/components/dispatch/DisableDispatchDialog.vue'
 import SwitchDispatchModeDialog from '@/components/dispatch/SwitchDispatchModeDialog.vue'
@@ -112,10 +113,17 @@ const memoStore = useMemoStore()
 
 const workspaceId = computed(() => route.params.id as string)
 
-// 选中状态：区分 node 和 memo
-type SelectionType = 'node' | 'memo'
+// 选中状态：区分 node、memo 和 memo-drawer
+type SelectionType = 'node' | 'memo' | 'memo-drawer'
 const selectedType = ref<SelectionType>('node')
 const selectedMemoId = ref<string | null>(null)
+
+// 计算当前有效的 selectedId（用于传递给 NodeTree 和 NodeTreeGraph）
+const effectiveSelectedId = computed(() => {
+  if (selectedType.value === 'node') return nodeStore.selectedNodeId
+  if (selectedType.value === 'memo-drawer') return '__memo_drawer__'
+  return selectedMemoId.value
+})
 
 // 加载工作区数据
 async function loadWorkspace() {
@@ -210,6 +218,9 @@ async function handleFocusCurrent() {
 
     const focusId = workspaceStore.currentFocus
     if (focusId) {
+      // 切换到节点视图并选中聚焦节点
+      selectedType.value = 'node'
+      selectedMemoId.value = null
       await nodeStore.selectNode(focusId)
       showToast('已定位到当前任务', 'success')
     } else {
@@ -272,12 +283,41 @@ function handleMemoSelect(memoId: string) {
   nodeStore.clearSelection()
 }
 
+// 统一处理树选择（区分节点、memo 和 memo-drawer）
+function handleTreeSelect(id: string) {
+  // memo 抽屉
+  if (id === '__memo_drawer__') {
+    handleMemoDrawerClick()
+    return
+  }
+  // memo 节点 ID 以 memo- 开头
+  if (id.startsWith('memo-')) {
+    handleMemoSelect(id)
+  } else {
+    handleNodeSelect(id)
+  }
+}
+
 // 点击图形视图中的memo抽屉
 function handleMemoDrawerClick() {
-  // 选择第一个memo（如果存在）
-  const firstMemo = memoStore.memos[0]
-  if (firstMemo) {
-    handleMemoSelect(firstMemo.id)
+  selectedType.value = 'memo-drawer'
+  selectedMemoId.value = null
+  nodeStore.clearSelection()
+}
+
+// 从抽屉详情选择具体 memo
+function handleDrawerSelectMemo(memoId: string) {
+  handleMemoSelect(memoId)
+}
+
+// 删除 memo 后的处理
+async function handleMemoDeleted() {
+  // 清除选中状态，返回到抽屉视图
+  selectedMemoId.value = null
+  selectedType.value = 'memo-drawer'
+  // 刷新 memo 列表
+  if (workspaceStore.currentWorkspace?.id) {
+    await memoStore.fetchMemoList(workspaceStore.currentWorkspace.id)
   }
 }
 
@@ -470,17 +510,18 @@ async function handleDispatchSuccess() {
           <NodeTree
             v-if="viewMode === 'list'"
             :tree="nodeStore.nodeTree"
-            :selected-id="nodeStore.selectedNodeId"
+            :selected-id="effectiveSelectedId"
             :focus-id="workspaceStore.currentFocus"
-            @select="handleNodeSelect"
+            :memos="memoStore.memos"
+            @select="handleTreeSelect"
           />
           <NodeTreeGraph
             v-else
             :tree="nodeStore.nodeTree"
-            :selected-id="nodeStore.selectedNodeId"
+            :selected-id="effectiveSelectedId"
             :focus-id="workspaceStore.currentFocus"
-            :memo-count="memoStore.memoCount"
-            @select="handleNodeSelect"
+            :memos="memoStore.memos"
+            @select="handleTreeSelect"
             @select-memo="handleMemoDrawerClick"
           />
         </div>
@@ -496,7 +537,8 @@ async function handleDispatchSuccess() {
       <!-- 右侧：节点/备忘详情 Content -->
       <main class="layout-content">
         <NodeDetail v-if="selectedType === 'node' && nodeStore.selectedNodeId" />
-        <MemoDetail v-else-if="selectedType === 'memo' && selectedMemoId" :memo-id="selectedMemoId" />
+        <MemoDetail v-else-if="selectedType === 'memo' && selectedMemoId" :memo-id="selectedMemoId" @deleted="handleMemoDeleted" />
+        <MemoDrawerDetail v-else-if="selectedType === 'memo-drawer'" @select-memo="handleDrawerSelectMemo" />
         <div v-else class="empty-state">
           <div class="empty-icon"></div>
           <p class="empty-text">SELECT A NODE OR MEMO</p>

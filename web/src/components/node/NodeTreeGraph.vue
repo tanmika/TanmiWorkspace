@@ -5,7 +5,7 @@ import { Background } from '@vue-flow/background'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 
-import type { NodeTreeItem } from '@/types'
+import type { NodeTreeItem, MemoListItem } from '@/types'
 import GraphNode from '@/components/graph/GraphNode.vue'
 import { transformTreeToFlow, type GraphNodeData } from '@/utils/treeLayout'
 
@@ -13,7 +13,7 @@ const props = defineProps<{
   tree: NodeTreeItem | null
   selectedId: string | null
   focusId: string | null
-  memoCount?: number
+  memos?: MemoListItem[]
 }>()
 
 const emit = defineEmits<{
@@ -31,17 +31,65 @@ const edges = ref<Edge[]>([])
 // 是否首次加载
 const isFirstLoad = ref(true)
 
+// 构造虚拟 MEMO 抽屉节点（与 NodeTree.vue 一致）
+const memoDrawerNode = computed<NodeTreeItem | null>(() => {
+  if (!props.memos || props.memos.length === 0) return null
+
+  // 将 memos 转换为 NodeTreeItem[] 格式
+  const memoChildren: NodeTreeItem[] = props.memos.map(memo => ({
+    id: memo.id,
+    type: 'execution' as const,
+    title: memo.title,
+    status: 'pending' as const,
+    contentLength: memo.contentLength,
+    children: []
+  }))
+
+  return {
+    id: '__memo_drawer__',
+    type: 'planning' as const,
+    title: `草稿 (${props.memos.length})`,
+    status: 'pending' as const,
+    memoCount: props.memos.length,  // 用于抽屉图标横线数量
+    children: memoChildren
+  }
+})
+
+// 扩展的树（包含原节点树 + MEMO 抽屉作为 root 的子节点）
+const extendedTree = computed<NodeTreeItem | null>(() => {
+  if (!props.tree) return null
+
+  // 如果没有 memo，直接返回原树
+  if (!memoDrawerNode.value) return props.tree
+
+  // 将 memo drawer 添加为 root 的最后一个子节点
+  return {
+    ...props.tree,
+    children: [...props.tree.children, memoDrawerNode.value]
+  }
+})
+
+// 收集所有 memo 相关的节点 ID（用于标记虚线）
+const memoNodeIds = computed<Set<string>>(() => {
+  const ids = new Set<string>()
+  if (memoDrawerNode.value) {
+    ids.add(memoDrawerNode.value.id)
+    memoDrawerNode.value.children.forEach(child => ids.add(child.id))
+  }
+  return ids
+})
+
 // 计算节点和边
 const flowData = computed(() => {
-  if (!props.tree) {
+  if (!extendedTree.value) {
     return { nodes: [], edges: [] }
   }
 
   return transformTreeToFlow({
-    tree: props.tree,
+    tree: extendedTree.value,
     focusId: props.focusId,
     selectedId: props.selectedId,
-    memoCount: props.memoCount || 0,
+    memoNodeIds: memoNodeIds.value,
   })
 })
 

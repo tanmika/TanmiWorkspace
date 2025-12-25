@@ -36,10 +36,11 @@ const memoDrawerNode = computed<NodeTreeItem | null>(() => {
   }))
 
   return {
-    id: 'memo-drawer',
+    id: '__memo_drawer__',
     type: 'planning' as const,
     title: `草稿 (${props.memos.length})`,
     status: 'pending' as const,
+    memoCount: props.memos.length,
     children: memoChildren
   }
 })
@@ -78,10 +79,14 @@ const activePathIds = computed(() => {
   // 先在真实节点树中查找
   findPath(props.tree, props.selectedId, [])
 
-  // 如果没找到，且选中的是 memo 节点，需要添加 memo-drawer 到路径
-  if (pathIds.size === 0 && memoDrawerNode.value && props.selectedId.startsWith('memo-')) {
-    pathIds.add('memo-drawer')
-    pathIds.add(props.selectedId)
+  // 如果没找到，且选中的是 memo 节点或抽屉，需要添加抽屉到路径
+  if (pathIds.size === 0 && memoDrawerNode.value) {
+    if (props.selectedId === '__memo_drawer__' || props.selectedId.startsWith('memo-')) {
+      pathIds.add('__memo_drawer__')
+      if (props.selectedId !== '__memo_drawer__') {
+        pathIds.add(props.selectedId)
+      }
+    }
   }
 
   return pathIds

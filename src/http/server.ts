@@ -28,6 +28,7 @@ import { stateRoutes } from "./routes/state.js";
 import { contextRoutes } from "./routes/context.js";
 import { logRoutes } from "./routes/log.js";
 import { configRoutes } from "./routes/config.js";
+import { memoRoutes } from "./routes/memo.js";
 
 /**
  * 创建并配置 Fastify 服务器
@@ -210,6 +211,7 @@ export async function createServer(): Promise<FastifyInstance> {
   await server.register(contextRoutes, { prefix: "/api" });
   await server.register(logRoutes, { prefix: "/api" });
   await server.register(configRoutes, { prefix: "/api" });
+  await server.register(memoRoutes, { prefix: "/api" });
 
   // 托管前端静态文件（生产模式）
   // web/dist 目录相对于 dist/http/server.js，路径为 ../../web/dist

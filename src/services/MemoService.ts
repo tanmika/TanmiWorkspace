@@ -18,7 +18,7 @@ import type {
   MemoListItem,
 } from "../types/memo.js";
 import { TanmiError } from "../types/errors.js";
-import { generateMemoId } from "../utils/id.js";
+import { generateMemoId, generateMemoDirName } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { devLog } from "../utils/devLog.js";
 
@@ -60,8 +60,9 @@ export class MemoService {
     // 1. 获取工作区信息
     const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
 
-    // 2. 生成备忘 ID
+    // 2. 生成备忘 ID 和目录名
     const memoId = generateMemoId();
+    const memoDirName = generateMemoDirName(title, memoId);
     const timestamp = now();
 
     // 3. 构造备忘对象
@@ -90,6 +91,7 @@ export class MemoService {
       summary,
       tags,
       contentLength: content.length,
+      dirName: memoDirName,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -98,15 +100,15 @@ export class MemoService {
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 8. 创建备忘目录
-    const memoDir = this.fs.getMemoDir(projectRoot, wsDirName, memoId);
+    const memoDir = this.fs.getMemoDir(projectRoot, wsDirName, memoDirName);
     await this.fs.ensureDir(memoDir);
 
     // 9. 写入 Content.md
-    const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoId);
+    const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
     await this.fs.writeFile(contentPath, content);
 
     // 10. 返回结果
-    const relativePath = `memos/${memoId}/Content.md`;
+    const relativePath = `memos/${memoDirName}/Content.md`;
     return {
       memoId,
       path: relativePath,
@@ -176,7 +178,8 @@ export class MemoService {
     }
 
     // 4. 读取 Content.md
-    const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoId);
+    const memoDirName = memoMeta.dirName;
+    const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
     const content = await this.fs.readFile(contentPath);
 
     // 5. 构造完整备忘对象
@@ -207,7 +210,10 @@ export class MemoService {
       throw new TanmiError("MEMO_NOT_FOUND", `备忘 "${memoId}" 不存在`);
     }
 
-    // 4. 更新备忘元数据
+    // 4. 获取目录名
+    const memoDirName = memoMeta.dirName;
+
+    // 5. 更新备忘元数据
     const timestamp = now();
     if (title !== undefined) memoMeta.title = title;
     if (summary !== undefined) memoMeta.summary = summary;
@@ -215,12 +221,12 @@ export class MemoService {
     if (content !== undefined) memoMeta.contentLength = content.length;
     memoMeta.updatedAt = timestamp;
 
-    // 5. 写回 graph.json
+    // 6. 写回 graph.json
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 6. 更新 Content.md（如果提供了 content）
+    // 7. 更新 Content.md（如果提供了 content）
     if (content !== undefined) {
-      const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoId);
+      const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
       await this.fs.writeFile(contentPath, content);
     }
 
@@ -244,18 +250,22 @@ export class MemoService {
 
     // 3. 检查备忘是否存在
     const memosIndex = graph.memos || {};
-    if (!memosIndex[memoId]) {
+    const memoMeta = memosIndex[memoId];
+    if (!memoMeta) {
       throw new TanmiError("MEMO_NOT_FOUND", `备忘 "${memoId}" 不存在`);
     }
 
-    // 4. 从索引中删除
+    // 4. 获取目录名
+    const memoDirName = memoMeta.dirName;
+
+    // 5. 从索引中删除
     delete memosIndex[memoId];
 
-    // 5. 写回 graph.json
+    // 6. 写回 graph.json
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 6. 删除备忘目录
-    const memoDir = this.fs.getMemoDir(projectRoot, wsDirName, memoId);
+    // 7. 删除备忘目录
+    const memoDir = this.fs.getMemoDir(projectRoot, wsDirName, memoDirName);
     await this.fs.remove(memoDir);
 
     return { success: true };

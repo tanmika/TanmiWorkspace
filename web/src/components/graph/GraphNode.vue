@@ -17,8 +17,9 @@ interface Props {
     isFocused: boolean
     isSelected: boolean
     isActivePath: boolean
-    isMemoDrawer?: boolean
-    memoCount?: number
+    isMemoNode?: boolean      // 是否为 memo 相关节点（显示六边形图标）
+    contentLength?: number    // memo 内容长度（六边形内横线数量）
+    memoCount?: number        // memo 抽屉：备忘数量（六边形内横线数量）
   }
 }
 
@@ -28,7 +29,6 @@ const nodeClass = computed(() => ({
   'graph-node': true,
   'selected': props.data.isSelected,
   'active-path': props.data.isActivePath,
-  'memo-drawer': props.data.isMemoDrawer,
 }))
 </script>
 
@@ -44,6 +44,14 @@ const nodeClass = computed(() => ({
         v-if="data.isFocused"
         :type="data.type"
         :status="data.status"
+      />
+      <NodeIcon
+        v-else-if="data.isMemoNode"
+        type="execution"
+        status="pending"
+        :is-memo="true"
+        :content-length="data.contentLength"
+        :memo-count="data.memoCount"
       />
       <NodeIcon
         v-else
@@ -99,17 +107,6 @@ const nodeClass = computed(() => ({
 
 .graph-node.active-path {
   /* 路径上的节点不额外样式 */
-}
-
-.graph-node.memo-drawer {
-  background: var(--bg-color);
-  border: 1px dashed var(--border-color);
-  opacity: 0.85;
-}
-
-.graph-node.memo-drawer:hover {
-  border-style: dashed;
-  opacity: 1;
 }
 
 .node-content {
