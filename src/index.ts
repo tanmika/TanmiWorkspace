@@ -31,6 +31,7 @@ import { importTools } from "./tools/import.js";
 import { dispatchTools } from "./tools/dispatch.js";
 import { configTools } from "./tools/config.js";
 import { memoTools } from "./tools/memo.js";
+import { capabilityTools } from "./tools/capability.js";
 import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
@@ -172,7 +173,7 @@ function createMcpServer(services: Services): Server {
 
   // 注册工具列表处理器
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [...allTools, ...memoTools],
+    tools: [...allTools, ...memoTools, ...capabilityTools],
   }));
 
   // 注册工具调用处理器
@@ -621,6 +622,103 @@ function createMcpServer(services: Services): Server {
             workspaceId: args?.workspaceId as string,
             memoId: args?.memoId as string,
           });
+          break;
+        }
+
+        // Capability 工具
+        case "capability_list": {
+          const scenario = args?.scenario as "feature" | "debug" | "optimize" | "summary" | "misc";
+          const { capabilityService } = await import("./services/CapabilityService.js");
+          const capabilities = capabilityService.getCapabilitiesForScenario(scenario);
+          result = {
+            scenario,
+            basePack: capabilities.basePack,
+            optionalPack: capabilities.optionalPack,
+            hint: "使用 capability_select 确认选择的能力包",
+          };
+          break;
+        }
+
+        case "capability_select": {
+          const workspaceId = args?.workspaceId as string;
+          const infoType = args?.infoType as "info_collection" | "info_summary" | undefined;
+          const nodeId = args?.nodeId as string | undefined;
+          const selected = args?.selected as string[];
+
+          const { capabilityService } = await import("./services/CapabilityService.js");
+
+          // 验证 selected 是否为有效的 CapabilityId
+          const validCapabilities = selected.filter((id) => {
+            try {
+              capabilityService.getCapabilityInfo(id as any);
+              return true;
+            } catch {
+              return false;
+            }
+          });
+
+          if (validCapabilities.length === 0) {
+            throw new Error("未选择有效的能力包");
+          }
+
+          let infoNodeId: string;
+          const createdNodes: Array<{ nodeId: string; capabilityId: string; title: string }> = [];
+
+          // 首次调用：创建 info 节点
+          if (!nodeId) {
+            if (!infoType) {
+              throw new Error("首次调用必须提供 infoType 参数");
+            }
+
+            // 创建 info 节点
+            const infoNodeTitle = infoType === "info_collection" ? "信息收集" : "信息总结";
+            const infoNodeResult = await services.node.create({
+              workspaceId,
+              parentId: "root",
+              type: "execution",
+              title: infoNodeTitle,
+              requirement: `${infoNodeTitle}节点，包含以下能力：${validCapabilities.map((id) => capabilityService.getCapabilityInfo(id as any).name).join("、")}`,
+              role: infoType,
+            });
+
+            infoNodeId = infoNodeResult.nodeId;
+          } else {
+            // 追加调用：使用现有 info 节点
+            infoNodeId = nodeId;
+          }
+
+          // 为每个能力创建子节点
+          for (const capabilityId of validCapabilities) {
+            const capInfo = capabilityService.getCapabilityInfo(capabilityId as any);
+            const acceptanceCriteria = capabilityService.getAcceptanceCriteria(capabilityId as any);
+
+            const childNodeResult = await services.node.create({
+              workspaceId,
+              parentId: infoNodeId,
+              type: "execution",
+              title: capInfo.name,
+              requirement: capInfo.description,
+              acceptanceCriteria,
+            });
+
+            createdNodes.push({
+              nodeId: childNodeResult.nodeId,
+              capabilityId,
+              title: capInfo.name,
+            });
+          }
+
+          // 构建 Skill 列表和路径
+          const skills = validCapabilities.map((id) => id);
+          const skillsPath = "src/skills/capabilities/";
+
+          result = {
+            infoNodeId,
+            createdNodes,
+            skills,
+            skillsPath,
+            hint: "已创建能力节点。请按 skills 列表顺序执行对应能力（如果 Skill 文件存在），或查看 skillsPath 目录。每个能力的验收标准已自动写入对应节点。",
+          };
           break;
         }
 

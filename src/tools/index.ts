@@ -17,3 +17,4 @@ export {
 } from "./dispatch.js";
 export { configTools, configGetTool, configSetTool } from "./config.js";
 export { memoTools, memoCreateTool, memoListTool, memoGetTool, memoUpdateTool, memoDeleteTool } from "./memo.js";
+export { capabilityTools, capabilityListTool, capabilitySelectTool } from "./capability.js";

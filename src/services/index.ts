@@ -11,6 +11,7 @@ export { GuidanceService } from "./GuidanceService.js";
 export { DispatchService } from "./DispatchService.js";
 export { ConfigService } from "./ConfigService.js";
 export { MemoService } from "./MemoService.js";
+export { CapabilityService, capabilityService } from "./CapabilityService.js";
 export type {
   DispatchPrepareResult,
   DispatchCompleteResult,

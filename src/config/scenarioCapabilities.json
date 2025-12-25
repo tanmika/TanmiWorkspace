@@ -1,0 +1,30 @@
+{
+  "feature": {
+    "basePack": ["requirement_clarify", "tech_design"],
+    "optionalPack": ["test_design", "doc_scan"]
+  },
+  "summary": {
+    "basePack": ["doc_scan"],
+    "optionalPack": ["requirement_clarify"]
+  },
+  "optimize": {
+    "basePack": ["perf_baseline", "tech_research"],
+    "optionalPack": ["tech_design", "test_design"]
+  },
+  "debug": {
+    "basePack": ["error_analysis"],
+    "optionalPack": ["tech_research", "perf_baseline", "test_design"]
+  },
+  "misc": {
+    "basePack": [],
+    "optionalPack": [
+      "requirement_clarify",
+      "tech_research",
+      "tech_design",
+      "test_design",
+      "doc_scan",
+      "error_analysis",
+      "perf_baseline"
+    ]
+  }
+}
