@@ -216,12 +216,11 @@ export class CapabilityService {
    */
   parseSkillFrontmatter(capabilityId: CapabilityId): SkillMetadata | null {
     try {
-      // Skill 文件路径约定：src/skills/capabilities/{capabilityId}.md
+      // Skill 文件路径约定：plugin/skills/{capabilityId}.md
       const skillPath = path.join(
         process.cwd(),
-        "src",
+        "plugin",
         "skills",
-        "capabilities",
         `${capabilityId}.md`
       );
 

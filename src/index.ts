@@ -710,7 +710,7 @@ function createMcpServer(services: Services): Server {
 
           // 构建 Skill 列表和路径
           const skills = validCapabilities.map((id) => id);
-          const skillsPath = "src/skills/capabilities/";
+          const skillsPath = "plugin/skills/";
 
           result = {
             infoNodeId,

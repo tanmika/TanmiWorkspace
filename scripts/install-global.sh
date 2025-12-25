@@ -349,13 +349,13 @@ install_dispatch_agents() {
     info "安装派发 Agent 模板..."
 
     # 检查是否有模板文件
-    if [ ! -f "$PROJECT_ROOT/templates/tanmi-executor.md" ]; then
-        error "模板文件不存在: $PROJECT_ROOT/templates/tanmi-executor.md"
+    if [ ! -f "$PROJECT_ROOT/plugin/agents/tanmi-executor.md" ]; then
+        error "模板文件不存在: $PROJECT_ROOT/plugin/agents/tanmi-executor.md"
         return 1
     fi
 
-    if [ ! -f "$PROJECT_ROOT/templates/tanmi-tester.md" ]; then
-        error "模板文件不存在: $PROJECT_ROOT/templates/tanmi-tester.md"
+    if [ ! -f "$PROJECT_ROOT/plugin/agents/tanmi-tester.md" ]; then
+        error "模板文件不存在: $PROJECT_ROOT/plugin/agents/tanmi-tester.md"
         return 1
     fi
 
@@ -366,8 +366,8 @@ install_dispatch_agents() {
     mkdir -p "$agents_dir"
 
     # 复制模板文件
-    cp "$PROJECT_ROOT/templates/tanmi-executor.md" "$agents_dir/"
-    cp "$PROJECT_ROOT/templates/tanmi-tester.md" "$agents_dir/"
+    cp "$PROJECT_ROOT/plugin/agents/tanmi-executor.md" "$agents_dir/"
+    cp "$PROJECT_ROOT/plugin/agents/tanmi-tester.md" "$agents_dir/"
 
     success "派发 Agent 已安装到 $agents_dir/"
     info "  - tanmi-executor.md (任务执行者)"
@@ -420,7 +420,7 @@ uninstall_dispatch_agents() {
 install_skills() {
     info "安装 Skills 模板..."
 
-    local skills_src="$PROJECT_ROOT/templates/skills"
+    local skills_src="$PROJECT_ROOT/plugin/skills"
     local skills_dir="$CLAUDE_HOME/skills"
 
     # 检查是否有模板文件
@@ -464,7 +464,7 @@ uninstall_skills() {
     info "卸载 Skills 模板..."
 
     local skills_dir="$CLAUDE_HOME/skills"
-    local skills_src="$PROJECT_ROOT/templates/skills"
+    local skills_src="$PROJECT_ROOT/plugin/skills"
 
     # 删除由 TanmiWorkspace 安装的 skill 文件
     if [ -d "$skills_src" ] && [ -d "$skills_dir" ]; then
