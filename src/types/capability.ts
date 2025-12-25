@@ -7,13 +7,13 @@ import type { TaskScenario } from "./workspace.js";
  * 对应 scenarioCapabilities.json 中的能力标识
  */
 export type CapabilityId =
-  | "requirement_clarify"  // 需求澄清
-  | "tech_research"        // 技术调研
-  | "tech_design"          // 技术设计
-  | "test_design"          // 测试设计
-  | "doc_scan"             // 文档扫描
-  | "error_analysis"       // 错误分析
-  | "perf_baseline";       // 性能基准
+  | "intent_alignment"      // 意图对齐（原 requirement_clarify）
+  | "context_discovery"     // 上下文探索（原 doc_scan）
+  | "diagnosis"             // 诊断分析（原 error_analysis）
+  | "tech_research"         // 技术调研（不变）
+  | "measurement_analysis"  // 度量分析（原 perf_baseline）
+  | "solution_design"       // 方案设计（原 tech_design）
+  | "verification_strategy"; // 验证策略（原 test_design）
 
 /**
  * 能力信息（用于列表展示）

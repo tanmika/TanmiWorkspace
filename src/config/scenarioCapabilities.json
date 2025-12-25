@@ -1,30 +1,30 @@
 {
   "feature": {
-    "basePack": ["requirement_clarify", "tech_design"],
-    "optionalPack": ["test_design", "doc_scan"]
+    "basePack": ["intent_alignment", "context_discovery"],
+    "optionalPack": ["tech_research", "solution_design", "verification_strategy"]
   },
   "summary": {
-    "basePack": ["doc_scan"],
-    "optionalPack": ["requirement_clarify"]
+    "basePack": ["intent_alignment", "context_discovery"],
+    "optionalPack": []
   },
   "optimize": {
-    "basePack": ["perf_baseline", "tech_research"],
-    "optionalPack": ["tech_design", "test_design"]
+    "basePack": ["intent_alignment", "measurement_analysis"],
+    "optionalPack": ["diagnosis", "solution_design", "verification_strategy"]
   },
   "debug": {
-    "basePack": ["error_analysis"],
-    "optionalPack": ["tech_research", "perf_baseline", "test_design"]
+    "basePack": ["intent_alignment", "diagnosis"],
+    "optionalPack": ["context_discovery", "solution_design", "verification_strategy"]
   },
   "misc": {
     "basePack": [],
     "optionalPack": [
-      "requirement_clarify",
+      "intent_alignment",
+      "context_discovery",
       "tech_research",
-      "tech_design",
-      "test_design",
-      "doc_scan",
-      "error_analysis",
-      "perf_baseline"
+      "measurement_analysis",
+      "diagnosis",
+      "solution_design",
+      "verification_strategy"
     ]
   }
 }

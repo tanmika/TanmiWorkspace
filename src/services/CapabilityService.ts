@@ -15,11 +15,23 @@ import type { TaskScenario } from "../types/workspace.js";
  * 能力元信息映射（硬编码，作为 Skill 文件缺失时的降级方案）
  */
 const CAPABILITY_INFO_MAP: Record<CapabilityId, CapabilityInfo> = {
-  requirement_clarify: {
-    id: "requirement_clarify",
-    name: "需求澄清",
-    description: "通过结构化提问澄清需求",
+  intent_alignment: {
+    id: "intent_alignment",
+    name: "意图对齐",
+    description: "通过结构化提问对齐用户意图",
     type: "collection",
+  },
+  context_discovery: {
+    id: "context_discovery",
+    name: "上下文探索",
+    description: "扫描和分析项目上下文",
+    type: "summary",
+  },
+  diagnosis: {
+    id: "diagnosis",
+    name: "诊断分析",
+    description: "诊断问题并分析根因",
+    type: "summary",
   },
   tech_research: {
     id: "tech_research",
@@ -27,34 +39,22 @@ const CAPABILITY_INFO_MAP: Record<CapabilityId, CapabilityInfo> = {
     description: "调研相关技术方案和最佳实践",
     type: "collection",
   },
-  tech_design: {
-    id: "tech_design",
-    name: "技术设计",
+  measurement_analysis: {
+    id: "measurement_analysis",
+    name: "度量分析",
+    description: "建立度量基准并分析数据",
+    type: "collection",
+  },
+  solution_design: {
+    id: "solution_design",
+    name: "方案设计",
     description: "设计技术实现方案",
     type: "collection",
   },
-  test_design: {
-    id: "test_design",
-    name: "测试设计",
-    description: "设计测试策略和用例",
-    type: "collection",
-  },
-  doc_scan: {
-    id: "doc_scan",
-    name: "文档扫描",
-    description: "扫描和分析项目文档",
-    type: "summary",
-  },
-  error_analysis: {
-    id: "error_analysis",
-    name: "错误分析",
-    description: "分析错误日志和堆栈信息",
-    type: "summary",
-  },
-  perf_baseline: {
-    id: "perf_baseline",
-    name: "性能基准",
-    description: "建立性能基准和分析瓶颈",
+  verification_strategy: {
+    id: "verification_strategy",
+    name: "验证策略",
+    description: "设计验证策略和测试用例",
     type: "collection",
   },
 };
@@ -184,26 +184,26 @@ export class CapabilityService {
 
     // 默认验收标准配置
     const defaultCriteria: Record<CapabilityId, import("../types/node.js").AcceptanceCriteria[]> = {
-      requirement_clarify: [
-        { when: "需求澄清完成", then: "需求描述清晰，无歧义点" },
+      intent_alignment: [
+        { when: "意图对齐完成", then: "需求描述清晰，无歧义点" },
+      ],
+      context_discovery: [
+        { when: "上下文探索完成", then: "相关文档和代码已整理归纳" },
+      ],
+      diagnosis: [
+        { when: "诊断分析完成", then: "问题原因和影响已明确" },
       ],
       tech_research: [
         { when: "技术调研完成", then: "技术方案可行性已验证" },
       ],
-      tech_design: [
-        { when: "技术设计完成", then: "设计方案完整且可实施" },
+      measurement_analysis: [
+        { when: "度量分析完成", then: "性能瓶颈或关键指标已识别" },
       ],
-      test_design: [
-        { when: "测试设计完成", then: "测试策略和用例明确" },
+      solution_design: [
+        { when: "方案设计完成", then: "设计方案完整且可实施" },
       ],
-      doc_scan: [
-        { when: "文档扫描完成", then: "相关文档已整理归纳" },
-      ],
-      error_analysis: [
-        { when: "错误分析完成", then: "错误原因和影响已明确" },
-      ],
-      perf_baseline: [
-        { when: "性能基准建立", then: "性能瓶颈已识别" },
+      verification_strategy: [
+        { when: "验证策略完成", then: "测试策略和用例明确" },
       ],
     };
 
