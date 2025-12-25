@@ -195,7 +195,12 @@ export class MemoService {
    * 更新备忘
    */
   async update(params: MemoUpdateParams): Promise<MemoUpdateResult> {
-    const { workspaceId, memoId, title, summary, content, tags } = params;
+    const { workspaceId, memoId, title, summary, content, appendContent, tags } = params;
+
+    // 0. 验证 content 和 appendContent 互斥
+    if (content !== undefined && appendContent !== undefined) {
+      throw new TanmiError("INVALID_PARAMS", "content 和 appendContent 不能同时使用");
+    }
 
     // 1. 获取工作区信息
     const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
@@ -212,22 +217,32 @@ export class MemoService {
 
     // 4. 获取目录名
     const memoDirName = memoMeta.dirName;
+    const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
 
-    // 5. 更新备忘元数据
+    // 5. 处理内容更新
+    let finalContent: string | undefined;
+    if (content !== undefined) {
+      finalContent = content;
+    } else if (appendContent !== undefined) {
+      // 读取现有内容并追加
+      const existingContent = await this.fs.readFile(contentPath);
+      finalContent = existingContent + appendContent;
+    }
+
+    // 6. 更新备忘元数据
     const timestamp = now();
     if (title !== undefined) memoMeta.title = title;
     if (summary !== undefined) memoMeta.summary = summary;
     if (tags !== undefined) memoMeta.tags = tags;
-    if (content !== undefined) memoMeta.contentLength = content.length;
+    if (finalContent !== undefined) memoMeta.contentLength = finalContent.length;
     memoMeta.updatedAt = timestamp;
 
-    // 6. 写回 graph.json
+    // 7. 写回 graph.json
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 7. 更新 Content.md（如果提供了 content）
-    if (content !== undefined) {
-      const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
-      await this.fs.writeFile(contentPath, content);
+    // 8. 更新 Content.md（如果有内容变更）
+    if (finalContent !== undefined) {
+      await this.fs.writeFile(contentPath, finalContent);
     }
 
     return {

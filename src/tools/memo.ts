@@ -87,7 +87,7 @@ export const memoGetTool: Tool = {
  */
 export const memoUpdateTool: Tool = {
   name: "memo_update",
-  description: "更新备忘。可部分更新 title、summary、content、tags。tags 会完全替换现有标签。",
+  description: "更新备忘。可部分更新 title、summary、content、tags。content 替换全部内容，appendContent 追加到末尾（二者互斥）。tags 会完全替换现有标签。",
   inputSchema: {
     type: "object",
     properties: {
@@ -109,7 +109,11 @@ export const memoUpdateTool: Tool = {
       },
       content: {
         type: "string",
-        description: "新内容（可选）",
+        description: "新内容（可选，替换全部内容，与 appendContent 互斥）",
+      },
+      appendContent: {
+        type: "string",
+        description: "追加内容（可选，追加到现有内容末尾，与 content 互斥）",
       },
       tags: {
         type: "array",

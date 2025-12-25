@@ -98,7 +98,8 @@ export interface MemoUpdateParams {
   memoId: string;
   title?: string;
   summary?: string;
-  content?: string;
+  content?: string;                 // 替换内容（与 appendContent 互斥）
+  appendContent?: string;           // 追加内容到末尾（与 content 互斥）
   tags?: string[];                  // 会完全替换现有标签
 }
 
