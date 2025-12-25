@@ -4,7 +4,10 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as fs from "node:fs/promises";
 import * as crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import YAML from "yaml";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import type { WorkspaceService } from "./WorkspaceService.js";
 import type { NodeService } from "./NodeService.js";
 import type { StateService } from "./StateService.js";
@@ -593,11 +596,13 @@ export class TutorialService {
    */
   private async readVersionNotes(): Promise<VersionNote[]> {
     try {
-      const notesPath = path.join(process.cwd(), "docs/version-notes.yaml");
+      // 使用模块相对路径，避免 process.cwd() 在不同启动目录下的问题
+      const notesPath = path.join(__dirname, "../../docs/version-notes.yaml");
       const content = await fs.readFile(notesPath, "utf-8");
       const data = YAML.parse(content) as VersionNotesFile;
       return data.versions || [];
-    } catch {
+    } catch (err) {
+      console.error("[Tutorial] Failed to read version-notes.yaml:", err);
       return [];
     }
   }
