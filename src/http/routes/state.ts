@@ -3,7 +3,6 @@
 
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getServices } from "../services.js";
-import { eventService } from "../EventService.js";
 import type { NodeTransitionParams, TransitionAction } from "../../types/index.js";
 
 // 请求类型定义
@@ -63,9 +62,6 @@ export async function stateRoutes(fastify: FastifyInstance): Promise<void> {
         // 记录失败不阻塞主流程
         console.error('[HTTP] addManualChange failed:', err);
       }
-
-      // 推送事件
-      eventService.emitNodeUpdate(request.params.wid, request.params.nid);
 
       return { ...result, manualOperationRecorded };
     }

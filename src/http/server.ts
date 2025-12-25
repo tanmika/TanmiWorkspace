@@ -9,7 +9,7 @@ import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { ensureBaseSetup } from "./services.js";
-import { eventService } from "./EventService.js";
+import { eventService } from "../services/EventService.js";
 
 // ESM 下获取 __dirname
 const __filename = fileURLToPath(import.meta.url);

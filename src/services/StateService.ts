@@ -24,6 +24,7 @@ import { randomBytes } from "crypto";
 import { GuidanceService } from "./GuidanceService.js";
 import type { GuidanceContext } from "../types/guidance.js";
 import { isGitRepo } from "../utils/git.js";
+import { eventService } from "./EventService.js";
 
 /**
  * 待确认 Token 信息
@@ -472,6 +473,9 @@ export class StateService {
         }
       }
     }
+
+    // 推送 SSE 事件通知前端
+    eventService.emitNodeUpdate(workspaceId, nodeId);
 
     return result;
   }

@@ -3,7 +3,6 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { getServices } from "../services.js";
-import { eventService } from "../EventService.js";
 import type {
   NodeCreateParams,
   NodeGetParams,
@@ -175,9 +174,6 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         // 记录失败不阻塞主流程
       }
 
-      // 推送事件
-      eventService.emitNodeUpdate(request.params.wid, result.nodeId);
-
       reply.status(201).send({ ...result, manualOperationRecorded });
     }
   );
@@ -268,9 +264,6 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         // 记录失败不阻塞主流程
       }
 
-      // 推送事件
-      eventService.emitNodeUpdate(request.params.wid, request.params.nid);
-
       return { ...result, manualOperationRecorded };
     }
   );
@@ -320,9 +313,6 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         // 记录失败不阻塞主流程
       }
 
-      // 推送事件
-      eventService.emitNodeUpdate(request.params.wid, request.params.nid);
-
       return { ...result, manualOperationRecorded };
     }
   );
@@ -340,9 +330,6 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         newParentId: request.body.newParentId,
       };
       const result = await services.node.move(params);
-
-      // 推送事件
-      eventService.emitNodeUpdate(request.params.wid, request.params.nid);
 
       return result;
     }
