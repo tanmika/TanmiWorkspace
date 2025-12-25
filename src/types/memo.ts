@@ -60,6 +60,7 @@ export interface MemoListItem {
   title: string;
   summary: string;
   tags: string[];
+  contentLength: number;  // 内容长度（用于UI显示横线数量）
   createdAt: string;
   updatedAt: string;
 }

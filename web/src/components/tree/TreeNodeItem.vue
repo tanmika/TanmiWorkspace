@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { NodeTreeItem } from '@/types'
 import FocusCrosshair from './FocusCrosshair.vue'
 import NodeIcon from './NodeIcon.vue'
@@ -20,6 +21,9 @@ const emit = defineEmits<{
   toggleExpand: []
 }>()
 
+// 检测是否为 memo 节点（通过 id 前缀）
+const isMemo = computed(() => props.node.id.startsWith('memo-'))
+
 // 计算层级点数量（有子节点时最后一个位置留给展开按钮）
 const depthDots = props.depth ? (props.hasChildren ? props.depth - 1 : props.depth) : 0
 
@@ -35,7 +39,7 @@ function handleToggleExpand(e: Event) {
 
 <template>
   <div
-    :class="['tree-node-item', { selected: isSelected, 'active-path': isActivePath }]"
+    :class="['tree-node-item', { selected: isSelected, 'active-path': isActivePath, 'is-memo': isMemo }]"
     @click="handleClick"
   >
     <!-- 层级点 -->
@@ -54,7 +58,7 @@ function handleToggleExpand(e: Event) {
     </button>
     <!-- 节点图标 -->
     <FocusCrosshair
-      v-if="isFocused"
+      v-if="isFocused && !isMemo"
       :type="node.type"
       :status="node.status"
     />
@@ -62,6 +66,8 @@ function handleToggleExpand(e: Event) {
       v-else
       :type="node.type"
       :status="node.status"
+      :is-memo="isMemo"
+      :content-length="node.contentLength"
     />
     <span class="node-title">{{ node.title }}</span>
     <!-- 角色标牌 -->
@@ -177,8 +183,36 @@ function handleToggleExpand(e: Event) {
   color: var(--text-main);
 }
 
+/* Memo 节点样式 - 使用淡绿色背景 */
+.tree-node-item.is-memo {
+  background: rgba(90, 154, 122, 0.06);
+}
+
+.tree-node-item.is-memo:hover {
+  background: rgba(90, 154, 122, 0.1);
+  border-color: rgba(90, 154, 122, 0.3);
+}
+
+.tree-node-item.is-memo.selected {
+  background: rgba(90, 154, 122, 0.12);
+  border-color: rgba(90, 154, 122, 0.5);
+  border-left-color: var(--accent-green);
+}
+
 /* 深色模式 */
 [data-theme="dark"] .tree-node-item.active-path .dot::before {
   background: var(--accent-red);
+}
+
+[data-theme="dark"] .tree-node-item.is-memo {
+  background: rgba(106, 170, 138, 0.1);
+}
+
+[data-theme="dark"] .tree-node-item.is-memo:hover {
+  background: rgba(106, 170, 138, 0.14);
+}
+
+[data-theme="dark"] .tree-node-item.is-memo.selected {
+  background: rgba(106, 170, 138, 0.18);
 }
 </style>

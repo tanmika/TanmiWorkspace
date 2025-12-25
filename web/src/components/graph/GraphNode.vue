@@ -17,6 +17,8 @@ interface Props {
     isFocused: boolean
     isSelected: boolean
     isActivePath: boolean
+    isMemoDrawer?: boolean
+    memoCount?: number
   }
 }
 
@@ -26,6 +28,7 @@ const nodeClass = computed(() => ({
   'graph-node': true,
   'selected': props.data.isSelected,
   'active-path': props.data.isActivePath,
+  'memo-drawer': props.data.isMemoDrawer,
 }))
 </script>
 
@@ -96,6 +99,17 @@ const nodeClass = computed(() => ({
 
 .graph-node.active-path {
   /* 路径上的节点不额外样式 */
+}
+
+.graph-node.memo-drawer {
+  background: var(--bg-color);
+  border: 1px dashed var(--border-color);
+  opacity: 0.85;
+}
+
+.graph-node.memo-drawer:hover {
+  border-style: dashed;
+  opacity: 1;
 }
 
 .node-content {

@@ -89,6 +89,7 @@ export class MemoService {
       title,
       summary,
       tags,
+      contentLength: content.length,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -211,6 +212,7 @@ export class MemoService {
     if (title !== undefined) memoMeta.title = title;
     if (summary !== undefined) memoMeta.summary = summary;
     if (tags !== undefined) memoMeta.tags = tags;
+    if (content !== undefined) memoMeta.contentLength = content.length;
     memoMeta.updatedAt = timestamp;
 
     // 5. 写回 graph.json

@@ -13,10 +13,12 @@ const props = defineProps<{
   tree: NodeTreeItem | null
   selectedId: string | null
   focusId: string | null
+  memoCount?: number
 }>()
 
 const emit = defineEmits<{
   select: [nodeId: string]
+  selectMemo: []
 }>()
 
 // Vue Flow 实例
@@ -39,6 +41,7 @@ const flowData = computed(() => {
     tree: props.tree,
     focusId: props.focusId,
     selectedId: props.selectedId,
+    memoCount: props.memoCount || 0,
   })
 })
 
@@ -67,7 +70,12 @@ watch(
 
 // 处理节点点击
 function handleNodeClick(event: NodeMouseEvent) {
-  emit('select', event.node.id)
+  // 如果点击的是memo抽屉虚拟节点，触发selectMemo事件
+  if (event.node.id === '__memo_drawer__') {
+    emit('selectMemo')
+  } else {
+    emit('select', event.node.id)
+  }
 }
 
 // 聚焦到当前选中/聚焦的节点

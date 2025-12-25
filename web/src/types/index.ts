@@ -133,6 +133,7 @@ export interface NodeTreeItem {
   status: NodeStatus
   role?: NodeRole
   dispatch?: NodeDispatchInfo
+  contentLength?: number  // MEMO 节点专用：内容长度
   children: NodeTreeItem[]
 }
 
@@ -510,4 +511,41 @@ export const DISPATCH_STATUS_CONFIG: Record<NodeDispatchStatus, DispatchStatusCo
     emoji: '❌',
     description: '执行或测试失败',
   },
+}
+
+// ========== Memo 类型 ==========
+
+/**
+ * 备忘（Memo）- 工作区独立草稿区
+ */
+export interface Memo {
+  id: string
+  title: string
+  summary: string
+  content: string
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * memo_list 输出项（精简信息）
+ */
+export interface MemoListItem {
+  id: string
+  title: string
+  summary: string
+  tags: string[]
+  contentLength: number  // 内容长度（用于UI显示横线数量）
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * memo_list 输出
+ */
+export interface MemoListResult {
+  memos: MemoListItem[]
+  allTags: string[]
+  hint?: string
 }

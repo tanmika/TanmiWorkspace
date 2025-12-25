@@ -2,11 +2,12 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 // Element Plus icons (no longer used in header/sidebar)
-import { useWorkspaceStore, useNodeStore, useSettingsStore, useToastStore } from '@/stores'
+import { useWorkspaceStore, useNodeStore, useSettingsStore, useToastStore, useMemoStore } from '@/stores'
 import { getGlobalSSE } from '@/composables/useSSE'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
+import MemoDetail from '@/components/memo/MemoDetail.vue'
 import EnableDispatchDialog from '@/components/dispatch/EnableDispatchDialog.vue'
 import DisableDispatchDialog from '@/components/dispatch/DisableDispatchDialog.vue'
 import SwitchDispatchModeDialog from '@/components/dispatch/SwitchDispatchModeDialog.vue'
@@ -107,14 +108,21 @@ const router = useRouter()
 const workspaceStore = useWorkspaceStore()
 const nodeStore = useNodeStore()
 const settingsStore = useSettingsStore()
+const memoStore = useMemoStore()
 
 const workspaceId = computed(() => route.params.id as string)
+
+// 选中状态：区分 node 和 memo
+type SelectionType = 'node' | 'memo'
+const selectedType = ref<SelectionType>('node')
+const selectedMemoId = ref<string | null>(null)
 
 // 加载工作区数据
 async function loadWorkspace() {
   try {
     await workspaceStore.fetchWorkspace(workspaceId.value)
     await nodeStore.fetchNodeTree()
+    await memoStore.fetchMemos(workspaceId.value)
   } catch {
     showToast('加载工作区失败', 'error')
     router.push('/')
@@ -249,7 +257,25 @@ function goBack() {
 
 // 选择节点
 function handleNodeSelect(nodeId: string) {
+  selectedType.value = 'node'
+  selectedMemoId.value = null
   nodeStore.selectNode(nodeId)
+}
+
+// 选择 memo
+function handleMemoSelect(memoId: string) {
+  selectedType.value = 'memo'
+  selectedMemoId.value = memoId
+  nodeStore.clearSelection()
+}
+
+// 点击图形视图中的memo抽屉
+function handleMemoDrawerClick() {
+  // 选择第一个memo（如果存在）
+  const firstMemo = memoStore.memos[0]
+  if (firstMemo) {
+    handleMemoSelect(firstMemo.id)
+  }
 }
 
 // 创建子节点对话框
@@ -450,7 +476,9 @@ async function handleDispatchSuccess() {
             :tree="nodeStore.nodeTree"
             :selected-id="nodeStore.selectedNodeId"
             :focus-id="workspaceStore.currentFocus"
+            :memo-count="memoStore.memoCount"
             @select="handleNodeSelect"
+            @select-memo="handleMemoDrawerClick"
           />
         </div>
       </aside>
@@ -462,13 +490,14 @@ async function handleDispatchSuccess() {
         @mousedown="startResize"
       />
 
-      <!-- 右侧：节点详情 Content -->
+      <!-- 右侧：节点/备忘详情 Content -->
       <main class="layout-content">
-        <NodeDetail v-if="nodeStore.selectedNodeId" />
+        <NodeDetail v-if="selectedType === 'node' && nodeStore.selectedNodeId" />
+        <MemoDetail v-else-if="selectedType === 'memo' && selectedMemoId" :memo-id="selectedMemoId" />
         <div v-else class="empty-state">
           <div class="empty-icon"></div>
-          <p class="empty-text">SELECT A NODE</p>
-          <p class="empty-hint">选择左侧节点查看详情</p>
+          <p class="empty-text">SELECT A NODE OR MEMO</p>
+          <p class="empty-hint">选择左侧节点或备忘查看详情</p>
         </div>
       </main>
     </div>

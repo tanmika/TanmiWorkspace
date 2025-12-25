@@ -5,15 +5,29 @@ import type { NodeType, NodeStatus } from '@/types'
 const props = defineProps<{
   type: NodeType
   status: NodeStatus
+  isMemo?: boolean
+  contentLength?: number  // MEMO 内容长度，用于显示横线数量
 }>()
 
 // 是否为规划节点 - 必须是 computed 才能响应式
 const isPlanning = computed(() => props.type === 'planning')
+
+// 计算横线数量（1-3条）
+const memoLines = computed(() => {
+  if (!props.contentLength) return 1
+  if (props.contentLength < 500) return 1
+  if (props.contentLength <= 1000) return 2
+  return 3
+})
 </script>
 
 <template>
+  <!-- Memo 节点 - 方形 + 横线 -->
+  <div v-if="isMemo" class="node-memo" :class="'lines-' + memoLines">
+    <span class="memo-line" v-for="i in memoLines" :key="i"></span>
+  </div>
   <!-- 规划节点需要外层容器保持对齐 -->
-  <div v-if="isPlanning" class="node-plan-wrapper">
+  <div v-else-if="isPlanning" class="node-plan-wrapper">
     <div :class="['node-plan', status]"></div>
   </div>
   <!-- 执行节点直接渲染 -->
@@ -192,6 +206,70 @@ const isPlanning = computed(() => props.type === 'planning')
 [data-theme="dark"] .node-exec.failed::before,
 [data-theme="dark"] .node-exec.failed::after {
   background: #181818;
+}
+
+/* Memo 节点 - 六边形 + 横线 */
+.node-memo {
+  width: 20px;
+  height: 20px;
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 1px;
+}
+
+/* 六边形背景（边框效果）*/
+.node-memo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--accent-green);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+/* 六边形内部（背景色）*/
+.node-memo::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  background: var(--card-bg);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+/* 横线样式 */
+.memo-line {
+  width: 8px;
+  height: 2px;
+  background: var(--accent-green);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* 1条横线时居中 */
+.node-memo.lines-1 {
+  justify-content: center;
+}
+
+/* 2条横线 */
+.node-memo.lines-2 {
+  justify-content: center;
+  gap: 2px;
+}
+
+/* 3条横线时填满 */
+.node-memo.lines-3 {
+  justify-content: center;
+  gap: 1px;
 }
 
 </style>
