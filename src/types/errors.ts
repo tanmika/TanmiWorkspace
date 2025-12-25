@@ -45,6 +45,7 @@ export const ErrorCodes = {
   CONCURRENT_EXECUTION: "CONCURRENT_EXECUTION",
   RULES_HASH_MISMATCH: "RULES_HASH_MISMATCH",
   INVALID_PARAMS: "INVALID_PARAMS",
+  UNKNOWN_PARAMS: "UNKNOWN_PARAMS",
 
   // 校验错误
   GRAPH_CORRUPTED: "GRAPH_CORRUPTED",
@@ -121,6 +122,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   CONCURRENT_EXECUTION: "同级节点正在执行中，请遵循一次一个节点原则",
   RULES_HASH_MISMATCH: "规则哈希不匹配，请先获取最新规则",
   INVALID_PARAMS: "参数无效",
+  UNKNOWN_PARAMS: "存在未知参数",
   GRAPH_CORRUPTED: "节点图数据损坏",
   NODE_DIR_MISSING: "节点目录不存在",
   NODE_INFO_MISSING: "节点 Info.md 不存在",

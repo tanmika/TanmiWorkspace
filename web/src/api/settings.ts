@@ -23,6 +23,38 @@ export interface TutorialTriggerResult {
   message: string
 }
 
+// 组件状态（组件级版本跟踪）
+export interface ComponentStatus {
+  installed: boolean
+  version: string | null
+  outdated: boolean
+}
+
+// 平台组件状态
+export interface PlatformComponents {
+  mcp: ComponentStatus
+  hooks: ComponentStatus
+  agents: ComponentStatus
+  skills: ComponentStatus
+}
+
+// 平台安装状态
+export interface PlatformStatus {
+  name: string
+  enabled: boolean
+  components: PlatformComponents
+}
+
+// 安装状态响应（移除 codex）
+export interface InstallationStatusResult {
+  currentVersion: string
+  platforms: {
+    claudeCode: PlatformStatus
+    cursor: PlatformStatus
+  }
+  updateCommand: string
+}
+
 export const settingsApi = {
   /**
    * 获取全局配置
@@ -45,5 +77,12 @@ export const settingsApi = {
    */
   async triggerTutorial(): Promise<TutorialTriggerResult> {
     return client.post('/tutorial/trigger')
+  },
+
+  /**
+   * 获取插件安装状态
+   */
+  async getInstallationStatus(): Promise<InstallationStatusResult> {
+    return client.get('/installation-status')
   },
 }

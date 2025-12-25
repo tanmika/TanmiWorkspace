@@ -34,16 +34,20 @@ import { configRoutes } from "./routes/config.js";
  */
 export async function createServer(): Promise<FastifyInstance> {
   const server = Fastify({
-    logger: {
-      level: "info",
-      transport: {
-        target: "pino-pretty",
-        options: {
-          translateTime: "HH:MM:ss Z",
-          ignore: "pid,hostname",
+    logger: IS_DEV
+      ? {
+          level: "info",
+          transport: {
+            target: "pino-pretty",
+            options: {
+              translateTime: "HH:MM:ss Z",
+              ignore: "pid,hostname",
+            },
+          },
+        }
+      : {
+          level: "warn", // 生产环境只记录警告和错误
         },
-      },
-    },
   });
 
   // 注册 CORS
@@ -115,6 +119,16 @@ export async function createServer(): Promise<FastifyInstance> {
     let latestVersion: string | null = null;
     let updateAvailable = false;
 
+    // 语义化版本比较：v1 > v2 返回 true
+    const semverGreaterThan = (v1: string, v2: string): boolean => {
+      const parse = (v: string) => v.split(".").map(Number);
+      const [a1, a2, a3] = parse(v1);
+      const [b1, b2, b3] = parse(v2);
+      if (a1 !== b1) return a1 > b1;
+      if (a2 !== b2) return a2 > b2;
+      return a3 > b3;
+    };
+
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
@@ -129,7 +143,8 @@ export async function createServer(): Promise<FastifyInstance> {
         const data = await response.json() as { version?: string };
         latestVersion = data.version || null;
         if (latestVersion && currentVersion !== "unknown") {
-          updateAvailable = latestVersion !== currentVersion;
+          // 只有当 npm 版本大于当前版本时才提示更新
+          updateAvailable = semverGreaterThan(latestVersion, currentVersion);
         }
       }
     } catch {
@@ -143,22 +158,8 @@ export async function createServer(): Promise<FastifyInstance> {
     };
   });
 
-  // 开发信息接口（仅开发模式）
+  // 服务信息接口（基本信息所有环境可用，调试信息仅开发模式）
   server.get("/api/dev-info", async () => {
-    if (!IS_DEV) {
-      return { available: false };
-    }
-
-    // 获取代码编译时间（dist/index.js 的修改时间）
-    let codeBuildTime: string | null = null;
-    const distIndexPath = path.resolve(__dirname, "../index.js");
-    try {
-      const stat = fs.statSync(distIndexPath);
-      codeBuildTime = stat.mtime.toISOString();
-    } catch {
-      // 忽略错误
-    }
-
     // 读取 package.json 版本
     let packageVersion: string | null = null;
     const packageJsonPath = path.resolve(__dirname, "../../package.json");
@@ -169,14 +170,35 @@ export async function createServer(): Promise<FastifyInstance> {
       // 忽略错误
     }
 
-    return {
+    // 基本信息（所有环境可用）
+    const baseInfo = {
       available: true,
       isDev: IS_DEV,
-      serverStartTime: SERVER_START_TIME,
-      codeBuildTime,
       packageVersion,
       nodeVersion: process.version,
       platform: process.platform,
+    };
+
+    // 生产环境只返回基本信息
+    if (!IS_DEV) {
+      return baseInfo;
+    }
+
+    // 开发环境额外返回调试信息
+    // 获取代码编译时间（dist/index.js 的修改时间）
+    let codeBuildTime: string | null = null;
+    const distIndexPath = path.resolve(__dirname, "../index.js");
+    try {
+      const stat = fs.statSync(distIndexPath);
+      codeBuildTime = stat.mtime.toISOString();
+    } catch {
+      // 忽略错误
+    }
+
+    return {
+      ...baseInfo,
+      serverStartTime: SERVER_START_TIME,
+      codeBuildTime,
       dataDir: ".tanmi-workspace-dev",
     };
   });
@@ -225,7 +247,7 @@ export async function createServer(): Promise<FastifyInstance> {
 /**
  * 启动服务器
  */
-export async function startServer(port: number = 3000): Promise<FastifyInstance> {
+export async function startServer(port: number = 19540): Promise<FastifyInstance> {
   const server = await createServer();
   const modeLabel = IS_DEV ? "[DEV]" : "[PROD]";
   const dataDir = IS_DEV ? ".tanmi-workspace-dev" : ".tanmi-workspace";

@@ -3,7 +3,7 @@ import { ref, watch, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastStore } from '@/stores/toast'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
-import { settingsApi } from '@/api/settings'
+import { settingsApi, type InstallationStatusResult, type PlatformStatus, type ComponentStatus } from '@/api/settings'
 import WsModal from '@/components/ui/WsModal.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
@@ -14,6 +14,9 @@ const toastStore = useToastStore()
 // 版本信息
 const devInfo = ref<DevInfoResult | null>(null)
 const frontendBuildTime = __BUILD_TIME__
+
+// 插件安装状态
+const installationStatus = ref<InstallationStatusResult | null>(null)
 
 // 计算前后端编译时间差异是否超过100秒
 const buildTimeDiffTooLarge = computed(() => {
@@ -53,11 +56,16 @@ watch(() => props.visible, async (isVisible) => {
   if (isVisible) {
     await settingsStore.loadSettings()
     localMode.value = settingsStore.settings.defaultDispatchMode
-    // 加载版本信息
-    try {
-      devInfo.value = await workspaceApi.getDevInfo()
-    } catch {
-      // 忽略
+    // 并行加载版本信息和插件状态
+    const [devInfoRes, installRes] = await Promise.allSettled([
+      workspaceApi.getDevInfo(),
+      settingsApi.getInstallationStatus()
+    ])
+    if (devInfoRes.status === 'fulfilled') {
+      devInfo.value = devInfoRes.value
+    }
+    if (installRes.status === 'fulfilled') {
+      installationStatus.value = installRes.value
     }
   }
 })
@@ -73,6 +81,19 @@ function formatTime(isoString?: string | null) {
     minute: '2-digit',
     second: '2-digit',
   })
+}
+
+// 检查平台是否有过期组件
+function hasOutdatedComponent(platform: PlatformStatus): boolean {
+  const comps = platform.components
+  return comps.mcp.outdated || comps.hooks.outdated || comps.agents.outdated || comps.skills.outdated
+}
+
+// 获取状态指示器样式类
+function getIndicatorClass(comp: ComponentStatus): string {
+  if (!comp.installed) return 'not-installed'
+  if (comp.outdated) return 'outdated'
+  return 'installed'
 }
 
 // 关闭弹窗
@@ -225,6 +246,91 @@ async function handleVersionClick() {
         </div>
       </div>
 
+      <!-- 插件详情 -->
+      <div class="setting-section plugin-section">
+        <div class="setting-section-title">插件详情</div>
+        <div class="setting-section-desc">
+          各平台的组件安装状态
+        </div>
+
+        <div v-if="installationStatus" class="platform-grid">
+          <!-- Claude Code -->
+          <div class="platform-card">
+            <div class="platform-label">
+              <span class="platform-name">CLAUDE CODE</span>
+              <span
+                class="platform-status"
+                :class="{
+                  installed: installationStatus.platforms.claudeCode.enabled && !hasOutdatedComponent(installationStatus.platforms.claudeCode),
+                  outdated: installationStatus.platforms.claudeCode.enabled && hasOutdatedComponent(installationStatus.platforms.claudeCode),
+                  disabled: !installationStatus.platforms.claudeCode.enabled
+                }"
+              >
+                {{ !installationStatus.platforms.claudeCode.enabled ? 'NOT INSTALLED' : (hasOutdatedComponent(installationStatus.platforms.claudeCode) ? 'UPDATE' : 'INSTALLED') }}
+              </span>
+            </div>
+            <div class="component-box">
+              <div
+                v-for="comp in ['mcp', 'hooks', 'agents', 'skills']"
+                :key="comp"
+                class="component-cell"
+              >
+                <span
+                  class="status-block"
+                  :class="getIndicatorClass(installationStatus.platforms.claudeCode.components[comp as keyof typeof installationStatus.platforms.claudeCode.components])"
+                ></span>
+                <span
+                  class="component-name"
+                  :class="getIndicatorClass(installationStatus.platforms.claudeCode.components[comp as keyof typeof installationStatus.platforms.claudeCode.components])"
+                >{{ comp.charAt(0).toUpperCase() + comp.slice(1) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cursor -->
+          <div class="platform-card">
+            <div class="platform-label">
+              <span class="platform-name">CURSOR</span>
+              <span
+                class="platform-status"
+                :class="{
+                  installed: installationStatus.platforms.cursor.enabled && !hasOutdatedComponent(installationStatus.platforms.cursor),
+                  outdated: installationStatus.platforms.cursor.enabled && hasOutdatedComponent(installationStatus.platforms.cursor),
+                  disabled: !installationStatus.platforms.cursor.enabled
+                }"
+              >
+                {{ !installationStatus.platforms.cursor.enabled ? 'NOT INSTALLED' : (hasOutdatedComponent(installationStatus.platforms.cursor) ? 'UPDATE' : 'INSTALLED') }}
+              </span>
+            </div>
+            <div class="component-box">
+              <div
+                v-for="comp in ['mcp', 'hooks', 'agents', 'skills']"
+                :key="comp"
+                class="component-cell"
+              >
+                <span
+                  class="status-block"
+                  :class="getIndicatorClass(installationStatus.platforms.cursor.components[comp as keyof typeof installationStatus.platforms.cursor.components])"
+                ></span>
+                <span
+                  class="component-name"
+                  :class="getIndicatorClass(installationStatus.platforms.cursor.components[comp as keyof typeof installationStatus.platforms.cursor.components])"
+                >{{ comp.charAt(0).toUpperCase() + comp.slice(1) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="plugin-loading">
+          加载中...
+        </div>
+
+        <div class="command-bar">
+          <span class="command-label">插件安装方式</span>
+          <span class="command-text">npx tanmi-workspace setup</span>
+        </div>
+      </div>
+
       <!-- 版本信息 -->
       <div class="setting-section version-section">
         <div class="setting-section-title">版本信息</div>
@@ -244,21 +350,24 @@ async function handleVersionClick() {
             <label>NODE VERSION</label>
             <div class="spec-value">{{ devInfo?.nodeVersion || '-' }}</div>
           </div>
-          <div class="spec-item">
-            <label>后端编译</label>
-            <div class="spec-value">{{ formatTime(devInfo?.codeBuildTime) }}</div>
-          </div>
-          <div class="spec-item">
-            <label>前端编译</label>
-            <div class="spec-value">{{ formatTime(frontendBuildTime) }}</div>
-          </div>
-          <div class="spec-item">
-            <label>服务启动</label>
-            <div class="spec-value">{{ formatTime(devInfo?.serverStartTime) }}</div>
-          </div>
+          <!-- 调试信息（仅开发模式显示） -->
+          <template v-if="devInfo?.isDev">
+            <div class="spec-item">
+              <label>后端编译</label>
+              <div class="spec-value">{{ formatTime(devInfo?.codeBuildTime) }}</div>
+            </div>
+            <div class="spec-item">
+              <label>前端编译</label>
+              <div class="spec-value">{{ formatTime(frontendBuildTime) }}</div>
+            </div>
+            <div class="spec-item">
+              <label>服务启动</label>
+              <div class="spec-value">{{ formatTime(devInfo?.serverStartTime) }}</div>
+            </div>
+          </template>
         </div>
         <div
-          v-if="buildTimeDiffTooLarge"
+          v-if="buildTimeDiffTooLarge && devInfo?.isDev"
           class="spec-warning"
         >
           [WARN] 前后端编译时间不一致，若为版本更新后需要指示 AI 重新编译前后端
@@ -545,5 +654,184 @@ async function handleVersionClick() {
   padding: 2px 6px;
   border-radius: 10px;
   font-weight: 600;
+}
+
+/* 插件详情区 */
+.plugin-section {
+  border-top: 1px solid var(--border-color);
+  padding-top: 20px;
+}
+
+.plugin-loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 20px;
+  font-size: 13px;
+}
+
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* 平台卡片：无边框容器 */
+.platform-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 平台标签行：名称 + 状态 */
+.platform-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+}
+
+/* 平台名称：小号粗体 */
+.platform-name {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+/* 平台状态标签 */
+.platform-status {
+  font-family: var(--mono-font);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  letter-spacing: 0.3px;
+}
+
+/* 已安装：黑底白字 */
+.platform-status.installed {
+  background: #000;
+  color: #fff;
+}
+
+[data-theme="dark"] .platform-status.installed {
+  background: #fff;
+  color: #000;
+}
+
+/* 需更新：红底白字 */
+.platform-status.outdated {
+  background: #D92424;
+  color: #fff;
+}
+
+/* 未安装：灰色 */
+.platform-status.disabled {
+  background: transparent;
+  color: #999;
+  border: 1px solid #ccc;
+}
+
+[data-theme="dark"] .platform-status.disabled {
+  color: #666;
+  border-color: #444;
+}
+
+/* 组件框：细灰边框，无内部分割 */
+.component-box {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+}
+
+[data-theme="dark"] .component-box {
+  border-color: #444;
+}
+
+/* 单元格：无边框 */
+.component-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 状态方块：8x8 */
+.status-block {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+/* 已安装：实心黑色方块 */
+.status-block.installed {
+  background: #000;
+}
+
+[data-theme="dark"] .status-block.installed {
+  background: #fff;
+}
+
+/* 需更新：实心红色方块 */
+.status-block.outdated {
+  background: #D92424;
+}
+
+/* 未安装：空心方块 */
+.status-block.not-installed {
+  background: transparent;
+  border: 1px solid #bbb;
+}
+
+[data-theme="dark"] .status-block.not-installed {
+  border-color: #555;
+}
+
+/* 组件名称 */
+.component-name {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  color: #000;
+}
+
+[data-theme="dark"] .component-name {
+  color: #fff;
+}
+
+.component-name.outdated {
+  color: #D92424;
+}
+
+.component-name.not-installed {
+  color: #999;
+}
+
+[data-theme="dark"] .component-name.not-installed {
+  color: #666;
+}
+
+/* 命令栏：引用风格 */
+.command-bar {
+  margin-top: 12px;
+  padding-left: 12px;
+  border-left: 2px solid #ddd;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+[data-theme="dark"] .command-bar {
+  border-left-color: #444;
+}
+
+.command-label {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.command-text {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 </style>

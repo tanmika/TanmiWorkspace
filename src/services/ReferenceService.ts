@@ -8,8 +8,8 @@ import type {
   NodeIsolateResult,
   NodeReferenceParams,
   NodeReferenceResult,
-  DocRefWithStatus,
 } from "../types/context.js";
+import type { DocRef } from "../types/workspace.js";
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
 
@@ -105,8 +105,8 @@ export class ReferenceService {
     const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
 
     // 3. 读取节点 Info.md
-    const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, wsDirName, nodeDirName);
-    let docs = nodeInfo.docsWithStatus;
+    const nodeInfo = await this.md.readNodeInfoFull(projectRoot, wsDirName, nodeDirName);
+    let docs = nodeInfo.docs;
 
     // 4. 判断引用类型：节点引用、备忘引用或文档引用
     const isMemoReference = targetIdOrPath.startsWith("memo://");
@@ -147,21 +147,13 @@ export class ReferenceService {
           );
         }
         break;
-
-      case "expire":
-        docs = this.updateRefStatus(docs, targetIdOrPath, "expired");
-        break;
-
-      case "activate":
-        docs = this.updateRefStatus(docs, targetIdOrPath, "active");
-        break;
     }
 
     // 6. 写入 Info.md
-    await this.md.writeNodeInfoWithStatus(projectRoot, wsDirName, nodeDirName, {
+    await this.md.writeNodeInfoFull(projectRoot, wsDirName, nodeDirName, {
       ...nodeInfo,
+      docs,
       updatedAt: currentTime,
-      docsWithStatus: docs,
     });
 
     // 7. 更新 graph.json
@@ -172,8 +164,6 @@ export class ReferenceService {
     const actionDescriptions: Record<string, string> = {
       add: "添加引用",
       remove: "移除引用",
-      expire: "标记引用过期",
-      activate: "激活引用",
     };
     await this.md.appendTypedLogEntry(projectRoot, wsDirName, {
       timestamp,
@@ -192,12 +182,12 @@ export class ReferenceService {
    * 添加引用
    */
   private addReference(
-    docs: DocRefWithStatus[],
+    docs: DocRef[],
     targetIdOrPath: string,
     description: string,
     isNodeReference: boolean,
     isMemoReference: boolean
-  ): DocRefWithStatus[] {
+  ): DocRef[] {
     // 检查是否已存在
     const exists = docs.some(d => d.path === targetIdOrPath);
     if (exists) {
@@ -213,10 +203,9 @@ export class ReferenceService {
     }
 
     // 添加新引用
-    const newRef: DocRefWithStatus = {
+    const newRef: DocRef = {
       path: targetIdOrPath,
       description: description || defaultDescription,
-      status: "active",
     };
 
     return [...docs, newRef];
@@ -225,32 +214,11 @@ export class ReferenceService {
   /**
    * 移除引用
    */
-  private removeReference(docs: DocRefWithStatus[], targetIdOrPath: string): DocRefWithStatus[] {
+  private removeReference(docs: DocRef[], targetIdOrPath: string): DocRef[] {
     const index = docs.findIndex(d => d.path === targetIdOrPath);
     if (index === -1) {
       throw new TanmiError("REFERENCE_NOT_FOUND", `引用 "${targetIdOrPath}" 不存在`);
     }
     return docs.filter(d => d.path !== targetIdOrPath);
-  }
-
-  /**
-   * 更新引用状态
-   */
-  private updateRefStatus(
-    docs: DocRefWithStatus[],
-    targetIdOrPath: string,
-    status: "active" | "expired"
-  ): DocRefWithStatus[] {
-    const index = docs.findIndex(d => d.path === targetIdOrPath);
-    if (index === -1) {
-      throw new TanmiError("REFERENCE_NOT_FOUND", `引用 "${targetIdOrPath}" 不存在`);
-    }
-
-    return docs.map(d => {
-      if (d.path === targetIdOrPath) {
-        return { ...d, status };
-      }
-      return d;
-    });
   }
 }

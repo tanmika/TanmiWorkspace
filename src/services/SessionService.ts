@@ -4,6 +4,8 @@ import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
 import type { SessionBindingStorage, SessionBinding } from "../storage/SessionBindingStorage.js";
+import type { InstallationService } from "./InstallationService.js";
+import type { InstallationWarning } from "../types/settings.js";
 import { TanmiError } from "../types/errors.js";
 
 /**
@@ -63,6 +65,7 @@ export interface SessionStatusBoundResult {
     requirement?: string;
   };
   rules: string[];
+  installationWarnings?: InstallationWarning[];
 }
 
 /**
@@ -100,12 +103,21 @@ export interface GetPendingChangesResult {
  * 管理 Claude Code 会话与工作区的绑定关系
  */
 export class SessionService {
+  private installationService: InstallationService | null = null;
+
   constructor(
     private sessionStorage: SessionBindingStorage,
     private json: JsonStorage,
     private md: MarkdownStorage,
     private fs: FileSystemAdapter
   ) {}
+
+  /**
+   * 设置 InstallationService 依赖（延迟注入避免循环依赖）
+   */
+  setInstallationService(service: InstallationService): void {
+    this.installationService = service;
+  }
 
   /**
    * 绑定会话到工作区
@@ -254,7 +266,8 @@ export class SessionService {
     // 获取聚焦节点信息（优先使用 graph.currentFocus 作为权威来源）
     const focusNodeId = graph.currentFocus || binding.focusedNodeId;
     if (focusNodeId && graph.nodes[focusNodeId]) {
-      const nodeInfo = await this.md.readNodeInfo(projectRoot, dirName, focusNodeId);
+      const nodeDirName = graph.nodes[focusNodeId].dirName || focusNodeId;
+      const nodeInfo = await this.md.readNodeInfo(projectRoot, dirName, nodeDirName);
       result.focusedNode = {
         id: focusNodeId,
         title: nodeInfo.title,
@@ -263,7 +276,67 @@ export class SessionService {
       };
     }
 
+    // 检查安装警告
+    const warnings = await this.checkInstallationWarnings();
+    if (warnings.length > 0) {
+      result.installationWarnings = warnings;
+    }
+
     return result;
+  }
+
+  /**
+   * 检查安装版本警告
+   * 使用组件级版本检查，每个组件独立比较版本
+   */
+  private async checkInstallationWarnings(): Promise<InstallationWarning[]> {
+    if (!this.installationService) {
+      return [];
+    }
+
+    const warnings: InstallationWarning[] = [];
+
+    try {
+      const meta = await this.installationService.read();
+      const currentVersion = this.installationService.getPackageVersion();
+
+      // 组件名称映射（用于生成友好的警告消息）
+      const componentNames: Record<string, string> = {
+        hooks: "Hook",
+        mcp: "MCP",
+        agents: "Dispatch Agents",
+        skills: "Skills",
+      };
+
+      // 检查各平台的组件版本
+      for (const platform of ["claudeCode", "cursor", "codex"] as const) {
+        const platformInfo = meta.global.platforms[platform];
+        if (!platformInfo?.enabled) continue;
+
+        // 遍历每个组件检查版本
+        for (const [componentKey, componentInfo] of Object.entries(platformInfo.components)) {
+          // 类型断言：componentInfo 可能是 ComponentInfo
+          const info = componentInfo as { installed?: boolean; version?: string };
+          if (!info?.installed || !info.version) continue;
+
+          // 版本不匹配时生成警告
+          if (info.version !== currentVersion) {
+            const friendlyName = componentNames[componentKey] || componentKey;
+            warnings.push({
+              platform,
+              component: componentKey as "hooks" | "mcp" | "agents" | "skills",
+              installedVersion: info.version,
+              currentVersion,
+              message: `${platform} ${friendlyName} 版本过旧 (${info.version} → ${currentVersion})，建议更新`,
+            });
+          }
+        }
+      }
+    } catch {
+      // 检查失败时静默，不影响主功能
+    }
+
+    return warnings;
   }
 
   /**

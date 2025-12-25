@@ -10,6 +10,7 @@
 - 后端: `npx tsc`
 - 前端: `cd web && npm run build`
 - 开发服务器: `npm run dev:all` 或分别启动
+- **开发测试**: `./scripts/dev-rebuild.sh` (编译前后端 + 重启开发服务)
 
 ## 注意事项
 
@@ -50,8 +51,29 @@
 
 ## 发布流程
 
-1. 更新 `CHANGELOG.md` 记录变更
-2. 更新 `package.json` 版本号
-3. 提交：`[Chore] Release vX.Y.Z`
-4. 打 tag：`git tag vX.Y.Z`
-5. 推送：`git push && git push --tags`
+### 使用发布脚本（推荐）
+
+```bash
+./scripts/release.sh patch   # 补丁版本 (bug 修复)
+./scripts/release.sh minor   # 次版本 (新功能)
+./scripts/release.sh major   # 主版本 (破坏性变更)
+```
+
+脚本会自动执行：编译后端 → 编译前端 → 更新版本 → 同步说明 → 提交 → 发布 npm
+
+### 手动发布流程
+
+1. 编译后端：`npx tsc`
+2. 编译前端：`cd web && npm run build`
+3. 更新 `CHANGELOG.md` 记录变更
+4. 更新 `package.json` 版本号
+5. 同步版本说明：`npx tsx scripts/sync-versions.ts`
+6. 填写 `docs/version-notes.yaml` 中新版本的 `requirement` 字段
+7. 提交：`[Chore] Release vX.Y.Z`
+8. 打 tag：`git tag vX.Y.Z`
+9. 推送：`git push && git push --tags`
+10. 发布：`npm publish --registry https://registry.npmjs.org`
+
+> **重要**：前端必须重新编译！否则 npm 包中的前端版本会与后端不匹配。
+
+> 注意：`version-notes.yaml` 用于生成版本更新工作区，`requirement` 是简短描述，`conclusion` 自动从 CHANGELOG 提取。

@@ -70,6 +70,11 @@ export const workspaceApi = {
   switchDispatchMode(id: string, useGit: boolean): Promise<{ success: boolean; hint?: string }> {
     return client.post(`/workspaces/${id}/dispatch/switch`, { useGit })
   },
+
+  // 重新加载错误状态的工作区
+  reload(id: string): Promise<{ success: boolean; message: string }> {
+    return client.post(`/workspaces/${id}/reload`)
+  },
 }
 
 // 开发信息结果类型

@@ -318,10 +318,8 @@ export class StateService {
     // 9.2 complete 时获取节点的文档引用（用于提醒更新）
     let nodeDocRefs: DocRef[] = [];
     if (action === "complete") {
-      const nodeInfo = await this.md.readNodeInfoWithStatus(projectRoot, wsDirName, nodeDirName);
-      nodeDocRefs = nodeInfo.docsWithStatus
-        .filter(d => d.status === "active")
-        .map(d => ({ path: d.path, description: d.description }));
+      const nodeInfo = await this.md.readNodeInfoFull(projectRoot, wsDirName, nodeDirName);
+      nodeDocRefs = nodeInfo.docs;
     }
 
     // 9. 更新工作区配置的 updatedAt（使用前面已读取的 config）

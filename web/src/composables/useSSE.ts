@@ -35,7 +35,7 @@ export function useSSE() {
       return
     }
 
-    const baseUrl = import.meta.env.DEV ? 'http://localhost:3001' : ''
+    const baseUrl = import.meta.env.DEV ? 'http://localhost:19541' : ''
     eventSource = new EventSource(`${baseUrl}/api/events`)
 
     eventSource.onopen = () => {

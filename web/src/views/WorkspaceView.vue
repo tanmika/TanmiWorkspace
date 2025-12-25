@@ -123,8 +123,9 @@ async function loadWorkspace() {
     await workspaceStore.fetchWorkspace(workspaceId.value)
     await nodeStore.fetchNodeTree()
     await memoStore.fetchMemos(workspaceId.value)
-  } catch {
-    showToast('加载工作区失败', 'error')
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : '未知错误'
+    toastStore.error('加载工作区失败', errorMessage)
     router.push('/')
   }
 }
@@ -191,8 +192,9 @@ async function handleRefresh() {
       await nodeStore.selectNode(nodeStore.selectedNodeId)
     }
     showToast('刷新成功', 'success')
-  } catch {
-    showToast('刷新失败', 'error')
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : '未知错误'
+    toastStore.error('刷新失败', errorMessage)
   } finally {
     isRefreshing.value = false
   }
@@ -213,8 +215,9 @@ async function handleFocusCurrent() {
     } else {
       showToast('当前没有聚焦的任务', 'info')
     }
-  } catch {
-    showToast('定位失败', 'error')
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : '未知错误'
+    toastStore.error('定位失败', errorMessage)
   } finally {
     isFocusing.value = false
   }

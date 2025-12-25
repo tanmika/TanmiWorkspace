@@ -1,0 +1,5 @@
+# npm 发布时只包含 dist 目录
+src/
+node_modules/
+*.log
+.DS_Store

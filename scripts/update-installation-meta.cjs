@@ -1,0 +1,258 @@
+#!/usr/bin/env node
+
+/**
+ * TanmiWorkspace - 更新安装元信息脚本
+ * 在 Hook/Agents 安装后调用，记录安装状态到 installation-meta.json
+ *
+ * 用法:
+ *   node update-installation-meta.cjs <command> [args...]
+ *
+ * 示例:
+ *   node update-installation-meta.cjs update claudeCode hooks 1.8.0
+ *   node update-installation-meta.cjs update claudeCode agents 1.8.0
+ *   node update-installation-meta.cjs remove cursor hooks
+ *   node update-installation-meta.cjs status
+ */
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// 配置
+const isDev = process.env.NODE_ENV === 'development' || process.env.TANMI_DEV === 'true';
+const baseDir = isDev ? '.tanmi-workspace-dev' : '.tanmi-workspace';
+const metaPath = path.join(os.homedir(), baseDir, 'installation-meta.json');
+
+// 支持的平台和组件
+const PLATFORMS = ['claudeCode', 'cursor', 'codex'];
+const COMPONENTS = ['hooks', 'mcp', 'agentsMd', 'modes', 'agents', 'skills'];
+
+/**
+ * 读取元信息
+ */
+function readMeta() {
+  try {
+    if (fs.existsSync(metaPath)) {
+      const content = fs.readFileSync(metaPath, 'utf-8');
+      return JSON.parse(content);
+    }
+  } catch (err) {
+    console.error('读取元信息失败:', err.message);
+  }
+
+  // 返回默认结构
+  const now = new Date().toISOString();
+  return {
+    schemaVersion: '1.0',
+    global: {
+      installedAt: now,
+      lastUpdatedAt: now,
+      packageVersion: '0.0.0',
+      platforms: {}
+    }
+  };
+}
+
+/**
+ * 写入元信息
+ */
+function writeMeta(meta) {
+  // 确保目录存在
+  const metaDir = path.dirname(metaPath);
+  if (!fs.existsSync(metaDir)) {
+    fs.mkdirSync(metaDir, { recursive: true });
+  }
+
+  // 更新时间戳
+  meta.global.lastUpdatedAt = new Date().toISOString();
+
+  // 写入文件
+  fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+}
+
+/**
+ * 更新平台组件信息
+ * 新结构：每个组件有独立的 installed 和 version 字段
+ */
+function updatePlatform(platform, component, version) {
+  const meta = readMeta();
+  const now = new Date().toISOString();
+  const componentVersion = version || meta.global.packageVersion || '0.0.0';
+
+  // 初始化平台信息
+  if (!meta.global.platforms[platform]) {
+    meta.global.platforms[platform] = {
+      enabled: true,
+      installedAt: now,
+      components: {
+        hooks: { installed: false },
+        mcp: { installed: false }
+      }
+    };
+
+    // 平台特有组件
+    if (platform === 'claudeCode') {
+      meta.global.platforms[platform].components.agents = { installed: false };
+      meta.global.platforms[platform].components.skills = { installed: false };
+    }
+    if (platform === 'codex') {
+      meta.global.platforms[platform].components.agentsMd = { installed: false };
+    }
+    if (platform === 'cursor') {
+      meta.global.platforms[platform].components.modes = { installed: false };
+    }
+  }
+
+  // 更新组件状态（组件级别版本）
+  const platformInfo = meta.global.platforms[platform];
+  platformInfo.components[component] = {
+    installed: true,
+    version: componentVersion
+  };
+
+  // 更新全局包版本
+  if (version) {
+    meta.global.packageVersion = version;
+  }
+
+  writeMeta(meta);
+  console.log(`✓ 已更新 ${platform}.${component} (v${componentVersion}) 到 installation-meta.json`);
+}
+
+/**
+ * 移除平台组件信息
+ * 新结构：设置 installed: false，清除 version
+ */
+function removePlatformComponent(platform, component) {
+  const meta = readMeta();
+
+  if (meta.global.platforms[platform]) {
+    meta.global.platforms[platform].components[component] = { installed: false };
+
+    // 检查是否所有组件都未安装
+    const components = meta.global.platforms[platform].components;
+    const allDisabled = Object.values(components).every(c => !c.installed);
+
+    if (allDisabled) {
+      meta.global.platforms[platform].enabled = false;
+    }
+
+    writeMeta(meta);
+    console.log(`✓ 已从 installation-meta.json 移除 ${platform}.${component}`);
+  }
+}
+
+/**
+ * 显示当前状态
+ * 新结构：显示每个组件的安装状态和版本
+ */
+function showStatus() {
+  const meta = readMeta();
+  console.log('\n安装元信息:');
+  console.log('  路径:', metaPath);
+  console.log('  包版本:', meta.global.packageVersion);
+  console.log('  首次安装:', meta.global.installedAt);
+  console.log('  最后更新:', meta.global.lastUpdatedAt);
+  console.log('\n平台状态:');
+
+  for (const [platform, info] of Object.entries(meta.global.platforms)) {
+    console.log(`  ${platform}:`);
+    console.log(`    启用: ${info.enabled}`);
+    console.log(`    安装时间: ${info.installedAt}`);
+    console.log(`    组件:`);
+    for (const [compName, compInfo] of Object.entries(info.components)) {
+      if (compInfo.installed) {
+        console.log(`      ${compName}: ✓ (v${compInfo.version || '未知'})`);
+      } else {
+        console.log(`      ${compName}: ✗`);
+      }
+    }
+  }
+}
+
+// 主逻辑
+function main() {
+  const args = process.argv.slice(2);
+
+  if (args.length === 0 || args[0] === '--help') {
+    console.log('用法: node update-installation-meta.cjs <命令> [参数...]');
+    console.log('');
+    console.log('命令:');
+    console.log('  update <platform> <component> [version]  更新平台组件');
+    console.log('  remove <platform> <component>            移除平台组件');
+    console.log('  status                                   显示当前状态');
+    console.log('');
+    console.log('平台: claudeCode, cursor, codex');
+    console.log('组件: hooks, mcp, agentsMd, modes, agents');
+    process.exit(0);
+  }
+
+  const command = args[0];
+
+  switch (command) {
+    case 'update': {
+      const platform = args[1];
+      const component = args[2];
+      const version = args[3];
+
+      if (!platform || !component) {
+        console.error('错误: 需要指定平台和组件');
+        process.exit(1);
+      }
+
+      if (!PLATFORMS.includes(platform)) {
+        console.error(`错误: 不支持的平台 "${platform}"`);
+        console.error('支持的平台:', PLATFORMS.join(', '));
+        process.exit(1);
+      }
+
+      if (!COMPONENTS.includes(component)) {
+        console.error(`错误: 不支持的组件 "${component}"`);
+        console.error('支持的组件:', COMPONENTS.join(', '));
+        process.exit(1);
+      }
+
+      updatePlatform(platform, component, version);
+      break;
+    }
+
+    case 'remove': {
+      const platform = args[1];
+      const component = args[2];
+
+      if (!platform || !component) {
+        console.error('错误: 需要指定平台和组件');
+        process.exit(1);
+      }
+
+      removePlatformComponent(platform, component);
+      break;
+    }
+
+    case 'status': {
+      showStatus();
+      break;
+    }
+
+    default: {
+      // 兼容旧格式: platform component [version]
+      if (PLATFORMS.includes(command)) {
+        const platform = command;
+        const component = args[1];
+        const version = args[2];
+
+        if (!component) {
+          console.error('错误: 需要指定组件');
+          process.exit(1);
+        }
+
+        updatePlatform(platform, component, version);
+      } else {
+        console.error(`错误: 未知命令 "${command}"`);
+        process.exit(1);
+      }
+    }
+  }
+}
+
+main();

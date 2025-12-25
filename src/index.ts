@@ -16,6 +16,10 @@ import type { FastifyInstance } from "fastify";
 import { createServices, type Services } from "./http/services.js";
 import { createServer } from "./http/server.js";
 import { isPortInUse } from "./utils/port.js";
+import { handleOldProcess, writePidInfo, removePidFile, getPidFilePath } from "./utils/processManager.js";
+import { createRequire } from "module";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { workspaceTools } from "./tools/workspace.js";
 import { nodeTools } from "./tools/node.js";
 import { stateTools } from "./tools/state.js";
@@ -31,6 +35,7 @@ import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
 import type { TransitionAction, ReferenceAction } from "./types/index.js";
+import { validateAndCorrectParams } from "./utils/paramValidator.js";
 import { logMcpStart, logMcpEnd, logMcpError } from "./utils/sessionLogger.js";
 import { formatManualChangeReminder } from "./utils/manualChangeFormatter.js";
 import { devLog } from "./utils/devLog.js";
@@ -39,8 +44,8 @@ import { devLog } from "./utils/devLog.js";
 // 配置
 // ============================================================================
 const IS_DEV = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
-// 开发模式默认端口 3001，正式模式默认端口 3000
-const DEFAULT_PORT = IS_DEV ? "3001" : "3000";
+// 开发模式默认端口 19541，正式模式默认端口 19540
+const DEFAULT_PORT = IS_DEV ? "19541" : "19540";
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? DEFAULT_PORT, 10);
 const DISABLE_HTTP = process.env.DISABLE_HTTP === "true";
 
@@ -58,6 +63,23 @@ function logHttp(message: string): void {
 }
 
 // ============================================================================
+// 获取当前版本
+// ============================================================================
+function getCurrentVersion(): string {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const require = createRequire(import.meta.url);
+    const pkg = require(join(__dirname, "..", "package.json"));
+    return pkg.version;
+  } catch {
+    return "0.0.0";
+  }
+}
+
+const CURRENT_VERSION = getCurrentVersion();
+
+// ============================================================================
 // HTTP Server 后台启动
 // ============================================================================
 async function startHttpServerInBackground(port: number): Promise<FastifyInstance | null> {
@@ -70,16 +92,43 @@ async function startHttpServerInBackground(port: number): Promise<FastifyInstanc
   // 使用与 server.ts 一致的 host 设置（默认 127.0.0.1，可通过环境变量覆盖）
   const host = process.env.TANMI_HOST || "127.0.0.1";
 
-  // 检测端口占用（使用相同的 host）
+  // 处理旧版本进程
+  const canStart = handleOldProcess(port, CURRENT_VERSION, logHttp);
+  if (!canStart) {
+    // 检查是否是因为相同版本已在运行（不是真正的错误）
+    if (await isPortInUse(port, host)) {
+      logHttp(`相同版本已在运行，复用现有服务`);
+    }
+    return null;
+  }
+
+  // 再次检测端口占用（处理非 tanmi-workspace 进程占用的情况）
   if (await isPortInUse(port, host)) {
-    logHttp(`端口 ${host}:${port} 已被占用，跳过 HTTP 启动`);
+    logHttp(`端口 ${host}:${port} 被其他服务占用，跳过 HTTP 启动`);
     return null;
   }
 
   try {
     const server = await createServer();
     await server.listen({ port, host });
-    logHttp(`Listening on http://${host}:${port}`);
+    logHttp(`Listening on http://${host}:${port} (v${CURRENT_VERSION})`);
+
+    // 写入 PID 信息
+    writePidInfo({
+      pid: process.pid,
+      port,
+      version: CURRENT_VERSION,
+      startedAt: new Date().toISOString(),
+    });
+
+    // 进程退出时清理
+    const cleanup = () => {
+      removePidFile();
+    };
+    process.on("exit", cleanup);
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
+
     return server;
   } catch (err) {
     logHttp(`启动失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -104,34 +153,61 @@ function createMcpServer(services: Services): Server {
     }
   );
 
+  // 所有工具列表
+  const allTools = [
+    ...workspaceTools,
+    ...nodeTools,
+    ...stateTools,
+    ...contextTools,
+    ...logTools,
+    ...sessionTools,
+    ...helpTools,
+    ...importTools,
+    ...dispatchTools,
+    ...configTools,
+  ];
+
+  // 创建工具名到 Tool 定义的映射（用于参数验证）
+  const toolMap = new Map(allTools.map(tool => [tool.name, tool]));
+
   // 注册工具列表处理器
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      ...workspaceTools,
-      ...nodeTools,
-      ...stateTools,
-      ...contextTools,
-      ...logTools,
-      ...sessionTools,
-      ...helpTools,
-      ...importTools,
-      ...dispatchTools,
-      ...configTools,
-      ...memoTools,
-    ],
+    tools: [...allTools, ...memoTools],
   }));
 
   // 注册工具调用处理器
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
+    const { name, arguments: rawArgs } = request.params;
     const startTime = Date.now();
 
     // 记录 MCP 调用开始
-    logMcpStart(name, args as Record<string, unknown> || {});
+    logMcpStart(name, rawArgs as Record<string, unknown> || {});
 
     try {
       // 确保基础目录存在
       await services.fs.ensureIndex();
+
+      // 参数验证与自动纠错
+      let args = rawArgs as Record<string, unknown> | undefined;
+      let paramWarnings: string[] = [];
+
+      const tool = toolMap.get(name);
+      if (tool) {
+        const validation = validateAndCorrectParams(
+          name,
+          rawArgs as Record<string, unknown> | undefined,
+          tool
+        );
+
+        // 如果有错误，抛出异常
+        if (validation.errors.length > 0) {
+          throw new TanmiError("UNKNOWN_PARAMS", validation.errors.join("\n"));
+        }
+
+        // 使用纠正后的参数
+        args = validation.correctedArgs;
+        paramWarnings = validation.warnings;
+      }
 
       let result: unknown;
 
@@ -392,7 +468,7 @@ function createMcpServer(services: Services): Server {
 
         // Help 工具
         case "tanmi_help":
-          result = services.help.getHelp(args?.topic as HelpTopic);
+          result = await services.help.getHelp(args?.topic as HelpTopic);
           break;
 
         case "tanmi_prompt":
@@ -558,6 +634,12 @@ function createMcpServer(services: Services): Server {
 
       // 检查并附加手动变更提醒（针对工作区相关工具）
       let responseText = JSON.stringify(result, null, 2);
+
+      // 附加参数纠正警告
+      if (paramWarnings.length > 0) {
+        responseText = responseText + "\n\n⚠️ " + paramWarnings.join("\n⚠️ ");
+      }
+
       const workspaceId = args?.workspaceId as string | undefined;
 
       // 排除 context_get 和 workspace_get（它们会清除变更，所以不需要提醒）
@@ -708,11 +790,105 @@ function createMcpServer(services: Services): Server {
 }
 
 // ============================================================================
+// 启动检测
+// ============================================================================
+async function runStartupDetection(services: Services): Promise<void> {
+  try {
+    // 运行检测
+    const detectionResults = await services.detection.detectAll();
+
+    // 读取当前 meta
+    const meta = await services.installation.read();
+    const currentVersion = services.installation.getPackageVersion();
+
+    // 检查是否需要更新 meta（检测到的组件与 meta 记录不一致）
+    let needsUpdate = false;
+
+    for (const platform of ["claudeCode", "cursor", "codex"] as const) {
+      const detected = detectionResults[platform];
+      const recorded = meta.global.platforms[platform];
+
+      if (detected?.detected) {
+        // 构建组件状态（使用新的 ComponentInfo 结构）
+        const components: {
+          hooks: { installed: boolean; version?: string };
+          mcp: { installed: boolean; version?: string };
+          agents?: { installed: boolean; version?: string };
+          skills?: { installed: boolean; version?: string };
+        } = {
+          hooks: {
+            installed: detected.components.hooks.installed,
+            // 如果检测到已安装但 meta 没有记录版本，说明是新检测到的，使用当前版本
+            version: detected.components.hooks.installed
+              ? (recorded?.components?.hooks?.version || currentVersion)
+              : undefined,
+          },
+          mcp: {
+            installed: detected.components.mcp.installed,
+            version: detected.components.mcp.installed
+              ? (recorded?.components?.mcp?.version || currentVersion)
+              : undefined,
+          },
+        };
+
+        // Claude Code 平台特有的 agents 和 skills 组件
+        if (platform === "claudeCode") {
+          if (detected.components.agents) {
+            components.agents = {
+              installed: detected.components.agents.installed,
+              version: detected.components.agents.installed
+                ? (recorded?.components?.agents?.version || currentVersion)
+                : undefined,
+            };
+          }
+          if (detected.components.skills) {
+            components.skills = {
+              installed: detected.components.skills.installed,
+              version: detected.components.skills.installed
+                ? (recorded?.components?.skills?.version || currentVersion)
+                : undefined,
+            };
+          }
+        }
+
+        // 检查是否有变更需要同步（比较 installed 状态）
+        const hooksChanged = components.hooks.installed !== recorded?.components?.hooks?.installed;
+        const mcpChanged = components.mcp.installed !== recorded?.components?.mcp?.installed;
+        const agentsChanged = platform === "claudeCode" &&
+          components.agents?.installed !== recorded?.components?.agents?.installed;
+        const skillsChanged = platform === "claudeCode" &&
+          components.skills?.installed !== recorded?.components?.skills?.installed;
+
+        if (!recorded?.enabled || hooksChanged || mcpChanged || agentsChanged || skillsChanged) {
+          // 检测到组件状态变更，更新 meta
+          await services.installation.updatePlatform(platform, {
+            enabled: true,
+            components,
+          });
+          needsUpdate = true;
+          logMcp(`检测到 ${platform} 组件状态变更，已更新 meta`);
+        }
+      }
+    }
+
+    if (!needsUpdate) {
+      logMcp("启动检测完成，无需更新");
+    }
+  } catch (err) {
+    // 检测失败不影响启动，只记录警告
+    logMcp(`启动检测失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// ============================================================================
 // 主函数
 // ============================================================================
 async function main() {
   // 1. 创建共享服务实例
   const services = createServices();
+
+  // 1.1 后台运行启动检测（不阻塞启动）
+  runStartupDetection(services);
 
   // 2. 尝试启动 HTTP server（后台）
   const httpServer = await startHttpServerInBackground(HTTP_PORT);

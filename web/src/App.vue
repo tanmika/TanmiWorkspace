@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { useServiceStore, useToastStore, useSettingsStore } from '@/stores'
 import ServiceUnavailable from '@/components/ServiceUnavailable.vue'
+import VersionMismatchWarning from '@/components/VersionMismatchWarning.vue'
 import VersionUpdateNotification from '@/components/VersionUpdateNotification.vue'
 import ManualOperationToast from '@/components/ManualOperationToast.vue'
 import WsToastContainer from '@/components/ui/WsToastContainer.vue'
@@ -20,6 +21,7 @@ onMounted(() => {
 <template>
   <el-config-provider>
     <VersionUpdateNotification />
+    <VersionMismatchWarning />
     <router-view />
     <ServiceUnavailable />
     <ManualOperationToast

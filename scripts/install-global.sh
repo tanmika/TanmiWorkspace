@@ -22,10 +22,26 @@ if [ ! -d "$PROJECT_ROOT/plugin/scripts" ]; then
     fi
 fi
 
-# 全局安装目录
-TANMI_HOME="$HOME/.tanmi-workspace"
+# 全局安装目录（支持开发环境）
+if [ "$TANMI_DEV" = "true" ]; then
+    TANMI_HOME="$HOME/.tanmi-workspace-dev"
+else
+    TANMI_HOME="$HOME/.tanmi-workspace"
+fi
 TANMI_SCRIPTS="$TANMI_HOME/scripts"
 TANMI_SHARED="$TANMI_SCRIPTS/shared"
+
+# 版本跟踪脚本
+UPDATE_META_SCRIPT="$SCRIPT_DIR/update-installation-meta.cjs"
+
+# 获取包版本（从 package.json）
+get_package_version() {
+    if [ -f "$PROJECT_ROOT/package.json" ] && check_jq; then
+        jq -r '.version' "$PROJECT_ROOT/package.json"
+    else
+        echo "0.0.0"
+    fi
+}
 
 # Claude Code 配置
 CLAUDE_HOME="$HOME/.claude"
@@ -177,6 +193,12 @@ configure_claude_hooks() {
     mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
 
     success "Hooks 已配置到 $CLAUDE_SETTINGS"
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        local version=$(get_package_version)
+        node "$UPDATE_META_SCRIPT" update claudeCode hooks "$version"
+    fi
 }
 
 # 卸载 Claude Code Hook 系统
@@ -194,6 +216,11 @@ uninstall_claude_hooks() {
         jq 'del(.hooks)' "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp"
         mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
         success "已从 $CLAUDE_SETTINGS 移除 hooks 配置"
+    fi
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        node "$UPDATE_META_SCRIPT" remove claudeCode hooks
     fi
 
     success "Claude Code Hook 系统已卸载"
@@ -266,6 +293,12 @@ configure_cursor_hooks() {
     fi
 
     success "Hooks 已配置到 $CURSOR_HOOKS"
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        local version=$(get_package_version)
+        node "$UPDATE_META_SCRIPT" update cursor hooks "$version"
+    fi
 }
 
 # 卸载 Cursor Hook 系统
@@ -283,6 +316,11 @@ uninstall_cursor_hooks() {
         jq 'del(.hooks.beforeSubmitPrompt) | del(.hooks.afterMCPExecution)' "$CURSOR_HOOKS" > "${CURSOR_HOOKS}.tmp"
         mv "${CURSOR_HOOKS}.tmp" "$CURSOR_HOOKS"
         success "已从 $CURSOR_HOOKS 移除 hooks 配置"
+    fi
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        node "$UPDATE_META_SCRIPT" remove cursor hooks
     fi
 
     success "Cursor Hook 系统已卸载"
@@ -303,10 +341,10 @@ cleanup_shared_if_unused() {
 }
 
 # ============================================================================
-# Dispatch Agent 安装（项目级）
+# Dispatch Agent 安装（全局）
 # ============================================================================
 
-# 安装派发 Agent 到当前项目
+# 安装派发 Agent 到用户全局目录
 install_dispatch_agents() {
     info "安装派发 Agent 模板..."
 
@@ -321,9 +359,8 @@ install_dispatch_agents() {
         return 1
     fi
 
-    # 获取目标项目目录（当前工作目录）
-    local target_dir="${TARGET_PROJECT:-$(pwd)}"
-    local agents_dir="$target_dir/.claude/agents"
+    # 安装到用户全局目录
+    local agents_dir="$CLAUDE_HOME/agents"
 
     # 创建 agents 目录
     mkdir -p "$agents_dir"
@@ -335,15 +372,20 @@ install_dispatch_agents() {
     success "派发 Agent 已安装到 $agents_dir/"
     info "  - tanmi-executor.md (任务执行者)"
     info "  - tanmi-tester.md (任务测试者)"
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        local version=$(get_package_version)
+        node "$UPDATE_META_SCRIPT" update claudeCode agents "$version"
+    fi
 }
 
 # 卸载派发 Agent
 uninstall_dispatch_agents() {
     info "卸载派发 Agent 模板..."
 
-    # 获取目标项目目录
-    local target_dir="${TARGET_PROJECT:-$(pwd)}"
-    local agents_dir="$target_dir/.claude/agents"
+    # 从用户全局目录卸载
+    local agents_dir="$CLAUDE_HOME/agents"
 
     # 删除模板文件
     if [ -f "$agents_dir/tanmi-executor.md" ]; then
@@ -362,7 +404,239 @@ uninstall_dispatch_agents() {
         success "已删除空目录 $agents_dir"
     fi
 
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        node "$UPDATE_META_SCRIPT" remove claudeCode agents
+    fi
+
     success "派发 Agent 模板已卸载"
+}
+
+# ============================================================================
+# Skills 安装（全局）
+# ============================================================================
+
+# 安装 Skills 到用户全局目录
+install_skills() {
+    info "安装 Skills 模板..."
+
+    local skills_src="$PROJECT_ROOT/templates/skills"
+    local skills_dir="$CLAUDE_HOME/skills"
+
+    # 检查是否有模板文件
+    if [ ! -d "$skills_src" ]; then
+        warn "Skills 模板目录不存在: $skills_src"
+        info "跳过 Skills 安装"
+        return 0
+    fi
+
+    # 检查是否有 .md 文件
+    local skill_files=$(find "$skills_src" -name "*.md" -type f 2>/dev/null)
+    if [ -z "$skill_files" ]; then
+        warn "Skills 模板目录为空"
+        info "跳过 Skills 安装"
+        return 0
+    fi
+
+    # 创建 skills 目录
+    mkdir -p "$skills_dir"
+
+    # 复制所有 skill 模板文件
+    local count=0
+    for skill_file in $skill_files; do
+        local filename=$(basename "$skill_file")
+        cp "$skill_file" "$skills_dir/"
+        info "  - $filename"
+        count=$((count + 1))
+    done
+
+    success "已安装 $count 个 Skill 模板到 $skills_dir/"
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        local version=$(get_package_version)
+        node "$UPDATE_META_SCRIPT" update claudeCode skills "$version"
+    fi
+}
+
+# 卸载 Skills
+uninstall_skills() {
+    info "卸载 Skills 模板..."
+
+    local skills_dir="$CLAUDE_HOME/skills"
+    local skills_src="$PROJECT_ROOT/templates/skills"
+
+    # 删除由 TanmiWorkspace 安装的 skill 文件
+    if [ -d "$skills_src" ] && [ -d "$skills_dir" ]; then
+        for skill_file in "$skills_src"/*.md; do
+            if [ -f "$skill_file" ]; then
+                local filename=$(basename "$skill_file")
+                if [ -f "$skills_dir/$filename" ]; then
+                    rm "$skills_dir/$filename"
+                    success "已删除 $skills_dir/$filename"
+                fi
+            fi
+        done
+    fi
+
+    # 如果 skills 目录为空，删除目录
+    if [ -d "$skills_dir" ] && [ -z "$(ls -A "$skills_dir")" ]; then
+        rmdir "$skills_dir"
+        success "已删除空目录 $skills_dir"
+    fi
+
+    # 更新安装元信息
+    if [ -f "$UPDATE_META_SCRIPT" ]; then
+        node "$UPDATE_META_SCRIPT" remove claudeCode skills
+    fi
+
+    success "Skills 模板已卸载"
+}
+
+# ============================================================================
+# 平台完整安装/卸载
+# ============================================================================
+
+# Claude Code 完整安装
+install_claude_all() {
+    info "安装 Claude Code 全部特性..."
+    echo ""
+    install_claude_hooks
+    configure_claude_hooks
+    install_dispatch_agents
+    install_skills
+    echo ""
+    success "Claude Code 全部特性安装完成！"
+    info "请重启 Claude Code 使配置生效。"
+}
+
+# Claude Code 完整卸载
+uninstall_claude_all() {
+    info "卸载 Claude Code 全部特性..."
+    echo ""
+    uninstall_claude_hooks
+    uninstall_dispatch_agents
+    uninstall_skills
+    cleanup_shared_if_unused
+    echo ""
+    success "Claude Code 全部特性已卸载"
+}
+
+# Cursor 完整安装
+install_cursor_all() {
+    info "安装 Cursor 全部特性..."
+    echo ""
+    install_cursor_hooks
+    configure_cursor_hooks
+    echo ""
+    success "Cursor 全部特性安装完成！"
+    info "请重启 Cursor 使配置生效。"
+}
+
+# Cursor 完整卸载
+uninstall_cursor_all() {
+    info "卸载 Cursor 全部特性..."
+    echo ""
+    uninstall_cursor_hooks
+    cleanup_shared_if_unused
+    echo ""
+    success "Cursor 全部特性已卸载"
+}
+
+# ============================================================================
+# 剪切板功能（其他平台）
+# ============================================================================
+
+# 复制 MCP 配置到剪切板
+copy_mcp_config() {
+    local mcp_config='{
+  "tanmi-workspace": {
+    "command": "npx",
+    "args": ["tanmi-workspace"]
+  }
+}'
+    if command -v pbcopy &> /dev/null; then
+        echo "$mcp_config" | pbcopy
+        success "MCP 配置已复制到剪切板"
+    elif command -v xclip &> /dev/null; then
+        echo "$mcp_config" | xclip -selection clipboard
+        success "MCP 配置已复制到剪切板"
+    else
+        warn "无法复制到剪切板，请手动复制以下配置："
+        echo ""
+        echo "$mcp_config"
+    fi
+}
+
+# 复制完整配置到剪切板
+copy_full_config() {
+    local hook_script="$TANMI_SCRIPTS/hook-entry.cjs"
+
+    local full_config='{
+  "mcpServers": {
+    "tanmi-workspace": {
+      "command": "npx",
+      "args": ["tanmi-workspace"]
+    }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"'"$hook_script"'\" SessionStart",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"'"$hook_script"'\" UserPromptSubmit",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__tanmi-workspace__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"'"$hook_script"'\" PostToolUse",
+            "timeout": 3000
+          }
+        ]
+      }
+    ]
+  }
+}'
+
+    if command -v pbcopy &> /dev/null; then
+        echo "$full_config" | pbcopy
+        success "完整配置已复制到剪切板"
+    elif command -v xclip &> /dev/null; then
+        echo "$full_config" | xclip -selection clipboard
+        success "完整配置已复制到剪切板"
+    else
+        warn "无法复制到剪切板，请手动复制以下配置："
+        echo ""
+        echo "$full_config"
+    fi
+
+    echo ""
+    info "使用说明："
+    echo "  1. 将 mcpServers 部分合并到平台的 MCP 配置文件"
+    echo "  2. 将 hooks 部分合并到平台的 Hooks 配置（如支持）"
+    echo "  3. Agents/Skills 模板位置："
+    echo "     $(npm root -g 2>/dev/null)/tanmi-workspace/templates/"
+    echo "     或: $PROJECT_ROOT/templates/"
 }
 
 # ============================================================================
@@ -375,48 +649,22 @@ show_menu() {
     echo "  TanmiWorkspace 全局安装脚本"
     echo "========================================"
     echo ""
-    echo "项目路径: $PROJECT_ROOT"
-    echo "安装目录: $TANMI_HOME"
+    echo "Claude Code:"
+    echo "  1) 安装全部特性（推荐）[Hooks, Agents, Skills]"
+    echo "  2) 仅安装基础 MCP 服务"
+    echo "  3) 卸载全部"
     echo ""
-    echo "Hook 功能（全局）："
+    echo "Cursor:"
+    echo "  4) 安装全部特性（推荐）[Hooks]"
+    echo "  5) 仅安装基础 MCP 服务"
+    echo "  6) 卸载全部"
     echo ""
-    echo "  1) Claude Code Hook - 自动注入工作区上下文"
-    echo "  2) Cursor Hook      - 自动注入工作区上下文"
-    echo "  3) 全部 Hook 安装 (Claude Code + Cursor)"
-    echo "  4) 卸载 Claude Code Hook"
-    echo "  5) 卸载 Cursor Hook"
-    echo "  6) 全部 Hook 卸载"
-    echo ""
-    echo "派发功能（项目级，安装到当前目录）："
-    echo ""
-    echo "  7) 安装派发 Agent 模板"
-    echo "  8) 卸载派发 Agent 模板"
+    echo "其他平台:"
+    echo "  7) 复制 MCP 配置到剪切板"
+    echo "  8) 复制完整配置到剪切板 (MCP + Hooks)"
     echo ""
     echo "  0) 退出"
     echo ""
-}
-
-show_claude_usage() {
-    echo ""
-    info "Claude Code Hook 安装完成！"
-    info "请重启 Claude Code 使配置生效。"
-    echo ""
-    info "使用方法："
-    echo "  1. 调用 session_bind(sessionId, workspaceId) 绑定工作区"
-    echo "  2. 后续对话将自动注入工作区上下文"
-    echo "  3. 调用 session_unbind(sessionId) 解除绑定"
-}
-
-show_cursor_usage() {
-    echo ""
-    info "Cursor Hook 安装完成！"
-    info "请重启 Cursor 使配置生效。"
-    echo ""
-    info "使用方法："
-    echo "  1. 调用 session_bind(sessionId, workspaceId) 绑定工作区"
-    echo "     (sessionId 使用 Cursor 的 conversation_id)"
-    echo "  2. 后续对话将自动注入工作区上下文"
-    echo "  3. 调用 session_unbind(sessionId) 解除绑定"
 }
 
 # ============================================================================
@@ -427,6 +675,18 @@ main() {
     # 检查是否有命令行参数
     if [ $# -gt 0 ]; then
         case "$1" in
+            --claude-all)
+                install_claude_all
+                ;;
+            --uninstall-claude-all)
+                uninstall_claude_all
+                ;;
+            --cursor-all)
+                install_cursor_all
+                ;;
+            --uninstall-cursor-all)
+                uninstall_cursor_all
+                ;;
             --claude-hooks)
                 install_claude_hooks
                 configure_claude_hooks
@@ -435,45 +695,28 @@ main() {
                 install_cursor_hooks
                 configure_cursor_hooks
                 ;;
-            --hooks|--all)
-                install_claude_hooks
-                configure_claude_hooks
-                install_cursor_hooks
-                configure_cursor_hooks
-                ;;
-            --uninstall-claude-hooks)
-                uninstall_claude_hooks
-                cleanup_shared_if_unused
-                ;;
-            --uninstall-cursor-hooks)
-                uninstall_cursor_hooks
-                cleanup_shared_if_unused
-                ;;
-            --uninstall-hooks|--uninstall-all)
-                uninstall_claude_hooks
-                uninstall_cursor_hooks
-                cleanup_shared_if_unused
-                ;;
             --dispatch-agents)
                 install_dispatch_agents
                 ;;
-            --uninstall-dispatch-agents)
-                uninstall_dispatch_agents
+            --skills)
+                install_skills
                 ;;
             --help)
                 echo "用法: $0 [选项]"
                 echo ""
-                echo "Hook 选项（全局）:"
-                echo "  --claude-hooks           安装 Claude Code Hook 系统"
-                echo "  --cursor-hooks           安装 Cursor Hook 系统"
-                echo "  --hooks, --all           安装所有 Hook 系统"
-                echo "  --uninstall-claude-hooks 卸载 Claude Code Hook 系统"
-                echo "  --uninstall-cursor-hooks 卸载 Cursor Hook 系统"
-                echo "  --uninstall-hooks        卸载所有 Hook 系统"
+                echo "Claude Code:"
+                echo "  --claude-all             安装全部特性 [Hooks, Agents, Skills]"
+                echo "  --uninstall-claude-all   卸载全部特性"
                 echo ""
-                echo "派发 Agent 选项（项目级，安装到当前目录）:"
-                echo "  --dispatch-agents        安装派发 Agent 模板"
-                echo "  --uninstall-dispatch-agents 卸载派发 Agent 模板"
+                echo "Cursor:"
+                echo "  --cursor-all             安装全部特性 [Hooks]"
+                echo "  --uninstall-cursor-all   卸载全部特性"
+                echo ""
+                echo "单独组件（高级）:"
+                echo "  --claude-hooks           仅安装 Claude Code Hooks"
+                echo "  --cursor-hooks           仅安装 Cursor Hooks"
+                echo "  --dispatch-agents        仅安装派发 Agents"
+                echo "  --skills                 仅安装 Skills"
                 echo ""
                 echo "其他:"
                 echo "  --help                   显示帮助"
@@ -497,43 +740,30 @@ main() {
 
         case $choice in
             1)
-                install_claude_hooks
-                configure_claude_hooks
-                show_claude_usage
+                install_claude_all
                 ;;
             2)
-                install_cursor_hooks
-                configure_cursor_hooks
-                show_cursor_usage
+                info "基础 MCP 服务通过 'tanmi-workspace setup --claude-code' 安装"
+                info "或手动配置 ~/.claude.json 中的 mcpServers"
                 ;;
             3)
-                install_claude_hooks
-                configure_claude_hooks
-                install_cursor_hooks
-                configure_cursor_hooks
-                echo ""
-                success "所有 Hook 系统安装完成！"
-                info "请重启 Claude Code 和 Cursor 使配置生效。"
+                uninstall_claude_all
                 ;;
             4)
-                uninstall_claude_hooks
-                cleanup_shared_if_unused
+                install_cursor_all
                 ;;
             5)
-                uninstall_cursor_hooks
-                cleanup_shared_if_unused
+                info "基础 MCP 服务通过 'tanmi-workspace setup --cursor' 安装"
+                info "或手动配置 ~/.cursor/mcp.json"
                 ;;
             6)
-                uninstall_claude_hooks
-                uninstall_cursor_hooks
-                cleanup_shared_if_unused
-                success "所有 Hook 系统已卸载"
+                uninstall_cursor_all
                 ;;
             7)
-                install_dispatch_agents
+                copy_mcp_config
                 ;;
             8)
-                uninstall_dispatch_agents
+                copy_full_config
                 ;;
             0)
                 info "退出安装脚本"

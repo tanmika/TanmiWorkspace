@@ -1,9 +1,26 @@
 // src/storage/MarkdownStorage.ts
+// ============================================================================
+// ⚠️ 重要：参数命名约定
+// ============================================================================
+// 本文件中的方法参数遵循以下命名规范：
+//
+// - workspaceId: 工作区的唯一标识符（如 "ws-abc123"）
+//   用于工作区级别的操作（Workspace.md, Log.md 等）
+//
+// - wsDirName: 工作区的实际目录名（可能与 workspaceId 不同）
+//   用于节点级别的操作，因为需要先定位工作区目录
+//
+// - nodeDirName: 节点的实际目录名（可能与 nodeId 不同）
+//   从 graph.json 中获取：graph.nodes[nodeId].dirName || nodeId
+//
+// 调用方在使用节点相关方法前，必须先通过 JsonStorage.readGraph() 获取正确的 dirName
+// 参见 src/http/services.ts 中的 resolveDirNames() 辅助函数
+// ============================================================================
 
 import type { FileSystemAdapter } from "./FileSystemAdapter.js";
 import type { WorkspaceMdData, LogEntry, ProblemData, DocRef } from "../types/workspace.js";
 import type { NodeInfoData, NodeStatus, NodeType, AcceptanceCriteria } from "../types/node.js";
-import type { DocRefWithStatus, TypedLogEntry } from "../types/context.js";
+import type { TypedLogEntry } from "../types/context.js";
 import { formatShort } from "../utils/time.js";
 import {
   validateMultilineContent,
@@ -256,11 +273,14 @@ ${data.goal ?? ""}
 
   /**
    * 读取节点 Info.md
+   * @param wsDirName 工作区目录名（非 workspaceId，需通过 graph 解析）
+   * @param nodeDirName 节点目录名（非 nodeId，需通过 graph.nodes[nodeId].dirName 获取）
+   * @param isArchived 是否为归档工作区
    */
-  async readNodeInfo(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean = false): Promise<NodeInfoData> {
+  async readNodeInfo(projectRoot: string, wsDirName: string, nodeDirName: string, isArchived: boolean = false): Promise<NodeInfoData> {
     const infoPath = isArchived
-      ? this.fs.getNodeInfoPathWithArchive(projectRoot, workspaceId, nodeId, true)
-      : this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
+      ? this.fs.getNodeInfoPathWithArchive(projectRoot, wsDirName, nodeDirName, true)
+      : this.fs.getNodeInfoPath(projectRoot, wsDirName, nodeDirName);
     const content = await this.fs.readFile(infoPath);
     const parsed = this.parse(content);
 
@@ -324,7 +344,7 @@ ${data.goal ?? ""}
     }
 
     return {
-      id: parsed.frontmatter.id as string || nodeId,
+      id: parsed.frontmatter.id as string || nodeDirName,
       type: (parsed.frontmatter.type as NodeType) || "execution",
       title: parsed.frontmatter.title as string || "",
       status: (parsed.frontmatter.status as NodeStatus) || "pending",
@@ -340,8 +360,10 @@ ${data.goal ?? ""}
 
   /**
    * 写入节点 Info.md
+   * @param wsDirName 工作区目录名（非 workspaceId）
+   * @param nodeDirName 节点目录名（非 nodeId）
    */
-  async writeNodeInfo(projectRoot: string, workspaceId: string, nodeId: string, data: NodeInfoData): Promise<void> {
+  async writeNodeInfo(projectRoot: string, wsDirName: string, nodeDirName: string, data: NodeInfoData): Promise<void> {
     // 验证内容格式
     validateSingleLineContent(data.title, "节点标题");
     if (data.requirement) {
@@ -354,7 +376,7 @@ ${data.goal ?? ""}
       validateMultilineContent(data.conclusion, "结论");
     }
 
-    const infoPath = this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
+    const infoPath = this.fs.getNodeInfoPath(projectRoot, wsDirName, nodeDirName);
 
     const docsContent = data.docs.length > 0
       ? data.docs.map(doc => `- [${doc.description}](${doc.path})`).join("\n")
@@ -633,11 +655,14 @@ ${data.nextStep}
 
   /**
    * 读取节点 Info.md 原始内容
+   * @param wsDirName 工作区目录名（非 workspaceId）
+   * @param nodeDirName 节点目录名（非 nodeId）
+   * @param isArchived 是否为归档工作区
    */
-  async readNodeInfoRaw(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean = false): Promise<string> {
+  async readNodeInfoRaw(projectRoot: string, wsDirName: string, nodeDirName: string, isArchived: boolean = false): Promise<string> {
     const infoPath = isArchived
-      ? this.fs.getNodeInfoPathWithArchive(projectRoot, workspaceId, nodeId, true)
-      : this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
+      ? this.fs.getNodeInfoPathWithArchive(projectRoot, wsDirName, nodeDirName, true)
+      : this.fs.getNodeInfoPath(projectRoot, wsDirName, nodeDirName);
     return await this.fs.readFile(infoPath);
   }
 
@@ -752,20 +777,21 @@ ${data.nextStep}
   }
 
   /**
-   * 解析文档引用（含状态）
-   * 格式：- [文件名](路径) - 说明 (状态)
+   * 解析文档引用
+   * 格式：- [文件名](路径) - 说明
+   * 向后兼容：忽略旧数据中的 (active)/(expired) 状态
    */
-  parseDocsWithStatus(content: string): DocRefWithStatus[] {
-    const docs: DocRefWithStatus[] = [];
-    // 匹配可选状态的格式
-    const regex = /^- \[([^\]]+)\]\(([^)]+)\)(?: - (.+?))?(?: \((active|expired)\))?$/gm;
+  parseDocs(content: string): DocRef[] {
+    const docs: DocRef[] = [];
+    // 匹配格式：- [name](path) - description
+    // 向后兼容：可选的 (active)/(expired) 状态会被忽略
+    const regex = /^- \[([^\]]+)\]\(([^)]+)\)(?: - (.+?))?(?:\s*\((?:active|expired)\))?$/gm;
 
     let match;
     while ((match = regex.exec(content)) !== null) {
       docs.push({
         path: match[2],
-        description: match[3] || match[1],
-        status: (match[4] as "active" | "expired") ?? "active",
+        description: (match[3] || match[1]).trim(),
       });
     }
 
@@ -773,50 +799,56 @@ ${data.nextStep}
   }
 
   /**
-   * 序列化带状态的文档引用
+   * 序列化文档引用
    */
-  serializeDocWithStatus(doc: DocRefWithStatus): string {
+  serializeDoc(doc: DocRef): string {
     const name = doc.path.split("/").pop() ?? doc.path;
-    return `- [${name}](${doc.path}) - ${doc.description} (${doc.status})`;
+    return `- [${name}](${doc.path}) - ${doc.description}`;
   }
 
   /**
    * 更新 Info.md 的结论部分
+   * @param wsDirName 工作区目录名（非 workspaceId）
+   * @param nodeDirName 节点目录名（非 nodeId）
    */
   async updateConclusion(
     projectRoot: string,
-    workspaceId: string,
-    nodeId: string,
+    wsDirName: string,
+    nodeDirName: string,
     conclusion: string
   ): Promise<void> {
-    const info = await this.readNodeInfo(projectRoot, workspaceId, nodeId);
+    const info = await this.readNodeInfo(projectRoot, wsDirName, nodeDirName);
     // 将字面量 \\n 转换为真正的换行符（MCP 工具调用时可能传入转义字符串）
     info.conclusion = conclusion.replace(/\\n/g, "\n");
-    await this.writeNodeInfo(projectRoot, workspaceId, nodeId, info);
+    await this.writeNodeInfo(projectRoot, wsDirName, nodeDirName, info);
   }
 
   /**
    * 更新 Info.md 的状态
+   * @param wsDirName 工作区目录名（非 workspaceId）
+   * @param nodeDirName 节点目录名（非 nodeId）
    */
   async updateNodeStatus(
     projectRoot: string,
-    workspaceId: string,
-    nodeId: string,
+    wsDirName: string,
+    nodeDirName: string,
     status: NodeStatus
   ): Promise<void> {
-    const info = await this.readNodeInfo(projectRoot, workspaceId, nodeId);
+    const info = await this.readNodeInfo(projectRoot, wsDirName, nodeDirName);
     info.status = status;
-    await this.writeNodeInfo(projectRoot, workspaceId, nodeId, info);
+    await this.writeNodeInfo(projectRoot, wsDirName, nodeDirName, info);
   }
 
   /**
-   * 读取节点 Info.md（带状态的文档引用）
+   * 读取节点 Info.md（包含文档引用）
+   * @param wsDirName 工作区目录名（非 workspaceId）
+   * @param nodeDirName 节点目录名（非 nodeId）
    * @param isArchived 是否为归档工作区
    */
-  async readNodeInfoWithStatus(projectRoot: string, workspaceId: string, nodeId: string, isArchived: boolean = false): Promise<NodeInfoData & { docsWithStatus: DocRefWithStatus[] }> {
+  async readNodeInfoFull(projectRoot: string, wsDirName: string, nodeDirName: string, isArchived: boolean = false): Promise<NodeInfoData> {
     const infoPath = isArchived
-      ? this.fs.getNodeInfoPathWithArchive(projectRoot, workspaceId, nodeId, true)
-      : this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
+      ? this.fs.getNodeInfoPathWithArchive(projectRoot, wsDirName, nodeDirName, true)
+      : this.fs.getNodeInfoPath(projectRoot, wsDirName, nodeDirName);
     const content = await this.fs.readFile(infoPath);
     const parsed = this.parse(content);
 
@@ -846,30 +878,13 @@ ${data.nextStep}
       }
     }
 
-    // 解析文档引用（含状态）
-    const docsWithStatus: DocRefWithStatus[] = [];
+    // 解析文档引用（向后兼容：忽略旧数据中的状态）
     const docs: DocRef[] = [];
     const docsMatch = parsed.content.match(/## 文档引用\n\n(?:>.*\n\n)?([\s\S]*?)(?=\n## |$)/);
     if (docsMatch) {
       const docsContent = docsMatch[1].trim();
       if (docsContent) {
-        const docLines = docsContent.split("\n").filter(line => line.startsWith("- "));
-        for (const line of docLines) {
-          // 匹配带状态的格式
-          const docMatch = line.match(/- \[(.+?)\]\((.+?)\)(?: - (.+?))?(?: \((active|expired)\))?$/);
-          if (docMatch) {
-            const status = (docMatch[4] as "active" | "expired") ?? "active";
-            docsWithStatus.push({
-              path: docMatch[2],
-              description: docMatch[3] || docMatch[1],
-              status,
-            });
-            docs.push({
-              path: docMatch[2],
-              description: docMatch[3] || docMatch[1],
-            });
-          }
-        }
+        docs.push(...this.parseDocs(docsContent));
       }
     }
 
@@ -888,7 +903,7 @@ ${data.nextStep}
     }
 
     return {
-      id: parsed.frontmatter.id as string || nodeId,
+      id: parsed.frontmatter.id as string || nodeDirName,
       type: (parsed.frontmatter.type as NodeType) || "execution",
       title: parsed.frontmatter.title as string || "",
       status: (parsed.frontmatter.status as NodeStatus) || "pending",
@@ -896,7 +911,6 @@ ${data.nextStep}
       updatedAt: parsed.frontmatter.updatedAt as string || "",
       requirement,
       docs,
-      docsWithStatus,
       notes,
       conclusion,
       acceptanceCriteria: acceptanceCriteria.length > 0 ? acceptanceCriteria : undefined
@@ -904,10 +918,10 @@ ${data.nextStep}
   }
 
   /**
-   * 读取 Workspace.md（带状态的文档引用）
+   * 读取 Workspace.md（包含文档引用）
    * @param isArchived 是否为归档工作区
    */
-  async readWorkspaceMdWithStatus(projectRoot: string, workspaceId: string, isArchived: boolean = false): Promise<WorkspaceMdData & { docsWithStatus: DocRefWithStatus[] }> {
+  async readWorkspaceMdFull(projectRoot: string, workspaceId: string, isArchived: boolean = false): Promise<WorkspaceMdData> {
     const mdPath = isArchived
       ? this.fs.getWorkspaceMdPathWithArchive(projectRoot, workspaceId, true)
       : this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
@@ -927,29 +941,13 @@ ${data.nextStep}
       }
     }
 
-    // 解析文档（含状态）
+    // 解析文档（向后兼容：忽略旧数据中的状态）
     const docs: DocRef[] = [];
-    const docsWithStatus: DocRefWithStatus[] = [];
     const docsMatch = parsed.content.match(/## 文档\n\n(?:>.*\n\n)?([\s\S]*?)(?=\n## |$)/);
     if (docsMatch) {
       const docsContent = docsMatch[1].trim();
       if (docsContent) {
-        const docLines = docsContent.split("\n").filter(line => line.startsWith("- "));
-        for (const line of docLines) {
-          const docMatch = line.match(/- \[(.+?)\]\((.+?)\)(?: - (.+?))?(?: \((active|expired)\))?$/);
-          if (docMatch) {
-            const status = (docMatch[4] as "active" | "expired") ?? "active";
-            docsWithStatus.push({
-              path: docMatch[2],
-              description: docMatch[3] || docMatch[1],
-              status,
-            });
-            docs.push({
-              path: docMatch[2],
-              description: docMatch[3] || docMatch[1],
-            });
-          }
-        }
+        docs.push(...this.parseDocs(docsContent));
       }
     }
 
@@ -966,19 +964,20 @@ ${data.nextStep}
       updatedAt: parsed.frontmatter.updatedAt as string || "",
       rules,
       docs,
-      docsWithStatus,
       goal,
     };
   }
 
   /**
-   * 写入节点 Info.md（带状态的文档引用）
+   * 写入节点 Info.md（完整版本，用于服务层）
+   * @param wsDirName 工作区目录名（非 workspaceId）
+   * @param nodeDirName 节点目录名（非 nodeId）
    */
-  async writeNodeInfoWithStatus(
+  async writeNodeInfoFull(
     projectRoot: string,
-    workspaceId: string,
-    nodeId: string,
-    data: NodeInfoData & { docsWithStatus?: DocRefWithStatus[] }
+    wsDirName: string,
+    nodeDirName: string,
+    data: NodeInfoData
   ): Promise<void> {
     // 验证内容格式
     validateSingleLineContent(data.title, "节点标题");
@@ -992,14 +991,12 @@ ${data.nextStep}
       validateMultilineContent(data.conclusion, "结论");
     }
 
-    const infoPath = this.fs.getNodeInfoPath(projectRoot, workspaceId, nodeId);
+    const infoPath = this.fs.getNodeInfoPath(projectRoot, wsDirName, nodeDirName);
 
-    // 如果有 docsWithStatus，优先使用
+    // 序列化文档引用
     let docsContent = "";
-    if (data.docsWithStatus && data.docsWithStatus.length > 0) {
-      docsContent = data.docsWithStatus.map(doc => this.serializeDocWithStatus(doc)).join("\n");
-    } else if (data.docs.length > 0) {
-      docsContent = data.docs.map(doc => `- [${doc.description}](${doc.path})`).join("\n");
+    if (data.docs.length > 0) {
+      docsContent = data.docs.map(doc => this.serializeDoc(doc)).join("\n");
     }
 
     // 渲染验收标准表格
@@ -1037,7 +1034,7 @@ ${data.requirement ?? ""}
 ${acceptanceCriteriaContent}
 ## 文档引用
 
-> 格式：- [文件名](路径) - 说明 (状态)
+> 格式：- [文件名](路径) - 说明
 
 ${docsContent}
 
