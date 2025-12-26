@@ -10,13 +10,14 @@ import { homedir } from "os";
 import { join, dirname } from "path";
 import { execSync, exec } from "child_process";
 import { promisify } from "util";
+import { installClaudeAll, installCursorAll, updateInstallationMeta } from "./plugins.js";
 import { fileURLToPath } from "url";
 
-const execAsync = promisify(exec);
 
 // ES module 兼容：获取当前文件目录
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const execAsync = promisify(exec);
 
 // 路径配置
 const HOME = homedir();
@@ -28,9 +29,7 @@ const CURSOR_MCP = join(CURSOR_HOME, "mcp.json");
 const IS_DEV = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
 const TANMI_BASE = IS_DEV ? ".tanmi-workspace-dev" : ".tanmi-workspace";
 const TANMI_SCRIPTS = join(HOME, TANMI_BASE, "scripts");
-// update-installation-meta.cjs 位于 npm 包根目录的 scripts 目录
-// __dirname = dist/cli/, 所以需要 ../../scripts/
-const UPDATE_META_SCRIPT = join(__dirname, "..", "..", "scripts", "update-installation-meta.cjs");
+
 
 // 颜色输出
 const colors = {
@@ -52,20 +51,7 @@ function getPackageVersion(): string {
   }
 }
 
-// 更新安装元信息
-function updateInstallationMeta(platform: string, component: string): void {
-  if (!existsSync(UPDATE_META_SCRIPT)) {
-    return; // 脚本不存在，跳过
-  }
-  try {
-    const version = getPackageVersion();
-    execSync(`node "${UPDATE_META_SCRIPT}" update ${platform} ${component} ${version}`, {
-      stdio: "ignore",
-    });
-  } catch {
-    // 静默失败，不影响主流程
-  }
-}
+
 
 // 检测环境
 interface Environment {
@@ -188,7 +174,7 @@ async function configureClaudeMcp(env: Environment): Promise<boolean> {
       console.log("  执行: claude mcp add tanmi-workspace -s user -- npx tanmi-workspace");
       await execAsync("claude mcp add tanmi-workspace -s user -- npx tanmi-workspace");
       console.log(colors.green("  ✓ MCP 服务器已添加"));
-      updateInstallationMeta("claudeCode", "mcp");
+      updateInstallationMeta("claudeCode", "mcp", "update");
       return true;
     } catch (error) {
       console.log(colors.yellow("  ⚠ claude mcp add 失败，尝试手动配置..."));
@@ -213,7 +199,7 @@ async function configureClaudeMcp(env: Environment): Promise<boolean> {
 
     writeFileSync(CLAUDE_JSON, JSON.stringify(claudeJson, null, 2));
     console.log(colors.green("  ✓ MCP 配置已写入 " + CLAUDE_JSON));
-    updateInstallationMeta("claudeCode", "mcp");
+    updateInstallationMeta("claudeCode", "mcp", "update");
     return true;
   } catch (error) {
     console.log(colors.red("  ✗ 配置失败: " + error));
@@ -289,7 +275,7 @@ async function configureCursorMcp(): Promise<boolean> {
 
     writeFileSync(CURSOR_MCP, JSON.stringify(mcp, null, 2));
     console.log(colors.green("  ✓ MCP 配置已写入 " + CURSOR_MCP));
-    updateInstallationMeta("cursor", "mcp");
+    updateInstallationMeta("cursor", "mcp", "update");
     return true;
   } catch (error) {
     console.log(colors.red("  ✗ 配置失败: " + error));
@@ -299,18 +285,15 @@ async function configureCursorMcp(): Promise<boolean> {
 
 // 安装插件（Hooks + Agents + Skills）
 async function installPlugins(platform: "claude" | "cursor"): Promise<boolean> {
-  const platformName = platform === "claude" ? "Claude Code" : "Cursor";
-  const components = platform === "claude" ? "Hooks, Agents, Skills" : "Hooks";
-  console.log("\n" + colors.blue(`安装 ${platformName} 插件 (${components})...`));
-
   try {
-    // 使用 --claude-all / --cursor-all 安装全部组件
-    const arg = platform === "claude" ? "--claude-all" : "--cursor-all";
-    await execAsync(`npx tanmi-workspace-hooks ${arg}`);
-    console.log(colors.green(`  ✓ 插件已安装`));
+    if (platform === "claude") {
+      installClaudeAll();
+    } else {
+      installCursorAll();
+    }
     return true;
   } catch (error) {
-    console.log(colors.yellow(`  ⚠ 自动安装失败，请手动运行: tanmi-workspace-hooks ${platform === "claude" ? "--claude-all" : "--cursor-all"}`));
+    console.log(colors.yellow(`  ⚠ 插件安装失败，请手动运行: tanmi-workspace plugins install --${platform}`));
     return false;
   }
 }

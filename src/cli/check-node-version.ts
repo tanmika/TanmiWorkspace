@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// src/check-node-version.ts
+// src/cli/check-node-version.ts
 // Node 版本检查 + 更新通知脚本 - 在加载主模块前执行
 
 import { createRequire } from "module";
@@ -34,8 +34,8 @@ async function checkForUpdates() {
     const __dirname = dirname(__filename);
     const require = createRequire(import.meta.url);
 
-    // 读取 package.json
-    const pkg = require(join(__dirname, "..", "package.json"));
+    // 读取 package.json (从 cli 目录向上两级)
+    const pkg = require(join(__dirname, "..", "..", "package.json"));
 
     // 动态导入 update-notifier
     const updateNotifier = (await import("update-notifier")).default;
@@ -69,42 +69,78 @@ async function checkForUpdates() {
 // 执行更新检查（不等待结果）
 checkForUpdates();
 
+// 获取版本号
+function getVersion(): string {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const require = createRequire(import.meta.url);
+    const pkg = require(join(__dirname, "..", "..", "package.json"));
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
 // 检查子命令
 const subcommand = process.argv[2];
 
 switch (subcommand) {
   case "setup":
-    // 执行 setup 命令
-    import("./cli/setup.js").then((m) => m.default());
+    import("./setup.js").then((m) => m.default());
+    break;
+  case "plugins":
+    import("./plugins.js").then((m) => m.default());
     break;
   case "webui":
-    // 执行 webui 命令
-    import("./cli/webui.js").then((m) => m.default());
+    import("./webui.js").then((m) => m.default());
+    break;
+  case "rebuild":
+    import("./rebuild.js").then((m) => m.default());
+    break;
+  case "version":
+  case "-v":
+  case "--version":
+    console.log(`tanmi-workspace v${getVersion()}`);
     break;
   case "help":
   case "--help":
   case "-h":
     console.log(`
-TanmiWorkspace - AI 工作区管理系统
+TanmiWorkspace v${getVersion()} - AI 工作区管理系统
 
 用法: tanmi-workspace [command]
 
 命令:
-  (无)      启动 MCP 服务器 (供 Claude Code/Cursor 调用)
-  webui     启动/管理 WebUI 服务
-  setup     交互式安装配置
+  (无)       启动 MCP 服务器 (供 Claude Code/Cursor 调用)
+  setup      交互式安装配置
+  plugins    插件管理 (安装/卸载/查看状态)
+  webui      启动/管理 WebUI 服务
+  rebuild    索引管理 (同步/重建/验证/备份)
+  -v         显示版本
+
+插件子命令:
+  tanmi-workspace plugins                    查看插件状态
+  tanmi-workspace plugins install --claude   安装 Claude 插件
+  tanmi-workspace plugins install --cursor   安装 Cursor 插件
 
 WebUI 子命令:
   tanmi-workspace webui          启动 WebUI
   tanmi-workspace webui stop     停止 WebUI
   tanmi-workspace webui status   查看状态
 
+索引管理子命令:
+  tanmi-workspace rebuild                    查看状态和帮助
+  tanmi-workspace rebuild <path>             增量同步项目
+  tanmi-workspace rebuild --verify           验证并清理
+  tanmi-workspace rebuild --list             列出备份
+
 更多帮助:
+  tanmi-workspace plugins help   插件管理帮助
   tanmi-workspace webui help     WebUI 详细帮助
-  tanmi-workspace setup          安装向导
 `);
     break;
   default:
     // 版本检查通过，加载主模块 (MCP Server)
-    import("./index.js");
+    import("../index.js");
 }

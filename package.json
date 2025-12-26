@@ -3,10 +3,9 @@
   "version": "1.9.0",
   "description": "TanmiWorkspace MCP Server - 面向 AI 编程助手的分形任务跟踪系统",
   "type": "module",
-  "main": "dist/check-node-version.js",
+  "main": "dist/cli/check-node-version.js",
   "bin": {
-    "tanmi-workspace": "./dist/check-node-version.js",
-    "tanmi-workspace-hooks": "./scripts/install-global.sh"
+    "tanmi-workspace": "./dist/cli/check-node-version.js"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -15,7 +14,6 @@
     "dist/",
     "web/dist/",
     "plugin/",
-    "scripts/",
     "templates/",
     "README.md",
     "CHANGELOG.md",
@@ -35,9 +33,9 @@
     "build:all": "tsc && cd web && npm run build",
     "dev": "tsc --watch",
     "dev:all": "concurrently -n api,web -c blue,green \"npm run start:http:dev\" \"cd web && npm run dev\"",
-    "start": "node dist/check-node-version.js",
-    "start:mcp": "DISABLE_HTTP=true node dist/check-node-version.js",
-    "start:mcp:dev": "TANMI_DEV=true DISABLE_HTTP=true node dist/check-node-version.js",
+    "start": "node dist/cli/check-node-version.js",
+    "start:mcp": "DISABLE_HTTP=true node dist/cli/check-node-version.js",
+    "start:mcp:dev": "TANMI_DEV=true DISABLE_HTTP=true node dist/cli/check-node-version.js",
     "start:http": "node dist/http/index.js",
     "start:http:dev": "TANMI_DEV=true node dist/http/index.js",
     "test": "vitest",
