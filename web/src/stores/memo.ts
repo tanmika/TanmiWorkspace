@@ -53,6 +53,24 @@ export const useMemoStore = defineStore('memo', () => {
     error.value = null
   }
 
+  async function deleteMemo(workspaceId: string, memoId: string) {
+    loading.value = true
+    error.value = null
+    try {
+      await memoApi.delete(workspaceId, memoId)
+      // 从列表中移除
+      memos.value = memos.value.filter(m => m.id !== memoId)
+      if (currentMemo.value?.id === memoId) {
+        currentMemo.value = null
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '删除 memo 失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     // 状态
     memos,
@@ -66,5 +84,6 @@ export const useMemoStore = defineStore('memo', () => {
     fetchMemos,
     fetchMemo,
     clearMemos,
+    deleteMemo,
   }
 })

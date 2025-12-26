@@ -23,6 +23,7 @@ import { randomBytes } from "crypto";
 import { GuidanceService } from "./GuidanceService.js";
 import type { GuidanceContext } from "../types/guidance.js";
 import { isGitRepo } from "../utils/git.js";
+import { validateMultilineContent } from "../utils/contentValidation.js";
 
 /**
  * 待确认 Token 信息
@@ -170,6 +171,11 @@ export class StateService {
         "CONCLUSION_REQUIRED",
         `${action} 动作必须提供 conclusion 参数`
       );
+    }
+
+    // 5.0.1 验证 conclusion 格式（必须在状态更新前验证，否则会导致状态已更新但结论写入失败）
+    if (conclusion) {
+      validateMultilineContent(conclusion, "结论");
     }
 
     // 5.1 根节点 start 时检查信息收集节点状态（不阻止，但记录用于后续提醒）

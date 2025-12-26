@@ -607,7 +607,7 @@ export class DispatchService {
     // 6. 构建 actionRequired
     const actionRequired: ActionRequired = {
       type: "dispatch_task",
-      message: "请使用 Task tool 派发此节点任务",
+      message: "请使用 Task tool 派发此节点任务（找不到 agent 时调用 plugin_path 获取路径）",
       data: {
         workspaceId,
         nodeId,

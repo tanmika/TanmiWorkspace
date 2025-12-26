@@ -627,7 +627,27 @@ function createMcpServer(services: Services): Server {
 
         // Capability 工具
         case "capability_list": {
-          const scenario = args?.scenario as "feature" | "debug" | "optimize" | "summary" | "misc";
+          let scenario = args?.scenario as "feature" | "debug" | "optimize" | "summary" | "misc" | undefined;
+
+          // 如果未传入 scenario，尝试从会话绑定的工作区获取
+          if (!scenario) {
+            const sessionId = args?.sessionId as string | undefined;
+            if (sessionId) {
+              const binding = await services.sessionStorage.getBinding(sessionId);
+              if (binding) {
+                const location = await services.json.getWorkspaceLocation(binding.workspaceId);
+                if (location) {
+                  const config = await services.json.readWorkspaceConfig(location.projectRoot, location.dirName);
+                  scenario = config.scenario;
+                }
+              }
+            }
+          }
+
+          if (!scenario) {
+            throw new Error("scenario 参数必填。请传入 scenario 参数，或确保当前会话已绑定到包含 scenario 配置的工作区。");
+          }
+
           const { capabilityService } = await import("./services/CapabilityService.js");
           const capabilities = capabilityService.getCapabilitiesForScenario(scenario);
           result = {
@@ -670,12 +690,12 @@ function createMcpServer(services: Services): Server {
               throw new Error("首次调用必须提供 infoType 参数");
             }
 
-            // 创建 info 节点
+            // 创建 info 节点（使用 planning 类型，因为需要有能力子节点）
             const infoNodeTitle = infoType === "info_collection" ? "信息收集" : "信息总结";
             const infoNodeResult = await services.node.create({
               workspaceId,
               parentId: "root",
-              type: "execution",
+              type: "planning",
               title: infoNodeTitle,
               requirement: `${infoNodeTitle}节点，包含以下能力：${validCapabilities.map((id) => capabilityService.getCapabilityInfo(id as any).name).join("、")}`,
               role: infoType,
@@ -708,16 +728,30 @@ function createMcpServer(services: Services): Server {
             });
           }
 
-          // 构建 Skill 列表和路径
-          const skills = validCapabilities.map((id) => id);
-          const skillsPath = "plugin/skills/";
+          // 构建 Skill 列表（返回 skill 目录名）
+          const skills = validCapabilities.map((id) =>
+            capabilityService.getSkillDirName(id as any)
+          );
 
           result = {
             infoNodeId,
             createdNodes,
             skills,
-            skillsPath,
-            hint: "已创建能力节点。请按 skills 列表顺序执行对应能力（如果 Skill 文件存在），或查看 skillsPath 目录。每个能力的验收标准已自动写入对应节点。",
+            hint: "已创建能力节点。按 skills 顺序执行，读取对应 skill 获取指导",
+          };
+          break;
+        }
+
+        case "plugin_path": {
+          // 使用 import.meta.url 获取当前模块路径，推导出 plugin 目录
+          const currentFileUrl = import.meta.url;
+          const currentFilePath = new URL(currentFileUrl).pathname;
+          // 从 dist/index.js 往上两级到包根目录，再进入 plugin
+          const pluginPath = join(dirname(currentFilePath), "..", "plugin");
+
+          result = {
+            path: pluginPath,
+            skillsPath: join(pluginPath, "skills"),
           };
           break;
         }

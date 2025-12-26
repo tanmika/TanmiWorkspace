@@ -13,4 +13,9 @@ export const memoApi = {
     const result = await client.get(`/workspaces/${workspaceId}/memos/${memoId}`) as { memo: Memo }
     return result.memo
   },
+
+  // 删除 memo
+  delete(workspaceId: string, memoId: string): Promise<void> {
+    return client.delete(`/workspaces/${workspaceId}/memos/${memoId}`)
+  },
 }

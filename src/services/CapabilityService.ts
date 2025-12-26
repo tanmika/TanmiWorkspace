@@ -12,6 +12,20 @@ import type {
 import type { TaskScenario } from "../types/workspace.js";
 
 /**
+ * CapabilityId 到 Skill 目录名的映射
+ * 目录名使用 gerund 形式（动名词）+ 连字符
+ */
+const CAPABILITY_TO_SKILL_DIR: Record<CapabilityId, string> = {
+  intent_alignment: "aligning-intent",
+  context_discovery: "discovering-context",
+  diagnosis: "diagnosing-issues",
+  tech_research: "researching-tech",
+  measurement_analysis: "analyzing-measurements",
+  solution_design: "designing-solutions",
+  verification_strategy: "planning-verification",
+};
+
+/**
  * 能力元信息映射（硬编码，作为 Skill 文件缺失时的降级方案）
  */
 const CAPABILITY_INFO_MAP: Record<CapabilityId, CapabilityInfo> = {
@@ -211,17 +225,26 @@ export class CapabilityService {
   }
 
   /**
+   * 获取 Skill 目录名（从 CapabilityId 映射）
+   */
+  getSkillDirName(capabilityId: CapabilityId): string {
+    return CAPABILITY_TO_SKILL_DIR[capabilityId] || capabilityId;
+  }
+
+  /**
    * 解析 Skill 文件的 frontmatter（可选，降级处理）
    * @returns SkillMetadata 或 null（文件不存在或解析失败时）
    */
   parseSkillFrontmatter(capabilityId: CapabilityId): SkillMetadata | null {
     try {
-      // Skill 文件路径约定：plugin/skills/{capabilityId}.md
+      // Skill 文件路径约定：plugin/skills/{skillDirName}/SKILL.md
+      const skillDirName = this.getSkillDirName(capabilityId);
       const skillPath = path.join(
         process.cwd(),
         "plugin",
         "skills",
-        `${capabilityId}.md`
+        skillDirName,
+        "SKILL.md"
       );
 
       if (!fs.existsSync(skillPath)) {

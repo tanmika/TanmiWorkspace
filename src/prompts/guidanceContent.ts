@@ -15,37 +15,31 @@ export const GUIDANCE_CONFIGS: Record<GuidanceScenario, GuidanceConfig> = {
 
   workspace_init: {
     scenario: "workspace_init",
-    l0: "工作区已创建。下一步：创建信息收集节点（role: info_collection）收集项目信息。",
-    l1: `工作区创建后流程：
-1. 告知用户 webUrl
-2. 创建信息收集节点（type: planning, role: info_collection）
-3. 扫描项目结构、查找文档
-4. 完成信息收集后开始规划任务`,
-    l2: `## 工作区创建后必做事项
+    l0: "工作区已创建。读取 workspace_bootstrap skill 获取完整启动流程。",
+    l1: `工作区启动流程：
+1. 读取 workspace_bootstrap skill 获取详细流程
+2. 告知用户 webUrl
+3. capability_list → capability_select
+4. 执行能力包任务`,
+    l2: `## 工作区启动流程
 
-### 1. 告知用户 Web UI 地址
-workspace_init 返回的 webUrl 是可视化界面，**务必告知用户**。
-
-### 2. 创建信息收集节点（必须！）
-\`\`\`typescript
-node_create({
-  workspaceId: "...",
-  parentId: "root",
-  type: "planning",
-  role: "info_collection",
-  title: "项目信息收集",
-  requirement: "收集项目结构、开发规范、相关文档"
-})
+### 必须按顺序执行
+\`\`\`
+workspace_init → capability_list → capability_select → 执行任务
 \`\`\`
 
-### 3. 在信息收集节点中执行调研
-- 扫描项目根目录一级菜单
-- 查找文档文件夹（./assets/, ./Doc/）
-- 阅读 README 和配置文件
-- 收集环境配置信息
+### 步骤说明
+1. **告知 webUrl** - 返回的 webUrl 是用户查看进度的入口
+2. **capability_list()** - 获取 basePack（必选）和 optionalPack（可选）
+3. **capability_select** - 选择 infoType 和能力包，自动创建节点
+   - infoType="info_collection"：需主动调研（扫描项目、读文档）
+   - infoType="info_summary"：整理已有信息（从对话提取）
+4. **执行能力包任务** - 读取 skills（找不到时调用 plugin_path 获取路径）
 
-### 4. 完成信息收集后归档
-在 conclusion 中按格式归档规则和文档，系统会自动追加到工作区。`,
+### 强制规则
+- NEVER 跳过 capability_list 直接创建节点
+- NEVER 手动 node_create 信息节点（必须通过 capability_select）
+- MUST 根据场景选择正确的 infoType`,
     relatedHelpTopics: ["start_task"],
     metadata: { priority: 100, critical: true },
   },
@@ -372,12 +366,13 @@ pending → planning → monitoring → completed
 
   node_create_execution: {
     scenario: "node_create_execution",
-    l0: "执行节点已创建。下一步：start 开始执行，完成后 complete。",
+    l0: "执行节点已创建。使用 Skill 执行任务（找不到时调用 plugin_path 获取路径），然后 start 开始执行。",
     l1: `执行节点流程：
-1. start → implementing 状态
-2. 执行任务，用 log_append 记录
-3. 遇到问题用 problem_update 记录
-4. 完成后 complete，失败则 fail`,
+1. 使用 Skill 执行任务（找不到时调用 plugin_path 获取路径）
+2. start → implementing 状态
+3. 按 Skill SOP 执行任务，用 log_append 记录
+4. 遇到问题用 problem_update 记录
+5. 完成后 complete，失败则 fail`,
     l2: `## 执行节点工作流
 
 执行节点负责具体执行，不能有子节点。
@@ -389,14 +384,15 @@ pending → implementing → validating → completed
 \`\`\`
 
 ### 关键步骤
-1. **start** 进入 implementing 状态
-2. **执行任务** 边做边用 log_append 记录
-3. **阶段性结论** 用 node_update 记录到 note
-4. **遇阻处理**
+1. **使用 Skill** 执行任务（找不到时调用 plugin_path 获取路径）
+2. **start** 进入 implementing 状态
+3. **按 Skill SOP 执行** 遵循 Skill 的执行步骤和检查清单
+4. **记录过程** 边做边用 log_append 记录
+5. **遇阻处理**
    - 任务过大 → fail 回退父节点分解
    - 信息不足 → fail 并说明
    - 可继续 → problem_update 记录
-5. **complete** 填写最终 conclusion`,
+6. **complete** 填写最终 conclusion`,
     relatedHelpTopics: ["node_workflow"],
   },
 
@@ -471,20 +467,27 @@ node_transition({
 
   execution_complete: {
     scenario: "execution_complete",
-    l0: "执行任务已完成。如有引用文档，请确认是否需要同步更新。",
+    l0: "执行任务已完成。如有重要发现或决策，建议用 memo 记录。",
     l1: `完成后检查：
 1. 确认结论完整准确
-2. 检查引用的文档是否需要更新
-3. 查看是否有同级未完成节点
-4. 返回父节点继续`,
+2. 如有重要发现/决策，用 memo 创建备忘
+3. 检查引用的文档是否需要更新
+4. 查看是否有同级未完成节点
+5. 返回父节点继续`,
     l2: `## 执行节点完成
 
 任务已完成，结论已记录。
 
 ### 完成后建议
-1. **文档检查** - 如果修改了代码，相关文档可能需要更新
-2. **同级节点** - 检查是否有其他待执行的同级节点
-3. **父节点状态** - 当所有同级节点完成时，考虑完成父节点`,
+1. **记录重要发现** - 如有需要跨节点复用的结论，创建memo记录，并且及时跟踪工作区变化
+2. **文档检查** - 如果修改了代码，相关文档可能需要更新
+3. **同级节点** - 检查是否有其他待执行的同级节点
+4. **父节点状态** - 当所有同级节点完成时，考虑完成父节点
+
+### 何时使用 memo
+- 重要的技术决策
+- 可复用的调研结论
+- 需要跨节点引用的信息`,
     relatedHelpTopics: ["complete_task"],
   },
 

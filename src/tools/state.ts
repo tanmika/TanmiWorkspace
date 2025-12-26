@@ -46,7 +46,7 @@ export const nodeTransitionTool: Tool = {
       },
       conclusion: {
         type: "string",
-        description: "结论/产出摘要（complete/fail/cancel 时必填）",
+        description: "结论/产出摘要（complete/fail/cancel 时必填）。注意：不能包含 Markdown 二级标题（## ），请使用 ### 三级标题或其他格式",
       },
       confirmation: {
         type: "object",

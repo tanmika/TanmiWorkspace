@@ -225,7 +225,9 @@ export class WorkspaceService {
     const projectDocs = await this.scanProjectDocs(projectRoot);
 
     // 15. 生成 hint（包含项目文档信息）
-    let hint = "💡 工作区已创建。根节点是规划节点。下一步：调用 node_transition(action=\"start\") 进入规划状态，分析需求后使用 node_create 创建执行节点或子规划节点。";
+    // 使用 guidanceContent.ts 中的 workspace_init L0 引导
+    const wsInitGuidance = getGuidanceConfig("workspace_init");
+    let hint = `💡 ${wsInitGuidance?.l0 || "工作区已创建。下一步：调用 capability_list 获取场景推荐能力，然后创建信息收集节点。"}`;
 
     if (projectDocs.totalFound > 0) {
       hint += `\n\n📚 项目文档扫描结果：发现 ${projectDocs.totalFound} 个 .md 文件`;
@@ -254,6 +256,7 @@ export class WorkspaceService {
       path: this.fs.getWorkspacePath(projectRoot, wsDirName),
       projectRoot,
       rootNodeId,
+      scenario,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
       hint,
       projectDocs,

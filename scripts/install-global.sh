@@ -417,22 +417,23 @@ uninstall_dispatch_agents() {
 # ============================================================================
 
 # 安装 Skills 到用户全局目录
+# Skill 目录结构: skill-name/SKILL.md (Claude Code 兼容格式)
 install_skills() {
     info "安装 Skills 模板..."
 
     local skills_src="$PROJECT_ROOT/plugin/skills"
     local skills_dir="$CLAUDE_HOME/skills"
 
-    # 检查是否有模板文件
+    # 检查是否有模板目录
     if [ ! -d "$skills_src" ]; then
         warn "Skills 模板目录不存在: $skills_src"
         info "跳过 Skills 安装"
         return 0
     fi
 
-    # 检查是否有 .md 文件
-    local skill_files=$(find "$skills_src" -name "*.md" -type f 2>/dev/null)
-    if [ -z "$skill_files" ]; then
+    # 查找包含 SKILL.md 的目录（Claude Code 兼容格式）
+    local skill_dirs=$(find "$skills_src" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+    if [ -z "$skill_dirs" ]; then
         warn "Skills 模板目录为空"
         info "跳过 Skills 安装"
         return 0
@@ -441,14 +442,27 @@ install_skills() {
     # 创建 skills 目录
     mkdir -p "$skills_dir"
 
-    # 复制所有 skill 模板文件
+    # 复制所有 skill 目录
     local count=0
-    for skill_file in $skill_files; do
-        local filename=$(basename "$skill_file")
-        cp "$skill_file" "$skills_dir/"
-        info "  - $filename"
-        count=$((count + 1))
+    for skill_dir in $skill_dirs; do
+        local dirname=$(basename "$skill_dir")
+        # 检查是否包含 SKILL.md
+        if [ -f "$skill_dir/SKILL.md" ]; then
+            # 删除已存在的目标目录（确保更新）
+            if [ -d "$skills_dir/$dirname" ]; then
+                rm -rf "$skills_dir/$dirname"
+            fi
+            # 复制整个目录
+            cp -r "$skill_dir" "$skills_dir/"
+            info "  - $dirname/"
+            count=$((count + 1))
+        fi
     done
+
+    if [ $count -eq 0 ]; then
+        warn "未找到有效的 Skill 目录（需包含 SKILL.md）"
+        return 0
+    fi
 
     success "已安装 $count 个 Skill 模板到 $skills_dir/"
 
@@ -466,14 +480,14 @@ uninstall_skills() {
     local skills_dir="$CLAUDE_HOME/skills"
     local skills_src="$PROJECT_ROOT/plugin/skills"
 
-    # 删除由 TanmiWorkspace 安装的 skill 文件
+    # 删除由 TanmiWorkspace 安装的 skill 目录
     if [ -d "$skills_src" ] && [ -d "$skills_dir" ]; then
-        for skill_file in "$skills_src"/*.md; do
-            if [ -f "$skill_file" ]; then
-                local filename=$(basename "$skill_file")
-                if [ -f "$skills_dir/$filename" ]; then
-                    rm "$skills_dir/$filename"
-                    success "已删除 $skills_dir/$filename"
+        for skill_src_dir in "$skills_src"/*/; do
+            if [ -d "$skill_src_dir" ]; then
+                local dirname=$(basename "$skill_src_dir")
+                if [ -d "$skills_dir/$dirname" ]; then
+                    rm -rf "$skills_dir/$dirname"
+                    success "已删除 $skills_dir/$dirname/"
                 fi
             fi
         done

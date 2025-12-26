@@ -189,6 +189,7 @@ export interface WorkspaceInitResult {
   path: string;
   projectRoot: string;              // 实际使用的项目根目录
   rootNodeId: string;
+  scenario: TaskScenario;           // 工作区场景类型（供 capability_list 使用）
   webUrl?: string;                  // Web 访问地址（如果服务运行中）
   hint?: string;                    // 工作流提示
   projectDocs?: ProjectDocsScanResult;  // 项目文档扫描结果

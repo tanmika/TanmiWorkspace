@@ -317,7 +317,7 @@ async function handleMemoDeleted() {
   selectedType.value = 'memo-drawer'
   // 刷新 memo 列表
   if (workspaceStore.currentWorkspace?.id) {
-    await memoStore.fetchMemoList(workspaceStore.currentWorkspace.id)
+    await memoStore.fetchMemos(workspaceStore.currentWorkspace.id)
   }
 }
 

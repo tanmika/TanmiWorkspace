@@ -39,10 +39,10 @@ export const workspaceInitTool: Tool = {
       scenario: {
         type: "string",
         enum: ["feature", "summary", "optimize", "debug", "misc"],
-        description: "任务场景类型：feature(新功能开发)、summary(总结分析)、optimize(优化重构)、debug(查错修复)、misc(其他，默认)",
+        description: "任务场景类型（必填）：feature(新功能开发)、summary(总结分析)、optimize(优化重构)、debug(查错修复)、misc(其他)",
       },
     },
-    required: ["name", "goal"],
+    required: ["name", "goal", "scenario"],
   },
 };
 

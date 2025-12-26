@@ -8,17 +8,16 @@
     "optionalPack": []
   },
   "optimize": {
-    "basePack": ["intent_alignment", "measurement_analysis"],
+    "basePack": ["intent_alignment", "context_discovery", "measurement_analysis"],
     "optionalPack": ["diagnosis", "solution_design", "verification_strategy"]
   },
   "debug": {
-    "basePack": ["intent_alignment", "diagnosis"],
-    "optionalPack": ["context_discovery", "solution_design", "verification_strategy"]
+    "basePack": ["intent_alignment", "context_discovery", "diagnosis"],
+    "optionalPack": ["solution_design", "verification_strategy"]
   },
   "misc": {
-    "basePack": [],
+    "basePack": ["intent_alignment"],
     "optionalPack": [
-      "intent_alignment",
       "context_discovery",
       "tech_research",
       "measurement_analysis",

@@ -297,18 +297,20 @@ async function configureCursorMcp(): Promise<boolean> {
   }
 }
 
-// 安装 Hook
-async function installHook(platform: "claude" | "cursor"): Promise<boolean> {
-  console.log("\n" + colors.blue(`安装 ${platform === "claude" ? "Claude Code" : "Cursor"} Hook...`));
+// 安装插件（Hooks + Agents + Skills）
+async function installPlugins(platform: "claude" | "cursor"): Promise<boolean> {
+  const platformName = platform === "claude" ? "Claude Code" : "Cursor";
+  const components = platform === "claude" ? "Hooks, Agents, Skills" : "Hooks";
+  console.log("\n" + colors.blue(`安装 ${platformName} 插件 (${components})...`));
 
   try {
-    // 查找 tanmi-workspace-hooks 命令
-    const hookArg = platform === "claude" ? "--claude-hooks" : "--cursor-hooks";
-    await execAsync(`npx tanmi-workspace-hooks ${hookArg}`);
-    console.log(colors.green(`  ✓ Hook 已安装`));
+    // 使用 --claude-all / --cursor-all 安装全部组件
+    const arg = platform === "claude" ? "--claude-all" : "--cursor-all";
+    await execAsync(`npx tanmi-workspace-hooks ${arg}`);
+    console.log(colors.green(`  ✓ 插件已安装`));
     return true;
   } catch (error) {
-    console.log(colors.yellow(`  ⚠ 自动安装失败，请手动运行: tanmi-workspace-hooks ${platform === "claude" ? "--claude-hooks" : "--cursor-hooks"}`));
+    console.log(colors.yellow(`  ⚠ 自动安装失败，请手动运行: tanmi-workspace-hooks ${platform === "claude" ? "--claude-all" : "--cursor-all"}`));
     return false;
   }
 }
@@ -354,12 +356,12 @@ export default async function setup() {
     await configureClaudeMcp(env);
     await configureClaudePermission();
 
-    const installHookAnswer = await confirm({
-      message: "是否安装智能提醒 Hook？",
+    const installPluginsAnswer = await confirm({
+      message: "是否安装插件？(Hooks, Agents, Skills)",
       default: true,
     });
-    if (installHookAnswer) {
-      await installHook("claude");
+    if (installPluginsAnswer) {
+      await installPlugins("claude");
     }
 
     console.log("\n" + colors.green("配置完成！请重启 Claude Code。"));
@@ -370,12 +372,12 @@ export default async function setup() {
     console.log(colors.bold("\n=== TanmiWorkspace Cursor 快速配置 ===\n"));
     await configureCursorMcp();
 
-    const installHookAnswer = await confirm({
-      message: "是否安装智能提醒 Hook？",
+    const installPluginsAnswer = await confirm({
+      message: "是否安装插件？(Hooks)",
       default: true,
     });
-    if (installHookAnswer) {
-      await installHook("cursor");
+    if (installPluginsAnswer) {
+      await installPlugins("cursor");
     }
 
     console.log("\n" + colors.green("配置完成！请重启 Cursor。"));
@@ -451,12 +453,12 @@ ${colors.bold("3. 其他平台")}
     }
 
     if (!env.claudeCode.hookInstalled) {
-      const installHookAnswer = await confirm({
-        message: "是否安装智能提醒 Hook？(自动注入工作区上下文)",
+      const installPluginsAnswer = await confirm({
+        message: "是否安装插件？(Hooks, Agents, Skills)",
         default: true,
       });
-      if (installHookAnswer) {
-        await installHook("claude");
+      if (installPluginsAnswer) {
+        await installPlugins("claude");
       }
     }
 
@@ -471,12 +473,12 @@ ${colors.bold("3. 其他平台")}
     await configureCursorMcp();
 
     if (!env.cursor.hookInstalled) {
-      const installHookAnswer = await confirm({
-        message: "是否安装智能提醒 Hook？(自动注入工作区上下文)",
+      const installPluginsAnswer = await confirm({
+        message: "是否安装插件？(Hooks)",
         default: true,
       });
-      if (installHookAnswer) {
-        await installHook("cursor");
+      if (installPluginsAnswer) {
+        await installPlugins("cursor");
       }
     }
 
