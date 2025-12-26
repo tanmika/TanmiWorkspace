@@ -6,7 +6,6 @@ import * as fs from "node:fs/promises";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
-import { deleteAllWorkspaceBranches } from "../utils/git.js";
 import type {
   WorkspaceInitParams,
   WorkspaceInitResult,
@@ -453,12 +452,8 @@ export class WorkspaceService {
       );
     }
 
-    // 清理派发相关的 git 分支（如果存在）
-    try {
-      await deleteAllWorkspaceBranches(workspaceId, wsEntry.projectRoot);
-    } catch {
-      // 分支清理失败不阻塞删除流程
-    }
+    // 注意：不清理 Git 分支，用户可能选择保留分支用于对比
+    // 孤儿分支可通过 git branch -D tanmi_workspace/... 手动清理
 
     // 删除项目内目录（使用 dirName）
     const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
@@ -850,12 +845,7 @@ export class WorkspaceService {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区目录不存在: ${srcPath}`);
     }
 
-    // 3.1 清理派发相关的 git 分支（如果存在）
-    try {
-      await deleteAllWorkspaceBranches(workspaceId, projectRoot);
-    } catch {
-      // 分支清理失败不阻塞归档流程
-    }
+    // 注意：归档时不清理 Git 分支，用户可能选择保留分支用于对比
 
     // 4. 确保归档目录存在
     await this.fs.ensureArchiveDir(projectRoot);

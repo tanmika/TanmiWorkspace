@@ -4,7 +4,10 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as fs from "node:fs/promises";
 import * as crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import YAML from "yaml";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import type { WorkspaceService } from "./WorkspaceService.js";
 import type { NodeService } from "./NodeService.js";
 import type { StateService } from "./StateService.js";
@@ -593,9 +596,10 @@ export class TutorialService {
    * 向后兼容：优先尝试 assets/，回退到 docs/
    */
   private async readVersionNotes(): Promise<VersionNote[]> {
+    // 使用模块相对路径，避免 process.cwd() 在不同启动目录下的问题
     const paths = [
-      path.join(process.cwd(), "assets/version-notes.yaml"),
-      path.join(process.cwd(), "docs/version-notes.yaml"), // 向后兼容旧目录
+      path.join(__dirname, "../../assets/version-notes.yaml"),
+      path.join(__dirname, "../../docs/version-notes.yaml"), // 向后兼容旧目录
     ];
 
     for (const notesPath of paths) {

@@ -134,8 +134,8 @@ const createWorkspaceSchema = {
 
 | 模式 | 默认端口 | 数据目录 |
 |------|---------|---------|
-| 开发 | 3001 | `~/.tanmi-workspace-dev/` |
-| 生产 | 3000 | `~/.tanmi-workspace/` |
+| 开发 | 19541 | `~/.tanmi-workspace-dev/` |
+| 生产 | 19540 | `~/.tanmi-workspace/` |
 
 ### Tools 定义
 
@@ -147,12 +147,16 @@ const createWorkspaceSchema = {
 
 | 文件 | 工具 | 说明 |
 |------|------|------|
-| `workspace.ts` | workspace_init, workspace_list, workspace_get, workspace_delete, workspace_status | 工作区生命周期 |
-| `node.ts` | node_create, node_get, node_list, node_delete, node_split, node_update, node_move | 节点操作 |
+| `workspace.ts` | workspace_init, workspace_list, workspace_get, workspace_delete, workspace_status, workspace_update_rules, workspace_archive, workspace_restore | 工作区生命周期 |
+| `node.ts` | node_create, node_get, node_list, node_delete, node_update, node_move | 节点操作 |
 | `state.ts` | node_transition | 状态转换 |
 | `context.ts` | context_get, context_focus, node_isolate, node_reference | 上下文管理 |
 | `log.ts` | log_append, problem_update, problem_clear | 日志和问题 |
 | `help.ts` | tanmi_help, tanmi_prompt | 帮助系统 |
+| `session.ts` | session_bind, session_unbind, session_status, get_pending_changes | 会话管理 |
+| `dispatch.ts` | node_dispatch, node_dispatch_complete, dispatch_cleanup, dispatch_enable, dispatch_disable, dispatch_disable_execute | 任务派发 |
+| `config.ts` | config_get, config_set | 配置管理 |
+| `import.ts` | workspace_import_guide, workspace_import_list | OpenSpec 导入 |
 
 **工具定义结构**:
 
@@ -243,12 +247,12 @@ const httpServer = await createServer();
 
 ```bash
 # 创建工作区
-curl -X POST http://localhost:3000/api/workspaces \
+curl -X POST http://localhost:19540/api/workspaces \
   -H "Content-Type: application/json" \
   -d '{"name": "我的项目", "goal": "完成功能开发"}'
 
 # 获取工作区状态
-curl http://localhost:3000/api/workspaces/ws-xxx/status
+curl http://localhost:19540/api/workspaces/ws-xxx/status
 ```
 
 ## Prompts 支持

@@ -63,7 +63,6 @@ type TransitionAction =
 | `NodeGetParams` | `NodeGetResult` | node_get |
 | `NodeListParams` | `NodeListResult` | node_list |
 | `NodeDeleteParams` | `NodeDeleteResult` | node_delete |
-| `NodeSplitParams` | `NodeSplitResult` | node_split |
 | `NodeUpdateParams` | `NodeUpdateResult` | node_update |
 | `NodeMoveParams` | `NodeMoveResult` | node_move |
 | `NodeTransitionParams` | `NodeTransitionResult` | node_transition |

@@ -145,7 +145,7 @@ pending → planning → monitoring → completed
           cancelled ←────┘
 ```
 
-## 工具列表（29 个）
+## 工具列表（38 个）
 
 ### 工作区
 | 工具 | 说明 |
@@ -165,7 +165,6 @@ pending → planning → monitoring → completed
 | 工具 | 说明 |
 |------|------|
 | `node_create` | 创建子任务（需传 type 和 rulesHash） |
-| `node_split` | 分裂子任务 |
 | `node_get` | 获取详情 |
 | `node_list` | 列出节点树 |
 | `node_update` | 更新节点 |
@@ -204,8 +203,25 @@ pending → planning → monitoring → completed
 | `session_bind` | 绑定会话到工作区 |
 | `session_unbind` | 解除会话绑定 |
 | `session_status` | 查询会话绑定状态 |
+| `get_pending_changes` | 获取待处理的 WebUI 变更 |
 
 > 注：session_* 工具配合 Hook 系统使用，用于自动注入工作区上下文。支持 Claude Code 和 Cursor。详见 [Hook 系统](#hook-系统)。
+
+### 派发（多 Agent 协作）
+| 工具 | 说明 |
+|------|------|
+| `node_dispatch` | 派发节点给子 Agent 执行 |
+| `node_dispatch_complete` | 子 Agent 完成派发任务 |
+| `dispatch_cleanup` | 清理派发状态 |
+| `dispatch_enable` | 启用派发功能 |
+| `dispatch_disable` | 禁用派发功能 |
+| `dispatch_disable_execute` | 禁用并立即执行派发任务 |
+
+### 配置
+| 工具 | 说明 |
+|------|------|
+| `config_get` | 获取配置项 |
+| `config_set` | 设置配置项 |
 
 ## AI 使用指南
 
@@ -261,10 +277,17 @@ AI 会引导你完成以下流程：
 TanmiWorkspace 提供可视化 Web 界面：
 
 ```bash
-npm run start:http
+tanmi-workspace webui
 ```
 
-访问 http://localhost:3000 查看工作区状态。
+服务启动后会自动打开浏览器（默认端口 19540）。
+
+其他命令：
+```bash
+tanmi-workspace webui status   # 查看服务状态
+tanmi-workspace webui stop     # 停止服务
+tanmi-workspace webui restart  # 重启服务
+```
 
 **功能特性**：
 - 工作区列表与状态筛选
@@ -424,7 +447,7 @@ beforeSubmitPrompt 触发
 npm run dev:all
 
 # 分别启动
-npm run start:http:dev   # 后端 HTTP API (端口 3001)
+npm run start:http:dev   # 后端 HTTP API (端口 19541)
 cd web && npm run dev    # 前端 Vite (端口 5173)
 
 # 构建

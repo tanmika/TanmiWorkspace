@@ -13,6 +13,7 @@ import type {
 } from "../types/context.js";
 import { TanmiError } from "../types/errors.js";
 import { formatShort, now } from "../utils/time.js";
+import { eventService } from "./EventService.js";
 
 /**
  * 日志服务
@@ -85,7 +86,10 @@ export class LogService {
       throw new TanmiError("LOG_APPEND_FAILED", `日志追加失败: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    // 5. 返回结果
+    // 5. 推送 SSE 事件通知前端
+    eventService.emitLogUpdate(workspaceId, nodeId || "workspace");
+
+    // 6. 返回结果
     return {
       success: true,
       timestamp,
@@ -167,7 +171,10 @@ export class LogService {
       event: `更新问题: ${problem.substring(0, 50)}${problem.length > 50 ? "..." : ""}`,
     }, nodeDirName);
 
-    // 6. 返回结果
+    // 6. 推送 SSE 事件通知前端
+    eventService.emitNodeUpdate(workspaceId, nodeId);
+
+    // 7. 返回结果
     return {
       success: true,
       hint: "💡 问题已记录。如果问题复杂且当前是执行节点，考虑 fail 后回到父规划节点重新分解；如果问题已解决，使用 problem_clear 清空。",
@@ -208,7 +215,10 @@ export class LogService {
       event: "清空问题",
     }, nodeDirName);
 
-    // 5. 返回结果
+    // 5. 推送 SSE 事件通知前端
+    eventService.emitNodeUpdate(workspaceId, nodeId);
+
+    // 6. 返回结果
     return {
       success: true,
     };

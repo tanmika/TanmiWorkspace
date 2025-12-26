@@ -6,11 +6,16 @@
 
 ```typescript
 // 工作区生命周期
-workspace_init(name, goal, rules?, docs?)     // 创建工作区
+workspace_init(name, goal, rules?, docs?)      // 创建工作区
 workspace_get(workspaceId)                     // 获取详情
 workspace_list(status?)                        // 列出工作区
 workspace_delete(workspaceId, force?)          // 删除工作区
 workspace_status(workspaceId, format?)         // 可视化状态
+workspace_update_rules(workspaceId, action, rule?, rules?)  // 更新规则
+workspace_archive(workspaceId)                 // 归档工作区
+workspace_restore(workspaceId)                 // 恢复归档
+workspace_import_guide(path, type, changeId?)  // 导入引导
+workspace_import_list(path, type)              // 列出可导入项
 
 // 节点管理
 node_create(workspaceId, parentId, type, title, requirement, rulesHash?, role?, docs?)
@@ -36,6 +41,19 @@ problem_clear(workspaceId, nodeId?)
 session_bind(sessionId, workspaceId, nodeId?)
 session_unbind(sessionId)
 session_status(sessionId)
+get_pending_changes(sessionId, workspaceId?)   // 获取待处理变更
+
+// 派发（多 Agent 协作）
+node_dispatch(workspaceId, nodeId)             // 派发节点任务
+node_dispatch_complete(workspaceId, nodeId, success, conclusion?)  // 完成派发
+dispatch_enable(workspaceId, useGit?)          // 启用派发模式
+dispatch_disable(workspaceId)                  // 禁用派发（查询状态）
+dispatch_disable_execute(workspaceId, mergeStrategy, ...)  // 执行禁用
+dispatch_cleanup(workspaceId, cleanupType?)    // 清理分支
+
+// 配置管理
+config_get()                                   // 获取配置
+config_set(defaultDispatchMode?)               // 设置配置
 
 // 帮助系统
 tanmi_help(topic)
@@ -220,6 +238,125 @@ workspace_init({
   success: boolean;
   rules: string[];      // 更新后的规则列表
   rulesHash: string;    // 新的规则哈希
+}
+```
+
+---
+
+### workspace_archive
+
+归档工作区。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+
+**返回值**
+
+```typescript
+{
+  success: boolean;
+  archivePath: string;  // 归档后的路径
+}
+```
+
+**说明**
+
+- 工作区状态变为 `archived`
+- 目录移动到 `.tanmi-workspace/archive/` 下
+- 仍可通过 `workspace_get`/`workspace_status` 查看
+- 可通过 `workspace_restore` 恢复
+
+---
+
+### workspace_restore
+
+恢复归档的工作区。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+
+**返回值**
+
+```typescript
+{
+  success: boolean;
+  restoredPath: string;  // 恢复后的路径
+}
+```
+
+**说明**
+
+- 工作区状态变为 `active`
+- 目录移回原位置
+- 可继续正常使用
+
+---
+
+### workspace_import_guide
+
+获取外部规范的导入引导信息。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `path` | string | ✅ | 规范目录的绝对路径 |
+| `type` | string | ✅ | 规范类型：`openspec` |
+| `changeId` | string | - | 变更 ID（OpenSpec 目录名） |
+
+**返回值**
+
+```typescript
+{
+  summary: {
+    title: string;
+    taskCount: number;
+    completedCount: number;
+  };
+  files: Array<{
+    path: string;
+    purpose: string;
+  }>;
+  importCommand: string;  // 导入脚本调用命令
+}
+```
+
+**使用流程**
+
+1. 调用此工具获取引导
+2. 根据 `files` 列表阅读相关文件
+3. 向用户展示理解的内容
+4. 用户确认后执行 `importCommand`
+5. 调用 `workspace_get` 获取创建的工作区详情
+
+---
+
+### workspace_import_list
+
+列出可导入的变更列表。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `path` | string | ✅ | 规范目录的绝对路径 |
+| `type` | string | ✅ | 规范类型：`openspec` |
+
+**返回值**
+
+```typescript
+{
+  changes: Array<{
+    id: string;
+    title: string;
+    progress: string;  // 如 "3/5"
+  }>;
 }
 ```
 
@@ -766,6 +903,249 @@ interface ChildConclusion {
     name: string;
     goal: string;
   }>;
+}
+```
+
+---
+
+### get_pending_changes
+
+获取工作区的待处理手动变更记录。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `sessionId` | string | ✅ | Claude Code 会话 ID |
+| `workspaceId` | string | - | 工作区 ID（不提供则使用会话绑定的工作区） |
+
+**返回值**
+
+```typescript
+{
+  hasChanges: boolean;
+  reminder: string;  // 格式化的提醒文本（无变更时为空）
+}
+```
+
+**说明**
+
+- 供 Hook 脚本调用，检测 WebUI 手动编辑
+- 此工具不会清除变更记录（由 `context_get`/`workspace_get` 负责清除）
+
+---
+
+## 派发（多 Agent 协作）
+
+### node_dispatch
+
+准备派发节点任务，返回 subagent 调用指令。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `nodeId` | string | ✅ | 要派发的节点 ID |
+
+**前置条件**
+
+- 工作区已启用派发模式
+- 节点类型为 `execution`
+- 节点状态为 `pending` 或 `implementing`
+
+**返回值**
+
+```typescript
+{
+  startMarker: string;  // Git 模式: commit hash; 无 Git: 时间戳
+  actionRequired: {
+    type: "dispatch_task";
+    subagentType: "tanmi-executor";
+    prompt: string;
+    timeout: number;
+  };
+}
+```
+
+---
+
+### node_dispatch_complete
+
+处理派发任务的执行结果。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `nodeId` | string | ✅ | 节点 ID |
+| `success` | boolean | ✅ | 执行是否成功 |
+| `conclusion` | string | - | 执行结论/失败原因 |
+
+**返回值**
+
+```typescript
+{
+  endMarker: string | null;  // 执行后的标记
+  nextAction: "dispatch_test" | "return_parent";
+  testNodeId?: string;  // 配对的测试节点 ID
+}
+```
+
+**说明**
+
+- 成功时：Git 模式自动 commit，无 Git 模式记录时间戳
+- 失败时：Git 模式自动回滚，无 Git 模式需手动恢复
+
+---
+
+### dispatch_enable
+
+启用工作区的派发模式。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `useGit` | boolean | - | 是否使用 Git 模式（默认 false） |
+
+**派发模式**
+
+| 模式 | 说明 | 推荐度 |
+|------|------|--------|
+| 无 Git（默认） | 仅更新元数据，安全 | ✅ 推荐 |
+| Git 模式 | 自动分支、提交、回滚 | ⚠️ 实验功能 |
+
+**返回值**
+
+```typescript
+{
+  success: boolean;
+  mode: "git" | "no-git";
+  processBranch?: string;  // Git 模式下的派发分支
+}
+```
+
+---
+
+### dispatch_disable
+
+禁用派发模式第一步：查询状态并返回选项。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+
+**返回值**
+
+```typescript
+{
+  mode: "git" | "no-git";
+  originalBranch?: string;
+  commits?: Array<{ hash: string; message: string }>;
+  actionRequired: {
+    type: "ask_merge_strategy";
+    options: string[];
+  };
+}
+```
+
+**⚠️ 重要**：返回的选项必须由用户决策，AI 禁止擅自选择！
+
+---
+
+### dispatch_disable_execute
+
+禁用派发模式第二步：执行用户选择的合并策略。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `mergeStrategy` | string | ✅ | 合并策略 |
+| `keepBackupBranch` | boolean | - | 保留备份分支（默认 false） |
+| `keepProcessBranch` | boolean | - | 保留派发分支（默认 false） |
+| `commitMessage` | string | - | squash 合并时的提交信息 |
+
+**合并策略**
+
+| 策略 | 说明 |
+|------|------|
+| `sequential` | 按顺序合并，保留独立提交 |
+| `squash` | 压缩为一个提交 |
+| `cherry-pick` | 遴选修改但不提交 |
+| `skip` | 不合并，保留分支 |
+
+---
+
+### dispatch_cleanup
+
+清理派发相关的 git 分支。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `cleanupType` | string | - | `backup`、`process`、`all`（默认） |
+
+**说明**
+
+- 仅 Git 模式下有效
+- 无 Git 模式下为空操作（no-op）
+
+---
+
+## 配置管理
+
+### config_get
+
+获取全局配置。
+
+**参数**
+
+无参数。
+
+**返回值**
+
+```typescript
+{
+  version: string;
+  defaultDispatchMode: "none" | "git" | "no-git";
+}
+```
+
+---
+
+### config_set
+
+设置全局配置。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `defaultDispatchMode` | string | - | 默认派发模式 |
+
+**可选值**
+
+| 值 | 说明 |
+|------|------|
+| `none` | 不启用派发（默认） |
+| `git` | Git 模式 |
+| `no-git` | 无 Git 模式 |
+
+**返回值**
+
+```typescript
+{
+  success: boolean;
+  config: { ... };  // 更新后的配置
 }
 ```
 

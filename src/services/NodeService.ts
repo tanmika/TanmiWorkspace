@@ -29,6 +29,7 @@ import { validateNodeTitle } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
 import { GuidanceService } from "./GuidanceService.js";
 import type { GuidanceContext } from "../types/guidance.js";
+import { eventService } from "./EventService.js";
 
 /**
  * 节点服务
@@ -492,6 +493,9 @@ export class NodeService {
       };
     }
 
+    // 推送 SSE 事件通知前端
+    eventService.emitNodeUpdate(workspaceId, nodeId);
+
     return result;
   }
 
@@ -686,6 +690,9 @@ export class NodeService {
       event: `节点 "${nodeId}" 及其 ${deletedNodes.length - 1} 个子节点已删除`,
     });
 
+    // 推送 SSE 事件通知前端
+    eventService.emitNodeUpdate(workspaceId, nodeId);
+
     return {
       success: true,
       deletedNodes,
@@ -801,6 +808,9 @@ export class NodeService {
       event: `更新节点: ${updates.join(", ")}`,
     }, nodeDirName);
 
+    // 推送 SSE 事件通知前端
+    eventService.emitNodeUpdate(workspaceId, nodeId);
+
     return {
       success: true,
       updatedAt: currentTime,
@@ -900,6 +910,9 @@ export class NodeService {
       operator: "AI",
       event: `移动节点 "${nodeInfo.title}" 到 ${newParentId === "root" ? "根节点" : newParentId}`,
     }, nodeDirName);
+
+    // 推送 SSE 事件通知前端
+    eventService.emitNodeUpdate(workspaceId, nodeId);
 
     return {
       success: true,

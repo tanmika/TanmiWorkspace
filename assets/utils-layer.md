@@ -178,7 +178,7 @@ const root = validateProjectRoot("./my-project");  // 返回绝对路径
 validateProjectRoot("../../etc");       // throws INVALID_PATH
 
 // 端口检测
-if (await isPortInUse(3000)) {
+if (await isPortInUse(19540)) {
   console.log("端口已占用");
 }
 ```
