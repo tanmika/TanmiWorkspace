@@ -87,7 +87,7 @@ log_info "Step 5/7: 请更新 CHANGELOG.md..."
 echo ""
 echo "================================================"
 echo "请确保 CHANGELOG.md 已包含 v$NEW_VERSION 的更新内容"
-echo "以及 docs/version-notes.yaml 的 requirement 字段"
+echo "以及 config/version-notes.yaml 的 requirement 字段"
 echo "================================================"
 echo ""
 read -p "CHANGELOG 已更新? (y/N) " -n 1 -r

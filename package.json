@@ -14,7 +14,7 @@
     "dist/",
     "web/dist/",
     "plugin/",
-    "templates/",
+    "config/",
     "README.md",
     "CHANGELOG.md",
     "配置方式.md"

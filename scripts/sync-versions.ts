@@ -4,7 +4,7 @@
  *
  * 功能：
  * 1. 从 CHANGELOG.md 提取版本信息
- * 2. 同步到 assets/version-notes.yaml（只增不改）
+ * 2. 同步到 config/version-notes.yaml（只增不改）
  * 3. 检查未填写的 requirement
  *
  * 使用：
@@ -28,7 +28,7 @@ interface VersionNotesFile {
 }
 
 const CHANGELOG_PATH = path.join(process.cwd(), "CHANGELOG.md");
-const VERSION_NOTES_PATH = path.join(process.cwd(), "assets/version-notes.yaml");
+const VERSION_NOTES_PATH = path.join(process.cwd(), "config/version-notes.yaml");
 
 /**
  * 从 CHANGELOG.md 提取版本信息

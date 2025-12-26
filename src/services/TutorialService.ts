@@ -641,8 +641,8 @@ export class TutorialService {
   private async readVersionNotes(): Promise<VersionNote[]> {
     // 使用模块相对路径，避免 process.cwd() 在不同启动目录下的问题
     const paths = [
-      path.join(__dirname, "../../assets/version-notes.yaml"),
-      path.join(__dirname, "../../docs/version-notes.yaml"), // 向后兼容旧目录
+      path.join(__dirname, "../../config/version-notes.yaml"),
+      path.join(__dirname, "../../assets/version-notes.yaml"), // 向后兼容旧目录
     ];
 
     for (const notesPath of paths) {
