@@ -77,7 +77,7 @@ export function createServices(): Services {
   context.setWorkspaceService(workspace);
   // 设置 MemoService 依赖（用于获取 memo 内容）
   context.setMemoService(memo);
-  const tutorial = new TutorialService(workspace, node, state, log, context, reference, dispatch, config);
+  const tutorial = new TutorialService(workspace, node, state, log, context, reference, dispatch, config, memo);
 
   // 创建独立服务实例
   const session = new SessionService(sessionStorage, json, md, fs);

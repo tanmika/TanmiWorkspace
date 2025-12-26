@@ -16,6 +16,7 @@ import type { ContextService } from "./ContextService.js";
 import type { ReferenceService } from "./ReferenceService.js";
 import type { DispatchService } from "./DispatchService.js";
 import type { ConfigService } from "./ConfigService.js";
+import type { MemoService } from "./MemoService.js";
 import pkg from "../../package.json" with { type: "json" };
 
 /**
@@ -53,6 +54,12 @@ interface TutorialNode {
     status: "pending" | "executing" | "testing" | "passed" | "failed";
     startMarker: string;
     endMarker?: string;
+  };
+  // memo: 创建备忘并添加引用
+  memo?: {
+    title: string;
+    summary: string;
+    content: string;
   };
 }
 
@@ -284,9 +291,44 @@ AI 会在执行时关注问题内容，本节点的问题区域有演示内容�
           requirement: `这是一个特殊角色的执行节点：**信息收集 (info_collection)**
 
 信息收集节点用于需求澄清、调研分析、方案评审等场景。
-在树视图中节点标签后显示 INFO 标牌，便于快速识别。`,
+在树视图中节点标签后显示 INFO 标牌，便于快速识别。
+
+**MEMO 功能**
+本节点创建了一个 MEMO，用于记录长篇内容。点击「References」区域查看引用。`,
           role: "info_collection",
-          note: "一般信息收集节点是项目的第一个节点，用于收集初始需求和背景信息。在后续需要额外信息时，也可以要求 AI 创建新的信息收集节点进行补充调研。",
+          targetStatus: "completed",
+          conclusion: "信息收集节点适合需求澄清和调研分析",
+          note: "短内容用 Note，长内容用 MEMO",
+          memo: {
+            title: "MEMO 功能说明",
+            summary: "演示 MEMO 的使用方式和适用场景",
+            content: `# MEMO 功能说明
+
+## 什么是 MEMO
+
+MEMO 是节点级的长篇内容记录功能，适合存储：
+- 技术调研笔记
+- 方案设计文档
+- 会议记录
+- 知识沉淀
+
+## MEMO的特点
+- 独立存储且可被节点引用
+- 方便临时记录再后续分析
+
+## 与 Note 的区别
+
+| 特性 | Note（备注） | MEMO |
+|------|-------------|------|
+| 长度 | 短文本 | 长篇内容 |
+| 显示 | 直接展示 | 独立标签页 |
+| 关系 | 绑定节点 | 独立存储且可被节点引用 |
+
+## 使用方法
+
+在对话中告知AI使用memo创建草稿/总结上文/跟进讨论
+`,
+          },
         },
       ],
     },
@@ -461,7 +503,8 @@ export class TutorialService {
     private context: ContextService,
     private reference: ReferenceService,
     private dispatch: DispatchService,
-    private config: ConfigService
+    private config: ConfigService,
+    private memo: MemoService
   ) {}
 
   /**
@@ -972,8 +1015,13 @@ export class TutorialService {
       .digest("hex")
       .substring(0, 8);
 
-    // 创建子节点，收集需要设为焦点的节点
-    const focusNodeId = await this.createNodes(result.workspaceId, "root", TUTORIAL_CONTENT.nodes, rulesHash);
+    // 创建子节点
+    const focusNodeId = await this.createNodes(
+      result.workspaceId,
+      "root",
+      TUTORIAL_CONTENT.nodes,
+      rulesHash
+    );
 
     // 最后设置焦点（避免被后续操作覆盖）
     if (focusNodeId) {
@@ -1012,8 +1060,8 @@ export class TutorialService {
 
       // 2. 递归创建子节点
       if (nodeDef.children && nodeDef.children.length > 0) {
-        const childFocus = await this.createNodes(workspaceId, nodeId, nodeDef.children, rulesHash);
-        if (childFocus) focusNodeId = childFocus;
+        const childFocusId = await this.createNodes(workspaceId, nodeId, nodeDef.children, rulesHash);
+        if (childFocusId) focusNodeId = childFocusId;
       }
 
       // 3. 设置目标状态
@@ -1060,6 +1108,24 @@ export class TutorialService {
       // 8. Hack: 直接写入派发信息
       if (nodeDef.dispatchInfo) {
         await this.hackSetDispatchInfo(workspaceId, nodeId, nodeDef.dispatchInfo);
+      }
+
+      // 9. 创建 MEMO 并添加引用
+      if (nodeDef.memo) {
+        const memoResult = await this.memo.create({
+          workspaceId,
+          title: nodeDef.memo.title,
+          summary: nodeDef.memo.summary,
+          content: nodeDef.memo.content,
+        });
+        // 使用 reference 服务添加引用（会同时更新 graph.json 和 Info.md）
+        await this.reference.reference({
+          workspaceId,
+          nodeId,
+          targetIdOrPath: `memo://${memoResult.memoId}`,
+          action: "add",
+          description: nodeDef.memo.title,
+        });
       }
     }
 
