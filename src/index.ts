@@ -41,6 +41,7 @@ import { validateAndCorrectParams } from "./utils/paramValidator.js";
 import { logMcpStart, logMcpEnd, logMcpError } from "./utils/sessionLogger.js";
 import { formatManualChangeReminder } from "./utils/manualChangeFormatter.js";
 import { devLog } from "./utils/devLog.js";
+import { INTERNAL_RULES_HASH } from "./services/NodeService.js";
 
 // ============================================================================
 // 配置
@@ -715,6 +716,7 @@ function createMcpServer(services: Services): Server {
               title: infoNodeTitle,
               requirement: `${infoNodeTitle}节点，包含以下能力：${validCapabilities.map((id) => capabilityService.getCapabilityInfo(id as any).name).join("、")}`,
               role: infoType,
+              rulesHash: INTERNAL_RULES_HASH,
             });
 
             infoNodeId = infoNodeResult.nodeId;
@@ -735,6 +737,7 @@ function createMcpServer(services: Services): Server {
               title: capInfo.name,
               requirement: capInfo.description,
               acceptanceCriteria,
+              rulesHash: INTERNAL_RULES_HASH,
             });
 
             createdNodes.push({
