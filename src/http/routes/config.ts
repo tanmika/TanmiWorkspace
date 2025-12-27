@@ -101,42 +101,49 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
       installed: boolean;
       version: string | null;
       outdated: boolean;
+      supported: boolean;
     };
 
-    // 默认组件状态
-    const defaultComponent = (): ComponentStatus => ({
+    // 默认组件状态（supported 默认 true，由 minVersion 决定）
+    const defaultComponent = (supported = true): ComponentStatus => ({
       installed: false,
       version: null,
       outdated: false,
+      supported,
     });
 
     // 构建组件状态
     // minVersion: 该组件的最低要求版本，来自 component-versions.json
+    // minVersion 为 "0.0.0" 表示该平台不支持此组件
     const buildComponentStatus = (
       compInfo: { installed?: boolean; version?: string } | boolean | undefined,
       minVersion: string | undefined
     ): ComponentStatus => {
+      // 检查是否不支持（0.0.0 表示不支持）
+      const supported = minVersion !== "0.0.0";
+
       // 兼容旧格式（boolean）：已安装但无版本信息
       // 只有当 minVersion > 1.0.0 时才标记为过期（说明该组件有重要更新）
       if (typeof compInfo === "boolean") {
-        const outdated = minVersion ? isVersionLessThan("1.0.0", minVersion) : false;
+        const outdated = minVersion && supported ? isVersionLessThan("1.0.0", minVersion) : false;
         return compInfo
-          ? { installed: true, version: null, outdated }
-          : defaultComponent();
+          ? { installed: true, version: null, outdated, supported }
+          : defaultComponent(supported);
       }
       // 新格式
       if (!compInfo?.installed) {
-        return defaultComponent();
+        return defaultComponent(supported);
       }
       // 如果没有配置最低版本，则不显示过期
-      // 如果有最低版本，则比较用户版本是否低于最低版本
-      const outdated = minVersion
+      // 如果有最低版本且支持，则比较用户版本是否低于最低版本
+      const outdated = minVersion && supported
         ? isVersionLessThan(compInfo.version || null, minVersion)
         : false;
       return {
         installed: true,
         version: compInfo.version || null,
         outdated,
+        supported,
       };
     };
 

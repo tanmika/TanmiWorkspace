@@ -91,6 +91,7 @@ function hasOutdatedComponent(platform: PlatformStatus): boolean {
 
 // 获取状态指示器样式类
 function getIndicatorClass(comp: ComponentStatus): string {
+  if (!comp.supported) return 'unsupported'
   if (!comp.installed) return 'not-installed'
   if (comp.outdated) return 'outdated'
   return 'installed'
@@ -777,13 +778,23 @@ async function handleVersionClick() {
   background: #D92424;
 }
 
-/* 未安装：空心方块 */
+/* 未安装：空心方块（与已安装同色，黑色边框） */
 .status-block.not-installed {
+  background: transparent;
+  border: 1px solid #000;
+}
+
+[data-theme="dark"] .status-block.not-installed {
+  border-color: #fff;
+}
+
+/* 不支持：空心灰色方块 */
+.status-block.unsupported {
   background: transparent;
   border: 1px solid #bbb;
 }
 
-[data-theme="dark"] .status-block.not-installed {
+[data-theme="dark"] .status-block.unsupported {
   border-color: #555;
 }
 
@@ -803,10 +814,19 @@ async function handleVersionClick() {
 }
 
 .component-name.not-installed {
-  color: #999;
+  color: #000;
 }
 
 [data-theme="dark"] .component-name.not-installed {
+  color: #fff;
+}
+
+/* 不支持：灰色文字 */
+.component-name.unsupported {
+  color: #999;
+}
+
+[data-theme="dark"] .component-name.unsupported {
   color: #666;
 }
 

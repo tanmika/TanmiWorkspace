@@ -28,6 +28,7 @@ export interface ComponentStatus {
   installed: boolean
   version: string | null
   outdated: boolean
+  supported: boolean  // 该平台是否支持此组件
 }
 
 // 平台组件状态
