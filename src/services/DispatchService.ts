@@ -46,12 +46,22 @@ import {
 export type MergeStrategy = "sequential" | "squash" | "cherry-pick" | "skip";
 
 /**
+ * 节点完整性检查结果
+ */
+export interface NodeReadinessCheck {
+  ready: boolean;                     // 是否可以派发
+  errors: string[];                   // 阻止派发的错误
+  warnings: string[];                 // 警告（不阻止派发）
+}
+
+/**
  * 派发准备结果
  */
 export interface DispatchPrepareResult {
   success: boolean;
   startMarker: string;  // Git 模式=commit hash，无 Git 模式=时间戳
   actionRequired: ActionRequired;
+  readinessWarnings?: string[];       // 完整性检查警告
 }
 
 /**
@@ -540,6 +550,45 @@ export class DispatchService {
   }
 
   /**
+   * 检查节点是否准备好派发
+   * @param nodeInfo 节点信息
+   * @param nodeMeta 节点元数据
+   * @returns 完整性检查结果
+   */
+  checkNodeReadiness(
+    nodeInfo: { title: string; requirement: string; acceptanceCriteria?: Array<{ when: string; then: string }> },
+    nodeMeta: NodeMeta
+  ): NodeReadinessCheck {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // 必须检查：需求描述
+    if (!nodeInfo.requirement || nodeInfo.requirement.trim() === "") {
+      errors.push("节点缺少需求描述（requirement），无法派发");
+    }
+
+    // 建议检查：验收标准
+    const criteria = nodeInfo.acceptanceCriteria || nodeMeta.acceptanceCriteria;
+    if (!criteria || criteria.length === 0) {
+      warnings.push("节点缺少验收标准（acceptanceCriteria），可能影响执行质量");
+    }
+
+    // 建议检查：重试场景下的失败历史
+    if (nodeMeta.dispatch?.attempts && nodeMeta.dispatch.attempts.length > 0) {
+      const lastAttempt = nodeMeta.dispatch.attempts[nodeMeta.dispatch.attempts.length - 1];
+      if (lastAttempt.status === "failed" && !lastAttempt.failureReason) {
+        warnings.push("上次执行失败但未记录失败原因，可能影响重试效果");
+      }
+    }
+
+    return {
+      ready: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
+
+  /**
    * 准备派发节点任务
    */
   async prepareDispatch(
@@ -579,6 +628,19 @@ export class DispatchService {
       );
     }
 
+    // 2.1 读取节点信息（提前读取用于完整性检查）
+    const nodeDirName = node.dirName || nodeId;
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+
+    // 2.2 节点完整性检查
+    const readiness = this.checkNodeReadiness(nodeInfo, node);
+    if (!readiness.ready) {
+      throw new TanmiError(
+        "NODE_NOT_READY",
+        `节点未准备好派发: ${readiness.errors.join("; ")}`
+      );
+    }
+
     // 如果是 pending 状态，自动转为 implementing
     const needsTransition = node.status === "pending";
     if (needsTransition) {
@@ -606,9 +668,7 @@ export class DispatchService {
     node.updatedAt = now();
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 5. 读取节点信息构建 prompt（使用 dirName 或回退到 nodeId）
-    const nodeDirName = node.dirName || nodeId;
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+    // 5. 构建 prompt（nodeInfo 已在步骤 2.1 读取）
     const timeout = config.dispatch.limits?.timeoutMs ?? 300000;
 
     // 6. 构建 actionRequired
@@ -619,7 +679,7 @@ export class DispatchService {
         workspaceId,
         nodeId,
         subagentType: "tanmi-executor",
-        prompt: this.buildExecutorPrompt(workspaceId, nodeId, nodeInfo.title),
+        prompt: this.buildExecutorPrompt(workspaceId, nodeId, nodeInfo, node),
         timeout,
       },
     };
@@ -631,6 +691,7 @@ export class DispatchService {
       success: true,
       startMarker,
       actionRequired,
+      readinessWarnings: readiness.warnings.length > 0 ? readiness.warnings : undefined,
     };
   }
 
@@ -997,28 +1058,77 @@ export class DispatchService {
   }
 
   /**
-   * 构建执行者 prompt
+   * 构建执行者 prompt（增强版：包含完整任务上下文）
    */
   private buildExecutorPrompt(
     workspaceId: string,
     nodeId: string,
-    title: string
+    nodeInfo: { title: string; requirement: string; acceptanceCriteria?: Array<{ when: string; then: string }> },
+    nodeMeta: NodeMeta
   ): string {
-    return `Execute task for TanmiWorkspace node.
+    const sections: string[] = [];
 
-Workspace: ${workspaceId}
-Node: ${nodeId}
-Title: ${title}
+    // 基础信息
+    sections.push(`# Task Execution Context
 
-Instructions:
-1. Call context_get(workspaceId="${workspaceId}") to get full execution context
-2. Assess task scope and information completeness
-3. Execute the task within defined boundaries
-4. Report progress via log_append
-5. On success: Call node_dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=true, conclusion="...")
-6. On failure: Call node_dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=false, conclusion="...")
+**Workspace**: ${workspaceId}
+**Node ID**: ${nodeId}
+**Title**: ${nodeInfo.title}`);
 
-IMPORTANT: You MUST call node_dispatch_complete to finalize the dispatch. Do NOT use node_transition directly.`;
+    // 需求描述
+    sections.push(`## Requirement
+
+${nodeInfo.requirement}`);
+
+    // 验收标准
+    const criteria = nodeInfo.acceptanceCriteria || nodeMeta.acceptanceCriteria;
+    if (criteria && criteria.length > 0) {
+      const criteriaList = criteria
+        .map((c, i) => `${i + 1}. **WHEN** ${c.when} **THEN** ${c.then}`)
+        .join("\n");
+      sections.push(`## Acceptance Criteria
+
+${criteriaList}`);
+    }
+
+    // 重试上下文（如果有失败历史）
+    if (nodeMeta.dispatch?.attempts && nodeMeta.dispatch.attempts.length > 0) {
+      const failedAttempts = nodeMeta.dispatch.attempts.filter(a => a.status === "failed");
+      if (failedAttempts.length > 0) {
+        const lastFailed = failedAttempts[failedAttempts.length - 1];
+        sections.push(`## Previous Failure Context
+
+⚠️ This is retry attempt #${nodeMeta.dispatch.attempts.length + 1}
+
+**Last failure reason**: ${lastFailed.failureReason || "Not specified"}
+**Last conclusion**: ${lastFailed.conclusion || "Not available"}
+
+Please address the issues from previous attempts.`);
+      }
+    }
+
+    // 执行指令
+    sections.push(`## Execution Instructions
+
+1. **Assess** task scope and verify information completeness
+2. **Execute** the task within defined boundaries (no scope expansion)
+3. **Log** progress via log_append at key milestones
+4. **Complete** with node_dispatch_complete when done
+
+### On Success:
+\`\`\`
+node_dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=true, conclusion="<summary of what was done>")
+\`\`\`
+
+### On Failure:
+\`\`\`
+node_dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=false, conclusion="<reason for failure and suggestions>")
+\`\`\`
+
+**CRITICAL**: You MUST call node_dispatch_complete to finalize. Do NOT use node_transition directly.
+**SCOPE CONTROL**: Execute only what is specified. If task is unclear or too large, FAIL with clear reason.`);
+
+    return sections.join("\n\n");
   }
 
   // ========== HTTP API 包装方法 ==========

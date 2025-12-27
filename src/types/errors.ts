@@ -64,6 +64,7 @@ export const ErrorCodes = {
   DISPATCH_ALREADY_ENABLED: "DISPATCH_ALREADY_ENABLED",
   DISPATCH_MODE_CONFLICT: "DISPATCH_MODE_CONFLICT",
   GIT_ENVIRONMENT_LOST: "GIT_ENVIRONMENT_LOST",
+  NODE_NOT_READY: "NODE_NOT_READY",
 
   // 配置错误
   INVALID_CONFIG: "INVALID_CONFIG",
@@ -137,6 +138,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   DISPATCH_ALREADY_ENABLED: "派发模式已启用，如需切换模式请先禁用",
   DISPATCH_MODE_CONFLICT: "同一项目只能使用一种派发模式",
   GIT_ENVIRONMENT_LOST: "Git 环境已丢失",
+  NODE_NOT_READY: "节点未准备好派发，缺少必要信息",
   INVALID_CONFIG: "配置文件无效",
   VERSION_TOO_HIGH: "数据版本过高，请升级 tanmi-workspace",
 };

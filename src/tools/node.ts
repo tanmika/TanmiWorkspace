@@ -85,8 +85,8 @@ export const nodeCreateTool: Tool = {
       },
       role: {
         type: "string",
-        enum: ["info_collection", "info_summary", "validation"],
-        description: "节点角色（可选）：info_collection=信息收集节点，info_summary=信息总结节点",
+        enum: ["info_collection", "info_summary", "spec_review", "quality_review"],
+        description: "节点角色（可选）：info_collection=信息收集，info_summary=信息总结，spec_review=规格审查，quality_review=质量审查",
       },
       acceptanceCriteria: {
         type: "array",
