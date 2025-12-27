@@ -4,8 +4,8 @@
   "claudeCode": {
     "mcp": "1.0.0",
     "hooks": "1.8.0",
-    "agents": "1.8.0",
-    "skills": "1.0.0"
+    "agents": "1.9.0",
+    "skills": "1.9.0"
   },
   "cursor": {
     "mcp": "1.0.0",
