@@ -71,6 +71,7 @@ export function createServices(): Services {
   const log = new LogService(json, md, fs);
   const reference = new ReferenceService(json, md, fs);
   const dispatch = new DispatchService(json, md, fs, config);
+  dispatch.setNodeService(node);  // 设置 NodeService 依赖（用于自动创建 Review 节点）
   const memo = new MemoService(json, md, fs);
 
   // 设置 WorkspaceService 依赖（用于清除手动变更）

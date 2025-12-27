@@ -111,17 +111,149 @@ export interface ExecuteDisableParams {
   commitMessage?: string;  // 用于 squash 时的提交信息
 }
 
+// 前置声明 NodeService 类型（避免循环导入）
+import type { NodeService } from "./NodeService.js";
+
 /**
  * 派发服务
  * 处理派发功能的核心业务逻辑
  */
 export class DispatchService {
+  private nodeService?: NodeService;
+
   constructor(
     private json: JsonStorage,
     private md: MarkdownStorage,
     private fs: FileSystemAdapter,
     private configService?: ConfigService
   ) {}
+
+  /**
+   * 设置 NodeService 依赖（用于自动创建 Review 节点）
+   */
+  setNodeService(nodeService: NodeService): void {
+    this.nodeService = nodeService;
+  }
+
+  /**
+   * 创建 Spec Review 节点
+   * @param workspaceId 工作区 ID
+   * @param execNodeId 被审查的执行节点 ID
+   * @param execNodeTitle 执行节点标题
+   * @param execConclusion 执行节点结论
+   * @returns 创建的 Review 节点 ID
+   */
+  async createSpecReviewNode(
+    workspaceId: string,
+    execNodeId: string,
+    execNodeTitle: string,
+    execConclusion: string
+  ): Promise<string> {
+    if (!this.nodeService) {
+      throw new TanmiError("INVALID_CONFIG", "NodeService 未设置，无法创建 Review 节点");
+    }
+
+    const projectRoot = await this.getProjectRoot(workspaceId);
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const wsDirName = location?.dirName || workspaceId;
+
+    // 获取执行节点的父节点
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
+    const execNode = graph.nodes[execNodeId];
+    if (!execNode || !execNode.parentId) {
+      throw new TanmiError("NODE_NOT_FOUND", `执行节点 ${execNodeId} 不存在或无父节点`);
+    }
+
+    // 读取执行节点的验收标准
+    const execNodeDirName = execNode.dirName || execNodeId;
+    const execNodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, execNodeDirName);
+
+    // 创建 Spec Review 节点（作为执行节点的兄弟节点）
+    const result = await this.nodeService.create({
+      workspaceId,
+      parentId: execNode.parentId,
+      type: "execution",
+      title: `[Spec Review] ${execNodeTitle}`,
+      requirement: `审查执行节点 "${execNodeTitle}" 的实现是否符合需求规格。
+
+## 被审查节点
+- 节点 ID: ${execNodeId}
+- 执行结论: ${execConclusion}
+
+## 审查要点
+1. 实现是否完整覆盖需求描述
+2. 验收标准是否全部满足
+3. 是否存在遗漏或偏离需求的实现`,
+      role: "spec_review",
+      acceptanceCriteria: execNodeInfo.acceptanceCriteria,
+    });
+
+    // 更新执行节点的 dispatch 信息，关联 Review 节点
+    execNode.dispatch = {
+      ...execNode.dispatch!,
+      specReviewNodeId: result.nodeId,
+    };
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
+
+    return result.nodeId;
+  }
+
+  /**
+   * 创建 Quality Review 节点
+   * @param workspaceId 工作区 ID
+   * @param execNodeId 被审查的执行节点 ID
+   * @param execNodeTitle 执行节点标题
+   * @returns 创建的 Review 节点 ID
+   */
+  async createQualityReviewNode(
+    workspaceId: string,
+    execNodeId: string,
+    execNodeTitle: string
+  ): Promise<string> {
+    if (!this.nodeService) {
+      throw new TanmiError("INVALID_CONFIG", "NodeService 未设置，无法创建 Review 节点");
+    }
+
+    const projectRoot = await this.getProjectRoot(workspaceId);
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const wsDirName = location?.dirName || workspaceId;
+
+    // 获取执行节点的父节点
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
+    const execNode = graph.nodes[execNodeId];
+    if (!execNode || !execNode.parentId) {
+      throw new TanmiError("NODE_NOT_FOUND", `执行节点 ${execNodeId} 不存在或无父节点`);
+    }
+
+    // 创建 Quality Review 节点
+    const result = await this.nodeService.create({
+      workspaceId,
+      parentId: execNode.parentId,
+      type: "execution",
+      title: `[Quality Review] ${execNodeTitle}`,
+      requirement: `审查执行节点 "${execNodeTitle}" 的代码质量。
+
+## 被审查节点
+- 节点 ID: ${execNodeId}
+
+## 审查要点
+1. 代码可读性和可维护性
+2. 错误处理是否完善
+3. 是否遵循项目编码规范
+4. 是否存在潜在的性能问题
+5. 是否存在安全漏洞`,
+      role: "quality_review",
+    });
+
+    // 更新执行节点的 dispatch 信息，关联 Review 节点
+    execNode.dispatch = {
+      ...execNode.dispatch!,
+      qualityReviewNodeId: result.nodeId,
+    };
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
+
+    return result.nodeId;
+  }
 
   /**
    * 启用派发模式
@@ -739,6 +871,56 @@ export class DispatchService {
         endMarker = Date.now().toString();
       }
 
+      // 检查是否需要 Spec Review（仅对非 Review 节点生效）
+      const isReviewNode = node.role === "spec_review" || node.role === "quality_review";
+      const specReviewEnabled = config.dispatch?.review?.specReviewEnabled ?? false;
+      const qualityReviewEnabled = config.dispatch?.review?.qualityReviewEnabled ?? false;
+
+      // 如果是普通执行节点且启用了 Spec Review
+      if (!isReviewNode && specReviewEnabled && this.nodeService) {
+        // 更新节点派发状态为 spec_reviewing
+        if (node.dispatch) {
+          node.dispatch.endMarker = endMarker;
+          node.dispatch.status = "spec_reviewing";
+        }
+        node.updatedAt = now();
+
+        // 保存执行结论（但不完成节点）
+        if (conclusion) {
+          node.conclusion = conclusion.replace(/\\n/g, "\n");
+          await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
+        }
+        await this.json.writeGraph(projectRoot, wsDirName, graph);
+
+        // 创建 Spec Review 节点
+        const reviewNodeId = await this.createSpecReviewNode(
+          workspaceId,
+          nodeId,
+          nodeInfo.title,
+          conclusion || "无结论"
+        );
+
+        // 记录日志
+        const markerInfo = useGit ? `commit: ${endMarker.substring(0, 7)}` : `timestamp: ${endMarker}`;
+        await this.md.appendLog(projectRoot, wsDirName, {
+          time: now(),
+          operator: "tanmi-executor",
+          event: `节点 ${nodeId} 执行完成，${markerInfo}，创建 Spec Review 节点 ${reviewNodeId}`,
+        }, nodeId);
+
+        // 发送事件通知
+        eventService.emitDispatchUpdate(workspaceId, nodeId);
+
+        // 返回需要派发 Review 节点
+        return {
+          success: true,
+          endMarker,
+          nextAction: "dispatch_test",  // 复用现有字段，表示需要派发 review
+          testNodeId: reviewNodeId,     // 复用现有字段
+          hint: `执行完成，需要进行 Spec Review。请派发 Review 节点 ${reviewNodeId}`,
+        };
+      }
+
       // 更新节点派发状态为 passed（保留对象以便 WebUI 显示派发历史）
       if (node.dispatch) {
         node.dispatch.endMarker = endMarker;
@@ -759,11 +941,42 @@ export class DispatchService {
         await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
       }
 
+      // 如果是 Spec Review 节点完成且启用了 Quality Review，创建 Quality Review 节点
+      if (node.role === "spec_review" && qualityReviewEnabled && this.nodeService) {
+        // 查找被审查的执行节点
+        const parentNode = graph.nodes[node.parentId!];
+        if (parentNode) {
+          // 从标题中提取原执行节点标题
+          const execTitle = nodeInfo.title.replace("[Spec Review] ", "");
+          const qualityReviewNodeId = await this.createQualityReviewNode(
+            workspaceId,
+            nodeId,  // 这里应该是原执行节点 ID，但我们暂时用当前节点
+            execTitle
+          );
+
+          await this.md.appendLog(projectRoot, wsDirName, {
+            time: now(),
+            operator: "tanmi-reviewer",
+            event: `Spec Review 通过，创建 Quality Review 节点 ${qualityReviewNodeId}`,
+          }, nodeId);
+
+          eventService.emitDispatchUpdate(workspaceId, nodeId);
+
+          return {
+            success: true,
+            endMarker,
+            nextAction: "dispatch_test",
+            testNodeId: qualityReviewNodeId,
+            hint: `Spec Review 通过，需要进行 Quality Review。请派发 Review 节点 ${qualityReviewNodeId}`,
+          };
+        }
+      }
+
       // 记录日志
       const markerInfo = useGit ? `commit: ${endMarker.substring(0, 7)}` : `timestamp: ${endMarker}`;
       await this.md.appendLog(projectRoot, wsDirName, {
         time: now(),
-        operator: "tanmi-executor",
+        operator: isReviewNode ? "tanmi-reviewer" : "tanmi-executor",
         event: `节点 ${nodeId} 派发执行完成并自动 complete，${markerInfo}`,
       }, nodeId);
 

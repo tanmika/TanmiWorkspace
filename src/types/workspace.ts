@@ -60,6 +60,14 @@ export interface DispatchLimits {
 }
 
 /**
+ * Review 配置
+ */
+export interface ReviewConfig {
+  specReviewEnabled: boolean;       // 是否启用规格审查（默认 true）
+  qualityReviewEnabled: boolean;    // 是否启用质量审查（默认 false）
+}
+
+/**
  * 派发配置 - 存储在 workspace.json 中
  */
 export interface DispatchConfig {
@@ -70,6 +78,7 @@ export interface DispatchConfig {
   processBranch?: string;           // 当前派发分支（Git 模式才有）
   backupBranches?: string[];        // 备份分支列表（Git 模式才有）
   limits?: DispatchLimits;          // 资源限制
+  review?: ReviewConfig;            // Review 配置
 }
 
 /**
