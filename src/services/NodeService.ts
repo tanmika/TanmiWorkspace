@@ -23,7 +23,7 @@ import type {
   NodeType,
 } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
-import { generateNodeId, generateNodeDirName } from "../utils/id.js";
+import { generateNodeId, generateNodeDirName, extractShortId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { validateNodeTitle } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
@@ -89,6 +89,68 @@ export class NodeService {
       wsDirName,
       isArchived,
     };
+  }
+
+  /**
+   * 解析并验证节点目录名
+   * 当 graph.json 中的 dirName 对应的目录不存在时，尝试通过 shortId 查找实际目录
+   * 这是运行时兜底机制，用于处理迁移失败或遗漏的情况
+   *
+   * @param projectRoot 项目根目录
+   * @param wsDirName 工作区目录名
+   * @param nodeId 节点 ID
+   * @param meta 节点元数据
+   * @param isArchived 是否归档
+   * @returns 实际的节点目录名
+   */
+  private async resolveNodeDirName(
+    projectRoot: string,
+    wsDirName: string,
+    nodeId: string,
+    meta: NodeMeta,
+    isArchived: boolean
+  ): Promise<string> {
+    const dirName = meta.dirName || nodeId;
+
+    // 检查目录是否存在
+    const nodePath = this.fs.getNodePath(projectRoot, wsDirName, dirName);
+    if (await this.fs.exists(nodePath)) {
+      return dirName;
+    }
+
+    // 目录不存在，尝试通过 shortId 查找
+    const shortId = extractShortId(nodeId);
+    const nodesDir = this.fs.getNodesDir(projectRoot, wsDirName);
+
+    try {
+      const entries = await this.fs.readdir(nodesDir);
+
+      // 优先匹配 `_shortId` 后缀
+      for (const entry of entries) {
+        if (entry.endsWith(`_${shortId}`)) {
+          devLog.warn(`[runtime] 节点目录名修复: ${nodeId} → ${entry}`);
+          // 更新 meta 中的 dirName（调用方需要保存 graph.json）
+          meta.dirName = entry;
+          return entry;
+        }
+      }
+
+      // 兜底：匹配包含 shortId 的目录
+      if (shortId.length >= 6) {
+        for (const entry of entries) {
+          if (entry.includes(shortId)) {
+            devLog.warn(`[runtime] 节点目录名修复（模糊匹配）: ${nodeId} → ${entry}`);
+            meta.dirName = entry;
+            return entry;
+          }
+        }
+      }
+    } catch {
+      // 读取目录失败，返回原始值
+    }
+
+    // 未找到匹配目录，返回原始值（后续可能会抛出文件不存在错误）
+    return dirName;
   }
 
   /**
@@ -515,7 +577,16 @@ export class NodeService {
     }
 
     const meta = graph.nodes[nodeId];
-    const nodeDirName = meta.dirName || nodeId;  // 向后兼容
+    const originalDirName = meta.dirName;
+
+    // 解析并验证节点目录名（运行时兜底机制）
+    const nodeDirName = await this.resolveNodeDirName(projectRoot, wsDirName, nodeId, meta, isArchived);
+
+    // 如果目录名被修复，保存更新后的 graph.json（仅非归档工作区）
+    if (!isArchived && meta.dirName !== originalDirName) {
+      await this.json.writeGraph(projectRoot, wsDirName, graph);
+    }
+
     const infoMd = await this.md.readNodeInfoRaw(projectRoot, wsDirName, nodeDirName, isArchived);
     const logMd = await this.md.readLogRaw(projectRoot, wsDirName, nodeDirName, isArchived);
     const problemMd = await this.md.readProblemRaw(projectRoot, wsDirName, nodeDirName, isArchived);

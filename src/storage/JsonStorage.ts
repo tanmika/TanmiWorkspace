@@ -256,44 +256,61 @@ export class JsonStorage {
         continue;
       }
 
-      const oldDirName = node.dirName || nodeId;
+      try {
+        const oldDirName = node.dirName || nodeId;
 
-      // 如果目录名不是以 node- 开头，说明已经是可读格式，跳过
-      if (!oldDirName.startsWith("node-")) {
-        continue;
-      }
-
-      // 从 Info.md 读取标题
-      const title = await this.readNodeTitle(nodesDir, oldDirName);
-
-      // 生成可读目录名
-      const newDirName = generateNodeDirName(title, nodeId);
-
-      // 如果新旧相同，跳过
-      if (newDirName === oldDirName) {
-        continue;
-      }
-
-      const srcPath = `${nodesDir}/${oldDirName}`;
-
-      // 检查源目录是否存在
-      if (!(await this.fs.exists(srcPath))) {
-        // 源目录不存在，可能已经被迁移过但 graph.json 没有更新
-        // 查找以节点短 ID 结尾的目录
-        const shortId = nodeId.split("-").pop();  // 提取短 ID
-        const existingDir = await this.findDirBySuffix(nodesDir, shortId!);
-        if (existingDir && existingDir !== oldDirName) {
-          // 找到已存在的可读格式目录，更新 graph.json
-          node.dirName = existingDir;
-          console.error(`[migration] 修复节点目录名: ${nodeId} → ${existingDir}`);
+        // 如果目录名不是以 node- 开头，说明已经是可读格式
+        // 但仍需验证目录是否存在，以处理 graph.json 与实际目录不一致的情况
+        if (!oldDirName.startsWith("node-")) {
+          // 验证目录存在性
+          const dirPath = `${nodesDir}/${oldDirName}`;
+          if (!(await this.fs.exists(dirPath))) {
+            // 目录不存在，尝试通过 shortId 查找
+            const shortId = extractShortId(nodeId);
+            const existingDir = await this.findDirBySuffix(nodesDir, shortId);
+            if (existingDir && existingDir !== oldDirName) {
+              node.dirName = existingDir;
+              console.error(`[migration] 修复节点目录名（目录不存在）: ${nodeId} → ${existingDir}`);
+            }
+          }
+          continue;
         }
-        continue;
-      }
 
-      // 安全重命名（处理冲突）
-      const actualDirName = await this.fs.safeRenameDir(srcPath, nodesDir, newDirName);
-      node.dirName = actualDirName;
-      console.error(`[migration] 节点目录重命名: ${oldDirName} → ${actualDirName}`);
+        // 从 Info.md 读取标题
+        const title = await this.readNodeTitle(nodesDir, oldDirName);
+
+        // 生成可读目录名
+        const newDirName = generateNodeDirName(title, nodeId);
+
+        // 如果新旧相同，跳过
+        if (newDirName === oldDirName) {
+          continue;
+        }
+
+        const srcPath = `${nodesDir}/${oldDirName}`;
+
+        // 检查源目录是否存在
+        if (!(await this.fs.exists(srcPath))) {
+          // 源目录不存在，可能已经被迁移过但 graph.json 没有更新
+          // 查找以节点短 ID 结尾的目录
+          const shortId = extractShortId(nodeId);
+          const existingDir = await this.findDirBySuffix(nodesDir, shortId);
+          if (existingDir && existingDir !== oldDirName) {
+            // 找到已存在的可读格式目录，更新 graph.json
+            node.dirName = existingDir;
+            console.error(`[migration] 修复节点目录名: ${nodeId} → ${existingDir}`);
+          }
+          continue;
+        }
+
+        // 安全重命名（处理冲突）
+        const actualDirName = await this.fs.safeRenameDir(srcPath, nodesDir, newDirName);
+        node.dirName = actualDirName;
+        console.error(`[migration] 节点目录重命名: ${oldDirName} → ${actualDirName}`);
+      } catch (e) {
+        // 单个节点迁移失败不影响其他节点
+        console.error(`[migration] 节点 ${nodeId} 迁移失败:`, e instanceof Error ? e.message : e);
+      }
     }
   }
 
@@ -319,17 +336,37 @@ export class JsonStorage {
   }
 
   /**
-   * 在目录中查找以指定后缀结尾的子目录
+   * 在目录中查找包含指定短 ID 的子目录
+   * 按优先级尝试多种匹配模式，提高兼容性
    */
-  private async findDirBySuffix(parentDir: string, suffix: string): Promise<string | null> {
+  private async findDirBySuffix(parentDir: string, shortId: string): Promise<string | null> {
     try {
       const entries = await this.fs.readdir(parentDir);
+
+      // 优先级 1: 精确匹配 `_shortId` 后缀（当前标准格式）
       for (const entry of entries) {
-        // 检查是否以 _suffix 结尾（可读格式为 名称_短ID）
-        if (entry.endsWith(`_${suffix}`)) {
+        if (entry.endsWith(`_${shortId}`)) {
           return entry;
         }
       }
+
+      // 优先级 2: 匹配 `shortId` 后缀（无下划线，可能的早期格式）
+      for (const entry of entries) {
+        if (entry.endsWith(shortId) && !entry.endsWith(`_${shortId}`)) {
+          return entry;
+        }
+      }
+
+      // 优先级 3: 目录名包含 shortId（兜底匹配，可能有误匹配风险）
+      // 仅当 shortId 长度 >= 6 时启用，减少误匹配概率
+      if (shortId.length >= 6) {
+        for (const entry of entries) {
+          if (entry.includes(shortId)) {
+            return entry;
+          }
+        }
+      }
+
       return null;
     } catch {
       return null;
@@ -526,7 +563,11 @@ export class JsonStorage {
     }
 
     // 兜底迁移：理论上 migrateAll 已处理，这里防止遗漏
+    // 场景：用户手动添加工作区到 index.json，绕过了 migrateAll 流程
     if (graph.version !== JsonStorage.STORAGE_VERSION) {
+      // 先修复节点目录名映射（扫描文件系统查找实际目录名）
+      await this.migrateNodeDirs(projectRoot, wsDirName, graph, isArchived);
+      // 再执行数据结构迁移
       this.migrateGraphData(graph);
       if (!isArchived) {
         await this.writeGraph(projectRoot, wsDirName, graph);
