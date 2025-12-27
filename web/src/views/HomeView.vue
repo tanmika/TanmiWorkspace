@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWorkspaceStore, useToastStore } from '@/stores'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
+import { settingsApi, type InstallationStatusResult, type PlatformStatus } from '@/api/settings'
 import { getGlobalSSE } from '@/composables/useSSE'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
 import SettingsModal from '@/components/SettingsModal.vue'
@@ -31,6 +32,48 @@ const pendingConfirmAction = ref<(() => Promise<void>) | null>(null)
 const showErrorDialog = ref(false)
 const errorDialogTitle = ref('')
 const errorDialogMessage = ref('')
+
+// 插件更新提示横幅
+const PLUGIN_BANNER_DISMISSED_KEY = 'tanmi-plugin-banner-dismissed-date'
+const installationStatus = ref<InstallationStatusResult | null>(null)
+
+// 获取今天日期字符串
+function getToday(): string {
+  return new Date().toISOString().split('T')[0] ?? ''
+}
+
+// 检查今天是否已关闭过
+function isDismissedToday(): boolean {
+  const dismissedDate = localStorage.getItem(PLUGIN_BANNER_DISMISSED_KEY)
+  return dismissedDate === getToday()
+}
+
+const pluginBannerDismissed = ref(isDismissedToday())
+
+// 检查平台是否有过期组件
+function hasOutdatedComponent(platform: PlatformStatus): boolean {
+  const comps = platform.components
+  return comps.mcp.outdated || comps.hooks.outdated || comps.agents.outdated || comps.skills.outdated
+}
+
+// 是否显示插件更新横幅
+const showPluginBanner = computed(() => {
+  if (pluginBannerDismissed.value || !installationStatus.value) return false
+  const { claudeCode, cursor } = installationStatus.value.platforms
+  return (claudeCode.enabled && hasOutdatedComponent(claudeCode)) ||
+         (cursor.enabled && hasOutdatedComponent(cursor))
+})
+
+// 关闭插件更新横幅（今日不再提示）
+function dismissPluginBanner() {
+  pluginBannerDismissed.value = true
+  localStorage.setItem(PLUGIN_BANNER_DISMISSED_KEY, getToday())
+}
+
+// 打开设置弹窗查看插件详情
+function openPluginSettings() {
+  showSettingsModal.value = true
+}
 
 const createForm = ref<WorkspaceInitParams>({
   name: '',
@@ -134,6 +177,13 @@ onMounted(async () => {
   // 加载开发信息（静默失败）
   try {
     devInfo.value = await workspaceApi.getDevInfo()
+  } catch {
+    // 忽略
+  }
+
+  // 加载插件安装状态（静默失败，用于显示更新提示横幅）
+  try {
+    installationStatus.value = await settingsApi.getInstallationStatus()
   } catch {
     // 忽略
   }
@@ -376,6 +426,16 @@ function getBadgeText(status: string) {
       </div>
     </header>
 
+    <!-- 插件更新提示横幅 -->
+    <div v-if="showPluginBanner" class="plugin-update-banner">
+      <div class="banner-content">
+        <span class="banner-tag">UPDATE</span>
+        <span class="banner-text">部分插件需要更新以获取最新功能</span>
+        <button class="banner-action" @click="openPluginSettings">查看</button>
+      </div>
+      <button class="banner-close" @click="dismissPluginBanner" title="关闭提示">✕</button>
+    </div>
+
     <!-- 筛选栏 -->
     <div class="filter-bar">
       <div class="filter-left">
@@ -520,6 +580,93 @@ function getBadgeText(status: string) {
   position: sticky;
   top: 0;
   z-index: 100;
+}
+
+/* 插件更新提示横幅 */
+.plugin-update-banner {
+  position: relative;
+  background: var(--border-heavy);
+  color: #fff;
+  height: 44px;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.banner-tag {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  background: var(--accent-orange);
+  color: #000;
+  text-transform: uppercase;
+}
+
+.banner-text {
+  flex: 0 1 auto;
+}
+
+.banner-action {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: #fff;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.banner-action:hover {
+  background: #fff;
+  color: var(--border-heavy);
+  border-color: #fff;
+}
+
+.banner-close {
+  position: absolute;
+  right: 32px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 14px;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.banner-close:hover {
+  opacity: 1;
+}
+
+[data-theme="dark"] .plugin-update-banner {
+  color: #111;
+}
+
+[data-theme="dark"] .banner-action {
+  border-color: rgba(0, 0, 0, 0.3);
+  color: #111;
+}
+
+[data-theme="dark"] .banner-action:hover {
+  background: #111;
+  color: var(--border-heavy);
+  border-color: #111;
+}
+
+[data-theme="dark"] .banner-close {
+  color: #111;
 }
 
 .logo {
