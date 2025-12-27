@@ -254,6 +254,12 @@ onMounted(() => {
     if (event.workspaceId === workspaceId.value) {
       console.log('[SSE] 收到节点更新，刷新数据')
       nodeStore.fetchNodeTree()
+      // 刷新工作区状态（更新进度等）
+      workspaceStore.fetchWorkspace(workspaceId.value)
+      // 如果当前正在查看节点详情，刷新该节点
+      if (nodeStore.selectedNodeId && selectedType.value === 'node') {
+        nodeStore.selectNode(nodeStore.selectedNodeId)
+      }
     }
   })
 

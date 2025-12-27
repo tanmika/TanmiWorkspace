@@ -9,7 +9,7 @@ import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { ensureBaseSetup } from "./services.js";
-import { eventService } from "../services/EventService.js";
+import { eventService, EventService } from "../services/EventService.js";
 
 // ESM 下获取 __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -103,6 +103,47 @@ export async function createServer(): Promise<FastifyInstance> {
     // 不要调用 reply.send()，保持连接打开
     return reply;
   });
+
+  // 内部事件接收端点（跨进程事件转发用）
+  server.post<{ Body: { type: string; workspaceId: string; nodeId?: string; timestamp: string } }>(
+    "/api/internal/events",
+    async (request, reply) => {
+      // 验证内部令牌
+      const token = request.headers["x-internal-token"];
+      const expectedToken = EventService.getInternalToken();
+      if (token !== expectedToken) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+
+      // 验证来源必须是本地
+      const remoteAddr = request.ip;
+      if (remoteAddr !== "127.0.0.1" && remoteAddr !== "::1" && remoteAddr !== "::ffff:127.0.0.1") {
+        return reply.status(403).send({ error: "Forbidden: local only" });
+      }
+
+      // 广播事件（仅本地广播，不再转发，避免循环）
+      const event = request.body;
+      if (event && event.type && event.workspaceId) {
+        const data = JSON.stringify(event);
+        const message = `data: ${data}\n\n`;
+
+        // 直接写入所有客户端，不调用 broadcast() 避免再次转发
+        const clients = (eventService as unknown as { clients: Map<string, unknown> }).clients;
+        for (const [, clientReply] of clients) {
+          try {
+            (clientReply as { raw: { write: (msg: string) => void } }).raw.write(message);
+          } catch {
+            // 忽略写入失败
+          }
+        }
+
+        server.log.info(`[内部事件] 收到并广播: ${event.type} (${event.workspaceId})`);
+        return { success: true };
+      }
+
+      return reply.status(400).send({ error: "Invalid event format" });
+    }
+  );
 
   // 版本检查接口（公开）
   server.get("/api/version", async () => {

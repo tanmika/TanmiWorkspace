@@ -262,49 +262,28 @@ export class WorkspaceService {
       projectDocs,
     };
 
-    // 文档相关的 actionRequired
-    if (projectDocs.totalFound > 0) {
-      // 有文档：询问是否使用
-      const actionData = {
-        found: true,
-        totalFound: projectDocs.totalFound,
-        files: projectDocs.files.slice(0, 10),
-        hasMore: projectDocs.totalFound > 10,
-      };
+    // 强制调用 bootstrapping-workspace skill
+    result.actionRequired = {
+      type: "invoke_skill",
+      message: `⚠️ MUST 调用 Skill(bootstrapping-workspace) 完成工作区启动流程。
 
-      // 生成 confirmation token（如果 StateService 可用）
-      let confirmationToken: string | undefined;
-      if (this.stateService) {
-        const confirmation = this.stateService.createPendingConfirmation(workspaceId, rootNodeId, "ask_user", actionData);
-        confirmationToken = confirmation.token;
-      }
+${scenarioGuidance}
 
-      result.actionRequired = {
-        type: "ask_user",
-        message: `项目中发现了文档文件，请询问用户是否需要将这些文档添加到工作区的文档引用中，以便后续任务参考。\n\n${scenarioGuidance}`,
-        data: actionData,
-        confirmationToken,
-      };
-    } else {
-      // 无文档：询问用户是否有其他文档
-      const actionData = {
-        found: false,
-      };
-
-      // 生成 confirmation token（如果 StateService 可用）
-      let confirmationToken: string | undefined;
-      if (this.stateService) {
-        const confirmation = this.stateService.createPendingConfirmation(workspaceId, rootNodeId, "ask_user", actionData);
-        confirmationToken = confirmation.token;
-      }
-
-      result.actionRequired = {
-        type: "ask_user",
-        message: `项目中未发现文档文件，请询问用户是否有相关的需求文档、设计文档或 API 文档可供参考。\n\n${scenarioGuidance}`,
-        data: actionData,
-        confirmationToken,
-      };
-    }
+**强制规则**：
+- MUST 调用 Skill(bootstrapping-workspace)
+- NEVER 直接 node_create
+- NEVER 跳过 capability_list → capability_select 流程`,
+      data: {
+        skill: "bootstrapping-workspace",
+        scenario,
+        workspaceId,
+        webUrl: result.webUrl,
+        projectDocs: projectDocs.totalFound > 0 ? {
+          totalFound: projectDocs.totalFound,
+          folders: projectDocs.folders,
+        } : null,
+      },
+    };
 
     // 16. 发送事件通知
     eventService.emitWorkspaceUpdate(workspaceId);

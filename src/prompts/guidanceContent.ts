@@ -15,11 +15,11 @@ export const GUIDANCE_CONFIGS: Record<GuidanceScenario, GuidanceConfig> = {
 
   workspace_init: {
     scenario: "workspace_init",
-    l0: "工作区已创建。读取 workspace_bootstrap skill 获取完整启动流程。",
-    l1: `工作区启动流程：
-1. 读取 workspace_bootstrap skill 获取详细流程
+    l0: "⚠️ MUST 调用 Skill(bootstrapping-workspace) 获取启动流程，NEVER 直接 node_create。",
+    l1: `⚠️ 强制启动流程（MUST 遵循）：
+1. 调用 Skill(bootstrapping-workspace) 获取完整流程
 2. 告知用户 webUrl
-3. capability_list → capability_select
+3. capability_list → capability_select（NEVER 手动 node_create）
 4. 执行能力包任务`,
     l2: `## 工作区启动流程
 
@@ -603,6 +603,7 @@ node_transition({
     scenario: "actionRequired_triggered",
     l0: "⚠️ 必须执行指定行为，不可忽略！请根据 type 执行对应操作。",
     l1: `actionRequired 类型：
+- invoke_skill: 强制调用指定 Skill（MUST 执行）
 - ask_user: 询问用户
 - show_plan: 展示计划等待确认
 - check_docs: 确认文档是否需要更新
@@ -614,6 +615,7 @@ node_transition({
 ### 类型说明
 | type | 你必须做什么 |
 |------|-------------|
+| invoke_skill | 调用 Skill(data.skill)，NEVER 跳过 |
 | ask_user | 询问用户指定问题 |
 | show_plan | 向用户展示当前计划，等待确认 |
 | check_docs | 确认引用的文档是否需要更新 |

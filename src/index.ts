@@ -16,7 +16,8 @@ import type { FastifyInstance } from "fastify";
 import { createServices, type Services } from "./http/services.js";
 import { createServer } from "./http/server.js";
 import { isPortInUse } from "./utils/port.js";
-import { handleOldProcess, writePidInfo, removePidFile, getPidFilePath } from "./utils/processManager.js";
+import { handleOldProcess, writePidInfo, removePidFile, getPidFilePath, readPidInfo, isProcessRunning } from "./utils/processManager.js";
+import { eventService } from "./services/EventService.js";
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -240,9 +241,15 @@ function createMcpServer(services: Services): Server {
             throw new TanmiError("INVALID_PARAMS", "缺少必填参数 'goal'（工作区目标描述）");
           }
 
-          // 验证 scenario 参数（可选）
+          // 验证 scenario 参数（必填）
           const validScenarios = ['feature', 'summary', 'optimize', 'debug', 'misc'];
-          if (args?.scenario !== undefined && !validScenarios.includes(args.scenario as string)) {
+          if (!args?.scenario) {
+            throw new TanmiError(
+              "INVALID_PARAMS",
+              `缺少必填参数 'scenario'（任务场景类型）。有效值为: ${validScenarios.join(', ')}`
+            );
+          }
+          if (!validScenarios.includes(args.scenario as string)) {
             throw new TanmiError(
               "INVALID_PARAMS",
               `无效的 scenario 参数: "${args.scenario}"。有效值为: ${validScenarios.join(', ')}`
@@ -1024,6 +1031,16 @@ async function main() {
 
   // 2. 尝试启动 HTTP server（后台）
   const httpServer = await startHttpServerInBackground(HTTP_PORT);
+
+  // 2.1 如果没有启动本地 HTTP，检测并连接远程 HTTP（用于事件转发）
+  if (!httpServer) {
+    const pidInfo = readPidInfo();
+    if (pidInfo && isProcessRunning(pidInfo.pid) && pidInfo.pid !== process.pid) {
+      // 存在远程 HTTP 服务，配置事件转发
+      eventService.setRemoteHttp(pidInfo.port);
+      logMcp(`已配置事件转发到远程 HTTP (port: ${pidInfo.port})`);
+    }
+  }
 
   // 3. 创建并启动 MCP server
   const mcpServer = createMcpServer(services);

@@ -1,5 +1,5 @@
-// src/http/EventService.ts
-// SSE 事件推送服务
+// src/services/EventService.ts
+// SSE 事件推送服务 - 支持跨进程事件转发
 
 import { FastifyReply } from "fastify";
 
@@ -19,9 +19,16 @@ export interface SSEEvent {
   timestamp: string;
 }
 
+// 内部事件令牌（用于验证跨进程调用）
+const INTERNAL_EVENT_TOKEN = process.env.TANMI_INTERNAL_TOKEN || "tanmi-internal-event-token";
+
 class EventService {
   private clients: Map<string, FastifyReply> = new Map();
   private clientCounter = 0;
+
+  // 远程 HTTP 服务配置（跨进程转发用）
+  private remoteHttpPort: number | null = null;
+  private remoteHttpHost: string = "127.0.0.1";
 
   /**
    * 添加 SSE 客户端连接
@@ -46,12 +53,68 @@ class EventService {
   }
 
   /**
-   * 向所有客户端推送事件
+   * 设置远程 HTTP 服务地址（用于跨进程事件转发）
+   */
+  setRemoteHttp(port: number, host: string = "127.0.0.1"): void {
+    this.remoteHttpPort = port;
+    this.remoteHttpHost = host;
+  }
+
+  /**
+   * 清除远程 HTTP 配置
+   */
+  clearRemoteHttp(): void {
+    this.remoteHttpPort = null;
+  }
+
+  /**
+   * 检查是否配置了远程 HTTP
+   */
+  hasRemoteHttp(): boolean {
+    return this.remoteHttpPort !== null;
+  }
+
+  /**
+   * 获取内部事件令牌
+   */
+  static getInternalToken(): string {
+    return INTERNAL_EVENT_TOKEN;
+  }
+
+  /**
+   * 转发事件到远程 HTTP 服务
+   */
+  private async forwardToRemote(event: SSEEvent): Promise<void> {
+    if (!this.remoteHttpPort) return;
+
+    try {
+      const url = `http://${this.remoteHttpHost}:${this.remoteHttpPort}/api/internal/events`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Token": INTERNAL_EVENT_TOKEN,
+        },
+        body: JSON.stringify(event),
+      });
+
+      if (!response.ok) {
+        console.warn(`[EventService] 事件转发失败: ${response.status}`);
+      }
+    } catch (err) {
+      // 转发失败不影响主流程，只记录警告
+      console.warn(`[EventService] 事件转发异常:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  /**
+   * 向所有客户端推送事件（本地 + 远程）
    */
   broadcast(event: SSEEvent): void {
     const data = JSON.stringify(event);
     const message = `data: ${data}\n\n`;
 
+    // 本地广播
     for (const [clientId, reply] of this.clients) {
       try {
         reply.raw.write(message);
@@ -59,6 +122,11 @@ class EventService {
         // 写入失败，移除客户端
         this.clients.delete(clientId);
       }
+    }
+
+    // 远程转发（异步，不阻塞）
+    if (this.remoteHttpPort) {
+      this.forwardToRemote(event);
     }
   }
 
@@ -155,3 +223,6 @@ class EventService {
 
 // 单例导出
 export const eventService = new EventService();
+
+// 导出类（用于类型和静态方法）
+export { EventService };
