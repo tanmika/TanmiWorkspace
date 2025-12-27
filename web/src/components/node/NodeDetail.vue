@@ -183,7 +183,7 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
           <span
             v-if="roleConfig"
             class="role-badge"
-            :data-role="nodeRole"
+            :style="{ background: roleConfig.color, color: roleConfig.textColor }"
           >
             {{ roleConfig.label }}
           </span>
@@ -501,21 +501,6 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   display: inline-block;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.role-badge[data-role="info_collection"] {
-  background: var(--accent-orange);
-  color: #000;
-}
-
-.role-badge[data-role="validation"] {
-  background: var(--accent-green);
-  color: #fff;
-}
-
-.role-badge[data-role="summary"] {
-  background: #909399;
-  color: #fff;
 }
 
 /* 隔离标签 */

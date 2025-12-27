@@ -420,7 +420,8 @@ export const NODE_TYPE_CONFIG: Record<NodeType, NodeTypeConfig> = {
 // 节点角色配置
 export interface NodeRoleConfig {
   label: string
-  color: string
+  color: string       // 背景色
+  textColor: string   // 文字颜色
   description: string
 }
 
@@ -428,16 +429,19 @@ export const NODE_ROLE_CONFIG: Record<NodeRole, NodeRoleConfig> = {
   info_collection: {
     label: 'INFO',
     color: '#E6A23C',
+    textColor: '#000',
     description: '收集项目信息，完成时自动归档规则和文档到工作区',
   },
   info_summary: {
     label: 'SUMM',
     color: '#909399',
+    textColor: '#fff',
     description: '信息总结，从已有信息中提取结构化内容',
   },
   validation: {
     label: 'VALID',
     color: '#67C23A',
+    textColor: '#fff',
     description: '验证类任务（预留）',
   },
 }

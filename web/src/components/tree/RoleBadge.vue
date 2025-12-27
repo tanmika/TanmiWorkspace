@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import type { NodeRole } from '@/types'
+import { computed } from 'vue'
+import { NODE_ROLE_CONFIG, type NodeRole } from '@/types'
 
-defineProps<{
+const props = defineProps<{
   role?: NodeRole
 }>()
+
+const config = computed(() => props.role ? NODE_ROLE_CONFIG[props.role] : null)
 </script>
 
 <template>
-  <span v-if="role === 'info_collection'" class="role-badge">INFO</span>
+  <span v-if="config" class="role-badge" :style="{ background: config.color, color: config.textColor }">
+    {{ config.label }}
+  </span>
 </template>
 
 <style scoped>
@@ -20,7 +25,5 @@ defineProps<{
   text-transform: uppercase;
   letter-spacing: 0.5px;
   flex-shrink: 0;
-  background: var(--accent-orange);
-  color: #000;
 }
 </style>
