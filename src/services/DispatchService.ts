@@ -12,6 +12,7 @@ import type { NodeMeta, NodeDispatchStatus } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
 import type { ConfigService } from "./ConfigService.js";
+import { eventService } from "./EventService.js";
 import {
   isGitRepo,
   ensureGitExclude,
@@ -230,6 +231,9 @@ export class DispatchService {
       operator: "system",
       event: `派发模式已启用（${mode}）${detail}`,
     });
+
+    // 8. 发送事件通知
+    eventService.emitDispatchUpdate(workspaceId, "");
 
     return { success: true, config: dispatchConfig };
   }
@@ -487,6 +491,9 @@ export class DispatchService {
       event: `派发模式已禁用: ${resultMessage}`,
     });
 
+    // 6. 发送事件通知
+    eventService.emitDispatchUpdate(workspaceId, "");
+
     return { success: true, message: resultMessage };
   }
 
@@ -617,6 +624,9 @@ export class DispatchService {
       },
     };
 
+    // 7. 发送事件通知
+    eventService.emitDispatchUpdate(workspaceId, nodeId);
+
     return {
       success: true,
       startMarker,
@@ -715,6 +725,9 @@ export class DispatchService {
         }
       }
 
+      // 发送事件通知
+      eventService.emitDispatchUpdate(workspaceId, nodeId);
+
       // 返回下一步：返回父节点
       return {
         success: true,
@@ -748,6 +761,9 @@ export class DispatchService {
         operator: "tanmi-executor",
         event: `节点 ${nodeId} 派发执行失败并自动标记: ${conclusion || "未知原因"}`,
       }, nodeId);
+
+      // 发送事件通知
+      eventService.emitDispatchUpdate(workspaceId, nodeId);
 
       return {
         success: false,

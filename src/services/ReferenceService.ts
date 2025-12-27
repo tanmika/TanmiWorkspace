@@ -12,6 +12,7 @@ import type {
 import type { DocRef } from "../types/workspace.js";
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
+import { eventService } from "./EventService.js";
 
 /**
  * 引用服务
@@ -78,7 +79,10 @@ export class ReferenceService {
       }, nodeDirName);
     }
 
-    // 7. 返回结果
+    // 7. 发送事件通知
+    eventService.emitNodeUpdate(workspaceId, nodeId);
+
+    // 8. 返回结果
     return {
       success: true,
     };
@@ -171,7 +175,10 @@ export class ReferenceService {
       event: `${actionDescriptions[action]}: ${targetIdOrPath}`,
     }, nodeDirName);
 
-    // 9. 返回更新后的引用列表
+    // 9. 发送事件通知
+    eventService.emitReferenceUpdate(workspaceId, nodeId);
+
+    // 10. 返回更新后的引用列表
     return {
       success: true,
       references: docs,

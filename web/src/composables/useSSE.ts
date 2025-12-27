@@ -8,7 +8,10 @@ export type SSEEventType =
   | 'workspace_updated'
   | 'node_updated'
   | 'log_updated'
+  | 'memo_updated'
   | 'dispatch_updated'
+  | 'context_updated'
+  | 'reference_updated'
 
 export interface SSEEvent {
   type: SSEEventType
@@ -29,14 +32,15 @@ export function useSSE() {
 
   /**
    * 连接 SSE
+   * 开发环境通过 Vite proxy 代理，生产环境直接访问同源后端
    */
   function connect() {
     if (eventSource) {
       return
     }
 
-    const baseUrl = import.meta.env.DEV ? 'http://localhost:19541' : ''
-    eventSource = new EventSource(`${baseUrl}/api/events`)
+    // 统一使用相对路径，开发环境由 Vite proxy 处理
+    eventSource = new EventSource('/api/events')
 
     eventSource.onopen = () => {
       connected.value = true

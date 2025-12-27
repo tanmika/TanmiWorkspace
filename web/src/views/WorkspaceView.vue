@@ -199,6 +199,10 @@ async function handleRefresh() {
     if (nodeStore.selectedNodeId) {
       await nodeStore.selectNode(nodeStore.selectedNodeId)
     }
+    // 刷新当前选中的 memo
+    if (selectedMemoId.value && workspaceStore.currentWorkspace?.id) {
+      await memoStore.fetchMemo(workspaceStore.currentWorkspace.id, selectedMemoId.value)
+    }
     showToast('刷新成功', 'success')
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : '未知错误'
@@ -257,6 +261,54 @@ onMounted(() => {
   sse.on('log_updated', (event) => {
     if (event.workspaceId === workspaceId.value) {
       console.log('[SSE] 收到日志更新，刷新数据')
+      workspaceStore.fetchWorkspace(workspaceId.value)
+    }
+  })
+
+  // 监听 memo 更新事件
+  sse.on('memo_updated', (event) => {
+    if (event.workspaceId === workspaceId.value) {
+      console.log('[SSE] 收到 memo 更新，刷新数据')
+      memoStore.fetchMemos(workspaceId.value)
+      // 如果当前正在查看 memo，刷新详情（selectedMemoId 格式为 memo-xxx）
+      if (selectedMemoId.value && selectedType.value === 'memo') {
+        memoStore.fetchMemo(workspaceId.value, selectedMemoId.value)
+      }
+    }
+  })
+
+  // 监听派发状态更新事件
+  sse.on('dispatch_updated', (event) => {
+    if (event.workspaceId === workspaceId.value) {
+      console.log('[SSE] 收到派发更新，刷新数据')
+      workspaceStore.fetchWorkspace(workspaceId.value)
+      nodeStore.fetchNodeTree()
+    }
+  })
+
+  // 监听上下文更新事件（聚焦变更）
+  sse.on('context_updated', (event) => {
+    if (event.workspaceId === workspaceId.value) {
+      console.log('[SSE] 收到上下文更新，刷新数据')
+      workspaceStore.fetchWorkspace(workspaceId.value)
+    }
+  })
+
+  // 监听引用更新事件
+  sse.on('reference_updated', (event) => {
+    if (event.workspaceId === workspaceId.value) {
+      console.log('[SSE] 收到引用更新，刷新数据')
+      nodeStore.fetchNodeTree()
+      if (nodeStore.selectedNodeId) {
+        nodeStore.selectNode(nodeStore.selectedNodeId)
+      }
+    }
+  })
+
+  // 监听工作区更新事件
+  sse.on('workspace_updated', (event) => {
+    if (event.workspaceId === workspaceId.value) {
+      console.log('[SSE] 收到工作区更新，刷新数据')
       workspaceStore.fetchWorkspace(workspaceId.value)
     }
   })

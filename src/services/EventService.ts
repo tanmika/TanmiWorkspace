@@ -7,7 +7,10 @@ export type EventType =
   | "workspace_updated"
   | "node_updated"
   | "log_updated"
-  | "dispatch_updated";
+  | "memo_updated"
+  | "dispatch_updated"
+  | "context_updated"
+  | "reference_updated";
 
 export interface SSEEvent {
   type: EventType;
@@ -100,6 +103,42 @@ class EventService {
   emitDispatchUpdate(workspaceId: string, nodeId: string): void {
     this.broadcast({
       type: "dispatch_updated",
+      workspaceId,
+      nodeId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * 推送备忘更新事件
+   */
+  emitMemoUpdate(workspaceId: string, memoId?: string): void {
+    this.broadcast({
+      type: "memo_updated",
+      workspaceId,
+      nodeId: memoId, // 复用 nodeId 字段传递 memoId
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * 推送上下文更新事件（聚焦变更）
+   */
+  emitContextUpdate(workspaceId: string, nodeId?: string): void {
+    this.broadcast({
+      type: "context_updated",
+      workspaceId,
+      nodeId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * 推送引用更新事件
+   */
+  emitReferenceUpdate(workspaceId: string, nodeId: string): void {
+    this.broadcast({
+      type: "reference_updated",
       workspaceId,
       nodeId,
       timestamp: new Date().toISOString(),

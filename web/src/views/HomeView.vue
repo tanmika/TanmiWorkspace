@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWorkspaceStore, useToastStore } from '@/stores'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
+import { getGlobalSSE } from '@/composables/useSSE'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
 import SettingsModal from '@/components/SettingsModal.vue'
 import WsModal from '@/components/ui/WsModal.vue'
@@ -136,6 +137,14 @@ onMounted(async () => {
   } catch {
     // 忽略
   }
+
+  // 连接 SSE 并监听工作区更新
+  const sse = getGlobalSSE()
+  sse.connect()
+  sse.on('workspace_updated', () => {
+    console.log('[SSE] 收到工作区更新，刷新列表')
+    workspaceStore.fetchWorkspaces('all')
+  })
 })
 
 // 监听偏好变化并自动保存

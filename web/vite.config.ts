@@ -6,6 +6,9 @@ import { readFileSync } from 'fs'
 // 读取 package.json 获取版本
 const pkg = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf-8'))
 
+// 开发模式后端端口（支持环境变量自定义）
+const API_PORT = process.env.API_PORT || '19541'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
@@ -23,13 +26,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // 开发模式通过 proxy 代理到后端，支持自定义端口：API_PORT=8080 npm run dev
       '/api': {
-        // 开发模式 API 端口为 19541（与 start:http:dev 对应）
-        target: 'http://localhost:19541',
+        target: `http://localhost:${API_PORT}`,
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:19541',
+        target: `http://localhost:${API_PORT}`,
         changeOrigin: true,
       },
     },

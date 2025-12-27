@@ -21,6 +21,7 @@ import { TanmiError } from "../types/errors.js";
 import { generateMemoId, generateMemoDirName } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { devLog } from "../utils/devLog.js";
+import { eventService } from "./EventService.js";
 
 /**
  * Memo 服务
@@ -107,7 +108,10 @@ export class MemoService {
     const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
     await this.fs.writeFile(contentPath, content);
 
-    // 10. 返回结果
+    // 10. 发送事件通知
+    eventService.emitMemoUpdate(workspaceId, memoId);
+
+    // 11. 返回结果
     const relativePath = `memos/${memoDirName}/Content.md`;
     return {
       memoId,
@@ -245,6 +249,9 @@ export class MemoService {
       await this.fs.writeFile(contentPath, finalContent);
     }
 
+    // 9. 发送事件通知
+    eventService.emitMemoUpdate(workspaceId, memoId);
+
     return {
       success: true,
       updatedAt: timestamp,
@@ -282,6 +289,9 @@ export class MemoService {
     // 7. 删除备忘目录
     const memoDir = this.fs.getMemoDir(projectRoot, wsDirName, memoDirName);
     await this.fs.remove(memoDir);
+
+    // 8. 发送事件通知
+    eventService.emitMemoUpdate(workspaceId, memoId);
 
     return { success: true };
   }

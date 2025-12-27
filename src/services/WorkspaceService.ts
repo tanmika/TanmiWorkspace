@@ -37,6 +37,7 @@ import { now } from "../utils/time.js";
 import { validateWorkspaceName, validateProjectRoot } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
 import { taskScenarioToGuidance, getGuidanceConfig } from "../prompts/guidanceContent.js";
+import { eventService } from "./EventService.js";
 
 /**
  * 获取 HTTP 服务端口
@@ -305,6 +306,9 @@ export class WorkspaceService {
       };
     }
 
+    // 16. 发送事件通知
+    eventService.emitWorkspaceUpdate(workspaceId);
+
     return result;
   }
 
@@ -465,6 +469,9 @@ export class WorkspaceService {
     // 更新全局索引
     index.workspaces = index.workspaces.filter(ws => ws.id !== workspaceId);
     await this.json.writeIndex(index);
+
+    // 发送事件通知
+    eventService.emitWorkspaceUpdate(workspaceId);
 
     return { success: true };
   }
@@ -809,6 +816,9 @@ export class WorkspaceService {
       ? crypto.createHash("md5").update(currentRules.join("\n")).digest("hex").substring(0, 8)
       : "";
 
+    // 发送事件通知
+    eventService.emitWorkspaceUpdate(workspaceId);
+
     return {
       success: true,
       rulesCount: currentRules.length,
@@ -872,6 +882,9 @@ export class WorkspaceService {
       event: `工作区已归档`,
     }, true);
 
+    // 9. 发送事件通知
+    eventService.emitWorkspaceUpdate(workspaceId);
+
     return {
       success: true,
       archivePath,
@@ -927,6 +940,9 @@ export class WorkspaceService {
       operator: "system",
       event: `工作区已从归档恢复`,
     });
+
+    // 8. 发送事件通知
+    eventService.emitWorkspaceUpdate(workspaceId);
 
     return {
       success: true,

@@ -21,6 +21,7 @@ import { devLog } from "../utils/devLog.js";
 import { GuidanceService } from "./GuidanceService.js";
 import type { GuidanceContext } from "../types/guidance.js";
 import type { InstallationService } from "./InstallationService.js";
+import { eventService } from "./EventService.js";
 
 /**
  * 上下文服务
@@ -347,7 +348,10 @@ export class ContextService {
       await this.json.writeIndex(index);
     }
 
-    // 8. 返回结果
+    // 8. 发送事件通知
+    eventService.emitContextUpdate(workspaceId, nodeId);
+
+    // 9. 返回结果
     return {
       success: true,
       previousFocus,
