@@ -372,6 +372,15 @@ function createMcpServer(services: Services): Server {
           });
           break;
 
+        case "node_reorder":
+          await services.node.reorderChildren({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+            orderedChildIds: args?.orderedChildIds as string[],
+          });
+          result = { success: true };
+          break;
+
         // Phase 2: 状态转换工具
         case "node_transition":
           result = await services.state.transition({

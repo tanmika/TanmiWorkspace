@@ -769,6 +769,30 @@ export class TutorialService {
   }
 
   /**
+   * 查找已存在的 major.minor 规划节点
+   * @returns Map<majorMinor, nodeId>
+   */
+  private async findExistingMajorNodes(workspaceId: string): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+
+    try {
+      const rootNode = await this.node.get({ workspaceId, nodeId: "root" });
+      for (const childId of rootNode.meta.children) {
+        const child = await this.node.get({ workspaceId, nodeId: childId });
+        // 从 dirName 中提取版本号，格式如 "V1.9 版本更新_mjmqarcp"
+        const match = child.meta.dirName?.match(/V(\d+\.\d+)/);
+        if (match) {
+          result.set(match[1], childId);
+        }
+      }
+    } catch {
+      // 如果获取失败，返回空映射
+    }
+
+    return result;
+  }
+
+  /**
    * 添加版本节点到工作区
    * @param workspaceId 工作区ID
    * @param oldVersion 旧版本号
@@ -798,6 +822,9 @@ export class TutorialService {
     let latestNodeId: string | null = null; // 记录最新版本节点 ID
     let rootReopened = false; // 标记是否已 reopen 根节点
 
+    // 预先获取已存在的 major.minor 节点映射
+    const existingMajorNodes = await this.findExistingMajorNodes(workspaceId);
+
     for (const mm of sortedMajorMinors) {
       // 如果根节点已完成，需要先 reopen 才能添加新子节点
       if (!rootReopened) {
@@ -814,37 +841,68 @@ export class TutorialService {
 
       const group = groups.get(mm)!;
 
-      // 创建 major.minor 规划节点
-      let majorRequirement: string;
-      let majorConclusion: string | undefined;
-      let majorNote: string | undefined;
+      // 检查是否已存在对应的 major.minor 节点
+      let majorNodeId: string;
+      let isExistingNode = false;
 
-      if (group.hasMinorStart && group.major) {
-        // 用户从这个 minor 版本开始，显示完整内容
-        majorRequirement = group.major.requirement || `v${mm} 版本更新`;
-        majorConclusion = group.major.conclusion;
-        majorNote = group.major.note;
+      if (existingMajorNodes.has(mm)) {
+        // 使用已存在的节点
+        majorNodeId = existingMajorNodes.get(mm)!;
+        isExistingNode = true;
+
+        // 如果节点已完成，需要先 reopen 才能添加子节点
+        const existingNode = await this.node.get({ workspaceId, nodeId: majorNodeId });
+        if (existingNode.meta.status === "completed") {
+          await this.state.transition({
+            workspaceId,
+            nodeId: majorNodeId,
+            action: "reopen",
+          });
+        }
       } else {
-        // 用户中途加入，只显示简要说明
-        majorRequirement = `这是 v${mm} 版本期间的优化`;
-      }
+        // 创建新的 major.minor 规划节点
+        // 从完整版本列表中获取该 minor 的所有版本（包括 x.y.0）
+        const allMinorVersions = versions.filter(v => this.getMajorMinor(v.version) === mm);
+        const minorStartVersion = allMinorVersions.find(v => this.isMajorMinorVersion(v.version));
 
-      const majorNodeResult = await this.node.create({
-        workspaceId,
-        parentId: "root",
-        type: "planning",
-        title: `V${mm} 版本更新`,
-        requirement: majorRequirement,
-        rulesHash,
-      });
+        let majorRequirement: string;
+        let majorNote: string | undefined;
 
-      // 如果有 major 节点的结论，设置到节点
-      if (majorConclusion || majorNote) {
-        await this.node.update({
+        if (minorStartVersion) {
+          // 使用 x.y.0 版本的信息作为父节点内容
+          majorRequirement = minorStartVersion.requirement || `v${mm} 版本更新`;
+          majorNote = minorStartVersion.note;
+        } else {
+          // 兜底：没有 x.y.0 版本时使用默认文案
+          majorRequirement = `v${mm} 版本更新`;
+        }
+
+        // 更新 group，包含该 minor 的所有版本
+        group.patches = allMinorVersions
+          .filter(v => !this.isMajorMinorVersion(v.version))
+          .sort((a, b) => this.compareVersions(b.version, a.version));
+        group.major = minorStartVersion || null;
+        group.hasMinorStart = !!minorStartVersion;
+
+        const majorNodeResult = await this.node.create({
           workspaceId,
-          nodeId: majorNodeResult.nodeId,
-          note: majorNote,
+          parentId: "root",
+          type: "planning",
+          title: `V${mm} 版本更新`,
+          requirement: majorRequirement,
+          rulesHash,
         });
+
+        majorNodeId = majorNodeResult.nodeId;
+
+        // 如果有 note，设置到节点
+        if (majorNote) {
+          await this.node.update({
+            workspaceId,
+            nodeId: majorNodeId,
+            note: majorNote,
+          });
+        }
       }
 
       // 创建 patch 版本子节点
@@ -856,7 +914,7 @@ export class TutorialService {
 
         const patchNodeResult = await this.node.create({
           workspaceId,
-          parentId: majorNodeResult.nodeId,
+          parentId: majorNodeId,
           type: "execution",
           title: `V${patch.version} 版本更新`,
           requirement: patchRequirement,
@@ -892,8 +950,8 @@ export class TutorialService {
         }
       }
 
-      // 如果有 major 版本自身（x.y.0），也作为子节点添加
-      if (group.major && group.hasMinorStart) {
+      // 如果有 major 版本自身（x.y.0），也作为子节点添加（仅新创建的节点需要）
+      if (!isExistingNode && group.major && group.hasMinorStart) {
         // 需求：版本更新详情 + requirement
         const majorVersionRequirement = group.major.requirement
           ? `V${group.major.version} 版本更新详情：\n${group.major.requirement}`
@@ -901,7 +959,7 @@ export class TutorialService {
 
         const majorVersionResult = await this.node.create({
           workspaceId,
-          parentId: majorNodeResult.nodeId,
+          parentId: majorNodeId,
           type: "execution",
           title: `V${group.major.version} 版本更新`,
           requirement: majorVersionRequirement,
@@ -931,14 +989,42 @@ export class TutorialService {
         }
       }
 
+      // 对 major.minor 节点的子节点按版本号降序排序（新版本在前）
+      const majorNode = await this.node.get({ workspaceId, nodeId: majorNodeId });
+      const patchChildIds = majorNode.meta.children;
+      if (patchChildIds.length > 1) {
+        const patchVersions: { id: string; version: string }[] = [];
+        for (const patchId of patchChildIds) {
+          const patchNode = await this.node.get({ workspaceId, nodeId: patchId });
+          // 从 dirName 中提取版本号，格式如 "V1.9.1 版本更新_mjoeaxds"
+          const match = patchNode.meta.dirName?.match(/V(\d+\.\d+\.\d+)/);
+          if (match) {
+            patchVersions.push({ id: patchId, version: match[1] });
+          }
+        }
+        // 按版本号降序排序
+        patchVersions.sort((a, b) => this.compareVersions(b.version, a.version));
+        const sortedPatchIds = patchVersions.map(p => p.id);
+
+        // 如果顺序有变化，重新排序
+        if (sortedPatchIds.length === patchChildIds.length &&
+            sortedPatchIds.some((id, i) => id !== patchChildIds[i])) {
+          await this.node.reorderChildren({
+            workspaceId,
+            nodeId: majorNodeId,
+            orderedChildIds: sortedPatchIds,
+          });
+        }
+      }
+
       // 将 major 规划节点标记为已完成
       // 由于添加子节点后，规划节点已自动进入 monitoring 状态
       // 所有子节点已完成，可直接标记 complete
       await this.state.transition({
         workspaceId,
-        nodeId: majorNodeResult.nodeId,
+        nodeId: majorNodeId,
         action: "complete",
-        conclusion: majorConclusion || `v${mm} 版本更新完成`,
+        conclusion: `v${mm} 版本更新完成`,
       });
     }
 

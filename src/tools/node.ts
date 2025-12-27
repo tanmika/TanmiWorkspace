@@ -257,6 +257,35 @@ export const nodeMoveTool: Tool = {
 };
 
 /**
+ * node_reorder 工具定义
+ */
+export const nodeReorderTool: Tool = {
+  name: "node_reorder",
+  description: `重新排序节点的子节点顺序。
+- 必须提供所有子节点的 ID，不能增减
+- 用于调整子节点的显示顺序`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+      nodeId: {
+        type: "string",
+        description: "父节点 ID（要重排其子节点）",
+      },
+      orderedChildIds: {
+        type: "array",
+        items: { type: "string" },
+        description: "按新顺序排列的所有子节点 ID 数组",
+      },
+    },
+    required: ["workspaceId", "nodeId", "orderedChildIds"],
+  },
+};
+
+/**
  * 所有节点工具
  */
 export const nodeTools: Tool[] = [
@@ -266,4 +295,5 @@ export const nodeTools: Tool[] = [
   nodeDeleteTool,
   nodeUpdateTool,
   nodeMoveTool,
+  nodeReorderTool,
 ];
