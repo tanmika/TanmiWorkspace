@@ -13,6 +13,11 @@
 
 ## [1.9.1] - 2025-12-27
 
+### Added
+
+- **SSE 跨进程事件转发**: MCP 进程的事件可转发到 HTTP 服务，实现 WebUI 实时同步刷新
+- **workspace_init 流程强化**: scenario 参数改为必填，actionRequired 强制调用 bootstrapping-workspace skill
+
 ### Fixed
 
 - **目录名兼容性**: 修复旧版本工作区节点目录名无法正确加载的问题（shortId 提取逻辑修复 + 运行时兜底机制）
