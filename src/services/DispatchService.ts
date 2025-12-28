@@ -898,7 +898,7 @@ Read(file_path: <返回的路径>/SKILL.md)
       // 测试通过：记录日志
       await this.md.appendLog(projectRoot, wsDirName, {
         time: now(),
-        operator: "tanmi-tester",
+        operator: "tanmi-reviewer",
         event: `测试节点 ${testNodeId} 验证通过`,
       }, testNodeId);
 
@@ -910,7 +910,7 @@ Read(file_path: <返回的路径>/SKILL.md)
       // 测试失败：记录日志
       await this.md.appendLog(projectRoot, wsDirName, {
         time: now(),
-        operator: "tanmi-tester",
+        operator: "tanmi-reviewer",
         event: `测试节点 ${testNodeId} 验证失败`,
       }, testNodeId);
 
@@ -1141,12 +1141,18 @@ Please address the issues from previous attempts.`);
     // 执行指令
     sections.push(`## Execution Instructions
 
-### Step 0: Start the node (REQUIRED FIRST)
+### Step 0: Invoke Skill (REQUIRED FIRST)
+\`\`\`
+Skill(skill: "executing-task")
+\`\`\`
+This provides detailed SOP for task execution. If unavailable, use plugin_path to read SKILL.md.
+
+### Step 1: Start the node
 \`\`\`
 node_transition(workspaceId="${workspaceId}", nodeId="${nodeId}", action="start")
 \`\`\`
 
-### Steps 1-4: Execute
+### Steps 2-5: Execute
 1. **Assess** task scope and verify information completeness
 2. **Execute** the task within defined boundaries (no scope expansion)
 3. **Log** progress via log_append at key milestones
@@ -1163,9 +1169,82 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
 \`\`\`
 
 **CRITICAL**:
-- You MUST call node_transition(start) FIRST to begin the task
+- You MUST invoke Skill(executing-task) FIRST for detailed SOP
+- You MUST call node_transition(start) to begin the task
 - You MUST call dispatch_complete to finalize
 **SCOPE CONTROL**: Execute only what is specified. If task is unclear or too large, FAIL with clear reason.`);
+
+    return sections.join("\n\n");
+  }
+
+  /**
+   * 构建 Reviewer prompt（用于 spec 和 quality 节点）
+   */
+  private buildReviewerPrompt(
+    workspaceId: string,
+    nodeId: string,
+    targetNodeId: string,
+    role: "dispatch_spec" | "dispatch_quality",
+    nodeInfo: { title: string; requirement?: string; acceptanceCriteria?: Array<{ when: string; then: string }> }
+  ): string {
+    const sections: string[] = [];
+    const isSpec = role === "dispatch_spec";
+    const skillName = isSpec ? "reviewing-spec" : "reviewing-quality";
+    const taskType = isSpec ? "Spec Review" : "Quality Review";
+
+    // 基础信息
+    sections.push(`# ${taskType} Task
+
+**Workspace**: ${workspaceId}
+**Node ID**: ${nodeId}
+**Target Node**: ${targetNodeId}
+**Role**: ${role}
+**Title**: ${nodeInfo.title}`);
+
+    // 验收标准（仅 spec review）
+    if (isSpec && nodeInfo.acceptanceCriteria && nodeInfo.acceptanceCriteria.length > 0) {
+      const criteriaList = nodeInfo.acceptanceCriteria
+        .map((c, i) => `${i + 1}. **WHEN** ${c.when} **THEN** ${c.then}`)
+        .join("\n");
+      sections.push(`## Acceptance Criteria to Verify
+
+${criteriaList}`);
+    }
+
+    // 审查指令
+    sections.push(`## Review Instructions
+
+### Step 0: Invoke Skill (REQUIRED FIRST)
+\`\`\`
+Skill(skill: "${skillName}")
+\`\`\`
+This provides detailed SOP for ${taskType.toLowerCase()}. If unavailable, use plugin_path to read SKILL.md.
+
+### Step 1: Start the node
+\`\`\`
+node_transition(workspaceId="${workspaceId}", nodeId="${nodeId}", action="start")
+\`\`\`
+
+### Steps 2-4: Review
+1. **Verify** ${isSpec ? "each acceptance criterion independently" : "code quality, maintainability, and best practices"}
+2. **Log** each verification via log_append
+3. **Complete** with dispatch_complete when done
+
+### On Pass:
+\`\`\`
+dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=true, conclusion="<审查通过：具体验证结果>")
+\`\`\`
+
+### On Fail:
+\`\`\`
+dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=false, conclusion="<审查失败：具体问题列表>")
+\`\`\`
+
+**CRITICAL**:
+- You MUST invoke Skill(${skillName}) FIRST for detailed SOP
+- You MUST verify INDEPENDENTLY - do NOT trust executor's conclusion
+- You MUST call dispatch_complete to finalize
+${isSpec ? "- ANY criterion fails → entire review FAILS" : "- Report specific issues with evidence"}`);
 
     return sections.join("\n\n");
   }
@@ -1418,9 +1497,9 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
     // 10. 发送事件通知
     eventService.emitDispatchUpdate(workspaceId, parentId);
 
-    // 11. 构建 executor prompt
+    // 11. 构建所有节点的 prompt
     const execNodeMeta = graph.nodes[execNodeId];
-    const prompt = this.buildExecutorPrompt(
+    const execPrompt = this.buildExecutorPrompt(
       workspaceId,
       execNodeId,
       {
@@ -1431,6 +1510,27 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
       execNodeMeta
     );
 
+    const specPrompt = this.buildReviewerPrompt(
+      workspaceId,
+      specNodeId,
+      execNodeId,
+      "dispatch_spec",
+      {
+        title: `[Spec] ${shortTitle}`,
+        acceptanceCriteria: exec.acceptanceCriteria,
+      }
+    );
+
+    const qualityPrompt = qualityNodeId
+      ? this.buildReviewerPrompt(
+          workspaceId,
+          qualityNodeId,
+          execNodeId,
+          "dispatch_quality",
+          { title: `[Quality] ${shortTitle}` }
+        )
+      : undefined;
+
     // 12. 返回结果
     return {
       execId: execNodeId,
@@ -1440,7 +1540,7 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
         type: "dispatch_task",
         message: `## ⚠️ MUST: 完成完整派发流程
 
-### 你 MUST 按顺序完成以下 3 步，NEVER 在中途停止
+### 你 MUST 按顺序完成以下步骤，NEVER 在中途停止
 
 ---
 
@@ -1450,7 +1550,7 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
 Task(
   subagent_type: "tanmi-executor",
   description: "执行派发任务",
-  prompt: <下方 data.prompt 中的完整内容>
+  prompt: <下方 data.execPrompt 中的完整内容>
 )
 \`\`\`
 
@@ -1460,11 +1560,12 @@ Task(
 
 **⚠️ NEVER 在 exec 完成后停止！**
 
-当 exec Task 返回后，你 MUST 继续派发 spec：
-
 \`\`\`
-1. context_get(workspaceId, nodeId="${specNodeId}")
-2. Task(subagent_type: "tanmi-reviewer", prompt: <构建 spec 审查 prompt>)
+Task(
+  subagent_type: "tanmi-reviewer",
+  description: "规格审查",
+  prompt: <下方 data.specPrompt 中的完整内容>
+)
 \`\`\`
 
 spec 节点 ID: **${specNodeId}**
@@ -1473,14 +1574,22 @@ spec 节点 ID: **${specNodeId}**
 
 ## 第3步：spec 通过后，派发 quality 节点（如有）
 
-${qualityNodeId ? `quality 节点 ID: **${qualityNodeId}**` : "未创建 quality 节点，跳过此步"}
+${qualityNodeId ? `\`\`\`
+Task(
+  subagent_type: "tanmi-reviewer",
+  description: "质量审查",
+  prompt: <下方 data.qualityPrompt 中的完整内容>
+)
+\`\`\`
+
+quality 节点 ID: **${qualityNodeId}**` : "未创建 quality 节点，跳过此步"}
 
 ---
 
 ## 第4步：所有子节点完成后，完成母节点
 
 \`\`\`
-node_transition(workspaceId, nodeId="<母节点ID>", action="complete", conclusion="...")
+node_transition(workspaceId, nodeId="${parentId}", action="complete", conclusion="...")
 \`\`\`
 
 ---
@@ -1492,11 +1601,13 @@ node_transition(workspaceId, nodeId="<母节点ID>", action="complete", conclusi
 - "我直接完成母节点" → NEVER，MUST 等所有子节点完成`,
         data: {
           workspaceId,
-          nodeId: execNodeId,
+          parentId,
+          execId: execNodeId,
           specId: specNodeId,
           qualityId: qualityNodeId,
-          subagentType: "tanmi-executor",
-          prompt,
+          execPrompt,
+          specPrompt,
+          qualityPrompt,
           timeout: config.dispatch.limits?.timeoutMs || 300000,
         },
       },

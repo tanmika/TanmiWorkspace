@@ -274,10 +274,10 @@ export class DetectionService {
 
   /**
    * 检查 TanmiWorkspace dispatch agents 是否已安装
-   * 检测 ~/.claude/agents/ 下是否存在 tanmi-executor.md 和 tanmi-tester.md
+   * 检测 ~/.claude/agents/ 下是否存在 tanmi-executor.md 和 tanmi-reviewer.md
    */
   async checkAgentsInstalled(): Promise<boolean> {
-    const agentFiles = ["tanmi-executor.md", "tanmi-tester.md"];
+    const agentFiles = ["tanmi-executor.md", "tanmi-reviewer.md"];
 
     try {
       // 检查所有 agent 文件是否存在

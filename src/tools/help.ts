@@ -219,7 +219,7 @@ ${table}
 
 - **Hooks**: 自动注入工作区上下文到会话
 - **MCP**: MCP 服务器配置
-- **Agents**: 派发执行器 (tanmi-executor, tanmi-tester)
+- **Agents**: 派发执行器 (tanmi-executor, tanmi-reviewer)
 - **Skills**: 自定义技能（即将支持）
 `;
     } catch (err) {

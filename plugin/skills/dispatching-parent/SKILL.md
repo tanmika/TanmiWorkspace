@@ -47,7 +47,7 @@ Dispatch exec node (Task tool + tanmi-executor)
     |
     v
 Handle exec result
-    |-- Success --> Dispatch spec node (Task tool + tanmi-tester)
+    |-- Success --> Dispatch spec node (Task tool + tanmi-reviewer)
     |-- Failure --> Analyze, enrich context, retry or escalate
     |
     v
@@ -107,12 +107,12 @@ dispatch_create({
 Task({
   subagent_type: "tanmi-executor",
   description: "执行派发任务",
-  prompt: actionRequired.data.prompt  // 完整复制 dispatch_create 返回的 prompt
+  prompt: actionRequired.data.execPrompt  // 完整复制 dispatch_create 返回的 execPrompt
 })
 ```
 
 **Important**:
-- Pass the COMPLETE prompt from `actionRequired.data.prompt`
+- Pass the COMPLETE prompt from `actionRequired.data.execPrompt`
 - Do NOT modify or simplify the prompt
 - Wait for Task completion before proceeding
 
@@ -154,35 +154,19 @@ Task({
 
 **Goal**: Verify execution meets requirements.
 
-**Build spec prompt**:
+**Use Task tool**:
 ```typescript
-// 读取 spec 节点信息构建 prompt
-const specNode = await node_get({ workspaceId, nodeId: specId });
-
-// 使用 Task 工具派发
 Task({
   subagent_type: "tanmi-reviewer",
   description: "规格审查",
-  prompt: `# Spec Review Task
-
-**Workspace**: ${workspaceId}
-**Node ID**: ${specId}
-**Target**: ${execId}
-
-## Requirement
-${specNode.requirement}
-
-## Acceptance Criteria
-${specNode.acceptanceCriteria.map(c => `- WHEN ${c.when} THEN ${c.then}`).join('\n')}
-
-## Instructions
-1. Review the execution result against acceptance criteria
-2. Verify INDEPENDENTLY - do not trust exec's conclusion
-3. Call dispatch_complete with success=true if ALL criteria pass
-4. Call dispatch_complete with success=false if ANY criterion fails
-`
+  prompt: actionRequired.data.specPrompt  // 完整复制 dispatch_create 返回的 specPrompt
 })
 ```
+
+**Important**:
+- Pass the COMPLETE prompt from `actionRequired.data.specPrompt`
+- Spec prompt 已包含 role、acceptance criteria 和完整指令
+- Do NOT modify or simplify the prompt
 
 **Key points**:
 - Spec review is INDEPENDENT verification
@@ -223,6 +207,20 @@ ${specNode.acceptanceCriteria.map(c => `- WHEN ${c.when} THEN ${c.then}`).join('
 - Simple bug fixes
 - Configuration changes
 - Documentation updates
+
+**Use Task tool**:
+```typescript
+Task({
+  subagent_type: "tanmi-reviewer",
+  description: "质量审查",
+  prompt: actionRequired.data.qualityPrompt  // 完整复制 dispatch_create 返回的 qualityPrompt
+})
+```
+
+**Important**:
+- Pass the COMPLETE prompt from `actionRequired.data.qualityPrompt`
+- Quality prompt 已包含 role 和完整指令
+- 如果 `qualityPrompt` 为空（includeQuality=false），跳过此步
 
 **Output**: Quality review result
 
