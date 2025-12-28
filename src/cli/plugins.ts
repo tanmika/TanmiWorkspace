@@ -267,12 +267,13 @@ function getPluginStatus(): PluginStatus {
   // Claude hooks
   const claudeHooksInstalled = existsSync(join(TANMI_SCRIPTS, "hook-entry.cjs"));
 
-  // Claude agents
+  // Claude agents - 动态检测已安装的 agent
   const agentsDir = join(CLAUDE_HOME, "agents");
   const installedAgents: string[] = [];
-  if (existsSync(agentsDir)) {
-    const expectedAgents = ["tanmi-executor.md", "tanmi-tester.md"];
-    for (const agent of expectedAgents) {
+  if (existsSync(agentsDir) && existsSync(PLUGIN_AGENTS)) {
+    // 从源目录获取期望的 agent 列表
+    const sourceAgents = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md"));
+    for (const agent of sourceAgents) {
       if (existsSync(join(agentsDir, agent))) {
         installedAgents.push(agent);
       }
@@ -452,23 +453,32 @@ function configureClaudeHooks(): void {
 function installDispatchAgents(): void {
   info("安装派发 Agent 模板...");
 
-  const executorSrc = join(PLUGIN_AGENTS, "tanmi-executor.md");
-  const testerSrc = join(PLUGIN_AGENTS, "tanmi-tester.md");
+  if (!existsSync(PLUGIN_AGENTS)) {
+    error(`Agent 模板目录不存在: ${PLUGIN_AGENTS}`);
+    return;
+  }
 
-  if (!existsSync(executorSrc) || !existsSync(testerSrc)) {
-    error(`Agent 模板文件不存在`);
+  // 动态读取所有 .md 文件
+  const agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md"));
+
+  if (agentFiles.length === 0) {
+    warn("没有找到 Agent 模板文件");
     return;
   }
 
   const agentsDir = join(CLAUDE_HOME, "agents");
   ensureDir(agentsDir);
 
-  copyFile(executorSrc, join(agentsDir, "tanmi-executor.md"));
-  copyFile(testerSrc, join(agentsDir, "tanmi-tester.md"));
+  for (const agentFile of agentFiles) {
+    const src = join(PLUGIN_AGENTS, agentFile);
+    const dest = join(agentsDir, agentFile);
+    copyFile(src, dest);
+  }
 
   success(`派发 Agent 已安装到 ${agentsDir}/`);
-  info("  - tanmi-executor.md (任务执行者)");
-  info("  - tanmi-tester.md (任务测试者)");
+  for (const agentFile of agentFiles) {
+    info(`  - ${agentFile}`);
+  }
 
   updateInstallationMeta("claudeCode", "agents", "update");
 }
@@ -543,9 +553,19 @@ function uninstallDispatchAgents(): void {
   info("卸载派发 Agent...");
 
   const agentsDir = join(CLAUDE_HOME, "agents");
-  const files = ["tanmi-executor.md", "tanmi-tester.md"];
 
-  for (const file of files) {
+  // 动态获取要卸载的 agent 列表
+  let agentFiles: string[] = [];
+  if (existsSync(PLUGIN_AGENTS)) {
+    agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md"));
+  }
+
+  if (agentFiles.length === 0) {
+    warn("没有找到 Agent 模板文件");
+    return;
+  }
+
+  for (const file of agentFiles) {
     const filePath = join(agentsDir, file);
     if (removeFile(filePath)) {
       success(`已删除 ${filePath}`);
