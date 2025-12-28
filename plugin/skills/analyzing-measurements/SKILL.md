@@ -1,6 +1,6 @@
 ---
 name: analyzing-measurements
-description: Establishes performance baselines, measures and compares data, verifies optimization effects. Use when optimizing performance or establishing metrics.
+description: Use when optimizing performance or establishing metrics. Establishes performance baselines, measures and compares data, verifies optimization effects.
 ---
 
 # Analyzing Measurements
@@ -145,6 +145,14 @@ After optimization, measure again and compare.
 3. **Single run** - Draw conclusions from one measurement
 4. **Ignore other metrics** - Optimize one metric, break others
 
+## Mandatory Rules
+
+1. **MUST establish baseline first** - NEVER optimize without measuring current state
+2. **MUST use same environment** - All measurements in identical conditions, no exceptions
+3. **MUST run multiple times** - Single run data is NEVER conclusive
+4. **MUST check for regressions** - Improving one metric while breaking others is unacceptable
+5. **NEVER report without evidence** - Every claim needs numbers with methodology
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -153,3 +161,13 @@ After optimization, measure again and compare.
 | **Premature optimization** | Optimize without profiling | Measure first, optimize bottleneck |
 | **Cherry-pick results** | Report best run only | Average multiple runs |
 | **Tunnel vision** | Only check target metric | Verify no regression |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "It obviously improved" | Perception is not measurement | Show before/after numbers |
+| "One test run is enough" | Variance makes single runs unreliable | Run 3+ times, take average |
+| "Environment doesn't matter" | Different conditions = incomparable results | Document and match environment |
+| "We're in a hurry, skip baseline" | No baseline = no proof of improvement | 10 min baseline saves hours of debate |
+| "Target metric improved, we're done" | May have broken other metrics | ALWAYS check for regressions |

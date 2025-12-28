@@ -23,7 +23,7 @@ import type { DocRef } from "../types/workspace.js";
 import { randomBytes } from "crypto";
 import { GuidanceService } from "./GuidanceService.js";
 import type { GuidanceContext } from "../types/guidance.js";
-import { isGitRepo } from "../utils/git.js";
+import { isGitRepo, getCurrentCommit } from "../utils/git.js";
 import { eventService } from "./EventService.js";
 
 /**
@@ -215,7 +215,11 @@ export class StateService {
       }
 
       // 4.3.2 执行节点 start 时，检查是否需要通过 dispatch_node 派发
-      if (action === "start" && !nodeMeta.dispatch) {
+      // 派发子节点有 dispatch 字段且 status 为 pending，允许直接 start
+      const isDispatchChild = nodeMeta.role === "dispatch_exec" || nodeMeta.role === "dispatch_spec" || nodeMeta.role === "dispatch_quality";
+      const hasDispatchPending = nodeMeta.dispatch?.status === "pending";
+
+      if (action === "start" && !isDispatchChild && !hasDispatchPending) {
         // 检查上级节点角色，info_collection/info_summary 节点的子节点允许直接 start
         const parent = nodeMeta.parentId ? graph.nodes[nodeMeta.parentId] : null;
         const isParentInfoNode = parent?.role === "info_collection" || parent?.role === "info_summary";
@@ -226,6 +230,17 @@ export class StateService {
             `派发模式已启用，执行节点必须通过 dispatch_node 派发执行，不能直接 start。请先调用 dispatch_node(workspaceId="${workspaceId}", nodeId="${nodeId}")。`
           );
         }
+      }
+
+      // 4.3.3 派发子节点 start 时，设置 dispatch.startMarker 和 status
+      if (action === "start" && (isDispatchChild || hasDispatchPending)) {
+        const useGit = config.dispatch.useGit ?? false;
+        const startMarker = useGit ? await getCurrentCommit(projectRoot) : Date.now().toString();
+        nodeMeta.dispatch = {
+          ...nodeMeta.dispatch,
+          startMarker,
+          status: "executing",
+        };
       }
     }
 

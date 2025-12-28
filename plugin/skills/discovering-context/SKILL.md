@@ -1,6 +1,6 @@
 ---
 name: discovering-context
-description: Investigates project context, understands existing state and dependencies. Use when starting work on unfamiliar codebase or module.
+description: Use when starting work on unfamiliar codebase or module. Investigates project context, understands existing state and dependencies.
 ---
 
 # Discovering Context
@@ -167,6 +167,14 @@ If findings exceed 10 lines:
 3. **Ignore dependencies** - Don't check module relationships
 4. **Wrong strategy** - Use docs when should use code, or vice versa
 
+## Mandatory Rules
+
+1. **MUST explore before implementing** - NEVER code without understanding existing patterns
+2. **MUST verify existence** - NEVER assume feature/module exists, check code
+3. **MUST trust code over docs** - When docs conflict with code, code is truth
+4. **MUST record findings** - Exploration without documentation is wasted effort
+5. **MUST scope exploration** - Explore what's needed, not the entire project
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -175,3 +183,13 @@ If findings exceed 10 lines:
 | **Over-explore** | Read entire project | Scope to task needs |
 | **Trust docs over code** | Docs say X exists, believe it | Code is truth, docs may be stale |
 | **No record** | Explore and forget | Output structured knowledge snapshot |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "I'll figure it out as I code" | Leads to wrong assumptions and rework | Explore first, code informed |
+| "The docs explain everything" | Docs are often outdated or incomplete | Verify against actual code |
+| "I've worked on similar projects" | This project may have different patterns | Check this specific codebase |
+| "Exploration takes too long" | Coding without context takes longer | 20 min exploration saves hours |
+| "I'll just ask if I get stuck" | User may not know implementation details | Code is the authoritative source |

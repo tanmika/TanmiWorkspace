@@ -1,6 +1,6 @@
 ---
 name: researching-tech
-description: Evaluates technical options through multi-dimensional comparison, provides selection recommendations. Use when choosing between technologies or approaches.
+description: Use when choosing between technologies or approaches. Evaluates technical options through multi-dimensional comparison, provides selection recommendations.
 ---
 
 # Researching Tech
@@ -145,6 +145,14 @@ description: Evaluates technical options through multi-dimensional comparison, p
 3. **Hype-driven** - Choose trendy over appropriate
 4. **No comparison** - Recommendation without pros/cons analysis
 
+## Mandatory Rules
+
+1. **MUST compare at least 2 options** - Single option is not a choice
+2. **MUST check compatibility** - Tech must work with existing stack
+3. **MUST provide reasoning** - Recommendations need justification (3+ points)
+4. **MUST document risks** - Every choice has trade-offs
+5. **NEVER choose based on hype** - Fit to project, not trends
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -153,3 +161,13 @@ description: Evaluates technical options through multi-dimensional comparison, p
 | **Resume-driven** | Choose to learn new tech | Choose what fits project |
 | **Ignore team** | Pick unfamiliar tech for team | Consider team expertise |
 | **Overkill** | Complex solution for simple problem | Match solution to problem scale |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "This is the industry standard" | Standards may not fit your context | Evaluate fit for YOUR project |
+| "The benchmark shows it's fastest" | Benchmarks don't reflect your use case | Test in your context |
+| "It's what I know best" | Familiarity != best fit | Compare objectively |
+| "Newer is better" | Newer = less stable, fewer resources | Evaluate maturity and support |
+| "Everyone recommends it" | Popularity != appropriateness | Match to requirements, not trends |

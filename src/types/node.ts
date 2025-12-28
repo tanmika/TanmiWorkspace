@@ -49,17 +49,22 @@ export interface DispatchAttempt {
 }
 
 /**
- * 节点派发信息 - 仅执行节点使用
+ * 节点派发信息 - 派发子节点使用
  */
 export interface NodeDispatchInfo {
-  startMarker: string;              // Git 模式=commit hash，无 Git 模式=时间戳（当前尝试）
+  startMarker?: string;             // Git 模式=commit hash，无 Git 模式=时间戳（当前尝试）- 开始执行时设置
   endMarker?: string;               // Git 模式=commit hash，无 Git 模式=时间戳
   status: NodeDispatchStatus;       // 派发状态
   attempts?: DispatchAttempt[];     // 执行尝试历史（用于重试时提供失败上下文）
-  isParent?: boolean;               // 是否为派发母节点
-  children?: {                      // 派发子节点 ID
-    execId?: string;
-    specId?: string;
+}
+
+/**
+ * 派发母节点信息 - 派发母节点使用
+ */
+export interface NodeDispatchParent {
+  children: {                       // 派发子节点 ID
+    execId: string;
+    specId: string;
     qualityId?: string;
   };
 }
@@ -155,7 +160,8 @@ export interface NodeMeta {
   acceptanceCriteria?: AcceptanceCriteria[];  // 验收标准（WHEN/THEN 格式）
 
   // ===== 派发相关字段（可选）=====
-  dispatch?: NodeDispatchInfo;      // 派发信息（仅执行节点使用）
+  dispatch?: NodeDispatchInfo;        // 派发信息（派发子节点使用）
+  dispatchParent?: NodeDispatchParent; // 派发母节点信息（派发母节点使用）
 }
 
 /**

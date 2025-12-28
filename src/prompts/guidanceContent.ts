@@ -15,9 +15,9 @@ export const GUIDANCE_CONFIGS: Record<GuidanceScenario, GuidanceConfig> = {
 
   workspace_init: {
     scenario: "workspace_init",
-    l0: "⚠️ MUST 调用 Skill(bootstrapping-workspace) 获取启动流程，NEVER 直接 node_create。",
+    l0: "⚠️ MUST 调用 Skill(bootstrapping-workspace) 获取启动流程，NEVER 直接 node_create。如 Skill 不可用，调用 plugin_path(type:skill, name:bootstrapping-workspace) 获取路径后 Read。",
     l1: `⚠️ 强制启动流程（MUST 遵循）：
-1. 调用 Skill(bootstrapping-workspace) 获取完整流程
+1. 调用 Skill(bootstrapping-workspace) 获取完整流程（如不可用，plugin_path 获取路径后 Read）
 2. 告知用户 webUrl
 3. capability_list → capability_select（NEVER 手动 node_create）
 4. 执行能力包任务`,
@@ -615,7 +615,7 @@ node_transition({
 ### 类型说明
 | type | 你必须做什么 |
 |------|-------------|
-| invoke_skill | 调用 Skill(data.skill)，NEVER 跳过 |
+| invoke_skill | 调用 Skill(data.skill)，如不可用则 plugin_path 获取路径后 Read，NEVER 跳过 |
 | ask_user | 询问用户指定问题 |
 | show_plan | 向用户展示当前计划，等待确认 |
 | check_docs | 确认引用的文档是否需要更新 |

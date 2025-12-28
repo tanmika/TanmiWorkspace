@@ -1,6 +1,6 @@
 ---
 name: reviewing-quality
-description: Assesses code quality, maintainability, and best practices. Use when performing Quality Review to identify potential issues and improvements.
+description: Use when performing Quality Review to identify potential issues and improvements. Assesses code quality, maintainability, and best practices.
 ---
 
 # Reviewing Quality
@@ -220,6 +220,14 @@ Look for:
 3. **Blocking on LOW issues** - Failing review for minor concerns
 4. **No prioritization** - Listing issues without severity
 
+## Mandatory Rules
+
+1. **MUST focus on changed files** - NEVER review unrelated code
+2. **MUST prioritize findings** - Every issue needs severity level
+3. **MUST provide specific feedback** - Vague comments are not actionable
+4. **MUST focus on substance over style** - Style nitpicking wastes everyone's time
+5. **NEVER block on LOW severity** - Only CRITICAL/HIGH issues should fail review
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -228,3 +236,13 @@ Look for:
 | **Vague feedback** | "Code could be better" | "Function X at line Y lacks error handling for null input" |
 | **Opinion as fact** | "I prefer approach X" | "Approach X improves readability because..." |
 | **Scope creep** | Review unrelated code | Focus on changed files only |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "All issues should be fixed" | Minor issues block important work | Prioritize by severity |
+| "This style is more readable" | Style is subjective, follow project standards | Match existing patterns |
+| "While we're here, let's fix this too" | Scope creep delays delivery | Focus on changed files only |
+| "I would have done it differently" | Different != wrong | Only flag if objectively problematic |
+| "It's faster to just note everything" | Noise obscures signal | Prioritize, focus on what matters |

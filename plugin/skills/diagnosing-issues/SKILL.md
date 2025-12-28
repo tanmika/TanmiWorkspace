@@ -1,6 +1,6 @@
 ---
 name: diagnosing-issues
-description: Traces root cause of problems, applies to logic errors and performance bottlenecks. Use when debugging errors or investigating performance issues.
+description: Use when debugging errors or investigating performance issues. Traces root cause of problems, applies to logic errors and performance bottlenecks.
 ---
 
 # Diagnosing Issues
@@ -141,6 +141,14 @@ Data source/Logic flaw ← Root cause
 3. **Single hypothesis** - Lock on first guess without exploring alternatives
 4. **No verification** - Claim fix without testing
 
+## Mandatory Rules
+
+1. **MUST reproduce first** - NEVER attempt fix without consistent reproduction
+2. **MUST find root cause** - Fixing symptoms without root cause leads to recurrence
+3. **MUST test one hypothesis at a time** - Multiple simultaneous changes = no learning
+4. **MUST verify the fix** - "Should work" is not verification
+5. **NEVER blame user/environment** - Reproduce in user's conditions first
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -149,3 +157,13 @@ Data source/Logic flaw ← Root cause
 | **Blame user** | "Works on my machine" | Reproduce in user environment |
 | **Ignore edge cases** | Only test happy path | Test error scenarios too |
 | **Incomplete trace** | Stop at first error | Trace to true root cause |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "The fix is obvious" | Obvious fixes often miss root cause | Trace causal chain first |
+| "It only happens sometimes" | Intermittent bugs need systematic reproduction | Find trigger conditions |
+| "Adding a retry will fix it" | Retry masks the real problem | Find why it fails, then fix |
+| "Let me try this quick fix first" | Quick fixes compound into technical debt | Diagnose properly, fix once |
+| "I've seen this before" | Similar symptoms may have different causes | Verify with evidence, don't assume |

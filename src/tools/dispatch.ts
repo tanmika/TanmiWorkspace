@@ -23,9 +23,8 @@ export const dispatchNodeTool: Tool = {
    - 如果是 info_collection/info_summary → 返回提示「可直接执行，无需派发」
    - 否则 → 继续升级流程
 4. 将节点类型改为 planning
-5. 设置派发母节点标识: dispatch.isParent = true
-6. 状态改为 monitoring
-7. 返回 actionRequired 指向 dispatching-parent Skill
+5. 状态改为 monitoring（dispatchParent 字段由 dispatch_create 设置）
+6. 返回 actionRequired 指向 dispatching-parent Skill
 
 **返回内容**：
 - success: 操作是否成功

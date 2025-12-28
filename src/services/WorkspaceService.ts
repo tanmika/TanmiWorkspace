@@ -272,7 +272,13 @@ ${scenarioGuidance}
 **强制规则**：
 - MUST 调用 Skill(bootstrapping-workspace)
 - NEVER 直接 node_create
-- NEVER 跳过 capability_list → capability_select 流程`,
+- NEVER 跳过 capability_list → capability_select 流程
+
+**如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
+\`\`\`
+plugin_path(type: "skill", name: "bootstrapping-workspace") → 获取路径
+Read(file_path: <返回的路径>/SKILL.md)
+\`\`\``,
       data: {
         skill: "bootstrapping-workspace",
         scenario,

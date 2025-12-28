@@ -1,6 +1,6 @@
 ---
 name: bootstrapping-workspace
-description: Guides TanmiWorkspace startup flow after workspace_init. Use when workspace is created and needs capability selection and info node setup.
+description: Use when workspace is created and needs capability selection and info node setup. Guides TanmiWorkspace startup flow after workspace_init.
 ---
 
 # Bootstrapping Workspace
@@ -129,6 +129,16 @@ Read corresponding Skill for SOP guidance.
 5. **MUST show capabilities to user** - Ask for confirmation, never decide alone
 6. **MUST include all basePack** - selected must contain all basePack capabilities
 
+## Red Flags
+
+When these appear, you may be skipping proper bootstrapping:
+
+1. **Jump to task directly** - Start working without capability selection
+2. **Forget webUrl** - User has no way to view workspace progress
+3. **Skip user confirmation** - Decide capabilities without asking
+4. **Wrong infoType** - Always use info_collection when info_summary is appropriate
+5. **Partial basePack** - Missing required capabilities from basePack
+
 ## Anti-Patterns
 
 | Wrong | Right |
@@ -139,3 +149,13 @@ Read corresponding Skill for SOP guidance.
 | Always use info_collection | Choose collection/summary based on scenario |
 | Decide capabilities yourself | Show user and ask |
 | Only include partial basePack | Include ALL basePack |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "User knows what capabilities they need" | User may not know all options | MUST show capabilities and ask |
+| "webUrl is in the output, user will see" | Output may be long, user may miss it | Explicitly tell user the webUrl |
+| "info_collection is safer default" | Wrong type wastes effort | Match infoType to task nature |
+| "basePack is just a suggestion" | basePack is REQUIRED, not optional | Include ALL basePack capabilities |
+| "I'll skip capability selection to save time" | Skipping leads to incomplete setup | 30s setup saves confusion later |

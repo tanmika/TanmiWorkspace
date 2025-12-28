@@ -1,6 +1,6 @@
 ---
 name: executing-task
-description: Guides task execution with scope control and quality delivery. Use when executing dispatched tasks as tanmi-executor.
+description: Use when executing dispatched tasks as tanmi-executor. Guides task execution with scope control and quality delivery.
 ---
 
 # Executing Task
@@ -237,6 +237,14 @@ Suggestion for parent node:
 3. **Assumed pass** - Complete without checking criteria
 4. **Heroic debugging** - Spending too long on unclear issues
 
+## Mandatory Rules
+
+1. **MUST assess readiness first** - NEVER start coding without checking requirements
+2. **MUST stay in scope** - Fix ONLY what's specified, nothing more
+3. **MUST log as you go** - Silent execution is unverifiable execution
+4. **MUST verify ALL criteria** - "Should work" is not verification
+5. **MUST fail fast on uncertainty** - Don't guess, fail with clear reason
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -245,3 +253,13 @@ Suggestion for parent node:
 | **Skip assessment** | Start coding immediately | Check readiness first |
 | **Batch logging** | Log everything at end | Log as you go |
 | **Optimistic completion** | "Should work" | Verify each criterion |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "I'll also fix this while I'm here" | Scope creep causes verification gaps | Stay in scope, note other issues |
+| "The requirement is clear enough" | Unclear requirements cause rework | Fail with info_insufficient if unclear |
+| "Logging slows me down" | No logs = no debugging when things fail | Log is cheap, retry is expensive |
+| "It obviously works, no need to verify" | Obvious != verified | Check each criterion with evidence |
+| "This edge case won't happen" | Edge cases cause production bugs | If in criteria, verify it |

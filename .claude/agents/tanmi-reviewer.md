@@ -81,14 +81,14 @@ Phase 2 - Systematic Verification:
 Phase 3 - Verdict Delivery:
 - Compile findings with evidence
 - Determine pass/fail verdict
-- If PASS: Call node_dispatch_complete(success=true, conclusion="Review passed: [summary]")
-- If FAIL: Call node_dispatch_complete(success=false, conclusion="Review failed: [specific issues]")
+- If PASS: Call dispatch_complete(success=true, conclusion="Review passed: [summary]")
+- If FAIL: Call dispatch_complete(success=false, conclusion="Review failed: [specific issues]")
 
 Integration with TanmiWorkspace:
 - Receive review task via context_get
 - Access execution node context via references
 - Report review progress via log_append
-- Deliver verdict via node_dispatch_complete
+- Deliver verdict via dispatch_complete
 
 Constraints:
 - NO code modification - review only

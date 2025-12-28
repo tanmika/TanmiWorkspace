@@ -1,9 +1,21 @@
 ---
 name: dispatching-parent
-description: Coordinates dispatch execution flow as a parent orchestrator. Use when your node has been upgraded to a dispatch parent via dispatch_node.
+description: Use when your node has been upgraded to a dispatch parent via dispatch_node. Coordinates dispatch execution flow as a parent orchestrator.
 ---
 
 # Dispatching Parent
+
+## ⚠️ CRITICAL: Complete the Full Flow
+
+**YOU MUST COMPLETE THE ENTIRE DISPATCH FLOW:**
+1. Dispatch exec node → Wait for result
+2. **Dispatch spec node** → Wait for result (DO NOT SKIP!)
+3. (Optional) Dispatch quality node
+4. Complete parent node
+
+**NEVER stop after exec completes. ALWAYS dispatch spec for verification.**
+
+---
 
 ## Core Thinking
 
@@ -353,6 +365,14 @@ When retrying after failure:
 3. **Vague requirements** - Dispatching with unclear tasks
 4. **Lost context** - Not passing full prompt to Task tool
 
+## Mandatory Rules
+
+1. **MUST complete full flow** - NEVER stop after exec, ALWAYS dispatch spec
+2. **MUST pass complete prompt** - Modifying/simplifying prompt breaks context
+3. **MUST add context on retry** - Same params on retry = same failure
+4. **MUST limit retries to 3** - After 3 failures, escalate to user
+5. **NEVER skip spec verification** - Exec success alone is not enough
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -361,3 +381,13 @@ When retrying after failure:
 | **Retry without learning** | Same params on retry | Add context based on failure |
 | **Trust exec blindly** | Skip spec on exec success | Always run spec verification |
 | **Infinite retry** | Keep retrying indefinitely | Max 3 attempts, then escalate |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "Exec succeeded, we're done" | Exec success != verified correctness | ALWAYS dispatch spec verification |
+| "Same retry should eventually work" | Same input = same output | Add context to change outcome |
+| "Just one more retry" | Infinite retries waste resources | Max 3, then escalate |
+| "I'll simplify the prompt to be clearer" | Simplification loses critical context | Pass COMPLETE prompt |
+| "Spec review slows us down" | Skipping verification = shipping bugs | Verification is non-negotiable |

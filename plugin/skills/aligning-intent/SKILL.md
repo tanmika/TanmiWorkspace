@@ -1,6 +1,6 @@
 ---
 name: aligning-intent
-description: Clarifies user intent through structured questioning, eliminates ambiguity, confirms verifiable acceptance criteria. Use when starting new tasks or when requirements are unclear.
+description: Use when starting new tasks or when requirements are unclear. Clarifies user intent through structured questioning, eliminates ambiguity, confirms verifiable acceptance criteria.
 ---
 
 # Aligning Intent

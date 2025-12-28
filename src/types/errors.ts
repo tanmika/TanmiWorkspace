@@ -39,6 +39,7 @@ export const ErrorCodes = {
 
   // 节点类型错误
   INVALID_NODE_TYPE: "INVALID_NODE_TYPE",
+  INVALID_NODE_ROLE: "INVALID_NODE_ROLE",
   EXECUTION_CANNOT_HAVE_CHILDREN: "EXECUTION_CANNOT_HAVE_CHILDREN",
   INVALID_PARENT_STATUS: "INVALID_PARENT_STATUS",
   INCOMPLETE_CHILDREN: "INCOMPLETE_CHILDREN",
@@ -67,6 +68,7 @@ export const ErrorCodes = {
   NODE_NOT_READY: "NODE_NOT_READY",
   DISPATCH_SKIP: "DISPATCH_SKIP",
   INVALID_DISPATCH_PARENT: "INVALID_DISPATCH_PARENT",
+  INVALID_DISPATCH_STATUS: "INVALID_DISPATCH_STATUS",
   DISPATCH_CHILDREN_EXIST: "DISPATCH_CHILDREN_EXIST",
 
   // 配置错误
@@ -120,6 +122,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   MEMO_NOT_FOUND: "备忘不存在",
   LOG_APPEND_FAILED: "日志追加失败",
   INVALID_NODE_TYPE: "节点类型无效，必须是 planning 或 execution",
+  INVALID_NODE_ROLE: "节点角色无效，派发子节点不能再升级为派发母节点",
   EXECUTION_CANNOT_HAVE_CHILDREN: "执行节点不能创建子节点",
   INVALID_PARENT_STATUS: "父节点状态不允许创建子节点",
   INCOMPLETE_CHILDREN: "存在未完成的子节点",
@@ -144,6 +147,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   NODE_NOT_READY: "节点未准备好派发，缺少必要信息",
   DISPATCH_SKIP: "节点无需派发，可直接执行",
   INVALID_DISPATCH_PARENT: "节点不是派发母节点，需先调用 dispatch_node 升级",
+  INVALID_DISPATCH_STATUS: "派发状态不正确，需先调用 node_transition(action=start) 开始执行",
   DISPATCH_CHILDREN_EXIST: "派发子节点已存在，无法重复创建",
   INVALID_CONFIG: "配置文件无效",
   VERSION_TOO_HIGH: "数据版本过高，请升级 tanmi-workspace",

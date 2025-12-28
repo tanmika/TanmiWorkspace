@@ -1,6 +1,6 @@
 ---
 name: reviewing-spec
-description: Validates execution results against requirements and acceptance criteria. Use when performing Spec Review as dispatch_spec role to verify implementation completeness.
+description: Use when performing Spec Review as dispatch_spec role to verify implementation completeness. Validates execution results against requirements and acceptance criteria.
 ---
 
 # Reviewing Spec
@@ -179,6 +179,14 @@ For each criterion (WHEN/THEN format):
 3. **Subjective judgment** - Opinion-based instead of evidence-based
 4. **Partial pass** - Passing when some criteria fail
 
+## Mandatory Rules
+
+1. **MUST verify INDEPENDENTLY** - NEVER trust exec's conclusion, verify yourself
+2. **MUST check ALL criteria** - Skipping any criterion is review failure
+3. **MUST provide evidence** - Every pass/fail needs verifiable proof
+4. **MUST fail if ANY criterion fails** - Partial pass is not pass
+5. **NEVER be lenient** - Pass only when ALL criteria are met
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -188,6 +196,16 @@ For each criterion (WHEN/THEN format):
 | **Vague feedback** | "Needs improvement" | "Criterion 2 fails: no error handling in line 45" |
 | **Scope creep** | Review code style in spec review | Focus only on requirements/criteria |
 | **Trust exec blindly** | "Exec said it's done, so pass" | Verify independently against criteria |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "Exec's conclusion looks thorough" | Exec may have missed something | Verify independently |
+| "It mostly works, close enough" | Partial implementation = partial pass = FAIL | ALL criteria must pass |
+| "The missing part is minor" | Criteria exist for a reason | Fail and specify what's missing |
+| "Code looks good, must work" | Looking good != working correctly | Test/verify each criterion |
+| "I'll be lenient this time" | Leniency erodes quality standards | Standards apply equally every time |
 
 ---
 

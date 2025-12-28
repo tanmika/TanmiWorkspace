@@ -677,6 +677,12 @@ export class DispatchService {
       throw new TanmiError("INVALID_NODE_TYPE", "只有执行节点可以升级为派发母节点");
     }
 
+    // 2.1 验证节点不是派发子节点
+    const dispatchChildRoles = ["dispatch_exec", "dispatch_spec", "dispatch_quality"];
+    if (node.role && dispatchChildRoles.includes(node.role)) {
+      throw new TanmiError("INVALID_NODE_ROLE", `派发子节点（${node.role}）不能再升级为派发母节点`);
+    }
+
     // 3. 检查上级节点角色
     if (node.parentId && node.parentId !== "root") {
       const parent = graph.nodes[node.parentId];
@@ -692,12 +698,8 @@ export class DispatchService {
     // 4. 升级节点类型为 planning
     node.type = "planning";
 
-    // 5. 设置派发母节点标识
-    node.dispatch = {
-      isParent: true,
-      status: "pending",
-      startMarker: "", // 占位，实际由 dispatch_create 时记录
-    };
+    // 5. 初始化派发母节点标识（children 由 dispatch_create 填充）
+    // 注意：不设置 node.dispatch，母节点使用 dispatchParent 字段
 
     // 6. 状态改为 monitoring
     node.status = "monitoring";
@@ -719,14 +721,35 @@ export class DispatchService {
     // 9. 返回 actionRequired
     const actionRequired: ActionRequired = {
       type: "invoke_skill",
-      message: `节点已升级为派发母节点。
+      message: `## ⚠️ MUST: 调用 Skill(dispatching-parent)
 
-**下一步操作**：
-1. 调用 Skill(dispatching-parent) 获取派发流程指导
-2. 按照 Skill 指导调用 dispatch_create 创建子节点
-3. 使用 Task 工具派发 exec 子节点执行
+**你 MUST 立即调用 Skill(dispatching-parent)**，否则派发流程会失败。
 
-**注意**：你现在是协调者，不再直接执行任务，而是派发给 subagent 执行。`,
+\`\`\`
+Skill(skill: "dispatching-parent")
+\`\`\`
+
+**如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
+\`\`\`
+plugin_path(type: "skill", name: "dispatching-parent") → 获取路径
+Read(file_path: <返回的路径>/SKILL.md)
+\`\`\`
+
+### 为什么必须调用？
+
+1. Skill 包含完整的派发流程（exec → spec → quality → 完成）
+2. 跳过 Skill 会导致：
+   - 忘记派发 spec 审查节点
+   - 聚焦点不正确
+   - 日志不完整
+   - 节点状态不一致
+
+### NEVER 直接调用 dispatch_create
+
+**错误做法**：直接调用 dispatch_create
+**正确做法**：先调用 Skill(dispatching-parent) 获取完整流程指导
+
+你现在是**协调者**，NEVER 直接执行任务。`,
       data: {
         skill: "dispatching-parent",
         workspaceId,
@@ -772,6 +795,22 @@ export class DispatchService {
     // 验证节点有派发信息
     if (!node.dispatch) {
       throw new TanmiError("INVALID_NODE_STATUS", "节点没有派发信息，无法完成派发");
+    }
+
+    // 验证节点已经开始执行（必须先调用 node_transition(action="start")）
+    if (node.dispatch.status !== "executing") {
+      throw new TanmiError(
+        "INVALID_DISPATCH_STATUS",
+        `节点派发状态为 ${node.dispatch.status}，必须先调用 node_transition(action="start") 开始执行后才能完成。`
+      );
+    }
+
+    // 验证节点状态正确
+    if (node.status !== "implementing") {
+      throw new TanmiError(
+        "INVALID_NODE_STATUS",
+        `节点状态为 ${node.status}，预期为 implementing。请确保已正确调用 node_transition(action="start")。`
+      );
     }
 
     const useGit = config.dispatch?.useGit ?? false;
@@ -1102,6 +1141,12 @@ Please address the issues from previous attempts.`);
     // 执行指令
     sections.push(`## Execution Instructions
 
+### Step 0: Start the node (REQUIRED FIRST)
+\`\`\`
+node_transition(workspaceId="${workspaceId}", nodeId="${nodeId}", action="start")
+\`\`\`
+
+### Steps 1-4: Execute
 1. **Assess** task scope and verify information completeness
 2. **Execute** the task within defined boundaries (no scope expansion)
 3. **Log** progress via log_append at key milestones
@@ -1117,7 +1162,9 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=true
 dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=false, conclusion="<reason for failure and suggestions>")
 \`\`\`
 
-**CRITICAL**: You MUST call dispatch_complete to finalize. Do NOT use node_transition directly.
+**CRITICAL**:
+- You MUST call node_transition(start) FIRST to begin the task
+- You MUST call dispatch_complete to finalize
 **SCOPE CONTROL**: Execute only what is specified. If task is unclear or too large, FAIL with clear reason.`);
 
     return sections.join("\n\n");
@@ -1153,12 +1200,13 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
     if (!parent) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 ${parentId} 不存在`);
     }
-    if (!parent.dispatch?.isParent) {
+    // 2.1 检查是否是派发母节点（通过 dispatch_node 升级后 status 为 monitoring）
+    if (parent.status !== "monitoring" || parent.type !== "planning") {
       throw new TanmiError("INVALID_DISPATCH_PARENT", "parentId 必须是派发母节点（需先调用 dispatch_node 升级）");
     }
 
-    // 2.1 检查是否已有子节点
-    if (parent.dispatch.children?.execId) {
+    // 2.2 检查是否已有子节点
+    if (parent.dispatchParent?.children) {
       throw new TanmiError("DISPATCH_CHILDREN_EXIST", "派发子节点已存在，无法重复创建");
     }
 
@@ -1316,19 +1364,32 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
       if (qualityNodeId) {
         parent.children.push(qualityNodeId);
       }
-      parent.dispatch.children = {
-        execId: execNodeId,
-        specId: specNodeId,
-        qualityId: qualityNodeId,
+      parent.dispatchParent = {
+        children: {
+          execId: execNodeId,
+          specId: specNodeId,
+          qualityId: qualityNodeId,
+        },
       };
       parent.updatedAt = currentTime;
 
-      // 8. 记录 startMarker
-      const startMarker = useGit ? await getCurrentCommit(projectRoot) : Date.now().toString();
+      // 8. 设置派发信息（所有子节点初始为 pending，executor 调用 start 时变为 executing）
       execNode.dispatch = {
-        startMarker,
-        status: "executing",
+        status: "pending",
       };
+
+      specNode.dispatch = {
+        status: "pending",
+      };
+
+      if (qualityNode) {
+        qualityNode.dispatch = {
+          status: "pending",
+        };
+      }
+
+      // 9. 自动聚焦到 exec 节点（下一个要执行的节点）
+      graph.currentFocus = execNodeId;
 
       await this.json.writeGraph(projectRoot, wsDirName, graph);
 
@@ -1377,24 +1438,63 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
       qualityId: qualityNodeId,
       actionRequired: {
         type: "dispatch_task",
-        message: `派发子节点已创建，请立即派发 exec 节点执行。
+        message: `## ⚠️ MUST: 完成完整派发流程
 
-**使用 Task 工具派发**：
+### 你 MUST 按顺序完成以下 3 步，NEVER 在中途停止
+
+---
+
+## 第1步：派发 exec 节点（立即执行）
+
 \`\`\`
 Task(
   subagent_type: "tanmi-executor",
   description: "执行派发任务",
-  prompt: <下方 data.prompt 中的内容>
+  prompt: <下方 data.prompt 中的完整内容>
 )
 \`\`\`
 
-**重要**：
-- 你是协调者，不要自己执行任务
-- 必须使用 Task 工具将任务派发给 subagent
-- 等待 subagent 返回后，根据结果决定下一步（派发 spec/quality 审查或处理失败）`,
+---
+
+## 第2步：exec 完成后，MUST 派发 spec 节点
+
+**⚠️ NEVER 在 exec 完成后停止！**
+
+当 exec Task 返回后，你 MUST 继续派发 spec：
+
+\`\`\`
+1. context_get(workspaceId, nodeId="${specNodeId}")
+2. Task(subagent_type: "tanmi-reviewer", prompt: <构建 spec 审查 prompt>)
+\`\`\`
+
+spec 节点 ID: **${specNodeId}**
+
+---
+
+## 第3步：spec 通过后，派发 quality 节点（如有）
+
+${qualityNodeId ? `quality 节点 ID: **${qualityNodeId}**` : "未创建 quality 节点，跳过此步"}
+
+---
+
+## 第4步：所有子节点完成后，完成母节点
+
+\`\`\`
+node_transition(workspaceId, nodeId="<母节点ID>", action="complete", conclusion="...")
+\`\`\`
+
+---
+
+### Red Flags - 如果你在想这些，立即停止
+
+- "exec 完成了，任务结束了" → NEVER，MUST 继续派发 spec
+- "spec 应该会自动运行" → NEVER，你 MUST 手动派发
+- "我直接完成母节点" → NEVER，MUST 等所有子节点完成`,
         data: {
           workspaceId,
           nodeId: execNodeId,
+          specId: specNodeId,
+          qualityId: qualityNodeId,
           subagentType: "tanmi-executor",
           prompt,
           timeout: config.dispatch.limits?.timeoutMs || 300000,

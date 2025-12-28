@@ -1,6 +1,6 @@
 ---
 name: planning-verification
-description: Designs test cases and acceptance steps to ensure requirements and designs are properly verified. Use when planning testing strategy or defining acceptance criteria.
+description: Use when planning testing strategy or defining acceptance criteria. Designs test cases and acceptance steps to ensure requirements and designs are properly verified.
 ---
 
 # Planning Verification
@@ -171,6 +171,14 @@ Choose appropriate method based on verification goal:
 3. **Manual only** - No automated tests for core logic
 4. **No acceptance criteria** - No way to know if done
 
+## Mandatory Rules
+
+1. **MUST plan tests before/during implementation** - NEVER ship without verification plan
+2. **MUST cover edge and error cases** - Happy path alone is insufficient
+3. **MUST have acceptance criteria** - No way to know "done" without criteria
+4. **MUST automate critical paths** - Manual-only testing for core logic is unacceptable
+5. **NEVER accept flaky tests** - Unreliable tests erode trust in the test suite
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -179,3 +187,13 @@ Choose appropriate method based on verification goal:
 | **100% coverage** | Coverage goal over usefulness | Cover critical paths well |
 | **Test implementation** | Test internal details | Test behavior and contracts |
 | **Flaky tests** | Tests that sometimes fail | Reliable, deterministic tests |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "It works, I tested manually" | Manual testing doesn't scale, misses cases | Create automated tests |
+| "Happy path covers 90% of usage" | Bugs hide in edge cases, cause most issues | MUST test edge and error cases |
+| "No time for test planning" | Bugs in production cost 10x more to fix | Plan tests upfront |
+| "High coverage = good quality" | Coverage without useful tests is vanity | Focus on critical path coverage |
+| "We'll add tests later" | Later never comes, debt accumulates | Test with implementation |

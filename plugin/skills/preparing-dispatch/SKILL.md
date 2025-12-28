@@ -1,6 +1,6 @@
 ---
 name: preparing-dispatch
-description: Prepares execution nodes for dispatch with complete requirements and acceptance criteria. Use when creating task nodes that will be dispatched to subagents.
+description: Use when creating task nodes that will be dispatched to subagents. Prepares execution nodes for dispatch with complete requirements and acceptance criteria.
 ---
 
 # Preparing Dispatch
@@ -190,6 +190,14 @@ node_reference({
 3. **Missing context** - Executor will need to guess
 4. **Scope too large** - Should be split into multiple nodes
 
+## Mandatory Rules
+
+1. **MUST write specific requirements** - Vague requirements cause executor confusion
+2. **MUST have at least 2 acceptance criteria** - No criteria = no way to verify done
+3. **MUST attach references** - Context-free tasks lead to wrong assumptions
+4. **MUST verify readiness before dispatch** - Unclear nodes waste retry cycles
+5. **NEVER dispatch scope-too-large tasks** - Split first, dispatch smaller units
+
 ## Anti-Patterns
 
 | Pattern | Wrong | Right |
@@ -198,6 +206,16 @@ node_reference({
 | **Assumed context** | Expect executor to know codebase | Attach relevant references |
 | **Perfectionism** | 10 criteria for simple task | 2-4 criteria matching complexity |
 | **Premature dispatch** | Dispatch unclear node | Verify readiness first |
+
+## Common Rationalizations
+
+| Excuse | Why Wrong | Correct Action |
+|--------|-----------|----------------|
+| "Executor will figure it out" | Guessing leads to wrong implementation | Provide clear requirements |
+| "Adding criteria takes too long" | Retry cycles take longer | 5 min criteria saves 30 min retry |
+| "The task is self-explanatory" | What's obvious to you isn't to executor | Write explicit requirements |
+| "References aren't needed for simple tasks" | Simple tasks still need context | Always attach relevant files |
+| "I'll clarify if executor asks" | Async clarification is slow | Front-load all context |
 
 ## Scope Guidelines
 
