@@ -2,6 +2,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 import type {
   CapabilityId,
   CapabilityInfo,
@@ -87,9 +88,14 @@ export class CapabilityService {
       return this.scenarioCapabilities;
     }
 
+    // 使用 import.meta.url 定位到包安装目录
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    // 从 dist/services/ 向上两级到包根目录，再进入 config/
     const configPath = path.join(
-      process.cwd(),
-      "src",
+      __dirname,
+      "..",
+      "..",
       "config",
       "scenarioCapabilities.json"
     );
@@ -154,9 +160,13 @@ export class CapabilityService {
    */
   getAcceptanceCriteria(capabilityId: CapabilityId): import("../types/node.js").AcceptanceCriteria[] {
     // 尝试从 Skill 文件读取
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
     const skillPath = path.join(
-      process.cwd(),
-      "src",
+      __dirname,
+      "..",
+      "..",
+      "plugin",
       "skills",
       "capabilities",
       `${capabilityId}.md`
@@ -238,9 +248,13 @@ export class CapabilityService {
   parseSkillFrontmatter(capabilityId: CapabilityId): SkillMetadata | null {
     try {
       // Skill 文件路径约定：plugin/skills/{skillDirName}/SKILL.md
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
       const skillDirName = this.getSkillDirName(capabilityId);
       const skillPath = path.join(
-        process.cwd(),
+        __dirname,
+        "..",
+        "..",
         "plugin",
         "skills",
         skillDirName,
