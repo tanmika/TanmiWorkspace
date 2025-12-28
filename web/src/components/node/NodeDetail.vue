@@ -10,6 +10,10 @@ import WsButton from '@/components/ui/WsButton.vue'
 import WsPromptDialog from '@/components/ui/WsPromptDialog.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 
+const emit = defineEmits<{
+  selectMemo: [memoId: string]
+}>()
+
 const nodeStore = useNodeStore()
 const workspaceStore = useWorkspaceStore()
 
@@ -162,6 +166,11 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   if (operator === 'Human') return 'usr'
   return 'sys'
 }
+
+// 点击 memo 引用卡片
+function handleMemoClick(memoId: string) {
+  emit('selectMemo', memoId)
+}
 </script>
 
 <template>
@@ -257,13 +266,41 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
     <div v-if="currentNode.docs?.length" class="detail-section">
       <div class="section-title">References / 文档引用</div>
       <div class="docs-list">
-        <div v-for="doc in currentNode.docs" :key="doc.path" class="docs-item">
-          <div class="docs-main">
-            <span class="docs-path">{{ doc.path }}</span>
-            <span v-if="doc.status === 'expired'" class="docs-expired">EXPIRED</span>
+        <template v-for="doc in currentNode.docs" :key="doc.path">
+          <!-- memo 引用：显示为可点击的富卡片 -->
+          <div
+            v-if="doc.memoMeta"
+            class="memo-ref-card"
+            @click="handleMemoClick(doc.memoMeta.id)"
+          >
+            <div class="memo-ref-header">
+              <NodeIcon
+                type="execution"
+                status="pending"
+                :is-memo="true"
+              />
+              <span class="memo-ref-title">{{ doc.memoMeta.title }}</span>
+            </div>
+            <div class="memo-ref-meta" v-if="doc.memoMeta.summary || doc.memoMeta.tags?.length">
+              <div class="memo-ref-summary" v-if="doc.memoMeta.summary">{{ doc.memoMeta.summary }}</div>
+              <div class="memo-ref-tags" v-if="doc.memoMeta.tags?.length">
+                <span
+                  v-for="tag in doc.memoMeta.tags"
+                  :key="tag"
+                  class="memo-mini-tag"
+                >{{ tag }}</span>
+              </div>
+            </div>
           </div>
-          <span class="docs-desc">{{ doc.description }}</span>
-        </div>
+          <!-- 普通文档引用 -->
+          <div v-else class="docs-item">
+            <div class="docs-main">
+              <span class="docs-path">{{ doc.path }}</span>
+              <span v-if="doc.status === 'expired'" class="docs-expired">EXPIRED</span>
+            </div>
+            <span class="docs-desc">{{ doc.description }}</span>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -794,6 +831,71 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
   background: var(--accent-orange);
   padding: 2px 6px;
   flex-shrink: 0;
+}
+
+/* Memo 引用卡片 - 复用 MemoDrawerDetail 样式 */
+.memo-ref-card {
+  padding: 12px;
+  background: var(--path-bg);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.memo-ref-card:hover {
+  border-color: var(--border-heavy);
+  box-shadow: 2px 2px 0 var(--border-color);
+}
+
+[data-theme="dark"] .memo-ref-card {
+  background: #1a1a1a;
+}
+
+.memo-ref-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.memo-ref-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-ref-meta {
+  padding-left: 28px;
+}
+
+.memo-ref-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.memo-ref-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.memo-mini-tag {
+  font-family: var(--mono-font), monospace;
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
 }
 
 /* 问题框 */

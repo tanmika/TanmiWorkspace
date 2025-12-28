@@ -14,6 +14,7 @@ import type {
   ChildConclusionItem,
   TypedLogEntry,
   MemoReferenceItem,
+  DocRef,
 } from "../types/context.js";
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
@@ -114,7 +115,7 @@ export class ContextService {
       maxLogEntries,
       includeProblem,
       reverseLog,
-    }, isArchived);
+    }, isArchived, workspaceId);
 
     // 5. 收集跨节点引用和 memo 引用
     const nodeMeta = graph.nodes[nodeId];
@@ -150,7 +151,7 @@ export class ContextService {
           maxLogEntries,
           includeProblem,
           reverseLog,
-        }, isArchived);
+        }, isArchived, workspaceId);
         references.push(refItem);
       }
     }
@@ -373,7 +374,8 @@ export class ContextService {
       includeProblem: boolean;
       reverseLog: boolean;
     },
-    isArchived: boolean = false
+    isArchived: boolean = false,
+    workspaceId?: string
   ): Promise<ContextChainItem[]> {
     const chain: ContextChainItem[] = [];
     let currentId: string | null = nodeId;
@@ -382,7 +384,7 @@ export class ContextService {
       const nodeMeta: NodeMeta | undefined = graph.nodes[currentId];
       if (!nodeMeta) break;
 
-      const item = await this.buildSingleContextItem(projectRoot, wsDirName, currentId, graph, options, isArchived);
+      const item = await this.buildSingleContextItem(projectRoot, wsDirName, currentId, graph, options, isArchived, workspaceId);
       chain.unshift(item); // 从根开始
 
       // 检查隔离标记
@@ -408,7 +410,8 @@ export class ContextService {
       includeProblem: boolean;
       reverseLog: boolean;
     },
-    isArchived: boolean = false
+    isArchived: boolean = false,
+    workspaceId?: string
   ): Promise<ContextChainItem> {
     const nodeMeta = graph.nodes[nodeId];
     const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
@@ -445,7 +448,58 @@ export class ContextService {
       }
     }
 
+    // 增强 docs 中的 memo:// 引用
+    if (workspaceId) {
+      item.docs = await this.enrichDocsWithMemoMeta(item.docs, workspaceId);
+    }
+
     return item;
+  }
+
+  /**
+   * 增强文档引用中的 memo:// 引用，填充 memoMeta 字段
+   * 如果 memo 已被删除，标记 status 为 expired
+   */
+  private async enrichDocsWithMemoMeta(docs: DocRef[], workspaceId: string): Promise<DocRef[]> {
+    if (!this.memoService) {
+      return docs;
+    }
+
+    const enrichedDocs: DocRef[] = [];
+
+    for (const doc of docs) {
+      if (doc.path.startsWith("memo://")) {
+        const memoId = doc.path.substring(7); // 去掉 "memo://" 前缀
+        try {
+          const memoResult = await this.memoService.get({
+            workspaceId,
+            memoId,
+          });
+          // 填充 memoMeta
+          enrichedDocs.push({
+            ...doc,
+            memoMeta: {
+              id: memoResult.memo.id,
+              title: memoResult.memo.title,
+              summary: memoResult.memo.summary,
+              tags: memoResult.memo.tags,
+            },
+          });
+        } catch (error) {
+          // Memo 不存在（已删除），标记为 expired
+          devLog.warn("Memo 引用已过期", { memoId, error });
+          enrichedDocs.push({
+            ...doc,
+            status: "expired",
+          });
+        }
+      } else {
+        // 非 memo 引用，保持原样
+        enrichedDocs.push(doc);
+      }
+    }
+
+    return enrichedDocs;
   }
 
   /**

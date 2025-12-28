@@ -57,9 +57,19 @@ export type ReferenceAction = 'add' | 'remove' | 'expire' | 'activate'
 
 // ========== 工作区类型 ==========
 
+// Memo 元数据（用于 DocRef 引用 memo）
+export interface MemoMeta {
+  id: string
+  title: string
+  summary: string
+  tags: string[]
+}
+
 export interface DocRef {
   path: string
   description: string
+  memoMeta?: MemoMeta
+  status?: 'active' | 'expired'
 }
 
 export interface DocRefWithStatus extends DocRef {
