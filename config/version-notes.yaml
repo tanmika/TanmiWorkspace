@@ -9,6 +9,13 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.2
+    requirement: 派发子代理优化，完善 Skill 引导与 Prompt 生成
+    conclusion: |-
+      - 移除冗余的 tanmi-tester
+      - 子代理添加 Skill 调用引导
+      - dispatch_create 返回完整 prompt
+    note: ""
   - version: 1.10.1
     requirement: 修复能力列表配置路径问题
     conclusion: "- 修复 capability_list 在用户项目目录下无法正常工作的问题"

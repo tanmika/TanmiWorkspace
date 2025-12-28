@@ -11,6 +11,21 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.10.2] - 2025-12-29
+
+### Changed
+
+- **派发子代理优化**: 完善派发流程的 Skill 引导与 Prompt 生成
+  - 移除冗余的 tanmi-tester（功能由 tanmi-reviewer dispatch_spec 角色覆盖）
+  - tanmi-executor/reviewer 添加 Skill 调用引导
+  - dispatch_create 返回完整的 execPrompt/specPrompt/qualityPrompt
+  - dispatching-parent skill 使用新的 prompt 字段
+
+### Component Versions
+
+- agents: 1.10.0 → 1.10.2
+- skills: 1.10.0 → 1.10.2
+
 ## [1.10.1] - 2025-12-28
 
 ### Fixed
