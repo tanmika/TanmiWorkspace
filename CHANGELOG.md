@@ -11,6 +11,34 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.10.0] - 2025-12-28
+
+### Added
+
+- **派发系统优化**: 完整的任务派发流程重构
+  - Review 机制：自动创建 spec/quality 审查节点
+  - Skill 化：dispatching-parent、executing-task、reviewing-spec、reviewing-quality 四个核心 Skill
+  - AI 引导增强：actionRequired 强制调用 Skill，防止跳过关键步骤
+  - 约束增强：dispatch_complete 前必须 start，派发子节点不能再升级为母节点
+  - 类型分离：NodeDispatchInfo（子节点）与 NodeDispatchParent（母节点）
+- **Memo 引用富卡片展示**: 节点详情中 Memo 引用以卡片形式展示
+- **用户入门引导文档**: 新增 `docs/用户入门引导.md`
+
+### Fixed
+
+- **Review 节点创建 Bug**: 修复 spec/quality 节点创建时的两个问题
+
+### Changed
+
+- **插件安装改为动态读取**: 不再硬编码文件列表，自动扫描目录
+- **Agents 重写**: executor/reviewer/tester agent 说明更清晰，强调执行顺序和反模式
+- **Skills description 格式**: 用途放在前面，便于 AI 理解
+
+### Component Versions
+
+- agents: 1.9.0 → 1.10.0
+- skills: 1.9.0 → 1.10.0
+
 ## [1.9.2] - 2025-12-28
 
 ### Added

@@ -9,6 +9,13 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.0
+    requirement: 派发系统优化、Memo 富卡片、Agents/Skills 更新
+    conclusion: |-
+      - 派发系统优化: Review 机制、Skill 化、AI 引导增强
+      - Memo 富卡片: 节点详情中 Memo 引用以卡片形式展示
+      - Agents/Skills 更新: 执行流程更清晰，需重新安装插件
+    note: ""
   - version: 1.9.2
     requirement: 插件更新提示、节点排序、README 重构
     conclusion: |-

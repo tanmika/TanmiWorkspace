@@ -68,7 +68,7 @@
 3. 更新 `CHANGELOG.md` 记录变更
 4. 更新 `package.json` 版本号
 5. 同步版本说明：`npx tsx scripts/sync-versions.ts`
-6. 填写 `config/version-notes.yaml` 中新版本的 `requirement` 字段
+6. 编辑 `config/version-notes.yaml`：填写 `requirement`，精简 `conclusion`（去掉技术细节和用户看不懂的内容）
 7. 提交：`[Chore] Release vX.Y.Z`
 8. 打 tag：`git tag vX.Y.Z`
 9. 推送：`git push && git push --tags`
@@ -76,4 +76,4 @@
 
 > **重要**：前端必须重新编译！否则 npm 包中的前端版本会与后端不匹配。
 
-> 注意：`version-notes.yaml` 用于生成版本更新工作区，`requirement` 是简短描述，`conclusion` 自动从 CHANGELOG 提取。
+> 注意：`version-notes.yaml` 用于生成版本更新工作区。`requirement` 是简短描述，`conclusion` 从 CHANGELOG 同步后需人工精简，去掉技术细节和用户看不懂的内容。
