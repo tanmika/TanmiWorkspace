@@ -14,6 +14,7 @@ export { MemoService } from "./MemoService.js";
 export { CapabilityService, capabilityService } from "./CapabilityService.js";
 export type {
   DispatchPrepareResult,
+  DispatchUpgradeResult,
   DispatchCompleteResult,
   GitStatusInfo,
 } from "./DispatchService.js";

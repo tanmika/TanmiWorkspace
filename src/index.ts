@@ -323,7 +323,7 @@ function createMcpServer(services: Services): Server {
             requirement: args?.requirement as string | undefined,
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
             rulesHash: args?.rulesHash as string | undefined,
-            role: args?.role as "info_collection" | "info_summary" | "spec_review" | "quality_review" | undefined,
+            role: args?.role as "info_collection" | "info_summary" | "dispatch_exec" | "dispatch_spec" | "dispatch_quality" | undefined,
             acceptanceCriteria: args?.acceptanceCriteria as Array<{ when: string; then: string }> | undefined,
             isNeedTest: args?.isNeedTest as boolean | undefined,
             testRequirement: args?.testRequirement as string | undefined,
@@ -539,7 +539,7 @@ function createMcpServer(services: Services): Server {
           break;
         }
 
-        case "dispatch_disable_execute": {
+        case "dispatch_execute": {
           const workspaceId = args?.workspaceId as string;
           const mergeStrategy = args?.mergeStrategy as "sequential" | "squash" | "cherry-pick" | "skip";
           const keepBackupBranch = args?.keepBackupBranch as boolean | undefined;
@@ -556,15 +556,15 @@ function createMcpServer(services: Services): Server {
           break;
         }
 
-        case "node_dispatch": {
+        case "dispatch_node": {
           const workspaceId = args?.workspaceId as string;
           const nodeId = args?.nodeId as string;
           const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
-          result = await services.dispatch.prepareDispatch(workspaceId, projectRoot, nodeId);
+          result = await services.dispatch.upgradeToDispatchParent(workspaceId, projectRoot, nodeId);
           break;
         }
 
-        case "node_dispatch_complete": {
+        case "dispatch_complete": {
           const workspaceId = args?.workspaceId as string;
           const nodeId = args?.nodeId as string;
           const success = args?.success as boolean;
@@ -578,6 +578,22 @@ function createMcpServer(services: Services): Server {
           const workspaceId = args?.workspaceId as string;
           const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
           result = await services.dispatch.cleanupBranches(workspaceId, projectRoot);
+          break;
+        }
+
+        case "dispatch_create": {
+          const workspaceId = args?.workspaceId as string;
+          const parentId = args?.parentId as string;
+          const exec = args?.exec as { requirement: string; acceptanceCriteria: Array<{ when: string; then: string }> };
+          const includeQuality = args?.includeQuality as boolean | undefined;
+          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
+          result = await services.dispatch.createDispatchChildren(
+            workspaceId,
+            projectRoot,
+            parentId,
+            exec,
+            includeQuality ?? true
+          );
           break;
         }
 

@@ -65,6 +65,9 @@ export const ErrorCodes = {
   DISPATCH_MODE_CONFLICT: "DISPATCH_MODE_CONFLICT",
   GIT_ENVIRONMENT_LOST: "GIT_ENVIRONMENT_LOST",
   NODE_NOT_READY: "NODE_NOT_READY",
+  DISPATCH_SKIP: "DISPATCH_SKIP",
+  INVALID_DISPATCH_PARENT: "INVALID_DISPATCH_PARENT",
+  DISPATCH_CHILDREN_EXIST: "DISPATCH_CHILDREN_EXIST",
 
   // 配置错误
   INVALID_CONFIG: "INVALID_CONFIG",
@@ -130,7 +133,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   GIT_NOT_FOUND: "当前项目不是 git 仓库",
   DISPATCH_CONFLICT: "已有其他工作区正在派发中",
   DISPATCH_NOT_ENABLED: "派发模式未启用",
-  DISPATCH_REQUIRED: "派发模式已启用，执行节点必须通过 node_dispatch 派发执行",
+  DISPATCH_REQUIRED: "派发模式已启用，执行节点必须通过 dispatch_node 派发执行",
   DISPATCH_IN_PROGRESS: "节点正在派发执行中，请等待 subagent 完成",
   INVALID_NODE_STATUS: "节点状态不符合操作要求",
   INVALID_TEST_NODE: "无效的测试节点",
@@ -139,6 +142,9 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   DISPATCH_MODE_CONFLICT: "同一项目只能使用一种派发模式",
   GIT_ENVIRONMENT_LOST: "Git 环境已丢失",
   NODE_NOT_READY: "节点未准备好派发，缺少必要信息",
+  DISPATCH_SKIP: "节点无需派发，可直接执行",
+  INVALID_DISPATCH_PARENT: "节点不是派发母节点，需先调用 dispatch_node 升级",
+  DISPATCH_CHILDREN_EXIST: "派发子节点已存在，无法重复创建",
   INVALID_CONFIG: "配置文件无效",
   VERSION_TOO_HIGH: "数据版本过高，请升级 tanmi-workspace",
 };

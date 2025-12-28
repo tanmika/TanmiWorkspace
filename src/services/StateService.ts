@@ -214,12 +214,18 @@ export class StateService {
         );
       }
 
-      // 4.3.2 执行节点 start 时，必须先调用 node_dispatch
+      // 4.3.2 执行节点 start 时，检查是否需要通过 dispatch_node 派发
       if (action === "start" && !nodeMeta.dispatch) {
-        throw new TanmiError(
-          "DISPATCH_REQUIRED",
-          `派发模式已启用，执行节点必须通过 node_dispatch 派发执行，不能直接 start。请先调用 node_dispatch(workspaceId="${workspaceId}", nodeId="${nodeId}")。`
-        );
+        // 检查上级节点角色，info_collection/info_summary 节点的子节点允许直接 start
+        const parent = nodeMeta.parentId ? graph.nodes[nodeMeta.parentId] : null;
+        const isParentInfoNode = parent?.role === "info_collection" || parent?.role === "info_summary";
+
+        if (!isParentInfoNode) {
+          throw new TanmiError(
+            "DISPATCH_REQUIRED",
+            `派发模式已启用，执行节点必须通过 dispatch_node 派发执行，不能直接 start。请先调用 dispatch_node(workspaceId="${workspaceId}", nodeId="${nodeId}")。`
+          );
+        }
       }
     }
 
@@ -380,7 +386,7 @@ export class StateService {
     // 13.2 如果派发模式启用，追加派发相关提示
     if (config.dispatch?.enabled && nodeType === "execution") {
       if (action === "start") {
-        result.hint += "\n\n🚀 **派发模式已启用**：请使用 node_dispatch 将任务派发给 subagent 执行，而非直接执行。派发后根据返回的 actionRequired 调用 Task tool。";
+        result.hint += "\n\n🚀 **派发模式已启用**：请使用 dispatch_node 将任务派发给 subagent 执行，而非直接执行。派发后根据返回的 actionRequired 调用 Task tool。";
       }
       // 注：测试节点附属化后，测试节点作为兄弟节点存在，由父管理节点统一调度
     }

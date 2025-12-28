@@ -8,9 +8,10 @@ import type {
   DispatchConfig,
   ActionRequired,
 } from "../types/workspace.js";
-import type { NodeMeta, NodeDispatchStatus } from "../types/node.js";
+import type { NodeMeta, NodeDispatchStatus, AcceptanceCriteria, NodeInfoData } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
+import { generateNodeId, generateNodeDirName } from "../utils/id.js";
 import type { ConfigService } from "./ConfigService.js";
 import { eventService } from "./EventService.js";
 import {
@@ -56,6 +57,7 @@ export interface NodeReadinessCheck {
 
 /**
  * 派发准备结果
+ * @deprecated 使用 DispatchUpgradeResult 代替
  */
 export interface DispatchPrepareResult {
   success: boolean;
@@ -65,13 +67,22 @@ export interface DispatchPrepareResult {
 }
 
 /**
+ * 派发升级结果
+ */
+export interface DispatchUpgradeResult {
+  success: boolean;
+  upgraded: boolean;      // 是否升级成功
+  skipReason?: string;    // 如果未升级，原因
+  actionRequired?: ActionRequired;
+}
+
+/**
  * 派发完成结果
+ * 简化版：不再返回 nextAction/testNodeId，由母节点通过 context_get 读取子节点状态决定下一步
  */
 export interface DispatchCompleteResult {
   success: boolean;
   endMarker?: string;  // Git 模式=commit hash，无 Git 模式=时间戳
-  nextAction?: "dispatch_test" | "return_parent";
-  testNodeId?: string;
   hint?: string;
 }
 
@@ -111,6 +122,16 @@ export interface ExecuteDisableParams {
   commitMessage?: string;  // 用于 squash 时的提交信息
 }
 
+/**
+ * 派发子节点创建结果
+ */
+export interface DispatchCreateResult {
+  execId: string;
+  specId: string;
+  qualityId?: string;
+  actionRequired: ActionRequired;  // 派发 exec 的指令
+}
+
 // 前置声明 NodeService 类型（避免循环导入）
 import type { NodeService } from "./NodeService.js";
 
@@ -133,134 +154,6 @@ export class DispatchService {
    */
   setNodeService(nodeService: NodeService): void {
     this.nodeService = nodeService;
-  }
-
-  /**
-   * 创建 Spec Review 节点
-   * @param workspaceId 工作区 ID
-   * @param execNodeId 被审查的执行节点 ID
-   * @param execNodeTitle 执行节点标题
-   * @param execConclusion 执行节点结论
-   * @returns 创建的 Review 节点 ID
-   */
-  async createSpecReviewNode(
-    workspaceId: string,
-    execNodeId: string,
-    execNodeTitle: string,
-    execConclusion: string
-  ): Promise<string> {
-    if (!this.nodeService) {
-      throw new TanmiError("INVALID_CONFIG", "NodeService 未设置，无法创建 Review 节点");
-    }
-
-    const projectRoot = await this.getProjectRoot(workspaceId);
-    const location = await this.json.getWorkspaceLocation(workspaceId);
-    const wsDirName = location?.dirName || workspaceId;
-
-    // 获取执行节点的父节点
-    const graph = await this.json.readGraph(projectRoot, wsDirName);
-    const execNode = graph.nodes[execNodeId];
-    if (!execNode || !execNode.parentId) {
-      throw new TanmiError("NODE_NOT_FOUND", `执行节点 ${execNodeId} 不存在或无父节点`);
-    }
-
-    // 读取执行节点的验收标准
-    const execNodeDirName = execNode.dirName || execNodeId;
-    const execNodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, execNodeDirName);
-
-    // 创建 Spec Review 节点（作为执行节点的兄弟节点）
-    const result = await this.nodeService.create({
-      workspaceId,
-      parentId: execNode.parentId,
-      type: "execution",
-      title: `[Spec Review] ${execNodeTitle}`,
-      requirement: `审查执行节点 "${execNodeTitle}" 的实现是否符合需求规格。
-
-**被审查节点**
-- 节点 ID: ${execNodeId}
-- 执行结论: ${execConclusion}
-
-**审查要点**
-1. 实现是否完整覆盖需求描述
-2. 验收标准是否全部满足
-3. 是否存在遗漏或偏离需求的实现`,
-      role: "spec_review",
-      acceptanceCriteria: execNodeInfo.acceptanceCriteria,
-    });
-
-    // 重新读取 graph（nodeService.create 已写入新节点）
-    const updatedGraph = await this.json.readGraph(projectRoot, wsDirName);
-    const updatedExecNode = updatedGraph.nodes[execNodeId];
-
-    // 更新执行节点的 dispatch 信息，关联 Review 节点
-    updatedExecNode.dispatch = {
-      ...updatedExecNode.dispatch!,
-      specReviewNodeId: result.nodeId,
-    };
-    await this.json.writeGraph(projectRoot, wsDirName, updatedGraph);
-
-    return result.nodeId;
-  }
-
-  /**
-   * 创建 Quality Review 节点
-   * @param workspaceId 工作区 ID
-   * @param execNodeId 被审查的执行节点 ID
-   * @param execNodeTitle 执行节点标题
-   * @returns 创建的 Review 节点 ID
-   */
-  async createQualityReviewNode(
-    workspaceId: string,
-    execNodeId: string,
-    execNodeTitle: string
-  ): Promise<string> {
-    if (!this.nodeService) {
-      throw new TanmiError("INVALID_CONFIG", "NodeService 未设置，无法创建 Review 节点");
-    }
-
-    const projectRoot = await this.getProjectRoot(workspaceId);
-    const location = await this.json.getWorkspaceLocation(workspaceId);
-    const wsDirName = location?.dirName || workspaceId;
-
-    // 获取执行节点的父节点
-    const graph = await this.json.readGraph(projectRoot, wsDirName);
-    const execNode = graph.nodes[execNodeId];
-    if (!execNode || !execNode.parentId) {
-      throw new TanmiError("NODE_NOT_FOUND", `执行节点 ${execNodeId} 不存在或无父节点`);
-    }
-
-    // 创建 Quality Review 节点
-    const result = await this.nodeService.create({
-      workspaceId,
-      parentId: execNode.parentId,
-      type: "execution",
-      title: `[Quality Review] ${execNodeTitle}`,
-      requirement: `审查执行节点 "${execNodeTitle}" 的代码质量。
-
-**被审查节点**
-- 节点 ID: ${execNodeId}
-
-**审查要点**
-1. 代码可读性和可维护性
-2. 错误处理是否完善
-3. 是否遵循项目编码规范
-4. 是否存在潜在的性能问题
-5. 是否存在安全漏洞`,
-      role: "quality_review",
-    });
-
-    // 重新读取 graph（nodeService.create 已写入新节点）
-    const updatedGraph = await this.json.readGraph(projectRoot, wsDirName);
-    const updatedExecNode = updatedGraph.nodes[execNodeId];
-
-    // 更新执行节点的 dispatch 信息，关联 Review 节点
-    updatedExecNode.dispatch = {
-      ...updatedExecNode.dispatch!,
-      qualityReviewNodeId: result.nodeId,
-    };
-    await this.json.writeGraph(projectRoot, wsDirName, updatedGraph);
-
-    return result.nodeId;
   }
 
   /**
@@ -730,12 +623,37 @@ export class DispatchService {
 
   /**
    * 准备派发节点任务
+   * @deprecated 使用 upgradeToDispatchParent 代替
    */
   async prepareDispatch(
     workspaceId: string,
     projectRoot: string,
     nodeId: string
   ): Promise<DispatchPrepareResult> {
+    // 向后兼容：调用新方法
+    const result = await this.upgradeToDispatchParent(workspaceId, projectRoot, nodeId);
+
+    // 转换返回格式以保持向后兼容
+    if (!result.upgraded) {
+      throw new TanmiError("DISPATCH_SKIP", result.skipReason || "节点无需派发");
+    }
+
+    return {
+      success: true,
+      startMarker: "", // 新逻辑不再记录 startMarker
+      actionRequired: result.actionRequired!,
+    };
+  }
+
+  /**
+   * 升级执行节点为派发母节点
+   * 将 execution 节点升级为 planning 节点，并设置为派发母节点
+   */
+  async upgradeToDispatchParent(
+    workspaceId: string,
+    projectRoot: string,
+    nodeId: string
+  ): Promise<DispatchUpgradeResult> {
     // 获取工作区目录名
     const location = await this.json.getWorkspaceLocation(workspaceId);
     const wsDirName = location?.dirName || workspaceId;
@@ -749,94 +667,83 @@ export class DispatchService {
     // 1.1 验证 Git 环境（11.2 环境变化检测）
     await this.validateGitEnvironment(workspaceId, projectRoot, config);
 
-    const useGit = config.dispatch.useGit;
-
-    // 2. 验证节点状态
+    // 2. 验证节点类型
     const graph = await this.json.readGraph(projectRoot, wsDirName);
     const node = graph.nodes[nodeId];
     if (!node) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 ${nodeId} 不存在`);
     }
     if (node.type !== "execution") {
-      throw new TanmiError("INVALID_NODE_TYPE", "只有执行节点可以派发");
-    }
-    // 支持 pending 和 implementing 状态的节点派发
-    if (node.status !== "pending" && node.status !== "implementing") {
-      throw new TanmiError(
-        "INVALID_NODE_STATUS",
-        `节点状态必须为 pending 或 implementing，当前为 ${node.status}`
-      );
+      throw new TanmiError("INVALID_NODE_TYPE", "只有执行节点可以升级为派发母节点");
     }
 
-    // 2.1 读取节点信息（提前读取用于完整性检查）
-    const nodeDirName = node.dirName || nodeId;
-    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
-
-    // 2.2 节点完整性检查
-    const readiness = this.checkNodeReadiness(nodeInfo, node);
-    if (!readiness.ready) {
-      throw new TanmiError(
-        "NODE_NOT_READY",
-        `节点未准备好派发: ${readiness.errors.join("; ")}`
-      );
-    }
-
-    // 如果是 pending 状态，自动转为 implementing
-    const needsTransition = node.status === "pending";
-    if (needsTransition) {
-      node.status = "implementing";
-    }
-
-    // 3. 记录 startMarker
-    let startMarker: string;
-    if (useGit) {
-      // Git 模式：确保在派发分支上，记录 commit hash
-      if (!(await isOnProcessBranch(workspaceId, projectRoot))) {
-        await checkoutProcessBranch(workspaceId, projectRoot);
+    // 3. 检查上级节点角色
+    if (node.parentId && node.parentId !== "root") {
+      const parent = graph.nodes[node.parentId];
+      if (parent?.role === "info_collection" || parent?.role === "info_summary") {
+        return {
+          success: true,
+          upgraded: false,
+          skipReason: "上级是信息节点，可直接执行，无需派发",
+        };
       }
-      startMarker = await getCurrentCommit(projectRoot);
-    } else {
-      // 无 Git 模式：使用时间戳
-      startMarker = Date.now().toString();
     }
 
-    // 4. 更新节点派发状态
+    // 4. 升级节点类型为 planning
+    node.type = "planning";
+
+    // 5. 设置派发母节点标识
     node.dispatch = {
-      startMarker,
-      status: "executing",
+      isParent: true,
+      status: "pending",
+      startMarker: "", // 占位，实际由 dispatch_create 时记录
     };
+
+    // 6. 状态改为 monitoring
+    node.status = "monitoring";
     node.updatedAt = now();
+
+    // 保存更新
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 5. 构建 prompt（nodeInfo 已在步骤 2.1 读取）
-    const timeout = config.dispatch.limits?.timeoutMs ?? 300000;
+    // 7. 记录日志
+    await this.md.appendLog(projectRoot, wsDirName, {
+      time: now(),
+      operator: "system",
+      event: `节点 ${nodeId} 已升级为派发母节点`,
+    }, nodeId);
 
-    // 6. 构建 actionRequired
+    // 8. 发送事件通知
+    eventService.emitDispatchUpdate(workspaceId, nodeId);
+
+    // 9. 返回 actionRequired
     const actionRequired: ActionRequired = {
-      type: "dispatch_task",
-      message: "请使用 Task tool 派发此节点任务（找不到 agent 时调用 plugin_path 获取路径）",
+      type: "invoke_skill",
+      message: `节点已升级为派发母节点。
+
+**下一步操作**：
+1. 调用 Skill(dispatching-parent) 获取派发流程指导
+2. 按照 Skill 指导调用 dispatch_create 创建子节点
+3. 使用 Task 工具派发 exec 子节点执行
+
+**注意**：你现在是协调者，不再直接执行任务，而是派发给 subagent 执行。`,
       data: {
+        skill: "dispatching-parent",
         workspaceId,
         nodeId,
-        subagentType: "tanmi-executor",
-        prompt: this.buildExecutorPrompt(workspaceId, nodeId, nodeInfo, node),
-        timeout,
       },
     };
 
-    // 7. 发送事件通知
-    eventService.emitDispatchUpdate(workspaceId, nodeId);
-
     return {
       success: true,
-      startMarker,
+      upgraded: true,
       actionRequired,
-      readinessWarnings: readiness.warnings.length > 0 ? readiness.warnings : undefined,
     };
   }
 
   /**
    * 处理派发完成
+   * 简化版：不再自动创建 Review 节点，由 dispatch_create 统一创建子节点
    */
   async completeDispatch(
     workspaceId: string,
@@ -862,197 +769,61 @@ export class DispatchService {
       throw new TanmiError("NODE_NOT_FOUND", `节点 ${nodeId} 不存在`);
     }
 
+    // 验证节点有派发信息
+    if (!node.dispatch) {
+      throw new TanmiError("INVALID_NODE_STATUS", "节点没有派发信息，无法完成派发");
+    }
+
     const useGit = config.dispatch?.useGit ?? false;
 
     // 获取节点目录名（用于读取和更新 Markdown 文件）
     const nodeDirName = node.dirName || nodeId;
     const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
-    if (success) {
-      // 2a. 执行成功：记录 endMarker
-      let endMarker: string;
-      if (useGit) {
-        // Git 模式：提交更改，记录 commit hash
-        endMarker = await commitDispatch(nodeId, nodeInfo.title, projectRoot);
-      } else {
-        // 无 Git 模式：记录时间戳
-        endMarker = Date.now().toString();
-      }
-
-      // 检查是否需要 Spec Review（仅对非 Review 节点生效）
-      const isReviewNode = node.role === "spec_review" || node.role === "quality_review";
-      const specReviewEnabled = config.dispatch?.review?.specReviewEnabled ?? false;
-      const qualityReviewEnabled = config.dispatch?.review?.qualityReviewEnabled ?? false;
-
-      // 如果是普通执行节点且启用了 Spec Review
-      if (!isReviewNode && specReviewEnabled && this.nodeService) {
-        // 更新节点派发状态为 spec_reviewing
-        if (node.dispatch) {
-          node.dispatch.endMarker = endMarker;
-          node.dispatch.status = "spec_reviewing";
-        }
-        node.updatedAt = now();
-
-        // 保存执行结论（但不完成节点）
-        if (conclusion) {
-          node.conclusion = conclusion.replace(/\\n/g, "\n");
-          await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
-        }
-        await this.json.writeGraph(projectRoot, wsDirName, graph);
-
-        // 创建 Spec Review 节点
-        const reviewNodeId = await this.createSpecReviewNode(
-          workspaceId,
-          nodeId,
-          nodeInfo.title,
-          conclusion || "无结论"
-        );
-
-        // 记录日志
-        const markerInfo = useGit ? `commit: ${endMarker.substring(0, 7)}` : `timestamp: ${endMarker}`;
-        await this.md.appendLog(projectRoot, wsDirName, {
-          time: now(),
-          operator: "tanmi-executor",
-          event: `节点 ${nodeId} 执行完成，${markerInfo}，创建 Spec Review 节点 ${reviewNodeId}`,
-        }, nodeId);
-
-        // 发送事件通知
-        eventService.emitDispatchUpdate(workspaceId, nodeId);
-
-        // 返回需要派发 Review 节点
-        return {
-          success: true,
-          endMarker,
-          nextAction: "dispatch_test",  // 复用现有字段，表示需要派发 review
-          testNodeId: reviewNodeId,     // 复用现有字段
-          hint: `执行完成，需要进行 Spec Review。请派发 Review 节点 ${reviewNodeId}`,
-        };
-      }
-
-      // 更新节点派发状态为 passed（保留对象以便 WebUI 显示派发历史）
-      if (node.dispatch) {
-        node.dispatch.endMarker = endMarker;
-        node.dispatch.status = "passed";
-      }
-
-      // 自动完成节点
-      node.status = "completed";
-      if (conclusion) {
-        node.conclusion = conclusion.replace(/\\n/g, "\n");
-      }
-      node.updatedAt = now();
-      await this.json.writeGraph(projectRoot, wsDirName, graph);
-
-      // 更新 Info.md 状态和结论
-      await this.md.updateNodeStatus(projectRoot, wsDirName, nodeDirName, "completed");
-      if (conclusion) {
-        await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
-      }
-
-      // 如果是 Spec Review 节点完成且启用了 Quality Review，创建 Quality Review 节点
-      if (node.role === "spec_review" && qualityReviewEnabled && this.nodeService) {
-        // 查找被审查的执行节点
-        const parentNode = graph.nodes[node.parentId!];
-        if (parentNode) {
-          // 从标题中提取原执行节点标题
-          const execTitle = nodeInfo.title.replace("[Spec Review] ", "");
-          const qualityReviewNodeId = await this.createQualityReviewNode(
-            workspaceId,
-            nodeId,  // 这里应该是原执行节点 ID，但我们暂时用当前节点
-            execTitle
-          );
-
-          await this.md.appendLog(projectRoot, wsDirName, {
-            time: now(),
-            operator: "tanmi-reviewer",
-            event: `Spec Review 通过，创建 Quality Review 节点 ${qualityReviewNodeId}`,
-          }, nodeId);
-
-          eventService.emitDispatchUpdate(workspaceId, nodeId);
-
-          return {
-            success: true,
-            endMarker,
-            nextAction: "dispatch_test",
-            testNodeId: qualityReviewNodeId,
-            hint: `Spec Review 通过，需要进行 Quality Review。请派发 Review 节点 ${qualityReviewNodeId}`,
-          };
-        }
-      }
-
-      // 记录日志
-      const markerInfo = useGit ? `commit: ${endMarker.substring(0, 7)}` : `timestamp: ${endMarker}`;
-      await this.md.appendLog(projectRoot, wsDirName, {
-        time: now(),
-        operator: isReviewNode ? "tanmi-reviewer" : "tanmi-executor",
-        event: `节点 ${nodeId} 派发执行完成并自动 complete，${markerInfo}`,
-      }, nodeId);
-
-      // 检查父节点是否可以完成
-      let parentCompletionHint = "";
-      const parentId = node.parentId;
-      if (parentId && parentId !== "root") {
-        const parentNode = graph.nodes[parentId];
-        if (parentNode && parentNode.type === "planning" && parentNode.status === "monitoring") {
-          // 检查所有兄弟节点是否都已完成
-          const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
-          const allChildrenCompleted = parentNode.children.every(childId => {
-            const child = graph.nodes[childId];
-            return child && terminalStatuses.has(child.status);
-          });
-
-          if (allChildrenCompleted) {
-            parentCompletionHint = `\n\n💡 **提醒**：父规划节点 ${parentId} 的所有子任务已完成。请检查是否可以填写结论并完成该节点，然后调用 dispatch_disable 关闭派发模式。`;
-          }
-        }
-      }
-
-      // 发送事件通知
-      eventService.emitDispatchUpdate(workspaceId, nodeId);
-
-      // 返回下一步：返回父节点
-      return {
-        success: true,
-        endMarker,
-        nextAction: "return_parent",
-        hint: "执行完成，节点已自动标记为 completed。返回父节点继续处理。" + parentCompletionHint,
-      };
+    // 2. 记录 endMarker
+    let endMarker: string;
+    if (useGit && success) {
+      // Git 模式且成功：提交更改，记录 commit hash
+      endMarker = await commitDispatch(nodeId, nodeInfo.title, projectRoot);
     } else {
-      // 2b. 执行失败：更新状态
-      if (node.dispatch) {
-        node.dispatch.status = "failed";
-      }
-
-      // 自动标记节点失败
-      node.status = "failed";
-      if (conclusion) {
-        node.conclusion = conclusion.replace(/\\n/g, "\n");
-      }
-      node.updatedAt = now();
-      await this.json.writeGraph(projectRoot, wsDirName, graph);
-
-      // 更新 Info.md 状态和结论
-      await this.md.updateNodeStatus(projectRoot, wsDirName, nodeDirName, "failed");
-      if (conclusion) {
-        await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
-      }
-
-      // 记录日志
-      await this.md.appendLog(projectRoot, wsDirName, {
-        time: now(),
-        operator: "tanmi-executor",
-        event: `节点 ${nodeId} 派发执行失败并自动标记: ${conclusion || "未知原因"}`,
-      }, nodeId);
-
-      // 发送事件通知
-      eventService.emitDispatchUpdate(workspaceId, nodeId);
-
-      return {
-        success: false,
-        nextAction: "return_parent",
-        hint: "执行失败，节点已自动标记为 failed。返回父节点决策。",
-      };
+      // 无 Git 模式或失败：记录时间戳（失败时由母节点决定是否 reset）
+      endMarker = Date.now().toString();
     }
+
+    // 3. 更新节点状态
+    node.dispatch.endMarker = endMarker;
+    node.dispatch.status = success ? "passed" : "failed";
+    node.status = success ? "completed" : "failed";
+    if (conclusion) {
+      node.conclusion = conclusion.replace(/\\n/g, "\n");
+    }
+    node.updatedAt = now();
+
+    // 4. 保存更改
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
+    await this.md.updateNodeStatus(projectRoot, wsDirName, nodeDirName, success ? "completed" : "failed");
+    if (conclusion) {
+      await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);
+    }
+
+    // 5. 记录日志
+    const markerInfo = useGit && success ? `commit: ${endMarker.substring(0, 7)}` : `timestamp: ${endMarker}`;
+    const statusText = success ? "完成" : "失败";
+    await this.md.appendLog(projectRoot, wsDirName, {
+      time: now(),
+      operator: "tanmi-executor",
+      event: `节点 ${nodeId} 派发执行${statusText}，${markerInfo}${conclusion ? `: ${conclusion.substring(0, 50)}...` : ""}`,
+    }, nodeId);
+
+    // 6. 发送事件通知
+    eventService.emitDispatchUpdate(workspaceId, nodeId);
+
+    // 7. 返回简单结果
+    return {
+      success,
+      endMarker,
+      hint: success ? "执行完成" : "执行失败",
+    };
   }
 
   /**
@@ -1334,22 +1105,302 @@ Please address the issues from previous attempts.`);
 1. **Assess** task scope and verify information completeness
 2. **Execute** the task within defined boundaries (no scope expansion)
 3. **Log** progress via log_append at key milestones
-4. **Complete** with node_dispatch_complete when done
+4. **Complete** with dispatch_complete when done
 
 ### On Success:
 \`\`\`
-node_dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=true, conclusion="<summary of what was done>")
+dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=true, conclusion="<summary of what was done>")
 \`\`\`
 
 ### On Failure:
 \`\`\`
-node_dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=false, conclusion="<reason for failure and suggestions>")
+dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=false, conclusion="<reason for failure and suggestions>")
 \`\`\`
 
-**CRITICAL**: You MUST call node_dispatch_complete to finalize. Do NOT use node_transition directly.
+**CRITICAL**: You MUST call dispatch_complete to finalize. Do NOT use node_transition directly.
 **SCOPE CONTROL**: Execute only what is specified. If task is unclear or too large, FAIL with clear reason.`);
 
     return sections.join("\n\n");
+  }
+
+  /**
+   * 创建派发子节点（exec + spec + quality）
+   * 在派发母节点下一次性创建所有派发子节点
+   */
+  async createDispatchChildren(
+    workspaceId: string,
+    projectRoot: string,
+    parentId: string,
+    exec: { requirement: string; acceptanceCriteria: AcceptanceCriteria[] },
+    includeQuality: boolean = true
+  ): Promise<DispatchCreateResult> {
+    // 获取工作区目录名
+    const location = await this.json.getWorkspaceLocation(workspaceId);
+    const wsDirName = location?.dirName || workspaceId;
+
+    // 1. 验证派发模式已启用
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
+    if (!config.dispatch?.enabled) {
+      throw new TanmiError("DISPATCH_NOT_ENABLED", "派发模式未启用");
+    }
+
+    // 1.1 验证 Git 环境
+    await this.validateGitEnvironment(workspaceId, projectRoot, config);
+
+    // 2. 验证 parentId 是派发母节点
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
+    const parent = graph.nodes[parentId];
+    if (!parent) {
+      throw new TanmiError("NODE_NOT_FOUND", `节点 ${parentId} 不存在`);
+    }
+    if (!parent.dispatch?.isParent) {
+      throw new TanmiError("INVALID_DISPATCH_PARENT", "parentId 必须是派发母节点（需先调用 dispatch_node 升级）");
+    }
+
+    // 2.1 检查是否已有子节点
+    if (parent.dispatch.children?.execId) {
+      throw new TanmiError("DISPATCH_CHILDREN_EXIST", "派发子节点已存在，无法重复创建");
+    }
+
+    const useGit = config.dispatch.useGit ?? false;
+    const currentTime = now();
+
+    // 3. 生成简短的父节点标题（去掉可能的前缀）
+    const parentNodeDirName = parent.dirName || parentId;
+    const parentInfo = await this.md.readNodeInfo(projectRoot, wsDirName, parentNodeDirName);
+    const shortTitle = parentInfo.title.replace(/^\[.*?\]\s*/, "").substring(0, 30);
+
+    // 4. 准备节点数据（内存中）
+    const execNodeId = generateNodeId();
+    const execNodeDirName = generateNodeDirName(`[Exec] ${shortTitle}`, execNodeId);
+    const execNode: NodeMeta = {
+      id: execNodeId,
+      dirName: execNodeDirName,
+      type: "execution",
+      parentId: parentId,
+      children: [],
+      status: "pending",
+      isolate: false,
+      references: [],
+      conclusion: null,
+      role: "dispatch_exec",
+      acceptanceCriteria: exec.acceptanceCriteria,
+      createdAt: currentTime,
+      updatedAt: currentTime,
+    };
+
+    // 5. 自动生成 spec 节点
+    const specNodeId = generateNodeId();
+    const specNodeDirName = generateNodeDirName(`[Spec] ${shortTitle}`, specNodeId);
+    const specAcceptanceCriteria = exec.acceptanceCriteria.map(c => ({
+      when: `检查: ${c.when}`,
+      then: `验证: ${c.then}`,
+    }));
+    const specNode: NodeMeta = {
+      id: specNodeId,
+      dirName: specNodeDirName,
+      type: "execution",
+      parentId: parentId,
+      children: [],
+      status: "pending",
+      isolate: false,
+      references: [],
+      conclusion: null,
+      role: "dispatch_spec",
+      acceptanceCriteria: specAcceptanceCriteria,
+      createdAt: currentTime,
+      updatedAt: currentTime,
+    };
+
+    // 6. 可选创建 quality 节点
+    let qualityNode: NodeMeta | null = null;
+    let qualityNodeId: string | undefined;
+    let qualityNodeDirName: string | undefined;
+    if (includeQuality) {
+      qualityNodeId = generateNodeId();
+      qualityNodeDirName = generateNodeDirName(`[Quality] ${shortTitle}`, qualityNodeId);
+      qualityNode = {
+        id: qualityNodeId,
+        dirName: qualityNodeDirName,
+        type: "execution",
+        parentId: parentId,
+        children: [],
+        status: "pending",
+        isolate: false,
+        references: [],
+        conclusion: null,
+        role: "dispatch_quality",
+        createdAt: currentTime,
+        updatedAt: currentTime,
+      };
+    }
+
+    // 7. 事务性写入
+    const createdDirs: string[] = [];
+    try {
+      // 7.1 创建节点目录和文件
+      // Exec 节点
+      const execNodePath = this.fs.getNodePath(projectRoot, wsDirName, execNodeDirName);
+      await this.fs.mkdir(execNodePath);
+      createdDirs.push(execNodePath);
+
+      const execNodeInfo: NodeInfoData = {
+        id: execNodeId,
+        type: "execution",
+        title: `[Exec] ${shortTitle}`,
+        status: "pending",
+        createdAt: currentTime,
+        updatedAt: currentTime,
+        requirement: exec.requirement.replace(/\\n/g, "\n"),
+        docs: [],
+        notes: "",
+        conclusion: "",
+        acceptanceCriteria: exec.acceptanceCriteria,
+      };
+      await this.md.writeNodeInfo(projectRoot, wsDirName, execNodeDirName, execNodeInfo);
+      await this.md.createEmptyLog(projectRoot, wsDirName, execNodeDirName);
+      await this.md.createEmptyProblem(projectRoot, wsDirName, execNodeDirName);
+
+      // Spec 节点
+      const specNodePath = this.fs.getNodePath(projectRoot, wsDirName, specNodeDirName);
+      await this.fs.mkdir(specNodePath);
+      createdDirs.push(specNodePath);
+
+      const specNodeInfo: NodeInfoData = {
+        id: specNodeId,
+        type: "execution",
+        title: `[Spec] ${shortTitle}`,
+        status: "pending",
+        createdAt: currentTime,
+        updatedAt: currentTime,
+        requirement: `验证执行节点实现是否符合需求规格。\n\n**被验证节点**: ${execNodeId}`,
+        docs: [],
+        notes: "",
+        conclusion: "",
+        acceptanceCriteria: specAcceptanceCriteria,
+      };
+      await this.md.writeNodeInfo(projectRoot, wsDirName, specNodeDirName, specNodeInfo);
+      await this.md.createEmptyLog(projectRoot, wsDirName, specNodeDirName);
+      await this.md.createEmptyProblem(projectRoot, wsDirName, specNodeDirName);
+
+      // Quality 节点（可选）
+      if (qualityNode && qualityNodeDirName) {
+        const qualityNodePath = this.fs.getNodePath(projectRoot, wsDirName, qualityNodeDirName);
+        await this.fs.mkdir(qualityNodePath);
+        createdDirs.push(qualityNodePath);
+
+        const qualityNodeInfo: NodeInfoData = {
+          id: qualityNodeId!,
+          type: "execution",
+          title: `[Quality] ${shortTitle}`,
+          status: "pending",
+          createdAt: currentTime,
+          updatedAt: currentTime,
+          requirement: `检查执行节点的代码质量。\n\n**被检查节点**: ${execNodeId}\n\n**审查要点**:\n1. 代码可读性和可维护性\n2. 错误处理是否完善\n3. 是否遵循项目编码规范\n4. 是否存在潜在的性能问题\n5. 是否存在安全漏洞`,
+          docs: [],
+          notes: "",
+          conclusion: "",
+        };
+        await this.md.writeNodeInfo(projectRoot, wsDirName, qualityNodeDirName, qualityNodeInfo);
+        await this.md.createEmptyLog(projectRoot, wsDirName, qualityNodeDirName);
+        await this.md.createEmptyProblem(projectRoot, wsDirName, qualityNodeDirName);
+      }
+
+      // 7.2 更新 graph.json（一次性写入所有节点）
+      graph.nodes[execNodeId] = execNode;
+      graph.nodes[specNodeId] = specNode;
+      if (qualityNode) {
+        graph.nodes[qualityNodeId!] = qualityNode;
+      }
+      parent.children.push(execNodeId, specNodeId);
+      if (qualityNodeId) {
+        parent.children.push(qualityNodeId);
+      }
+      parent.dispatch.children = {
+        execId: execNodeId,
+        specId: specNodeId,
+        qualityId: qualityNodeId,
+      };
+      parent.updatedAt = currentTime;
+
+      // 8. 记录 startMarker
+      const startMarker = useGit ? await getCurrentCommit(projectRoot) : Date.now().toString();
+      execNode.dispatch = {
+        startMarker,
+        status: "executing",
+      };
+
+      await this.json.writeGraph(projectRoot, wsDirName, graph);
+
+    } catch (error) {
+      // 回滚：删除已创建的目录
+      for (const dir of createdDirs) {
+        try {
+          await this.fs.rmdir(dir);
+        } catch {
+          // 忽略删除错误
+        }
+      }
+      throw error;
+    }
+
+    // 9. 记录日志
+    const nodeList = includeQuality
+      ? `exec=${execNodeId}, spec=${specNodeId}, quality=${qualityNodeId}`
+      : `exec=${execNodeId}, spec=${specNodeId}`;
+    await this.md.appendLog(projectRoot, wsDirName, {
+      time: now(),
+      operator: "system",
+      event: `派发子节点已创建: ${nodeList}`,
+    }, parentId);
+
+    // 10. 发送事件通知
+    eventService.emitDispatchUpdate(workspaceId, parentId);
+
+    // 11. 构建 executor prompt
+    const execNodeMeta = graph.nodes[execNodeId];
+    const prompt = this.buildExecutorPrompt(
+      workspaceId,
+      execNodeId,
+      {
+        title: `[Exec] ${shortTitle}`,
+        requirement: exec.requirement,
+        acceptanceCriteria: exec.acceptanceCriteria,
+      },
+      execNodeMeta
+    );
+
+    // 12. 返回结果
+    return {
+      execId: execNodeId,
+      specId: specNodeId,
+      qualityId: qualityNodeId,
+      actionRequired: {
+        type: "dispatch_task",
+        message: `派发子节点已创建，请立即派发 exec 节点执行。
+
+**使用 Task 工具派发**：
+\`\`\`
+Task(
+  subagent_type: "tanmi-executor",
+  description: "执行派发任务",
+  prompt: <下方 data.prompt 中的内容>
+)
+\`\`\`
+
+**重要**：
+- 你是协调者，不要自己执行任务
+- 必须使用 Task 工具将任务派发给 subagent
+- 等待 subagent 返回后，根据结果决定下一步（派发 spec/quality 审查或处理失败）`,
+        data: {
+          workspaceId,
+          nodeId: execNodeId,
+          subagentType: "tanmi-executor",
+          prompt,
+          timeout: config.dispatch.limits?.timeoutMs || 300000,
+        },
+      },
+    };
   }
 
   // ========== HTTP API 包装方法 ==========

@@ -1,13 +1,22 @@
 ---
 name: reviewing-spec
-description: Validates execution results against requirements and acceptance criteria. Use when performing Spec Review to verify implementation completeness.
+description: Validates execution results against requirements and acceptance criteria. Use when performing Spec Review as dispatch_spec role to verify implementation completeness.
 ---
 
 # Reviewing Spec
 
 ## Core Thinking
 
-**Verify** - Systematically validate each acceptance criterion. Evidence-based verdicts only.
+**Verify** - Systematically validate each acceptance criterion. Evidence-based verdicts only. Trust nothing - verify everything.
+
+## Role: dispatch_spec
+
+As a `dispatch_spec` node, you are part of the dispatch flow:
+- You are a **child** of the dispatch parent node
+- You verify the work done by the paired `dispatch_exec` node
+- You report back to the parent via `dispatch_complete`
+
+**Critical Principle**: You perform INDEPENDENT verification. You do NOT trust the exec node's conclusion. You verify against the original requirements and acceptance criteria by examining the actual code/output.
 
 ## Typical Actions
 
@@ -15,6 +24,7 @@ description: Validates execution results against requirements and acceptance cri
 - Check requirement coverage
 - Identify implementation gaps
 - Deliver pass/fail verdict
+- Report via dispatch_complete
 
 ## SOP
 
@@ -177,3 +187,45 @@ For each criterion (WHEN/THEN format):
 | **Leniency** | Pass despite missing feature | Fail with clear feedback |
 | **Vague feedback** | "Needs improvement" | "Criterion 2 fails: no error handling in line 45" |
 | **Scope creep** | Review code style in spec review | Focus only on requirements/criteria |
+| **Trust exec blindly** | "Exec said it's done, so pass" | Verify independently against criteria |
+
+---
+
+## Completing the Review
+
+**IMPORTANT**: As a dispatch_spec node, you MUST call `dispatch_complete` to finalize your review.
+
+### On Pass
+
+```typescript
+dispatch_complete({
+  workspaceId: "...",
+  nodeId: "[your-node-id]",
+  success: true,
+  conclusion: `**Verdict**: PASS
+**Criteria**: [X]/[X] passed
+**Coverage**: Complete
+**Summary**: Implementation fully meets requirements.`
+})
+```
+
+### On Fail
+
+```typescript
+dispatch_complete({
+  workspaceId: "...",
+  nodeId: "[your-node-id]",
+  success: false,
+  conclusion: `**Verdict**: FAIL
+**Criteria**: [X]/[Y] passed, [Z] failed
+**Failed**:
+- Criterion N: [specific reason with evidence]
+**Required Actions**:
+1. [specific fix needed]`
+})
+```
+
+**Why dispatch_complete?**
+- Signals completion to the dispatch parent
+- Enables Git commit (on success) or rollback (on failure)
+- Provides structured feedback for retry decisions

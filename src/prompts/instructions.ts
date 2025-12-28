@@ -201,7 +201,7 @@ export const CORE_WORKFLOW = `
 | \`check_docs\` | 执行节点完成且有文档引用 | 向用户确认引用的文档是否需要同步更新 |
 | \`review_structure\` | reopen 且有子节点 | 先调用 node_list/workspace_status 查看现有结构，评估是否调整现有节点而非创建新节点 |
 | \`ask_dispatch\` | 首个执行节点启动且项目是 Git 仓库 | 询问用户是否启用派发模式（subagent 执行 + 自动验证 + 失败回滚） |
-| \`dispatch_task\` | node_dispatch 准备完成 | 使用 Task tool 调用 subagent 执行任务，按返回的 prompt 和参数调用 |
+| \`dispatch_task\` | dispatch_node 准备完成 | 使用 Task tool 调用 subagent 执行任务，按返回的 prompt 和参数调用 |
 
 **执行示例**：
 \`\`\`
@@ -365,8 +365,8 @@ export const TOOLS_QUICK_REFERENCE = `
 |------|------|----------|
 | dispatch_enable | 启用派发模式 | workspaceId |
 | dispatch_disable | 禁用派发模式 | workspaceId, merge? |
-| node_dispatch | 准备派发任务 | workspaceId, nodeId |
-| node_dispatch_complete | 处理派发结果 | workspaceId, nodeId, success, conclusion? |
+| dispatch_node | 准备派发任务 | workspaceId, nodeId |
+| dispatch_complete | 处理派发结果 | workspaceId, nodeId, success, conclusion? |
 | dispatch_cleanup | 清理派发分支 | workspaceId, cleanupType? |
 
 **派发模式说明**：
@@ -951,7 +951,7 @@ node_create({
 node_transition({ action: "start" })
     ↓
 4. 准备派发
-node_dispatch({ workspaceId, nodeId })
+dispatch_node({ workspaceId, nodeId })
   → 返回 actionRequired: { type: "dispatch_task", prompt: "..." }
   → 返回 startMarker（Git 模式=commit hash，无 Git 模式=时间戳）
     ↓
@@ -959,7 +959,7 @@ node_dispatch({ workspaceId, nodeId })
 Task({ subagent_type: "tanmi-executor", prompt: "..." })
     ↓
 6. 处理执行结果
-node_dispatch_complete({ success: true/false, conclusion: "..." })
+dispatch_complete({ success: true/false, conclusion: "..." })
   → 成功时返回 endMarker（Git 模式=commit hash，无 Git 模式=时间戳）
     ↓
 7. 如果有测试节点，自动触发测试
@@ -991,16 +991,18 @@ node_create({
 // 返回 { nodeId: "exec-xxx", testNodeId: "test-xxx" }
 \`\`\`
 
-### 失败回滚
+### 失败处理
 
-**Git 模式**：
-当 node_dispatch_complete 传入 success: false 时：
-- 自动执行 git reset --hard 到 startMarker（commit hash）
-- 代码恢复到执行前状态
-- 可修复问题后 retry
+当 dispatch_complete 传入 success: false 时：
+- 节点状态变为 failed，dispatch.status 变为 failed
+- **不会自动回滚**，由母节点决定下一步操作
+- 母节点可以通过 context_get 读取子节点状态来决策
+
+**Git 模式下的手动回滚**：
+- 如需回滚，母节点可使用 startMarker（commit hash）执行 git reset
+- 或直接重新派发任务
 
 **无 Git 模式**：
-- ⚠️ 无法自动回滚
 - 需要手动恢复代码
 - 可通过 startMarker（时间戳）追溯执行时间点
 

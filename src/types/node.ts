@@ -13,10 +13,11 @@ export type NodeType =
  * 节点角色 - 节点在工作流中的特殊职责
  */
 export type NodeRole =
-  | "info_collection"  // 信息收集：调研、分析，完成时自动归档到工作区规则和文档
-  | "info_summary"     // 信息总结：从已有信息中提取结构化内容
-  | "spec_review"      // 规格审查：验证执行结果是否符合需求规格
-  | "quality_review";  // 质量审查：检查代码质量、最佳实践、潜在问题
+  | "info_collection"   // 信息收集：调研、分析，完成时自动归档到工作区规则和文档
+  | "info_summary"      // 信息总结：从已有信息中提取结构化内容
+  | "dispatch_exec"     // 派发执行：派发母节点自动创建的执行子节点
+  | "dispatch_spec"     // 派发规格审查：验证执行结果是否符合需求规格
+  | "dispatch_quality"; // 派发质量审查：检查代码质量、最佳实践、潜在问题
 
 /**
  * 验收标准 - WHEN/THEN 格式
@@ -32,11 +33,8 @@ export interface AcceptanceCriteria {
 export type NodeDispatchStatus =
   | "pending"           // 等待派发
   | "executing"         // subagent 执行中
-  | "spec_reviewing"    // 规格审查中
-  | "quality_reviewing" // 质量审查中
-  | "testing"           // 测试节点验证中
-  | "passed"            // 测试通过
-  | "failed";           // 执行失败或测试失败
+  | "passed"            // 执行通过
+  | "failed";           // 执行失败
 
 /**
  * 派发尝试记录 - 记录每次执行尝试的详情
@@ -58,8 +56,12 @@ export interface NodeDispatchInfo {
   endMarker?: string;               // Git 模式=commit hash，无 Git 模式=时间戳
   status: NodeDispatchStatus;       // 派发状态
   attempts?: DispatchAttempt[];     // 执行尝试历史（用于重试时提供失败上下文）
-  specReviewNodeId?: string;        // 规格审查节点 ID
-  qualityReviewNodeId?: string;     // 质量审查节点 ID
+  isParent?: boolean;               // 是否为派发母节点
+  children?: {                      // 派发子节点 ID
+    execId?: string;
+    specId?: string;
+    qualityId?: string;
+  };
 }
 
 /**

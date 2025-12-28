@@ -115,7 +115,7 @@ Notes: [if any].
 
 **Call**:
 ```
-node_dispatch_complete(
+dispatch_complete(
   workspaceId="...",
   nodeId="...",
   success=true,
@@ -146,7 +146,7 @@ node_dispatch_complete(
 - [ ] Conclusion is complete
 - [ ] Files listed
 - [ ] Verification stated
-- [ ] node_dispatch_complete called
+- [ ] dispatch_complete called
 
 ## Output Template
 

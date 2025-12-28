@@ -3,36 +3,43 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 /**
- * node_dispatch 工具定义
- * 准备派发节点任务
+ * dispatch_node 工具定义
+ * 升级执行节点为派发母节点
  */
-export const nodeDispatchTool: Tool = {
-  name: "node_dispatch",
-  description: `准备派发节点任务，返回 subagent 调用指令。
+export const dispatchNodeTool: Tool = {
+  name: "dispatch_node",
+  description: `升级执行节点为派发母节点。
 
-**使用场景**：在派发模式下，将执行节点任务交给 subagent 执行。
+**使用场景**：将执行节点升级为派发母节点，准备创建子节点进行派发执行。
 
 **前置条件**：
 - 工作区已启用派发模式
 - 节点类型为 execution
-- 节点状态为 pending 或 implementing
 
-**⚠️ 重要：派发模式下，执行节点必须通过此工具派发，不能直接调用 node_transition(action="start")**
-
-**自动状态转换**：
-- 如果节点状态为 pending，会自动转换为 implementing
-- 这意味着派发操作会自动包含 start 的效果，无需单独调用 start
+**执行逻辑**：
+1. 验证派发模式已启用
+2. 验证节点是 execution 类型
+3. 检查上级节点角色：
+   - 如果是 info_collection/info_summary → 返回提示「可直接执行，无需派发」
+   - 否则 → 继续升级流程
+4. 将节点类型改为 planning
+5. 设置派发母节点标识: dispatch.isParent = true
+6. 状态改为 monitoring
+7. 返回 actionRequired 指向 dispatching-parent Skill
 
 **返回内容**：
-- startMarker: 执行前的标记，用于记录执行起点
-  - **Git 模式**：commit hash（当前 HEAD 的 commit ID）
-  - **无 Git 模式**：时间戳（ISO 8601 格式）
-  - 用途：失败回滚时的基准点（Git 模式），或追溯执行时间（无 Git 模式）
-- actionRequired: 包含 subagent 调用所需的所有信息
-  - type: "dispatch_task"
-  - subagentType: "tanmi-executor"
-  - prompt: 预构建的 subagent prompt
-  - timeout: 超时时间`,
+- success: 操作是否成功
+- upgraded: 是否升级成功
+- skipReason: 如果未升级，原因说明
+- actionRequired: 包含下一步操作指引
+  - type: "invoke_skill"
+  - skill: "dispatching-parent"
+  - message: 引导阅读派发流程
+
+**注意**：
+- 不创建任何子节点（子节点由 dispatch_create 创建）
+- 不记录 startMarker（由 dispatch_create 时记录）
+- 不构建 executor prompt（由 dispatch_create 返回）`,
   inputSchema: {
     type: "object",
     properties: {
@@ -42,7 +49,7 @@ export const nodeDispatchTool: Tool = {
       },
       nodeId: {
         type: "string",
-        description: "要派发的节点 ID（pending 或 implementing 状态的执行节点）",
+        description: "要升级的执行节点 ID",
       },
     },
     required: ["workspaceId", "nodeId"],
@@ -50,11 +57,11 @@ export const nodeDispatchTool: Tool = {
 };
 
 /**
- * node_dispatch_complete 工具定义
+ * dispatch_complete 工具定义
  * 处理派发任务的执行结果
  */
-export const nodeDispatchCompleteTool: Tool = {
-  name: "node_dispatch_complete",
+export const dispatchCompleteTool: Tool = {
+  name: "dispatch_complete",
   description: `处理派发任务的执行结果。
 
 **使用场景**：subagent 执行完成后，调用此工具处理结果。
@@ -248,11 +255,11 @@ export const dispatchDisableTool: Tool = {
 };
 
 /**
- * dispatch_disable_execute 工具定义
+ * dispatch_execute 工具定义
  * 执行禁用派发（第二步：根据用户选择执行）
  */
-export const dispatchDisableExecuteTool: Tool = {
-  name: "dispatch_disable_execute",
+export const dispatchExecuteTool: Tool = {
+  name: "dispatch_execute",
   description: `禁用派发模式第二步：执行用户选择的合并策略。
 
 **⚠️ 前置条件：必须先通过 AskUserQuestion 获取用户的明确选择！**
@@ -305,13 +312,79 @@ export const dispatchDisableExecuteTool: Tool = {
 };
 
 /**
+ * dispatch_create 工具定义
+ * 在派发母节点下创建派发子节点
+ */
+export const dispatchCreateTool: Tool = {
+  name: "dispatch_create",
+  description: `在派发母节点下创建派发子节点。
+
+**使用场景**：dispatch_node 升级节点后，使用此工具创建子节点。
+
+**前置条件**：
+- parentId 必须是已调用 dispatch_node 的派发母节点
+- 派发模式已启用
+
+**创建的节点**：
+- exec: 执行节点 (role=dispatch_exec)
+- spec: 规格审查节点 (role=dispatch_spec)，自动生成
+- quality: 质量审查节点 (role=dispatch_quality)，可选
+
+**返回**：
+- execId, specId, qualityId
+- actionRequired: 派发 exec 节点的指令`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+      parentId: {
+        type: "string",
+        description: "派发母节点 ID",
+      },
+      exec: {
+        type: "object",
+        properties: {
+          requirement: {
+            type: "string",
+            description: "执行节点的需求描述",
+          },
+          acceptanceCriteria: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                when: { type: "string" },
+                then: { type: "string" },
+              },
+              required: ["when", "then"],
+            },
+            description: "验收标准列表",
+          },
+        },
+        required: ["requirement", "acceptanceCriteria"],
+        description: "执行节点的配置",
+      },
+      includeQuality: {
+        type: "boolean",
+        description: "是否创建质量审查节点，默认 true",
+      },
+    },
+    required: ["workspaceId", "parentId", "exec"],
+  },
+};
+
+/**
  * 所有派发工具
  */
 export const dispatchTools: Tool[] = [
-  nodeDispatchTool,
-  nodeDispatchCompleteTool,
+  dispatchNodeTool,
+  dispatchCompleteTool,
   dispatchCleanupTool,
   dispatchEnableTool,
   dispatchDisableTool,
-  dispatchDisableExecuteTool,
+  dispatchExecuteTool,
+  dispatchCreateTool,
 ];

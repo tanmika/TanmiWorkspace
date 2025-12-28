@@ -9,11 +9,13 @@ export { sessionTools, sessionBindTool, sessionUnbindTool, sessionStatusTool } f
 export { importTools, workspaceImportGuideTool, workspaceImportListTool } from "./import.js";
 export {
   dispatchTools,
-  nodeDispatchTool,
-  nodeDispatchCompleteTool,
+  dispatchNodeTool,
+  dispatchCompleteTool,
   dispatchCleanupTool,
   dispatchEnableTool,
   dispatchDisableTool,
+  dispatchExecuteTool,
+  dispatchCreateTool,
 } from "./dispatch.js";
 export { configTools, configGetTool, configSetTool } from "./config.js";
 export { memoTools, memoCreateTool, memoListTool, memoGetTool, memoUpdateTool, memoDeleteTool } from "./memo.js";
