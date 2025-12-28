@@ -28,6 +28,12 @@ import { now } from "../utils/time.js";
 import { validateNodeTitle } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
 import { GuidanceService } from "./GuidanceService.js";
+
+/**
+ * 内部调用专用的 magic hash，绕过 rulesHash 验证
+ * 仅供 capability_select 等内部模块使用
+ */
+export const INTERNAL_RULES_HASH = "__internal__";
 import type { GuidanceContext } from "../types/guidance.js";
 import { eventService } from "./EventService.js";
 
@@ -211,8 +217,9 @@ export class NodeService {
     }
 
     // 5.1 验证规则哈希（如果工作区有规则）
+    // 内部调用使用 INTERNAL_RULES_HASH 可绕过验证
     const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName);
-    if (workspaceMdData.rules.length > 0) {
+    if (workspaceMdData.rules.length > 0 && params.rulesHash !== INTERNAL_RULES_HASH) {
       const expectedHash = crypto.createHash("md5").update(workspaceMdData.rules.join("\n")).digest("hex").substring(0, 8);
       if (params.rulesHash !== expectedHash) {
         throw new TanmiError(

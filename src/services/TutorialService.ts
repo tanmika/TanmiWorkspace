@@ -3,13 +3,12 @@
 import * as path from "node:path";
 import * as os from "node:os";
 import * as fs from "node:fs/promises";
-import * as crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import type { WorkspaceService } from "./WorkspaceService.js";
-import type { NodeService } from "./NodeService.js";
+import { INTERNAL_RULES_HASH, type NodeService } from "./NodeService.js";
 import type { StateService } from "./StateService.js";
 import type { LogService } from "./LogService.js";
 import type { ContextService } from "./ContextService.js";
@@ -806,11 +805,6 @@ export class TutorialService {
       return;
     }
 
-    const rulesHash = crypto.createHash("md5")
-      .update("这是版本更新说明工作区，记录各版本的功能变更")
-      .digest("hex")
-      .substring(0, 8);
-
     // 按 major.minor 版本号排序（降序，新版本在前）
     const sortedMajorMinors = Array.from(groups.keys()).sort((a, b) => {
       const [aMajor, aMinor] = a.split(".").map(Number);
@@ -890,7 +884,7 @@ export class TutorialService {
           type: "planning",
           title: `V${mm} 版本更新`,
           requirement: majorRequirement,
-          rulesHash,
+          rulesHash: INTERNAL_RULES_HASH,
         });
 
         majorNodeId = majorNodeResult.nodeId;
@@ -918,7 +912,7 @@ export class TutorialService {
           type: "execution",
           title: `V${patch.version} 版本更新`,
           requirement: patchRequirement,
-          rulesHash,
+          rulesHash: INTERNAL_RULES_HASH,
         });
 
         // 记录第一个（最新）节点 ID 用于设置 focus
@@ -963,7 +957,7 @@ export class TutorialService {
           type: "execution",
           title: `V${group.major.version} 版本更新`,
           requirement: majorVersionRequirement,
-          rulesHash,
+          rulesHash: INTERNAL_RULES_HASH,
         });
 
         // 结论：使用 requirement（简洁描述）
@@ -1095,18 +1089,11 @@ export class TutorialService {
       docs: TUTORIAL_CONTENT.docs,
     });
 
-    // 计算 rulesHash（绕过规则确认检查）
-    const rulesHash = crypto.createHash("md5")
-      .update(TUTORIAL_CONTENT.rules.join("\n"))
-      .digest("hex")
-      .substring(0, 8);
-
-    // 创建子节点
+    // 创建子节点（使用 INTERNAL_RULES_HASH 绕过规则确认检查）
     const focusNodeId = await this.createNodes(
       result.workspaceId,
       "root",
-      TUTORIAL_CONTENT.nodes,
-      rulesHash
+      TUTORIAL_CONTENT.nodes
     );
 
     // 最后设置焦点（避免被后续操作覆盖）
@@ -1124,8 +1111,7 @@ export class TutorialService {
   private async createNodes(
     workspaceId: string,
     parentId: string,
-    nodes: TutorialNode[],
-    rulesHash: string
+    nodes: TutorialNode[]
   ): Promise<string | null> {
     let focusNodeId: string | null = null;
 
@@ -1139,14 +1125,14 @@ export class TutorialService {
         requirement: nodeDef.requirement,
         role: nodeDef.role,
         docs: nodeDef.docs,
-        rulesHash,
+        rulesHash: INTERNAL_RULES_HASH,
       });
 
       const nodeId = result.nodeId;
 
       // 2. 递归创建子节点
       if (nodeDef.children && nodeDef.children.length > 0) {
-        const childFocusId = await this.createNodes(workspaceId, nodeId, nodeDef.children, rulesHash);
+        const childFocusId = await this.createNodes(workspaceId, nodeId, nodeDef.children);
         if (childFocusId) focusNodeId = childFocusId;
       }
 

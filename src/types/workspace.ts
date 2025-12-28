@@ -98,11 +98,28 @@ export interface WorkspaceConfig {
 }
 
 /**
+ * Memo 元信息（用于 memo:// 引用）
+ */
+export interface MemoMeta {
+  id: string;
+  title: string;
+  summary: string;
+  tags: string[];
+}
+
+/**
+ * 文档引用状态
+ */
+export type DocRefStatus = "active" | "expired";
+
+/**
  * 文档引用
  */
 export interface DocRef {
   path: string;
   description: string;
+  memoMeta?: MemoMeta;          // memo:// 引用时的元信息
+  status?: DocRefStatus;        // 引用状态（expired 表示 memo 已删除）
 }
 
 /**
