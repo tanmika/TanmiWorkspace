@@ -176,11 +176,11 @@ export class DispatchService {
       title: `[Spec Review] ${execNodeTitle}`,
       requirement: `审查执行节点 "${execNodeTitle}" 的实现是否符合需求规格。
 
-## 被审查节点
+**被审查节点**
 - 节点 ID: ${execNodeId}
 - 执行结论: ${execConclusion}
 
-## 审查要点
+**审查要点**
 1. 实现是否完整覆盖需求描述
 2. 验收标准是否全部满足
 3. 是否存在遗漏或偏离需求的实现`,
@@ -188,12 +188,16 @@ export class DispatchService {
       acceptanceCriteria: execNodeInfo.acceptanceCriteria,
     });
 
+    // 重新读取 graph（nodeService.create 已写入新节点）
+    const updatedGraph = await this.json.readGraph(projectRoot, wsDirName);
+    const updatedExecNode = updatedGraph.nodes[execNodeId];
+
     // 更新执行节点的 dispatch 信息，关联 Review 节点
-    execNode.dispatch = {
-      ...execNode.dispatch!,
+    updatedExecNode.dispatch = {
+      ...updatedExecNode.dispatch!,
       specReviewNodeId: result.nodeId,
     };
-    await this.json.writeGraph(projectRoot, wsDirName, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, updatedGraph);
 
     return result.nodeId;
   }
@@ -233,10 +237,10 @@ export class DispatchService {
       title: `[Quality Review] ${execNodeTitle}`,
       requirement: `审查执行节点 "${execNodeTitle}" 的代码质量。
 
-## 被审查节点
+**被审查节点**
 - 节点 ID: ${execNodeId}
 
-## 审查要点
+**审查要点**
 1. 代码可读性和可维护性
 2. 错误处理是否完善
 3. 是否遵循项目编码规范
@@ -245,12 +249,16 @@ export class DispatchService {
       role: "quality_review",
     });
 
+    // 重新读取 graph（nodeService.create 已写入新节点）
+    const updatedGraph = await this.json.readGraph(projectRoot, wsDirName);
+    const updatedExecNode = updatedGraph.nodes[execNodeId];
+
     // 更新执行节点的 dispatch 信息，关联 Review 节点
-    execNode.dispatch = {
-      ...execNode.dispatch!,
+    updatedExecNode.dispatch = {
+      ...updatedExecNode.dispatch!,
       qualityReviewNodeId: result.nodeId,
     };
-    await this.json.writeGraph(projectRoot, wsDirName, graph);
+    await this.json.writeGraph(projectRoot, wsDirName, updatedGraph);
 
     return result.nodeId;
   }
