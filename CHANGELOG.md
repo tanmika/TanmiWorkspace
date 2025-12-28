@@ -11,6 +11,12 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.10.1] - 2025-12-28
+
+### Fixed
+
+- **capability_list 配置路径**: 修复在用户项目目录下无法找到 scenarioCapabilities.json 的问题
+
 ## [1.10.0] - 2025-12-28
 
 ### Added

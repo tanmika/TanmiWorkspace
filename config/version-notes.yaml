@@ -1,7 +1,7 @@
 # TanmiWorkspace 版本更新说明
 #
 # 此文件由 scripts/sync-versions.ts 同步维护
-# - conclusion: 自动从 CHANGELOG.md 提取，同时进行改造，把不该展示给用户的以及用户看不懂的给改了
+# - conclusion: 自动从 CHANGELOG.md 提取
 # - requirement/note: 人工填写
 #
 # 使用方式：
@@ -9,6 +9,10 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.1
+    requirement: 修复能力列表配置路径问题
+    conclusion: "- 修复 capability_list 在用户项目目录下无法正常工作的问题"
+    note: ""
   - version: 1.10.0
     requirement: 派发系统优化、Memo 富卡片、Agents/Skills 更新
     conclusion: |-
