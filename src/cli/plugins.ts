@@ -440,6 +440,46 @@ function configureClaudeHooks(): void {
           },
         ],
       },
+      {
+        matcher: "Edit",
+        hooks: [
+          {
+            type: "command",
+            command: `node "${hookScript}" PostToolUse`,
+            timeout: 3000,
+          },
+        ],
+      },
+      {
+        matcher: "Write",
+        hooks: [
+          {
+            type: "command",
+            command: `node "${hookScript}" PostToolUse`,
+            timeout: 3000,
+          },
+        ],
+      },
+      {
+        matcher: "Bash",
+        hooks: [
+          {
+            type: "command",
+            command: `node "${hookScript}" PostToolUse`,
+            timeout: 3000,
+          },
+        ],
+      },
+      {
+        matcher: "TodoWrite",
+        hooks: [
+          {
+            type: "command",
+            command: `node "${hookScript}" PostToolUse`,
+            timeout: 3000,
+          },
+        ],
+      },
     ],
   };
 

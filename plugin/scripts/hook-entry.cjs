@@ -144,6 +144,8 @@ function handlePostToolUse(sessionId, binding, input) {
     handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_response);
   } else if (tool_name === 'Bash') {
     handleBashToolUse(sessionId, binding, tool_input, tool_response);
+  } else if (tool_name === 'TodoWrite') {
+    handleTodoWriteToolUse(sessionId, binding, tool_input, tool_response);
   } else {
     process.exit(0);
   }
@@ -212,8 +214,8 @@ function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_respo
     return;
   }
 
-  // 节流检查：file_changed 类型，1分钟内不重复提醒
-  if (shouldThrottle(binding, 'file_changed', 60000)) {
+  // 节流检查：file_changed 类型，10秒内不重复提醒
+  if (shouldThrottle(binding, 'file_changed', 10000)) {
     process.exit(0);
     return;
   }
@@ -224,7 +226,7 @@ function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_respo
   const reminder = `<tanmi-post-tool-reminder>
 📝 文件 \`${fileName}\` 已${tool_name === 'Edit' ? '编辑' : '写入'}。
 
-建议：使用 \`log_append\` 记录本次变更的内容和目的，保持工作可追溯。
+**请使用 \`log_append\` 记录本次变更**，说明改动内容和目的。
 </tanmi-post-tool-reminder>`;
 
   updateLastReminder(sessionId, 'file_changed');
@@ -269,8 +271,8 @@ function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
     return;
   }
 
-  // 节流检查：bash_error 类型，30秒内不重复提醒
-  if (shouldThrottle(binding, 'bash_error', 30000)) {
+  // 节流检查：bash_error 类型，5秒内不重复提醒
+  if (shouldThrottle(binding, 'bash_error', 5000)) {
     process.exit(0);
     return;
   }
@@ -283,7 +285,7 @@ function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
 
 命令: \`${cmdPreview}\`
 
-建议：使用 \`problem_update\` 记录遇到的问题和解决思路，便于追踪和复盘。
+**请使用 \`problem_update\` 记录问题**，描述错误原因和解决思路。
 </tanmi-post-tool-reminder>`;
 
   updateLastReminder(sessionId, 'bash_error');
@@ -292,6 +294,48 @@ function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
     command: cmdPreview,
     exitCode,
     reminder: 'bash_error'
+  });
+
+  outputHookResponse('PostToolUse', reminder);
+}
+
+/**
+ * 处理 TodoWrite 工具
+ * 提醒 AI 应该在工作区创建执行节点跟踪任务
+ */
+function handleTodoWriteToolUse(sessionId, binding, tool_input, tool_response) {
+  // 未绑定工作区时不提醒
+  if (!binding?.workspaceId) {
+    process.exit(0);
+    return;
+  }
+
+  // 检查是否成功
+  const isSuccess = tool_response?.success !== false;
+  if (!isSuccess) {
+    process.exit(0);
+    return;
+  }
+
+  // 统计 todo 数量
+  const todos = tool_input?.todos || [];
+  const pendingCount = todos.filter(t => t.status === 'pending').length;
+  const inProgressCount = todos.filter(t => t.status === 'in_progress').length;
+
+  const reminder = `<tanmi-post-tool-reminder>
+📋 TodoWrite 已更新 (${todos.length} 项，${inProgressCount} 进行中，${pendingCount} 待办)。
+
+**注意：TodoWrite 是本地工具，用户在 WebUI 看不到进度。**
+**MUST** 评估是否需要同步到工作区（创建节点或使用 log_append 记录）。
+</tanmi-post-tool-reminder>`;
+
+  updateLastReminder(sessionId, 'todo_write');
+  logHook(sessionId, 'PostToolUse', {
+    tool: 'TodoWrite',
+    todoCount: todos.length,
+    pending: pendingCount,
+    inProgress: inProgressCount,
+    reminder: 'todo_write'
   });
 
   outputHookResponse('PostToolUse', reminder);
@@ -401,8 +445,7 @@ function handleStop(sessionId, binding, input) {
 
 上下文: "${errorContext}"
 
-建议：使用 \`problem_update\` 记录当前问题和下一步计划，便于追踪和复盘。
-如果问题已解决，可以忽略此提醒。
+**MUST** 使用 \`problem_update\` 记录当前问题和下一步计划。
 </tanmi-error-detected>`
       };
       console.log(JSON.stringify(response));
