@@ -110,6 +110,33 @@ capability_select({
 
 Read corresponding Skill for SOP guidance.
 
+### 6. Continue Tracking in Workspace (CRITICAL)
+
+**Workspace is for the ENTIRE task lifecycle, not just info collection.**
+
+After info collection completes:
+
+```
+Info collection done
+    ↓
+Create planning/execution nodes for implementation
+    ↓
+Use log_append to record progress
+    ↓
+Complete nodes when tasks finish
+```
+
+**Rules**:
+- **MUST** create execution nodes for implementation tasks
+- **MUST** use `log_append` for progress updates, NOT TodoWrite
+- **NEVER** treat "info collection done" as "workspace usage done"
+- Workspace nodes = visible progress + history + dispatchable
+
+**Why this matters**:
+- TodoWrite is local-only, invisible in WebUI
+- Workspace nodes preserve full execution history
+- User expects to see ALL progress in workspace
+
 ## Scenario-Capability Mapping
 
 | scenario | basePack | optionalPack |
@@ -138,6 +165,8 @@ When these appear, you may be skipping proper bootstrapping:
 3. **Skip user confirmation** - Decide capabilities without asking
 4. **Wrong infoType** - Always use info_collection when info_summary is appropriate
 5. **Partial basePack** - Missing required capabilities from basePack
+6. **Use TodoWrite after info collection** - Should create workspace nodes instead
+7. **No execution nodes for implementation** - Workspace abandoned after info phase
 
 ## Anti-Patterns
 
@@ -149,6 +178,8 @@ When these appear, you may be skipping proper bootstrapping:
 | Always use info_collection | Choose collection/summary based on scenario |
 | Decide capabilities yourself | Show user and ask |
 | Only include partial basePack | Include ALL basePack |
+| TodoWrite for implementation tasks | Create execution nodes in workspace |
+| Abandon workspace after info collection | Continue with planning/execution nodes |
 
 ## Common Rationalizations
 
@@ -159,3 +190,5 @@ When these appear, you may be skipping proper bootstrapping:
 | "info_collection is safer default" | Wrong type wastes effort | Match infoType to task nature |
 | "basePack is just a suggestion" | basePack is REQUIRED, not optional | Include ALL basePack capabilities |
 | "I'll skip capability selection to save time" | Skipping leads to incomplete setup | 30s setup saves confusion later |
+| "Info collection is done, now just coding" | Workspace tracks full lifecycle | Create execution nodes for implementation |
+| "TodoWrite is faster for tracking" | TodoWrite is invisible to user | Use workspace nodes + log_append |
