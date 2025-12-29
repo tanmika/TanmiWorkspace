@@ -9,6 +9,8 @@ description: Use when starting work on unfamiliar codebase or module. Investigat
 
 **Investigate** - Build cognitive model through systematic information collection.
 
+**Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
+
 ## Typical Actions
 
 - **Explore codebase**: Use Task tool with `subagent_type=Explore` for complex exploration
@@ -97,6 +99,38 @@ description: Use when starting work on unfamiliar codebase or module. Investigat
 
 Structure findings using output template.
 
+### 5. Record to Workspace (MANDATORY)
+
+After exploration, MUST record to workspace node:
+
+**Recording locations**:
+| Content | Location | Tool |
+|---------|----------|------|
+| Key conclusions (brief) | conclusion | node_update |
+| Scope, key files, dependencies | notes | node_update |
+| Full knowledge snapshot (>200 lines) | MEMO | memo_create + node_reference |
+
+**NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Conclusion template** (brief):
+```
+[探索范围] + [关键发现] + [待确认项]
+```
+
+**Notes template** (detailed):
+```
+**Strategy**: Macro/Micro
+**Scanned**: [directories/files]
+**Key Files**:
+- Entry: file:line
+- Types: file
+**Dependencies**: [list]
+**Data Flow**: [brief]
+**Uncertainties**: [items]
+```
+
+**Output**: node_update called with conclusion + notes
+
 ## Information Source Priority
 
 1. **Codebase**: Most reliable, implementation is truth
@@ -126,39 +160,11 @@ Structure findings using output template.
 - [ ] Data flow traced
 - [ ] Error handling identified
 
-## Recording to Workspace
-
-**Principle**: User only sees workspace, not conversation output.
-
-### What to Record
-
-| Content | Where | Example |
-|---------|-------|---------|
-| Scanned scope | conclusion | "Scanned: src/services/, docs/" |
-| Key files found | conclusion | "Entry: src/index.ts:45" |
-| Discoveries | conclusion or memo | Dependencies, data flow |
-| Uncertainties | conclusion | "TBD: Config loading mechanism" |
-
-### Conclusion Template
-
-```
-**Scope**: [what was scanned]
-**Strategy**: [Macro/Micro]
-**Key Findings**:
-- Entry: [file:line]
-- Dependencies: [list]
-- Data flow: [brief]
-**Uncertainties**: [items to confirm]
-**Details**: 见 MEMO#xxx (if long)
-```
-
-### Long Content Handling
-
-If findings exceed 10 lines:
-1. Use `memo_create` to store full knowledge snapshot
-2. Write concise conclusion with key paths and discoveries
-
----
+### Recording (MANDATORY)
+- [ ] **Conclusion written**: Brief summary in node conclusion
+- [ ] **Notes written**: Scope, key files, dependencies in node notes
+- [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
+- [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
 ## Red Flags
 

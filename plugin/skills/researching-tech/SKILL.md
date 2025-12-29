@@ -9,6 +9,8 @@ description: Use when choosing between technologies or approaches. Evaluates tec
 
 **Trade-off** - Every choice has pros and cons, find the best fit.
 
+**Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
+
 ## Typical Actions
 
 - Compare options
@@ -43,6 +45,39 @@ description: Use when choosing between technologies or approaches. Evaluates tec
 - Explain reasoning (at least 3 points)
 - Note prerequisites and risks
 
+### 5. Record to Workspace (MANDATORY)
+
+After research, MUST record to workspace node:
+
+**Recording locations**:
+| Content | Location | Tool |
+|---------|----------|------|
+| Key conclusions (brief) | conclusion | node_update |
+| Options, comparison, reasoning | notes | node_update |
+| Full comparison table (>200 lines) | MEMO | memo_create + node_reference |
+
+**NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Conclusion template** (brief):
+```
+[调研主题] + [推荐选项] + [核心理由]
+```
+
+**Notes template** (detailed):
+```
+**Topic**: [what researched]
+**Options**: [A, B, C with links]
+**Comparison**:
+| Dimension | A | B | C |
+|-----------|---|---|---|
+| ... | ... | ... | ... |
+**Recommendation**: [choice]
+**Reasons**: 1. ... 2. ... 3. ...
+**Risks**: [noted risks]
+```
+
+**Output**: node_update called with conclusion + notes
+
 ## Checklist
 
 ### Option Completeness
@@ -64,6 +99,12 @@ description: Use when choosing between technologies or approaches. Evaluates tec
 - [ ] Clear recommendation given
 - [ ] Reasoning explained (3+ points)
 - [ ] Risks documented
+
+### Recording (MANDATORY)
+- [ ] **Conclusion written**: Brief summary in node conclusion
+- [ ] **Notes written**: Options, comparison, reasoning in node notes
+- [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
+- [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
 ## Output Template
 
@@ -109,34 +150,6 @@ description: Use when choosing between technologies or approaches. Evaluates tec
 **Risks**:
 - [Risk 1]
 ```
-
-## Recording to Workspace
-
-**Principle**: User only sees workspace, not conversation output.
-
-### What to Record
-
-| Content | Where | Example |
-|---------|-------|---------|
-| Options compared | conclusion | "Compared: A vs B vs C" |
-| Selection + reason | conclusion | "Choose A: reason1, reason2" |
-| User preference | conclusion | > User: "prefer simpler" |
-| Detailed comparison | memo | Full pros/cons table |
-
-### Conclusion Template
-
-```
-**Topic**: [what researched]
-**Options**: [A, B, C]
-**Recommendation**: [choice]
-**Reasons**:
-1. [reason with user input if any]
-2. [reason]
-**Risks**: [noted risks]
-**Details**: 见 MEMO#xxx (full comparison)
-```
-
----
 
 ## Red Flags
 

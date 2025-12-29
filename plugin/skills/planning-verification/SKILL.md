@@ -9,6 +9,8 @@ description: Use when planning testing strategy or defining acceptance criteria.
 
 **Verify** - Trust but verify. Every feature needs a way to prove it works.
 
+**Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
+
 ## Typical Actions
 
 - Design test cases
@@ -49,6 +51,39 @@ Choose appropriate method based on verification goal:
 - Include precondition setup
 - Include cleanup after verification
 
+### 5. Record to Workspace (MANDATORY)
+
+After planning, MUST record to workspace node:
+
+**Recording locations**:
+| Content | Location | Tool |
+|---------|----------|------|
+| Key conclusions (brief) | conclusion | node_update |
+| Test cases, acceptance steps | notes | node_update |
+| Full test plan (>200 lines) | MEMO | memo_create + node_reference |
+
+**NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Conclusion template** (brief):
+```
+[验证范围] + [用例数量] + [验证方法]
+```
+
+**Notes template** (detailed):
+```
+**Scope**: [what to verify]
+**Cases**: P0: X, P1: Y, P2: Z
+**Methods**: [unit/integration/e2e/manual]
+**Test Cases**:
+- TC-001: [name] - Given/When/Then
+- TC-002: [name] - Given/When/Then
+**Edge Cases**: [list]
+**Acceptance Steps**:
+1. [step] → Expected: [result]
+```
+
+**Output**: node_update called with conclusion + notes
+
 ## Checklist
 
 ### Verification Points
@@ -66,6 +101,12 @@ Choose appropriate method based on verification goal:
 - [ ] **Expected results**: Each step has clear expected outcome
 - [ ] **Preconditions**: Setup requirements documented
 - [ ] **Cleanup**: Post-verification cleanup documented
+
+### Recording (MANDATORY)
+- [ ] **Conclusion written**: Brief summary in node conclusion
+- [ ] **Notes written**: Test cases, acceptance steps in node notes
+- [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
+- [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
 ## Output Template
 
@@ -136,33 +177,6 @@ Choose appropriate method based on verification goal:
 | **P0** | Core functionality, blocking issues |
 | **P1** | Important features, significant bugs |
 | **P2** | Nice to have, minor issues |
-
-## Recording to Workspace
-
-**Principle**: User only sees workspace, not conversation output.
-
-### What to Record
-
-| Content | Where | Example |
-|---------|-------|---------|
-| Verification scope | conclusion | "Verify: login flow, error handling" |
-| Test case count | conclusion | "Cases: 5 P0, 3 P1, 2 P2" |
-| Acceptance criteria source | conclusion | "From user: must support SSO" |
-| Full test plan | memo | All cases with Given/When/Then |
-
-### Conclusion Template
-
-```
-**Scope**: [what to verify]
-**Cases**: [P0: X, P1: Y, P2: Z]
-**Methods**: [unit/integration/e2e/manual]
-**Key Criteria**:
-- [criterion 1] (source: user/requirement)
-- [criterion 2]
-**Details**: 见 MEMO#xxx (full test plan)
-```
-
----
 
 ## Red Flags
 

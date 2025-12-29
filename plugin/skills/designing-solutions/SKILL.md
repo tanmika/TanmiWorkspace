@@ -9,6 +9,8 @@ description: Use when planning implementation approach for features or changes. 
 
 **Architect** - Design before build. Good architecture enables good implementation.
 
+**Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
+
 ## Typical Actions
 
 - Define interfaces
@@ -77,6 +79,41 @@ description: Use when planning implementation approach for features or changes. 
 
 **Output**: Numbered implementation steps
 
+### 5. Record to Workspace (MANDATORY)
+
+After design, MUST record to workspace node:
+
+**Recording locations**:
+| Content | Location | Tool |
+|---------|----------|------|
+| Key conclusions (brief) | conclusion | node_update |
+| Scope, interfaces, steps | notes | node_update |
+| Full design doc (>200 lines) | MEMO | memo_create + node_reference |
+
+**NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Conclusion template** (brief):
+```
+[问题] + [方案概述] + [影响范围] + [步骤数]
+```
+
+**Notes template** (detailed):
+```
+**Problem**: [what to solve]
+**Approach**: [high-level]
+**Scope**: [files/modules]
+**Key Interfaces**:
+- function(param): Return
+**Key Types**:
+- TypeName { field: type }
+**Implementation Steps**:
+1. Step 1 - [verification]
+2. Step 2 - [verification]
+**Risks**: [identified risks]
+```
+
+**Output**: node_update called with conclusion + notes
+
 ## Checklist
 
 ### Boundaries
@@ -99,6 +136,12 @@ description: Use when planning implementation approach for features or changes. 
 - [ ] Tasks broken down
 - [ ] Order determined
 - [ ] Risks identified
+
+### Recording (MANDATORY)
+- [ ] **Conclusion written**: Brief summary in node conclusion
+- [ ] **Notes written**: Scope, interfaces, steps in node notes
+- [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
+- [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
 ## Output Template
 
@@ -147,34 +190,6 @@ interface CoreType {
 ## Risks
 - **Risk 1**: [Description] - Mitigation: [approach]
 ```
-
-## Recording to Workspace
-
-**Principle**: User only sees workspace, not conversation output.
-
-### What to Record
-
-| Content | Where | Example |
-|---------|-------|---------|
-| Scope decision | conclusion | "Scope: src/services/auth.ts" |
-| Key interfaces | conclusion | "Interface: login(creds): Token" |
-| User confirmations | conclusion | > User: "no breaking changes" |
-| Full design | memo | Complete interfaces, types |
-
-### Conclusion Template
-
-```
-**Problem**: [what to solve]
-**Scope**: [files/modules affected]
-**Approach**: [high-level]
-**Key Decisions**:
-- [decision 1] (user confirmed / AI proposed)
-- [decision 2]
-**Implementation Steps**: [count] steps
-**Details**: 见 MEMO#xxx (full design)
-```
-
----
 
 ## Red Flags
 

@@ -9,6 +9,8 @@ description: Use when debugging errors or investigating performance issues. Trac
 
 **Trace** - Follow the causal chain to find root cause.
 
+**Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
+
 ## Applicable Scenarios
 
 - **Debug**: Diagnose logic errors (why error occurs)
@@ -69,6 +71,38 @@ Data source/Logic flaw ← Root cause
 - Root cause location
 - Fix recommendation
 
+### 5. Record to Workspace (MANDATORY)
+
+After diagnosis, MUST record to workspace node:
+
+**Recording locations**:
+| Content | Location | Tool |
+|---------|----------|------|
+| Key conclusions (brief) | conclusion | node_update |
+| Hypotheses, investigation, root cause | notes | node_update |
+| Full trace log (>200 lines) | MEMO | memo_create + node_reference |
+
+**NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Conclusion template** (brief):
+```
+[问题描述] + [根因位置] + [修复建议]
+```
+
+**Notes template** (detailed):
+```
+**Issue**: [error/symptom]
+**Reproduction**: [steps]
+**Investigation**:
+- Hypothesis 1: [tested] → [result]
+- Hypothesis 2: [tested] → [result]
+**Causal Chain**: Entry → A → B → Problem
+**Root Cause**: [file:line] - [explanation]
+**Fix**: [recommendation]
+```
+
+**Output**: node_update called with conclusion + notes
+
 ## Checklist
 
 ### Debug
@@ -83,6 +117,12 @@ Data source/Logic flaw ← Root cause
 - [ ] Bottleneck identified
 - [ ] Causal chain traced
 - [ ] Optimization point confirmed
+
+### Recording (MANDATORY)
+- [ ] **Conclusion written**: Brief summary in node conclusion
+- [ ] **Notes written**: Investigation, root cause in node notes
+- [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
+- [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
 ## Output Template
 
@@ -106,33 +146,6 @@ Data source/Logic flaw ← Root cause
 ## Fix Recommendation
 [Specific fix approach]
 ```
-
-## Recording to Workspace
-
-**Principle**: User only sees workspace, not conversation output.
-
-### What to Record
-
-| Content | Where | Example |
-|---------|-------|---------|
-| Error/symptom | conclusion | "Error: TypeError at file:line" |
-| Investigation path | conclusion or memo | Hypotheses tested, results |
-| Root cause | conclusion | "Cause: null check missing" |
-| Fix recommendation | conclusion | "Fix: add validation at line X" |
-
-### Conclusion Template
-
-```
-**Issue**: [error message or symptom]
-**Investigation**:
-- Hypothesis 1: [tested] → [result]
-- Hypothesis 2: [tested] → [result]
-**Root Cause**: [file:line] - [explanation]
-**Fix**: [recommendation]
-**Details**: 见 MEMO#xxx (if long trace)
-```
-
----
 
 ## Red Flags
 

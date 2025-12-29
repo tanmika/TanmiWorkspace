@@ -9,6 +9,8 @@ description: Use when optimizing performance or establishing metrics. Establishe
 
 **Measure** - You can't improve what you don't measure.
 
+**Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
+
 ## Typical Actions
 
 - Establish baseline
@@ -65,6 +67,37 @@ After optimization, measure again and compare.
 
 **Output**: Before/After comparison table
 
+### 5. Record to Workspace (MANDATORY)
+
+After measurement, MUST record to workspace node:
+
+**Recording locations**:
+| Content | Location | Tool |
+|---------|----------|------|
+| Key conclusions (brief) | conclusion | node_update |
+| Metrics, baseline, results | notes | node_update |
+| Full measurement data (>200 lines) | MEMO | memo_create + node_reference |
+
+**NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Conclusion template** (brief):
+```
+[度量目标] + [基线值] + [结果] + [结论]
+```
+
+**Notes template** (detailed):
+```
+**Objective**: [what measured]
+**Environment**: [hardware, software, data scale]
+**Metrics**: [name] (target: [value])
+**Baseline**: [value] ([method])
+**After**: [value] ([change %])
+**Analysis**: [explanation]
+**Conclusion**: [target met? next steps?]
+```
+
+**Output**: node_update called with conclusion + notes
+
 ## Checklist
 
 ### Pre-Measurement
@@ -78,6 +111,12 @@ After optimization, measure again and compare.
 - [ ] Same methodology applied
 - [ ] Improvement calculated
 - [ ] No regression verified
+
+### Recording (MANDATORY)
+- [ ] **Conclusion written**: Brief summary in node conclusion
+- [ ] **Notes written**: Metrics, baseline, results in node notes
+- [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
+- [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
 ## Output Template
 
@@ -111,32 +150,6 @@ After optimization, measure again and compare.
 - Target achieved: [Yes/No]
 - Further optimization needed: [Yes/No]
 ```
-
-## Recording to Workspace
-
-**Principle**: User only sees workspace, not conversation output.
-
-### What to Record
-
-| Content | Where | Example |
-|---------|-------|---------|
-| Metrics + targets | conclusion | "Response time: target <500ms" |
-| Baseline data | conclusion | "Current: 850ms (P95)" |
-| Measurement method | conclusion or memo | Tool, runs, environment |
-| Results comparison | conclusion | "After: 320ms (-62%)" |
-
-### Conclusion Template
-
-```
-**Objective**: [what measured]
-**Metric**: [name] (target: [value])
-**Baseline**: [value] ([source/method])
-**After**: [value] ([change %])
-**Environment**: [brief or 见 MEMO]
-**Conclusion**: [target met? next steps?]
-```
-
----
 
 ## Red Flags
 

@@ -9,6 +9,8 @@ description: Use when starting new tasks or when requirements are unclear. Clari
 
 **Clarify**: Use structured questioning to eliminate ambiguity in requirements, transform user intent into verifiable acceptance criteria.
 
+**Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
+
 ## Typical Actions
 
 - Ask user: Pose clarifying questions for ambiguous points
@@ -83,6 +85,38 @@ Evaluate understanding confidence:
 
 **Output**: Confidence % + uncertain points list (if any)
 
+### 5. Record to Workspace (MANDATORY)
+
+After user confirms, MUST record to workspace node:
+
+**Recording locations**:
+| Content | Location | Tool |
+|---------|----------|------|
+| Key conclusions (brief) | conclusion | node_update |
+| QA process, acceptance criteria table | notes | node_update |
+| Long analysis (>200 lines) | MEMO | memo_create + node_reference |
+
+**NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Conclusion template** (brief, keywords):
+```
+[核心需求] + [关键约束] + [置信度X%]
+```
+
+**Notes template** (detailed):
+```
+**用户原话**: > "..."
+**问答过程**:
+- Q: ... → A: ...
+**验收标准**:
+| WHEN | THEN |
+|------|------|
+| ... | ... |
+**待确认**: ...
+```
+
+**Output**: node_update called with conclusion + notes
+
 ## Checklist
 
 ### Core Elements
@@ -102,39 +136,11 @@ Evaluate understanding confidence:
 - [ ] **Edge cases**: Empty data, oversized, special characters
 - [ ] **Error scenarios**: Network failure, permission denied, timeout
 
-## Recording to Workspace
-
-**Principle**: User only sees workspace, not conversation output.
-
-### What to Record
-
-| Content | Where | Example |
-|---------|-------|---------|
-| User's original words | conclusion | > User: "I want it faster" |
-| Questions asked | conclusion or memo | Q1: Response time? A: <500ms |
-| Confirmed criteria | conclusion | WHEN/THEN table |
-| Unconfirmed items | conclusion | - [ ] Error handling TBD |
-| Detailed analysis | memo | Long content → memo_create |
-
-### Conclusion Template
-
-```
-**User Input**: > "[original words]"
-**Alignment Process**:
-- Q: [question] → A: [user answer]
-- Q: [question] → A: [user answer]
-**Confirmed**: [key acceptance criteria]
-**Pending**: [unconfirmed items]
-**Confidence**: X% - [reason]
-```
-
-### Long Content Handling
-
-If alignment details exceed 10 lines:
-1. Use `memo_create` to store full content
-2. Write concise conclusion: "见 MEMO#xxx"
-
----
+### Recording (MANDATORY)
+- [ ] **Conclusion written**: Brief summary in node conclusion
+- [ ] **Notes written**: QA process + acceptance criteria in node notes
+- [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
+- [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
 ## Output Template (for conversation)
 
