@@ -690,6 +690,25 @@ function uninstallCursorHooks(): void {
 }
 
 // ============================================================================
+// 单独安装函数（导出供 setup.ts 使用）
+// ============================================================================
+
+export function installClaudeHooksExport(): void {
+  installClaudeHooks();
+  configureClaudeHooks();
+}
+
+export function installClaudeAgentsExport(): void {
+  installDispatchAgents();
+}
+
+export function installClaudeSkillsExport(): void {
+  installSkills();
+}
+
+export { getPluginStatus };
+
+// ============================================================================
 // 平台完整安装/卸载（导出供 setup.ts 使用）
 // ============================================================================
 

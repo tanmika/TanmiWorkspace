@@ -10,7 +10,12 @@ import { homedir } from "os";
 import { join, dirname } from "path";
 import { execSync, exec } from "child_process";
 import { promisify } from "util";
-import { installClaudeAll, installCursorAll, updateInstallationMeta } from "./plugins.js";
+import {
+  installClaudeAll,
+  installCursorAll,
+  updateInstallationMeta,
+  getPluginStatus,
+} from "./plugins.js";
 import { fileURLToPath } from "url";
 
 
@@ -62,6 +67,8 @@ interface Environment {
     mcpConfigured: boolean;
     permissionConfigured: boolean;
     hookInstalled: boolean;
+    agentsInstalled: number;  // 已安装 Agent 数量
+    skillsInstalled: number;  // 已安装 Skill 数量
   };
   cursor: {
     installed: boolean;
@@ -98,8 +105,9 @@ async function detectEnvironment(): Promise<Environment> {
   if (existsSync(CLAUDE_SETTINGS_LOCAL)) {
     try {
       const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS_LOCAL, "utf-8"));
+      // 检查是否有服务器级权限 mcp__tanmi-workspace
       if (settings.permissions?.allow?.some((p: string) =>
-        p === "mcp__tanmi-workspace" || p.startsWith("mcp__tanmi-workspace__")
+        p === "mcp__tanmi-workspace"
       )) {
         claudePermissionConfigured = true;
       }
@@ -121,9 +129,8 @@ async function detectEnvironment(): Promise<Environment> {
     }
   }
 
-  // 检测 Hook 安装
-  const claudeHookInstalled = existsSync(join(TANMI_SCRIPTS, "hook-entry.cjs"));
-  const cursorHookInstalled = existsSync(join(TANMI_SCRIPTS, "cursor-hook-entry.cjs"));
+  // 检测插件安装状态
+  const pluginStatus = getPluginStatus();
 
   return {
     nodeVersion: process.versions.node,
@@ -132,12 +139,14 @@ async function detectEnvironment(): Promise<Environment> {
       cliAvailable: claudeCliAvailable,
       mcpConfigured: claudeMcpConfigured,
       permissionConfigured: claudePermissionConfigured,
-      hookInstalled: claudeHookInstalled,
+      hookInstalled: pluginStatus.claude.hooks,
+      agentsInstalled: pluginStatus.claude.agents.length,
+      skillsInstalled: pluginStatus.claude.skills.length,
     },
     cursor: {
       installed: existsSync(CURSOR_HOME),
       mcpConfigured: cursorMcpConfigured,
-      hookInstalled: cursorHookInstalled,
+      hookInstalled: pluginStatus.cursor.hooks,
     },
   };
 }
@@ -150,23 +159,31 @@ function showStatus(env: Environment) {
   console.log("");
 
   console.log(colors.bold("Claude Code:"));
-  console.log(`  目录: ${env.claudeCode.installed ? colors.green("✓") : colors.red("✗")} ${CLAUDE_HOME}`);
-  console.log(`  CLI:  ${env.claudeCode.cliAvailable ? colors.green("✓ 可用") : colors.yellow("✗ 未安装")}`);
-  console.log(`  MCP:  ${env.claudeCode.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
-  console.log(`  权限: ${env.claudeCode.permissionConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
-  console.log(`  Hook: ${env.claudeCode.hookInstalled ? colors.green("✓ 已安装") : colors.yellow("○ 未安装")}`);
+  console.log(`  目录:   ${env.claudeCode.installed ? colors.green("✓") : colors.red("✗")} ${CLAUDE_HOME}`);
+  console.log(`  CLI:    ${env.claudeCode.cliAvailable ? colors.green("✓ 可用") : colors.yellow("✗ 未安装")}`);
+  console.log(`  MCP:    ${env.claudeCode.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
+  console.log(`  权限:   ${env.claudeCode.permissionConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
+  console.log(`  Hooks:  ${env.claudeCode.hookInstalled ? colors.green("✓ 已安装") : colors.yellow("○ 未安装")}`);
+  console.log(`  Agents: ${env.claudeCode.agentsInstalled > 0 ? colors.green(`✓ 已安装 (${env.claudeCode.agentsInstalled})`) : colors.yellow("○ 未安装")}`);
+  console.log(`  Skills: ${env.claudeCode.skillsInstalled > 0 ? colors.green(`✓ 已安装 (${env.claudeCode.skillsInstalled})`) : colors.yellow("○ 未安装")}`);
   console.log("");
 
   console.log(colors.bold("Cursor:"));
-  console.log(`  目录: ${env.cursor.installed ? colors.green("✓") : colors.red("✗")} ${CURSOR_HOME}`);
-  console.log(`  MCP:  ${env.cursor.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
-  console.log(`  Hook: ${env.cursor.hookInstalled ? colors.green("✓ 已安装") : colors.yellow("○ 未安装")}`);
+  console.log(`  目录:  ${env.cursor.installed ? colors.green("✓") : colors.red("✗")} ${CURSOR_HOME}`);
+  console.log(`  MCP:   ${env.cursor.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
+  console.log(`  Hooks: ${env.cursor.hookInstalled ? colors.green("✓ 已安装") : colors.yellow("○ 未安装")}`);
   console.log("");
 }
 
 // 配置 Claude Code MCP
 async function configureClaudeMcp(env: Environment): Promise<boolean> {
   console.log("\n" + colors.blue("配置 Claude Code MCP..."));
+
+  // 如果已配置，直接返回成功
+  if (env.claudeCode.mcpConfigured) {
+    console.log(colors.green("  ✓ MCP 服务器已存在"));
+    return true;
+  }
 
   if (env.claudeCode.cliAvailable) {
     // 使用 claude mcp add 命令
@@ -177,6 +194,12 @@ async function configureClaudeMcp(env: Environment): Promise<boolean> {
       updateInstallationMeta("claudeCode", "mcp", "update");
       return true;
     } catch (error) {
+      // 检查是否是因为已存在
+      const errorMessage = (error as Error).message || "";
+      if (errorMessage.includes("already exists") || errorMessage.includes("已存在")) {
+        console.log(colors.green("  ✓ MCP 服务器已存在"));
+        return true;
+      }
       console.log(colors.yellow("  ⚠ claude mcp add 失败，尝试手动配置..."));
     }
   }
@@ -230,9 +253,9 @@ async function configureClaudePermission(): Promise<boolean> {
       permissions.allow = [];
     }
 
-    // 检查是否已存在
+    // 检查是否已存在服务器级权限
     const hasPermission = permissions.allow.some((p: string) =>
-      p === "mcp__tanmi-workspace" || p.startsWith("mcp__tanmi-workspace__")
+      p === "mcp__tanmi-workspace"
     );
 
     if (!hasPermission) {
@@ -298,6 +321,7 @@ async function installPlugins(platform: "claude" | "cursor"): Promise<boolean> {
   }
 }
 
+
 // 显示帮助
 function showHelp() {
   console.log(`
@@ -336,14 +360,28 @@ export default async function setup() {
   // 快速配置模式
   if (args.includes("--claude-code")) {
     console.log(colors.bold("\n=== TanmiWorkspace Claude Code 快速配置 ===\n"));
+
+    // 显示当前状态
+    console.log(colors.bold("当前状态:"));
+    console.log(`  MCP:    ${env.claudeCode.mcpConfigured ? colors.green("已配置") : colors.yellow("未配置")}`);
+    console.log(`  权限:   ${env.claudeCode.permissionConfigured ? colors.green("已配置") : colors.yellow("未配置")}`);
+    console.log(`  Hooks:  ${env.claudeCode.hookInstalled ? colors.green("已安装") : colors.yellow("未安装")}`);
+    console.log(`  Agents: ${env.claudeCode.agentsInstalled > 0 ? colors.green(`已安装 (${env.claudeCode.agentsInstalled})`) : colors.yellow("未安装")}`);
+    console.log(`  Skills: ${env.claudeCode.skillsInstalled > 0 ? colors.green(`已安装 (${env.claudeCode.skillsInstalled})`) : colors.yellow("未安装")}`);
+    console.log("");
+
+    const choice = await select({
+      message: "选择安装方式:",
+      choices: [
+        { name: "MCP + 所有插件 (推荐)", value: "all" },
+        { name: "仅 MCP (不含插件)", value: "mcp-only" },
+      ],
+    });
+
     await configureClaudeMcp(env);
     await configureClaudePermission();
 
-    const installPluginsAnswer = await confirm({
-      message: "是否安装插件？(Hooks, Agents, Skills)",
-      default: true,
-    });
-    if (installPluginsAnswer) {
+    if (choice === "all") {
       await installPlugins("claude");
     }
 
@@ -430,19 +468,21 @@ ${colors.bold("3. 其他平台")}
 
   // 执行配置
   if (platform === "claude") {
+    const choice = await select({
+      message: "选择安装方式:",
+      choices: [
+        { name: "MCP + 所有插件 (推荐)", value: "all" },
+        { name: "仅 MCP (不含插件)", value: "mcp-only" },
+      ],
+    });
+
     const mcpSuccess = await configureClaudeMcp(env);
     if (mcpSuccess) {
       await configureClaudePermission();
     }
 
-    if (!env.claudeCode.hookInstalled) {
-      const installPluginsAnswer = await confirm({
-        message: "是否安装插件？(Hooks, Agents, Skills)",
-        default: true,
-      });
-      if (installPluginsAnswer) {
-        await installPlugins("claude");
-      }
+    if (choice === "all") {
+      await installPlugins("claude");
     }
 
     console.log("\n" + colors.green(colors.bold("✓ 配置完成！")));
