@@ -242,6 +242,22 @@ export class StateService {
           status: "executing",
         };
       }
+
+      // 4.3.4 派发子节点 retry 时，重置 dispatch.status 为 pending
+      if (action === "retry" && nodeMeta.dispatch?.status === "failed") {
+        nodeMeta.dispatch = {
+          ...nodeMeta.dispatch,
+          status: "pending",
+        };
+      }
+
+      // 4.3.5 派发子节点 reopen 时，重置 dispatch.status 为 pending
+      if (action === "reopen" && nodeMeta.dispatch?.status === "passed") {
+        nodeMeta.dispatch = {
+          ...nodeMeta.dispatch,
+          status: "pending",
+        };
+      }
     }
 
     // 4.4 执行节点 start 时检查同级节点并发（一次只能有一个执行中的节点）
