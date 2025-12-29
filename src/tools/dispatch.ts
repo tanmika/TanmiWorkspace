@@ -254,11 +254,11 @@ export const dispatchDisableTool: Tool = {
 };
 
 /**
- * dispatch_execute 工具定义
+ * dispatch_disable_execute 工具定义
  * 执行禁用派发（第二步：根据用户选择执行）
  */
-export const dispatchExecuteTool: Tool = {
-  name: "dispatch_execute",
+export const dispatchDisableExecuteTool: Tool = {
+  name: "dispatch_disable_execute",
   description: `禁用派发模式第二步：执行用户选择的合并策略。
 
 **⚠️ 前置条件：必须先通过 AskUserQuestion 获取用户的明确选择！**
@@ -384,6 +384,6 @@ export const dispatchTools: Tool[] = [
   dispatchCleanupTool,
   dispatchEnableTool,
   dispatchDisableTool,
-  dispatchExecuteTool,
+  dispatchDisableExecuteTool,
   dispatchCreateTool,
 ];

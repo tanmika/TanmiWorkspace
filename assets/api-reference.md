@@ -44,8 +44,9 @@ session_status(sessionId)
 get_pending_changes(sessionId, workspaceId?)   // 获取待处理变更
 
 // 派发（多 Agent 协作）
-node_dispatch(workspaceId, nodeId)             // 派发节点任务
-node_dispatch_complete(workspaceId, nodeId, success, conclusion?)  // 完成派发
+dispatch_node(workspaceId, nodeId)             // 升级节点为派发母节点
+dispatch_create(workspaceId, parentId, exec, includeQuality?)  // 创建派发子节点
+dispatch_complete(workspaceId, nodeId, success, conclusion?)  // 完成派发
 dispatch_enable(workspaceId, useGit?)          // 启用派发模式
 dispatch_disable(workspaceId)                  // 禁用派发（查询状态）
 dispatch_disable_execute(workspaceId, mergeStrategy, ...)  // 执行禁用
@@ -937,40 +938,67 @@ interface ChildConclusion {
 
 ## 派发（多 Agent 协作）
 
-### node_dispatch
+### dispatch_node
 
-准备派发节点任务，返回 subagent 调用指令。
+升级执行节点为派发母节点。
 
 **参数**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|:----:|------|
 | `workspaceId` | string | ✅ | 工作区 ID |
-| `nodeId` | string | ✅ | 要派发的节点 ID |
+| `nodeId` | string | ✅ | 要升级的节点 ID |
 
 **前置条件**
 
 - 工作区已启用派发模式
 - 节点类型为 `execution`
-- 节点状态为 `pending` 或 `implementing`
 
 **返回值**
 
 ```typescript
 {
-  startMarker: string;  // Git 模式: commit hash; 无 Git: 时间戳
-  actionRequired: {
-    type: "dispatch_task";
-    subagentType: "tanmi-executor";
-    prompt: string;
-    timeout: number;
+  upgraded: boolean;    // 是否升级成功
+  skipReason?: string;  // 如果跳过，原因
+  actionRequired?: {
+    type: "invoke_skill";
+    data: { skill: "dispatching-parent", workspaceId, nodeId };
   };
 }
 ```
 
 ---
 
-### node_dispatch_complete
+### dispatch_create
+
+在派发母节点下创建派发子节点（exec + spec + quality）。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `parentId` | string | ✅ | 派发母节点 ID |
+| `exec` | object | ✅ | 执行节点配置 { requirement, acceptanceCriteria } |
+| `includeQuality` | boolean | - | 是否创建质量审查节点（默认 true） |
+
+**返回值**
+
+```typescript
+{
+  execId: string;
+  specId: string;
+  qualityId?: string;
+  actionRequired: {
+    type: "dispatch_task";
+    data: { execPrompt, specPrompt, qualityPrompt };
+  };
+}
+```
+
+---
+
+### dispatch_complete
 
 处理派发任务的执行结果。
 

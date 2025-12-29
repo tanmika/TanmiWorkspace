@@ -14,7 +14,7 @@ export {
   dispatchCleanupTool,
   dispatchEnableTool,
   dispatchDisableTool,
-  dispatchExecuteTool,
+  dispatchDisableExecuteTool,
   dispatchCreateTool,
 } from "./dispatch.js";
 export { configTools, configGetTool, configSetTool } from "./config.js";

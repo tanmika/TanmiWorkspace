@@ -154,7 +154,7 @@ const createWorkspaceSchema = {
 | `log.ts` | log_append, problem_update, problem_clear | 日志和问题 |
 | `help.ts` | tanmi_help, tanmi_prompt | 帮助系统 |
 | `session.ts` | session_bind, session_unbind, session_status, get_pending_changes | 会话管理 |
-| `dispatch.ts` | node_dispatch, node_dispatch_complete, dispatch_cleanup, dispatch_enable, dispatch_disable, dispatch_disable_execute | 任务派发 |
+| `dispatch.ts` | dispatch_node, dispatch_complete, dispatch_cleanup, dispatch_enable, dispatch_disable, dispatch_disable_execute, dispatch_create | 任务派发 |
 | `config.ts` | config_get, config_set | 配置管理 |
 | `import.ts` | workspace_import_guide, workspace_import_list | OpenSpec 导入 |
 

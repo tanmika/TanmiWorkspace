@@ -540,7 +540,7 @@ function createMcpServer(services: Services): Server {
           break;
         }
 
-        case "dispatch_execute": {
+        case "dispatch_disable_execute": {
           const workspaceId = args?.workspaceId as string;
           const mergeStrategy = args?.mergeStrategy as "sequential" | "squash" | "cherry-pick" | "skip";
           const keepBackupBranch = args?.keepBackupBranch as boolean | undefined;
