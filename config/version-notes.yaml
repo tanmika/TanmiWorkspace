@@ -9,6 +9,14 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.3
+    requirement: 派发状态机修复、Skill 展示成果环节、Hook 功能增强
+    conclusion: |-
+      - 修复派发节点 retry/reopen 后状态未重置的问题
+      - Info 类 Skill 新增展示成果环节（防止直接开始执行）
+      - PostToolUse Hook 增强（TodoWrite 提醒、节流优化）
+      - setup 命令插件安装体验优化
+    note: ""
   - version: 1.10.2
     requirement: 派发子代理优化，完善 Skill 引导与 Prompt 生成
     conclusion: |-
