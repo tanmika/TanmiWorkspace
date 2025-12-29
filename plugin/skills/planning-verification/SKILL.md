@@ -84,6 +84,16 @@ After planning, MUST record to workspace node:
 
 **Output**: node_update called with conclusion + notes
 
+### 6. Present to User (MANDATORY)
+
+After recording, MUST present verification plan to user:
+
+1. **Output summary**: Show test cases and acceptance steps using Output Template
+2. **Wait for confirmation**: Ask user if verification plan is complete and acceptable
+3. **NEVER proceed directly**: Do NOT start implementation/testing without user approval
+
+**Output**: Verification plan presented, user confirmation received
+
 ## Checklist
 
 ### Verification Points
@@ -184,6 +194,7 @@ After planning, MUST record to workspace node:
 2. **Only happy path** - Ignore edge and error cases
 3. **Manual only** - No automated tests for core logic
 4. **No acceptance criteria** - No way to know if done
+5. **Silent execution** - Complete verification planning, then immediately start implementation without showing user
 
 ## Mandatory Rules
 
@@ -192,6 +203,7 @@ After planning, MUST record to workspace node:
 3. **MUST have acceptance criteria** - No way to know "done" without criteria
 4. **MUST automate critical paths** - Manual-only testing for core logic is unacceptable
 5. **NEVER accept flaky tests** - Unreliable tests erode trust in the test suite
+6. **MUST present before proceed** - After planning verification, NEVER start implementation directly. Present plan, wait for user approval
 
 ## Anti-Patterns
 

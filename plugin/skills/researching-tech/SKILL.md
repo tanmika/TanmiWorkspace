@@ -78,6 +78,16 @@ After research, MUST record to workspace node:
 
 **Output**: node_update called with conclusion + notes
 
+### 6. Present to User (MANDATORY)
+
+After recording, MUST present research findings to user:
+
+1. **Output summary**: Show recommendation using Output Template
+2. **Wait for confirmation**: Ask user if they accept the recommendation
+3. **NEVER proceed directly**: Do NOT start implementation without user decision
+
+**Output**: Recommendation presented, user decision received
+
 ## Checklist
 
 ### Option Completeness
@@ -157,6 +167,7 @@ After research, MUST record to workspace node:
 2. **Skip constraints** - Ignore compatibility with existing stack
 3. **Hype-driven** - Choose trendy over appropriate
 4. **No comparison** - Recommendation without pros/cons analysis
+5. **Silent execution** - Complete research, then immediately start implementing without showing user
 
 ## Mandatory Rules
 
@@ -165,6 +176,7 @@ After research, MUST record to workspace node:
 3. **MUST provide reasoning** - Recommendations need justification (3+ points)
 4. **MUST document risks** - Every choice has trade-offs
 5. **NEVER choose based on hype** - Fit to project, not trends
+6. **MUST present before proceed** - After research, NEVER start implementation directly. Present recommendation, wait for user decision
 
 ## Anti-Patterns
 

@@ -131,6 +131,16 @@ After exploration, MUST record to workspace node:
 
 **Output**: node_update called with conclusion + notes
 
+### 6. Present to User (MANDATORY)
+
+After recording, MUST present findings to user:
+
+1. **Output summary**: Show key findings using Output Template
+2. **Wait for confirmation**: Ask user if findings are correct/complete
+3. **NEVER proceed directly**: Do NOT start execution without user acknowledgment
+
+**Output**: Summary presented, user confirmation received
+
 ## Information Source Priority
 
 1. **Codebase**: Most reliable, implementation is truth
@@ -172,6 +182,7 @@ After exploration, MUST record to workspace node:
 2. **Assume existence** - Assume feature exists without verification
 3. **Ignore dependencies** - Don't check module relationships
 4. **Wrong strategy** - Use docs when should use code, or vice versa
+5. **Silent execution** - Complete exploration, then immediately start implementing without showing user
 
 ## Mandatory Rules
 
@@ -180,6 +191,7 @@ After exploration, MUST record to workspace node:
 3. **MUST trust code over docs** - When docs conflict with code, code is truth
 4. **MUST record findings** - Exploration without documentation is wasted effort
 5. **MUST scope exploration** - Explore what's needed, not the entire project
+6. **MUST present before proceed** - After exploration, NEVER start execution directly. Present findings, wait for user confirmation
 
 ## Anti-Patterns
 

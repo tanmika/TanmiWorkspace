@@ -98,6 +98,16 @@ After measurement, MUST record to workspace node:
 
 **Output**: node_update called with conclusion + notes
 
+### 6. Present to User (MANDATORY)
+
+After recording, MUST present measurement results to user:
+
+1. **Output summary**: Show results using Output Template
+2. **Wait for confirmation**: Ask user if analysis is correct and next steps are acceptable
+3. **NEVER proceed directly**: Do NOT start optimization without user acknowledgment
+
+**Output**: Results presented, user confirmation received
+
 ## Checklist
 
 ### Pre-Measurement
@@ -157,6 +167,7 @@ After measurement, MUST record to workspace node:
 2. **Different environments** - Compare results from different conditions
 3. **Single run** - Draw conclusions from one measurement
 4. **Ignore other metrics** - Optimize one metric, break others
+5. **Silent execution** - Complete measurement, then immediately start optimization without showing user
 
 ## Mandatory Rules
 
@@ -165,6 +176,7 @@ After measurement, MUST record to workspace node:
 3. **MUST run multiple times** - Single run data is NEVER conclusive
 4. **MUST check for regressions** - Improving one metric while breaking others is unacceptable
 5. **NEVER report without evidence** - Every claim needs numbers with methodology
+6. **MUST present before proceed** - After measurement, NEVER start optimization directly. Present results, wait for user confirmation
 
 ## Anti-Patterns
 

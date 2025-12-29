@@ -103,6 +103,16 @@ After diagnosis, MUST record to workspace node:
 
 **Output**: node_update called with conclusion + notes
 
+### 6. Present to User (MANDATORY)
+
+After recording, MUST present diagnosis to user:
+
+1. **Output summary**: Show root cause and fix recommendation using Output Template
+2. **Wait for confirmation**: Ask user if diagnosis is correct and fix approach is acceptable
+3. **NEVER proceed directly**: Do NOT start fixing without user confirmation
+
+**Output**: Diagnosis presented, user confirmation received
+
 ## Checklist
 
 ### Debug
@@ -153,6 +163,7 @@ After diagnosis, MUST record to workspace node:
 2. **Skip reproduction** - Assume issue without consistent reproduction
 3. **Single hypothesis** - Lock on first guess without exploring alternatives
 4. **No verification** - Claim fix without testing
+5. **Silent execution** - Complete diagnosis, then immediately start fixing without showing user
 
 ## Mandatory Rules
 
@@ -161,6 +172,7 @@ After diagnosis, MUST record to workspace node:
 3. **MUST test one hypothesis at a time** - Multiple simultaneous changes = no learning
 4. **MUST verify the fix** - "Should work" is not verification
 5. **NEVER blame user/environment** - Reproduce in user's conditions first
+6. **MUST present before proceed** - After diagnosis, NEVER start fixing directly. Present diagnosis, wait for user confirmation
 
 ## Anti-Patterns
 

@@ -114,6 +114,16 @@ After design, MUST record to workspace node:
 
 **Output**: node_update called with conclusion + notes
 
+### 6. Present to User (MANDATORY)
+
+After recording, MUST present design to user:
+
+1. **Output summary**: Show design using Output Template
+2. **Wait for confirmation**: Ask user if design approach is acceptable
+3. **NEVER proceed directly**: Do NOT start implementation without user approval
+
+**Output**: Design presented, user confirmation received
+
 ## Checklist
 
 ### Boundaries
@@ -197,6 +207,7 @@ interface CoreType {
 2. **Interface changes mid-way** - Design interfaces after implementation
 3. **Missing states** - Forget state management design
 4. **No breakdown** - Giant task without steps
+5. **Silent execution** - Complete design, then immediately start implementing without showing user
 
 ## Mandatory Rules
 
@@ -205,6 +216,7 @@ interface CoreType {
 3. **MUST check existing patterns** - Design must fit existing codebase, not fight it
 4. **MUST break down into steps** - No giant tasks without clear milestones
 5. **NEVER create hidden dependencies** - All coupling must be explicit and documented
+6. **MUST present before proceed** - After design, NEVER start implementation directly. Present design, wait for user approval
 
 ## Anti-Patterns
 
