@@ -315,7 +315,40 @@ function createMcpServer(services: Services): Server {
           break;
 
         // Node 工具
-        case "node_create":
+        case "node_create": {
+          const nodeRole = args?.role as "info_collection" | "info_summary" | "dispatch_exec" | "dispatch_spec" | "dispatch_quality" | undefined;
+          const rulesHash = args?.rulesHash as string | undefined;
+
+          // 检测 info 类节点：引导使用 starting-info-flow Skill
+          // 仅对外部调用生效（rulesHash !== INTERNAL_RULES_HASH）
+          if ((nodeRole === "info_collection" || nodeRole === "info_summary") && rulesHash !== INTERNAL_RULES_HASH) {
+            const infoTypeName = nodeRole === "info_collection" ? "信息收集" : "信息总结";
+            result = {
+              actionRequired: {
+                type: "invoke_skill",
+                message: `⚠️ 创建${infoTypeName}节点需要通过能力包流程。
+
+**MUST 调用 Skill(starting-info-flow)** 完成信息流程启动。
+
+Skill 会引导你：
+1. capability_list() → 获取可用能力包
+2. 展示给用户并确认选择
+3. capability_select() → 创建节点并返回对应 Skill 引导
+
+**如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
+\`\`\`
+plugin_path() → 获取 skillsPath
+Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
+\`\`\``,
+                data: {
+                  skill: "starting-info-flow",
+                  requestedRole: nodeRole,
+                },
+              },
+            };
+            break;
+          }
+
           result = await services.node.create({
             workspaceId: args?.workspaceId as string,
             parentId: args?.parentId as string,
@@ -323,13 +356,14 @@ function createMcpServer(services: Services): Server {
             title: args?.title as string,
             requirement: args?.requirement as string | undefined,
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
-            rulesHash: args?.rulesHash as string | undefined,
-            role: args?.role as "info_collection" | "info_summary" | "dispatch_exec" | "dispatch_spec" | "dispatch_quality" | undefined,
+            rulesHash,
+            role: nodeRole,
             acceptanceCriteria: args?.acceptanceCriteria as Array<{ when: string; then: string }> | undefined,
             isNeedTest: args?.isNeedTest as boolean | undefined,
             testRequirement: args?.testRequirement as string | undefined,
           });
           break;
+        }
 
         case "node_get":
           result = await services.node.get({
@@ -763,16 +797,43 @@ function createMcpServer(services: Services): Server {
             });
           }
 
-          // 构建 Skill 列表（返回 skill 目录名）
-          const skills = validCapabilities.map((id) =>
-            capabilityService.getSkillDirName(id as any)
-          );
+          // 构建 Skill 列表（返回 skill 目录名 + 节点映射）
+          const skillsWithNodes = createdNodes.map((node) => ({
+            skill: capabilityService.getSkillDirName(node.capabilityId as any),
+            nodeId: node.nodeId,
+            title: node.title,
+          }));
+          const skills = skillsWithNodes.map(s => s.skill);
+
+          // 构建 Skill 调用引导
+          const skillList = skillsWithNodes
+            .map(s => `- Skill(${s.skill}) → 节点「${s.title}」(${s.nodeId})`)
+            .join("\n");
 
           result = {
             infoNodeId,
             createdNodes,
             skills,
-            hint: "已创建能力节点。按 skills 顺序执行，读取对应 skill 获取指导",
+            actionRequired: {
+              type: "invoke_skill",
+              message: `⚠️ 已创建能力节点，MUST 按顺序调用对应 Skill 执行任务：
+
+${skillList}
+
+**执行流程**：
+1. 调用 Skill(${skills[0]}) 获取第一个任务的执行指导
+2. 按 Skill SOP 完成任务，记录结论到对应节点
+3. 依次执行后续 Skill
+
+**如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
+\`\`\`
+plugin_path() → 获取 skillsPath
+Read(file_path: <skillsPath>/<skill-name>/SKILL.md)
+\`\`\``,
+              data: {
+                skills: skillsWithNodes,
+              },
+            },
           };
           break;
         }
