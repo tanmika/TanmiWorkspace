@@ -39,6 +39,8 @@
     "start:mcp:dev": "TANMI_DEV=true DISABLE_HTTP=true node dist/cli/check-node-version.js",
     "start:http": "node dist/http/index.js",
     "start:http:dev": "TANMI_DEV=true node dist/http/index.js",
+    "dev:kill": "PID=$(lsof -ti :19541); if [ -n \"$PID\" ]; then kill -9 $PID && echo \"已杀掉进程: $PID\"; else echo '无运行中的开发服务'; fi",
+    "dev:restart": "npm run dev:kill && sleep 1 && npm run start:http:dev &",
     "test": "vitest",
     "test:run": "vitest run",
     "sync-versions": "npx tsx scripts/sync-versions.ts",

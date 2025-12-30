@@ -98,6 +98,9 @@ switch (subcommand) {
   case "rebuild":
     import("./rebuild.js").then((m) => m.default());
     break;
+  case "update":
+    import("./update.js").then((m) => m.default());
+    break;
   case "version":
   case "-v":
   case "--version":
@@ -117,6 +120,7 @@ TanmiWorkspace v${getVersion()} - AI 工作区管理系统
   plugins    插件管理 (安装/卸载/查看状态)
   webui      启动/管理 WebUI 服务
   rebuild    索引管理 (同步/重建/验证/备份)
+  update     更新到最新版本
   -v         显示版本
 
 插件子命令:
