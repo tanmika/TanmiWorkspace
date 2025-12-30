@@ -30,10 +30,11 @@ export const memoCreateTool: Tool = {
       tags: {
         type: "array",
         items: { type: "string" },
-        description: "标签列表（可选，用于分类和过滤）",
+        minItems: 2,
+        description: "标签列表（必填，至少2个有效标签，用于分类和过滤）",
       },
     },
-    required: ["workspaceId", "title", "summary", "content"],
+    required: ["workspaceId", "title", "summary", "content", "tags"],
   },
 };
 

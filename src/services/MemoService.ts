@@ -58,60 +58,72 @@ export class MemoService {
   async create(params: MemoCreateParams): Promise<MemoCreateResult> {
     const { workspaceId, title, summary, content, tags = [] } = params;
 
-    // 1. 获取工作区信息
+    // 1. 校验 tags：过滤空白，至少2个有效标签
+    const validTags = tags
+      .map(tag => tag.trim())
+      .filter(tag => tag.length > 0);
+
+    if (validTags.length < 2) {
+      throw new TanmiError(
+        "INVALID_PARAMS",
+        `tags 至少需要2个有效标签，当前有效标签数: ${validTags.length}`
+      );
+    }
+
+    // 2. 获取工作区信息
     const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
 
-    // 2. 生成备忘 ID 和目录名
+    // 3. 生成备忘 ID 和目录名
     const memoId = generateMemoId();
     const memoDirName = generateMemoDirName(title, memoId);
     const timestamp = now();
 
-    // 3. 构造备忘对象
+    // 4. 构造备忘对象
     const memo: Memo = {
       id: memoId,
       title,
       summary,
       content,
-      tags,
+      tags: validTags,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
 
-    // 4. 读取 graph.json
+    // 5. 读取 graph.json
     const graph = await this.json.readGraph(projectRoot, wsDirName);
 
-    // 5. 初始化 memos 字段（如果不存在）
+    // 6. 初始化 memos 字段（如果不存在）
     if (!graph.memos) {
       graph.memos = {};
     }
 
-    // 6. 添加备忘到索引
+    // 7. 添加备忘到索引
     graph.memos[memoId] = {
       id: memoId,
       title,
       summary,
-      tags,
+      tags: validTags,
       contentLength: content.length,
       dirName: memoDirName,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
 
-    // 7. 写回 graph.json
+    // 8. 写回 graph.json
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 8. 创建备忘目录
+    // 9. 创建备忘目录
     const memoDir = this.fs.getMemoDir(projectRoot, wsDirName, memoDirName);
     await this.fs.ensureDir(memoDir);
 
-    // 9. 写入 Content.md
+    // 10. 写入 Content.md
     const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
     await this.fs.writeFile(contentPath, content);
 
-    // 10. 发送事件通知
+    // 11. 发送事件通知
     eventService.emitMemoUpdate(workspaceId, memoId);
 
-    // 11. 返回结果
+    // 12. 返回结果
     const relativePath = `memos/${memoDirName}/Content.md`;
     return {
       memoId,

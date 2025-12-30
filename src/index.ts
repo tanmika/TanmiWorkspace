@@ -170,12 +170,15 @@ function createMcpServer(services: Services): Server {
     ...configTools,
   ];
 
+  // 汇总所有工具（用于列表和参数验证）
+  const allToolsWithExtras = [...allTools, ...memoTools, ...capabilityTools];
+
   // 创建工具名到 Tool 定义的映射（用于参数验证）
-  const toolMap = new Map(allTools.map(tool => [tool.name, tool]));
+  const toolMap = new Map(allToolsWithExtras.map(tool => [tool.name, tool]));
 
   // 注册工具列表处理器
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [...allTools, ...memoTools, ...capabilityTools],
+    tools: allToolsWithExtras,
   }));
 
   // 注册工具调用处理器
