@@ -11,6 +11,47 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.10.4] - 2025-12-30
+
+### Added
+
+- **功能简介工作区增强**: 新增版本更新与帮助系统 MEMO
+- **WebUI 帮助模块**: 设置弹窗嵌入用户帮助模块
+- **Skill Announcement 机制**: 为所有 Skill 添加声明机制，输出时自动展示
+- **starting-info-flow Skill**: 新增引导信息流程的 Skill
+
+### Improved
+
+- **memo_create 参数校验**: 新增参数校验
+- **Skill 执行规范**: 增强执行规范与参数必填校验
+- **Skill 输出规范**: 增强能力 Skill 输出规范与长内容保护机制
+
+### Docs
+
+- 重构用户文档体系
+
+### Component Versions
+
+- skills: 1.10.3 → 1.10.4
+
+## [1.10.3] - 2025-12-29
+
+### Fixed
+
+- **派发节点状态重置**: 修复派发节点 retry/reopen 后状态未重置的问题
+- **工具名称修复**: 恢复 dispatch_disable_execute 工具名称
+
+### Improved
+
+- **PostToolUse Hook 增强**: 增强 Hook 功能，提供更精准的上下文提醒
+- **工作区生命周期跟踪**: 强调工作区全生命周期跟踪
+- **Info 类 Skill 规范**: 增强记录规范，新增展示成果环节
+- **setup 命令体验**: 优化插件安装体验
+
+### Component Versions
+
+- skills: 1.10.2 → 1.10.3
+
 ## [1.10.2] - 2025-12-29
 
 ### Changed

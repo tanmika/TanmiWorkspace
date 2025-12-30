@@ -9,6 +9,14 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.4
+    requirement: 帮助系统增强、Skill 声明机制、文档体系重构
+    conclusion: |-
+      - 功能简介工作区新增版本更新与帮助系统 MEMO
+      - 设置弹窗嵌入用户帮助模块
+      - Skill 添加 Announcement 声明机制
+      - 用户文档体系重构
+    note: ""
   - version: 1.10.3
     requirement: 派发状态机修复、Skill 展示成果环节、Hook 功能增强
     conclusion: |-
