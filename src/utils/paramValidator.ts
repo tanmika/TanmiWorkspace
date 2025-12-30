@@ -117,6 +117,46 @@ function findMostSimilar(
 }
 
 /**
+ * 允许空字符串的字段白名单
+ * 格式：{ toolName: [fieldName, ...] }
+ */
+const ALLOW_EMPTY_STRING: Record<string, string[]> = {
+  // 暂时没有需要允许空字符串的必填字段
+};
+
+/**
+ * 允许空数组的字段白名单
+ * 格式：{ toolName: [fieldName, ...] }
+ */
+const ALLOW_EMPTY_ARRAY: Record<string, string[]> = {
+  // 暂时没有需要允许空数组的必填字段
+};
+
+/**
+ * 判断字段是否允许空字符串
+ */
+function isEmptyStringAllowed(toolName: string, field: string): boolean {
+  return ALLOW_EMPTY_STRING[toolName]?.includes(field) ?? false;
+}
+
+/**
+ * 判断字段是否允许空数组
+ */
+function isEmptyArrayAllowed(toolName: string, field: string): boolean {
+  return ALLOW_EMPTY_ARRAY[toolName]?.includes(field) ?? false;
+}
+
+/**
+ * 检查值是否为"空"（undefined、null、空字符串、纯空白字符串、空数组）
+ */
+function isEmptyValue(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value === "string" && value.trim() === "") return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+  return false;
+}
+
+/**
  * 验证并纠正 MCP 工具参数
  *
  * @param toolName 工具名称（用于错误提示）
@@ -135,11 +175,40 @@ export function validateAndCorrectParams(
     errors: [],
   };
 
+  const schema = tool.inputSchema as {
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+
+  const validParams = getSchemaProperties(tool);
+
+  // ========== 必填字段检查 ==========
+  const requiredFields = schema.required || [];
+  for (const field of requiredFields) {
+    const value = result.correctedArgs[field];
+
+    if (value === undefined || value === null) {
+      // 完全缺失
+      result.errors.push(`缺少必填参数 '${field}'`);
+    } else if (typeof value === "string" && value.trim() === "") {
+      // 空字符串或纯空白
+      if (!isEmptyStringAllowed(toolName, field)) {
+        result.errors.push(`参数 '${field}' 不能为空`);
+      }
+    } else if (Array.isArray(value) && value.length === 0) {
+      // 空数组
+      if (!isEmptyArrayAllowed(toolName, field)) {
+        result.errors.push(`参数 '${field}' 不能为空数组`);
+      }
+    }
+  }
+  // ==================================
+
+  // 如果没有参数，跳过未知参数检查
   if (!args || Object.keys(args).length === 0) {
     return result;
   }
 
-  const validParams = getSchemaProperties(tool);
   if (validParams.length === 0) {
     // 没有定义参数的工具，跳过验证
     return result;

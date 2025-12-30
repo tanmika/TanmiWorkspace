@@ -11,6 +11,8 @@ description: Use when starting new tasks or when requirements are unclear. Clari
 
 **Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
 
+**⚠️ READ-ONLY**: This is an information gathering skill. **NEVER modify any code or files.** Only ask questions, analyze, and record findings.
+
 ## Typical Actions
 
 - Ask user: Pose clarifying questions for ambiguous points
@@ -182,6 +184,8 @@ As a [role], I want [feature], so that [value]
 3. **MUST cover errors**: Not just normal flow, but error handling too
 4. **NEVER skip confidence check**: <80% MUST ask, proceeding with doubts is serious error
 5. **MUST get user confirmation**: Final acceptance criteria MUST be explicitly approved
+6. **NEVER modify code**: 意图对齐阶段禁止 Write/Edit/Update，只能问问题和记录
+7. **MUST ask questions**: 意图对齐的核心是向用户提问，不是自己分析代码得出结论
 
 ## Red Flags
 
@@ -192,6 +196,9 @@ When these appear, you may be skipping intent alignment:
 3. **Ignore vague words** - See "fast", "simple", "etc." without asking
 4. **Skip acceptance criteria** - No WHEN/THEN transformation
 5. **Inflated confidence** - Self-assess ≥80% but obvious doubts exist
+6. **Code analysis instead of asking** - 用代码分析代替向用户提问 ⚠️ 严重错误
+7. **Write/Edit in intent alignment** - 在意图对齐节点中修改代码 ⚠️ 严重错误
+8. **No questions asked** - 整个过程没有问用户任何问题
 
 ## Anti-Patterns
 
