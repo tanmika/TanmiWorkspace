@@ -59,6 +59,7 @@ interface TutorialNode {
     title: string;
     summary: string;
     content: string;
+    tags: string[];
   };
 }
 
@@ -301,6 +302,7 @@ AI 会在执行时关注问题内容，本节点的问题区域有演示内容�
           memo: {
             title: "MEMO 功能说明",
             summary: "演示 MEMO 的使用方式和适用场景",
+            tags: ["功能演示", "MEMO"],
             content: `# MEMO 功能说明
 
 ## 什么是 MEMO
@@ -1089,6 +1091,61 @@ export class TutorialService {
       docs: TUTORIAL_CONTENT.docs,
     });
 
+    // 创建独立 MEMO：版本更新与帮助系统（在 MEMO 功能说明之前创建）
+    await this.memo.create({
+      workspaceId: result.workspaceId,
+      title: "版本更新与帮助系统",
+      summary: "版本更新、插件更新方式和 WebUI 帮助入口",
+      tags: ["新手教程", "帮助"],
+      content: `# 版本更新与帮助系统
+
+## 版本更新
+
+### npm 全局包更新
+TanmiWorkspace 作为 npm 全局包发布，更新命令：
+\`\`\`bash
+npm i -g tanmi-workspace
+\`\`\`
+
+### 版本检查机制
+- 启动时自动检查版本
+- 有新版本时创建「版本更新」工作区
+- 可在工作区中查看各版本的更新内容
+
+## 插件更新
+
+插件（Hooks、Agents、Skills）随 npm 包一起更新。
+
+### 更新流程
+1. 更新 npm 包：\`npm i -g tanmi-workspace\`
+2. 重新安装插件：\`tanmi-workspace plugins install --claude\`
+  或通过\`tanmi-workspace setup\`重新安装所有插件
+
+### 查看插件状态
+\`\`\`bash
+tanmi-workspace plugins
+\`\`\`
+
+### 插件管理命令
+- 安装 Claude 插件：\`tanmi-workspace plugins install --claude\`
+- 安装 Cursor 插件：\`tanmi-workspace plugins install --cursor\`
+- 卸载：\`tanmi-workspace plugins uninstall --claude\`
+
+## WebUI 帮助入口
+
+### 设置面板
+点击主页面顶部「设置」按钮：
+- 查看用户帮助（快速入门、触发词速查）
+- 查看插件详情和版本信息
+- 配置派发模式默认设置
+
+### 用户帮助区域
+- **快速入门**：工作流程和核心概念
+- **触发词速查**：常用对话触发词参考
+- **查看完整手册**：详细用户文档
+`,
+    });
+
     // 创建子节点（使用 INTERNAL_RULES_HASH 绕过规则确认检查）
     const focusNodeId = await this.createNodes(
       result.workspaceId,
@@ -1188,6 +1245,7 @@ export class TutorialService {
           workspaceId,
           title: nodeDef.memo.title,
           summary: nodeDef.memo.summary,
+          tags: nodeDef.memo.tags,
           content: nodeDef.memo.content,
         });
         // 使用 reference 服务添加引用（会同时更新 graph.json 和 Info.md）
