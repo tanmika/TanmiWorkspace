@@ -11,6 +11,8 @@ description: Use when planning implementation approach for features or changes. 
 
 **Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
 
+**Progressive Recording**: For complex designs, checkpoint after each major decision. `log_append` interface decisions before moving to data structures.
+
 ## Typical Actions
 
 - Define interfaces
@@ -46,6 +48,8 @@ description: Use when planning implementation approach for features or changes. 
   - How to handle deprecated interfaces?
 
 **Output**: Interface definitions (TypeScript/code examples)
+
+**⚠️ Checkpoint**: After interface design, `log_append` the interface definitions before proceeding to data structures.
 
 ### 3. Data Structure Design
 
@@ -91,6 +95,12 @@ After design, MUST record to workspace node:
 | Full design doc (>200 lines) | MEMO | memo_create + node_reference |
 
 **NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Reference rules** (design tasks SHOULD include):
+- Affected files/modules in scope
+- Dependencies being relied upon
+- Existing patterns being followed
+- Core principle: references help reviewers understand context
 
 **Conclusion template** (brief):
 ```
@@ -153,14 +163,19 @@ After recording, MUST present design to user:
 - [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
 - [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
+### Long Content Protection
+- [ ] **Checkpoint hit**: Logged interface design before data structures
+- [ ] **Scope referenced**: Affected files/modules listed
+- [ ] **Dependencies noted**: Key dependencies documented
+
 ## Output Template
 
 ```markdown
-## Solution Overview
+### Solution Overview
 **Problem**: [What to solve]
 **Approach**: [High-level approach]
 
-## Boundaries
+### Boundaries
 **Change scope**:
 - [File 1]: [Change description]
 - [File 2]: [Change description]
@@ -168,17 +183,17 @@ After recording, MUST present design to user:
 **Impact**: [Affected modules/callers]
 **Not changing**: [Explicit exclusions]
 
-## Interfaces
+### Interfaces
 
-### Public Interface
+#### Public Interface
 ```typescript
 function example(param: Type): ReturnType
 ```
 
-### Module Interface
+#### Module Interface
 [Internal contracts]
 
-## Data Structures
+### Data Structures
 
 ```typescript
 interface CoreType {
@@ -187,7 +202,7 @@ interface CoreType {
 }
 ```
 
-## Implementation Plan
+### Implementation Plan
 
 1. **Step 1**: [Description]
    - Files: [list]
@@ -197,7 +212,7 @@ interface CoreType {
    - Files: [list]
    - Verification: [how to verify]
 
-## Risks
+### Risks
 - **Risk 1**: [Description] - Mitigation: [approach]
 ```
 
@@ -208,6 +223,7 @@ interface CoreType {
 3. **Missing states** - Forget state management design
 4. **No breakdown** - Giant task without steps
 5. **Silent execution** - Complete design, then immediately start implementing without showing user
+6. **Skip checkpoint** - Complete complex design without intermediate logging
 
 ## Mandatory Rules
 

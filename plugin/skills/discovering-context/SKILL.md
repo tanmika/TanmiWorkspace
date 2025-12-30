@@ -11,6 +11,8 @@ description: Use when starting work on unfamiliar codebase or module. Investigat
 
 **Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
 
+**Progressive Recording**: For long explorations, NEVER wait until the end to record. After each major discovery, immediately `log_append` key findings. Context may be lost at any time.
+
 ## Typical Actions
 
 - **Explore codebase**: Use Task tool with `subagent_type=Explore` for complex exploration
@@ -81,6 +83,8 @@ description: Use when starting work on unfamiliar codebase or module. Investigat
 - Trace data flow paths
 - Understand state management
 
+**⚠️ Checkpoint**: After completing dependency analysis, `log_append` key module relationships before proceeding.
+
 ### 3. Data Flow Tracing
 
 **For functional tasks**:
@@ -94,6 +98,12 @@ description: Use when starting work on unfamiliar codebase or module. Investigat
 - Understand persistence
 - Analyze sync mechanisms
 - Trace config propagation
+
+**Visualization rules**:
+- Code investigation: **MUST** use mermaid sequenceDiagram
+- Architecture overview: flowchart or simple `A → B → C`
+
+**⚠️ Checkpoint**: After tracing data flow, `log_append` the flow diagram before proceeding.
 
 ### 4. Output Knowledge Snapshot
 
@@ -111,6 +121,12 @@ After exploration, MUST record to workspace node:
 | Full knowledge snapshot (>200 lines) | MEMO | memo_create + node_reference |
 
 **NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Reference rules** (investigation tasks MUST include):
+- Key files: `file:line` format
+- Entry points: exact location
+- Dependencies: module names with paths
+- Core principle: references enable traceability, not bureaucracy
 
 **Conclusion template** (brief):
 ```
@@ -153,6 +169,43 @@ After recording, MUST present findings to user:
 - Docs missing → Check code first, then ask user
 - Uncertain → Mark as "to be confirmed"
 
+## Output Template
+
+```markdown
+### Discovery Summary
+**Scope**: [What was explored]
+**Strategy**: Macro / Micro
+
+### Key Files
+| Role | File | Description |
+|------|------|-------------|
+| Entry | file:line | [description] |
+| Types | file | [description] |
+| Config | file | [description] |
+
+### Dependencies
+- **Internal**: [module relationships]
+- **External**: [key libraries]
+
+### Data Flow
+[Visualize with mermaid sequenceDiagram or flowchart]
+
+```mermaid
+sequenceDiagram
+    participant A
+    participant B
+    A->>B: [action]
+    B-->>A: [response]
+```
+
+### Findings
+- [Key finding 1]
+- [Key finding 2]
+
+### Uncertainties
+- [ ] [Item needing confirmation]
+```
+
 ## Checklist
 
 ### Macro
@@ -176,6 +229,12 @@ After recording, MUST present findings to user:
 - [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
 - [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
+### Long Content Protection
+- [ ] **Progressive recording**: Used `log_append` after each major discovery
+- [ ] **References complete**: All key files have `file:line` references
+- [ ] **Checkpoints hit**: Logged after dependency analysis and data flow tracing
+- [ ] **Output Template complete**: Every section filled, no placeholders left
+
 ## Red Flags
 
 1. **Skip exploration** - Start implementing without reading existing code
@@ -183,6 +242,9 @@ After recording, MUST present findings to user:
 3. **Ignore dependencies** - Don't check module relationships
 4. **Wrong strategy** - Use docs when should use code, or vice versa
 5. **Silent execution** - Complete exploration, then immediately start implementing without showing user
+6. **Batch recording** - Explore for 30+ minutes without any `log_append`
+7. **Missing references** - Conclusions without `file:line` references
+8. **Skip checkpoints** - Complete long exploration without intermediate logs
 
 ## Mandatory Rules
 

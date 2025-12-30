@@ -117,6 +117,16 @@ After user confirms, MUST record to workspace node:
 
 **Output**: node_update called with conclusion + notes
 
+### 6. Present to User (MANDATORY)
+
+After recording, MUST present acceptance criteria to user for final confirmation:
+
+1. **Output summary**: Show acceptance criteria using Output Template
+2. **Wait for confirmation**: Ask user if criteria are complete and correct
+3. **NEVER proceed directly**: Do NOT start implementation without user approval
+
+**Output**: Acceptance criteria presented, user confirmation received
+
 ## Checklist
 
 ### Core Elements
@@ -145,20 +155,20 @@ After user confirms, MUST record to workspace node:
 ## Output Template (for conversation)
 
 ```markdown
-## Requirement Summary
+### Requirement Summary
 [One sentence describing user intent, ≤50 words]
 
-## User Story
+### User Story
 As a [role], I want [feature], so that [value]
 
-## Acceptance Criteria
+### Acceptance Criteria
 | WHEN (Condition) | THEN (Result) |
 |------------------|---------------|
 | [Trigger 1] | [Expected result 1, observable, quantifiable] |
 | [Trigger 2] | [Expected result 2] |
 | [Error condition] | [Error handling] |
 
-## Confidence
+### Confidence
 - Current: [XX%]
 - Uncertain points:
   - [ ] [Question 1]

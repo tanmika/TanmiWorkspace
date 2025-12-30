@@ -11,6 +11,8 @@ description: Use when planning testing strategy or defining acceptance criteria.
 
 **Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
 
+**Progressive Recording**: For large test plans, `log_append` after completing each test case category (normal, edge, error).
+
 ## Typical Actions
 
 - Design test cases
@@ -63,6 +65,11 @@ After planning, MUST record to workspace node:
 | Full test plan (>200 lines) | MEMO | memo_create + node_reference |
 
 **NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Reference rules** (verification tasks SHOULD include):
+- Requirements/acceptance criteria being verified
+- Related design documents
+- Core principle: test cases should trace back to requirements
 
 **Conclusion template** (brief):
 ```
@@ -118,16 +125,20 @@ After recording, MUST present verification plan to user:
 - [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
 - [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
+### Long Content Protection
+- [ ] **Progressive recording**: Logged after each test case category
+- [ ] **Requirements traced**: Test cases reference source requirements
+
 ## Output Template
 
 ```markdown
-## Verification Strategy
+### Verification Strategy
 **Scope**: [What to verify]
 **Priority**: [P0/P1/P2]
 
-## Test Cases
+### Test Cases
 
-### TC-001: [Case Name]
+#### TC-001: [Case Name]
 **Priority**: P0
 **Type**: [Unit/Integration/E2E/Manual]
 
@@ -135,7 +146,7 @@ After recording, MUST present verification plan to user:
 **When**: [Action]
 **Then**: [Expected result]
 
-### TC-002: [Case Name]
+#### TC-002: [Case Name]
 **Priority**: P1
 **Type**: [Unit/Integration/E2E/Manual]
 
@@ -143,7 +154,7 @@ After recording, MUST present verification plan to user:
 **When**: [Action]
 **Then**: [Expected result]
 
-## Edge Cases
+### Edge Cases
 
 | Case | Input | Expected |
 |------|-------|----------|
@@ -151,18 +162,18 @@ After recording, MUST present verification plan to user:
 | Max value | [MAX] | [Result] |
 | Invalid | [Invalid] | Error message |
 
-## Acceptance Steps
+### Acceptance Steps
 
-### Preconditions
+#### Preconditions
 1. [Setup step 1]
 2. [Setup step 2]
 
-### Verification
+#### Verification
 1. [Action 1] → Expected: [Result 1]
 2. [Action 2] → Expected: [Result 2]
 3. [Action 3] → Expected: [Result 3]
 
-### Cleanup
+#### Cleanup
 1. [Cleanup step 1]
 ```
 
@@ -195,6 +206,7 @@ After recording, MUST present verification plan to user:
 3. **Manual only** - No automated tests for core logic
 4. **No acceptance criteria** - No way to know if done
 5. **Silent execution** - Complete verification planning, then immediately start implementation without showing user
+6. **Untraceable tests** - Test cases without reference to source requirements
 
 ## Mandatory Rules
 

@@ -11,6 +11,8 @@ description: Use when choosing between technologies or approaches. Evaluates tec
 
 **Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
 
+**Progressive Recording**: For extensive research, NEVER wait until the end. After collecting each option's key info, `log_append` findings immediately.
+
 ## Typical Actions
 
 - Compare options
@@ -39,6 +41,8 @@ description: Use when choosing between technologies or approaches. Evaluates tec
 | **Performance** | Throughput, latency, resource usage |
 | **Maintenance cost** | Learning curve, doc quality, community support |
 
+**⚠️ Checkpoint**: After completing comparison table, `log_append` the table before making recommendation.
+
 ### 4. Recommendation
 
 - Give clear recommendation
@@ -57,6 +61,12 @@ After research, MUST record to workspace node:
 | Full comparison table (>200 lines) | MEMO | memo_create + node_reference |
 
 **NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Reference rules** (research tasks MUST include):
+- Official links/repos for each option
+- Version numbers when relevant
+- Source of benchmark/comparison data
+- Core principle: references enable verification, not bureaucracy
 
 **Conclusion template** (brief):
 ```
@@ -116,28 +126,33 @@ After recording, MUST present research findings to user:
 - [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
 - [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
+### Long Content Protection
+- [ ] **Progressive recording**: Used `log_append` after researching each option
+- [ ] **References complete**: All options have official links/repos
+- [ ] **Checkpoint hit**: Logged comparison table before recommendation
+
 ## Output Template
 
 ```markdown
-## Research Summary
+### Research Summary
 **Topic**: [What technology/approach]
 **Recommendation**: [Recommended option]
 
-## Candidates
+### Candidates
 
-### Option A: [Name]
+#### Option A: [Name]
 - **Link**: [URL]
 - **Features**: [Key features]
 - **Pros**: [List]
 - **Cons**: [List]
 
-### Option B: [Name]
+#### Option B: [Name]
 - **Link**: [URL]
 - **Features**: [Key features]
 - **Pros**: [List]
 - **Cons**: [List]
 
-## Comparison
+### Comparison
 
 | Dimension | Option A | Option B |
 |-----------|----------|----------|
@@ -145,7 +160,7 @@ After recording, MUST present research findings to user:
 | Performance | [Rating] | [Rating] |
 | Maintenance | [Rating] | [Rating] |
 
-## Recommendation
+### Recommendation
 
 **Choose: [Option]**
 
@@ -168,6 +183,8 @@ After recording, MUST present research findings to user:
 3. **Hype-driven** - Choose trendy over appropriate
 4. **No comparison** - Recommendation without pros/cons analysis
 5. **Silent execution** - Complete research, then immediately start implementing without showing user
+6. **Missing links** - Recommend option without official link/repo
+7. **Batch recording** - Research multiple options without intermediate `log_append`
 
 ## Mandatory Rules
 

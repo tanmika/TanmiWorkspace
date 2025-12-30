@@ -124,14 +124,14 @@ Look for:
 ## Output Template
 
 ```markdown
-## Quality Review Report
+### Quality Review Report
 
 **Target Node**: [node-id] - [title]
 **Review Node**: [review-node-id]
 **Files Reviewed**: [count] files
 **Verdict**: PASS / FAIL
 
-## Summary
+### Summary
 
 | Category | Status | Issues |
 |----------|--------|--------|
@@ -140,30 +140,30 @@ Look for:
 | Standards | OK/WARN/FAIL | [count] |
 | Potential Issues | OK/WARN/FAIL | [count] |
 
-## Findings by Category
+### Findings by Category
 
-### Readability
+#### Readability
 - [Finding 1 with location]
 - [Finding 2 with location]
 
-### Error Handling
+#### Error Handling
 - [Finding 1 with location]
 - [Finding 2 with location]
 
-### Standards Compliance
+#### Standards Compliance
 - [Finding 1 with location]
 - [Finding 2 with location]
 
-### Potential Issues
+#### Potential Issues
 - [Finding 1 with severity and location]
 - [Finding 2 with severity and location]
 
-## Prioritized Recommendations
+### Prioritized Recommendations
 
 1. **[CRITICAL/HIGH/MEDIUM/LOW]**: [Issue] - [Suggested fix]
 2. **[CRITICAL/HIGH/MEDIUM/LOW]**: [Issue] - [Suggested fix]
 
-## Conclusion
+### Conclusion
 
 [Summary of quality assessment]
 ```

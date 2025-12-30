@@ -11,6 +11,8 @@ description: Use when optimizing performance or establishing metrics. Establishe
 
 **Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
 
+**Progressive Recording**: Measurement data is precious. After each measurement run, immediately `log_append` the results. Data loss means re-running tests.
+
 ## Typical Actions
 
 - Establish baseline
@@ -55,6 +57,8 @@ Execute tests, record current values.
 
 **Output**: Baseline data table
 
+**⚠️ Checkpoint**: After getting baseline, immediately `log_append` the baseline data. This is your reference point.
+
 ### 4. Post-Optimization Comparison
 
 After optimization, measure again and compare.
@@ -79,6 +83,12 @@ After measurement, MUST record to workspace node:
 | Full measurement data (>200 lines) | MEMO | memo_create + node_reference |
 
 **NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Reference rules** (measurement tasks SHOULD include):
+- Measurement tool and version
+- Environment specs (for reproducibility)
+- Data source/test case reference
+- Core principle: reproducible measurements need documented conditions
 
 **Conclusion template** (brief):
 ```
@@ -128,35 +138,40 @@ After recording, MUST present measurement results to user:
 - [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
 - [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
+### Long Content Protection
+- [ ] **Baseline logged**: Used `log_append` immediately after baseline measurement
+- [ ] **Environment documented**: Tool versions and specs recorded
+- [ ] **Data preserved**: Raw measurement data saved before analysis
+
 ## Output Template
 
 ```markdown
-## Measurement Summary
+### Measurement Summary
 **Objective**: [What to optimize]
 **Key Metric**: [Primary metric]
 **Result**: [X% improvement / No improvement]
 
-## Environment
+### Environment
 - **Hardware**: [Specs]
 - **Software**: [Versions]
 - **Data scale**: [Volume]
 
-## Baseline (Before)
+### Baseline (Before)
 | Metric | Value | Target |
 |--------|-------|--------|
 | [Metric 1] | [Value] | [Target] |
 | [Metric 2] | [Value] | [Target] |
 
-## After Optimization
+### After Optimization
 | Metric | Before | After | Change |
 |--------|--------|-------|--------|
 | [Metric 1] | [Value] | [Value] | [+/-X%] |
 | [Metric 2] | [Value] | [Value] | [+/-X%] |
 
-## Analysis
+### Analysis
 [Explanation of results]
 
-## Conclusion
+### Conclusion
 - Target achieved: [Yes/No]
 - Further optimization needed: [Yes/No]
 ```
@@ -168,6 +183,8 @@ After recording, MUST present measurement results to user:
 3. **Single run** - Draw conclusions from one measurement
 4. **Ignore other metrics** - Optimize one metric, break others
 5. **Silent execution** - Complete measurement, then immediately start optimization without showing user
+6. **Lost baseline** - Forget to log baseline before optimization
+7. **Undocumented environment** - Can't reproduce measurement conditions
 
 ## Mandatory Rules
 

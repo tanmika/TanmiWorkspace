@@ -11,6 +11,8 @@ description: Use when debugging errors or investigating performance issues. Trac
 
 **Recording**: Conversation output is invisible to users. You MUST record to workspace node. Standard: "If context is wiped now, can you recall discussion details from conclusion alone?"
 
+**Progressive Recording**: Diagnosis can be long. After each hypothesis test, immediately `log_append` the result. Don't lose valuable debugging insights.
+
 ## Applicable Scenarios
 
 - **Debug**: Diagnose logic errors (why error occurs)
@@ -58,6 +60,8 @@ Data source/Logic flaw ← Root cause
 - Modify code to test hypotheses
 - Use debugger to trace execution
 
+**⚠️ Checkpoint**: After each hypothesis test, `log_append` the result (confirmed/rejected + evidence).
+
 ### 4. Root Cause Confirmation
 
 **Confirmation criteria**:
@@ -83,6 +87,12 @@ After diagnosis, MUST record to workspace node:
 | Full trace log (>200 lines) | MEMO | memo_create + node_reference |
 
 **NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
+
+**Reference rules** (diagnosis tasks MUST include):
+- Root cause location: `file:line` format (CRITICAL)
+- Error stack trace: key frames with file:line
+- Causal chain: each node with file reference
+- Core principle: precise location enables verification and fix
 
 **Conclusion template** (brief):
 ```
@@ -134,26 +144,31 @@ After recording, MUST present diagnosis to user:
 - [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
 - [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
+### Long Content Protection
+- [ ] **Progressive recording**: Used `log_append` after each hypothesis test
+- [ ] **Root cause referenced**: Location has precise `file:line`
+- [ ] **Causal chain referenced**: Each node has file reference
+
 ## Output Template
 
 ```markdown
-## Diagnosis Summary
+### Diagnosis Summary
 **Issue type**: [Error/Performance]
 **Root cause**: [One sentence description]
 **Location**: [file:line]
 
-## Reproduction Path
+### Reproduction Path
 1. [Step 1]
 2. [Step 2]
 3. [Symptom appears]
 
-## Causal Chain
+### Causal Chain
 [Entry] → [Function A] → [Function B] → [Problem point]
 
-## Root Cause Analysis
+### Root Cause Analysis
 [Detailed explanation of why this causes the issue]
 
-## Fix Recommendation
+### Fix Recommendation
 [Specific fix approach]
 ```
 
@@ -164,6 +179,8 @@ After recording, MUST present diagnosis to user:
 3. **Single hypothesis** - Lock on first guess without exploring alternatives
 4. **No verification** - Claim fix without testing
 5. **Silent execution** - Complete diagnosis, then immediately start fixing without showing user
+6. **Vague location** - "The problem is in module X" without `file:line`
+7. **Lost hypotheses** - Test multiple hypotheses without logging results
 
 ## Mandatory Rules
 

@@ -104,36 +104,36 @@ For each criterion (WHEN/THEN format):
 ## Output Template
 
 ```markdown
-## Spec Review Report
+### Spec Review Report
 
 **Target Node**: [node-id] - [title]
 **Review Node**: [review-node-id]
 **Verdict**: PASS / FAIL
 
-## Acceptance Criteria Results
+### Acceptance Criteria Results
 
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
 | 1 | WHEN [condition] THEN [result] | PASS/FAIL | [evidence] |
 | 2 | WHEN [condition] THEN [result] | PASS/FAIL | [evidence] |
 
-## Requirement Coverage
+### Requirement Coverage
 
 - **Covered**: [list of covered aspects]
 - **Missing**: [list of missing aspects, if any]
 - **Scope Issues**: [deviations, if any]
 
-## Findings
+### Findings
 
-### Issues (if any)
+#### Issues (if any)
 1. [Issue description with evidence]
 2. [Issue description with evidence]
 
-### Suggestions (if fail)
+#### Suggestions (if fail)
 1. [Specific action to fix issue 1]
 2. [Specific action to fix issue 2]
 
-## Conclusion
+### Conclusion
 
 [Summary of review result]
 ```
