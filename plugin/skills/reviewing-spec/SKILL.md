@@ -5,6 +5,14 @@ description: Use when performing Spec Review as dispatch_spec role to verify imp
 
 # Reviewing Spec
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **规格评审** 技能来验证实现完整性、检查是否满足需求和验收标准。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Verify** - Systematically validate each acceptance criterion. Evidence-based verdicts only. Trust nothing - verify everything.

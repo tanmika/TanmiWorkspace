@@ -5,6 +5,14 @@ description: Use when your node has been upgraded to a dispatch parent via dispa
 
 # Dispatching Parent
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **派发协调** 技能来协调子代理执行、分析结果、做出决策。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## ⚠️ CRITICAL: Complete the Full Flow
 
 **YOU MUST COMPLETE THE ENTIRE DISPATCH FLOW:**

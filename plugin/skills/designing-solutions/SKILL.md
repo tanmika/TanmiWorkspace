@@ -5,6 +5,14 @@ description: Use when planning implementation approach for features or changes. 
 
 # Designing Solutions
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **方案设计** 技能来构建技术方案、定义接口和数据结构、规划实现路径。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Architect** - Design before build. Good architecture enables good implementation.

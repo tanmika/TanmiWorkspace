@@ -5,6 +5,14 @@ description: Use when debugging errors or investigating performance issues. Trac
 
 # Diagnosing Issues
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **问题诊断** 技能来追踪问题根因、分析逻辑错误和性能瓶颈。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Trace** - Follow the causal chain to find root cause.

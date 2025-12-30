@@ -5,6 +5,14 @@ description: Use when starting work on unfamiliar codebase or module. Investigat
 
 # Discovering Context
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **上下文探索** 技能来调查项目背景、理解现有状态和依赖关系。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Investigate** - Build cognitive model through systematic information collection.

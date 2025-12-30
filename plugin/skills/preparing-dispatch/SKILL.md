@@ -5,6 +5,14 @@ description: Use when creating task nodes that will be dispatched to subagents. 
 
 # Preparing Dispatch
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **派发准备** 技能来准备执行节点、完善需求和验收标准以供派发。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Complete** - A well-prepared node reduces executor confusion and retry cycles. Invest time upfront.

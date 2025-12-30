@@ -5,6 +5,14 @@ description: Use when optimizing performance or establishing metrics. Establishe
 
 # Analyzing Measurements
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **度量分析** 技能来建立性能基准、对比数据、验证优化效果。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Measure** - You can't improve what you don't measure.

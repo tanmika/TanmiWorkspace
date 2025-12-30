@@ -5,6 +5,14 @@ description: Use when planning testing strategy or defining acceptance criteria.
 
 # Planning Verification
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **验证策略** 技能来设计测试用例、定义验收步骤、确保需求被正确验证。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Verify** - Trust but verify. Every feature needs a way to prove it works.

@@ -5,6 +5,14 @@ description: Use when starting new tasks or when requirements are unclear. Clari
 
 # Aligning Intent
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **意图对齐** 技能来澄清需求、消除歧义、确认验收标准。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Clarify**: Use structured questioning to eliminate ambiguity in requirements, transform user intent into verifiable acceptance criteria.

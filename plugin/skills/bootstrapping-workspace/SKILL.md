@@ -5,6 +5,14 @@ description: Use when workspace is created and needs capability selection and in
 
 # Bootstrapping Workspace
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **工作区启动** 技能来初始化工作区、选择能力、创建信息节点。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Flow
 
 ```

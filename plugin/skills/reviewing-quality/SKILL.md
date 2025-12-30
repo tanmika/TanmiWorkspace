@@ -5,6 +5,14 @@ description: Use when performing Quality Review to identify potential issues and
 
 # Reviewing Quality
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **质量评审** 技能来评估代码质量、可维护性和最佳实践。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Assess** - Evaluate code quality objectively. Focus on maintainability, not personal style preferences.

@@ -5,6 +5,14 @@ description: Use when executing dispatched tasks as tanmi-executor. Guides task 
 
 # Executing Task
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **任务执行** 技能来执行派发任务、控制范围、交付高质量成果。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Focus** - Execute exactly what's required. No more, no less. Fail fast on uncertainty.

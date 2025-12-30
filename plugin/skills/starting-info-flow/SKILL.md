@@ -5,6 +5,14 @@ description: Use when user requests research, analysis, or summary in an existin
 
 # Starting Info Flow
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **信息流启动** 技能来引导能力选择、创建信息收集/总结节点。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## When to Use
 
 User says things like:

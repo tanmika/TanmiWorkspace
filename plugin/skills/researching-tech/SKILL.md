@@ -5,6 +5,14 @@ description: Use when choosing between technologies or approaches. Evaluates tec
 
 # Researching Tech
 
+## Announcement (MANDATORY)
+
+Before executing this skill, you MUST announce to the user:
+
+「我将使用 **技术调研** 技能来评估技术选型、多维度比较方案、提供选择建议。」
+
+This creates a commitment checkpoint. Proceed only after announcing.
+
 ## Core Thinking
 
 **Trade-off** - Every choice has pros and cons, find the best fit.
