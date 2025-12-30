@@ -15,6 +15,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '工作区详情' },
   },
   {
+    path: '/docs',
+    name: 'docs',
+    component: () => import('@/views/DocsView.vue'),
+    meta: { title: '用户手册' },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'notFound',
     component: () => import('@/views/NotFoundView.vue'),

@@ -7,6 +7,9 @@ import { settingsApi, type InstallationStatusResult, type PlatformStatus, type C
 import WsModal from '@/components/ui/WsModal.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
+import WsCollapse from '@/components/ui/WsCollapse.vue'
+import MarkdownContent from '@/components/common/MarkdownContent.vue'
+import { quickStartContent, triggerWords } from '@/data/helpContent'
 
 const settingsStore = useSettingsStore()
 const toastStore = useToastStore()
@@ -129,6 +132,11 @@ async function doSave() {
 // 选择模式
 function selectMode(mode: 'none' | 'git' | 'no-git') {
   localMode.value = mode
+}
+
+// 打开完整手册
+function openFullDocs() {
+  window.open('/docs', '_blank')
 }
 
 // 版本号点击处理（连续点击5次触发教程创建 - 彩蛋功能）
@@ -330,6 +338,43 @@ async function handleVersionClick() {
           <span class="command-label">插件安装方式</span>
           <span class="command-text">npx tanmi-workspace setup</span>
         </div>
+      </div>
+
+      <!-- 用户帮助 -->
+      <div class="setting-section help-section">
+        <div class="setting-section-title">用户帮助</div>
+        <div class="setting-section-desc">
+          在对话中使用 TanmiWorkspace 的指南
+        </div>
+
+        <div class="help-collapse-group">
+          <WsCollapse title="快速入门">
+            <MarkdownContent :content="quickStartContent" />
+          </WsCollapse>
+
+          <WsCollapse title="触发词速查">
+            <div class="trigger-table-wrapper">
+              <table class="trigger-table">
+                <thead>
+                  <tr>
+                    <th>意图</th>
+                    <th>说法</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in triggerWords" :key="item.intent">
+                    <td>{{ item.intent }}</td>
+                    <td>{{ item.phrases.join(' / ') }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </WsCollapse>
+        </div>
+
+        <a class="doc-link" href="javascript:void(0)" @click="openFullDocs">
+          查看完整手册 <span class="doc-link-arrow">&rarr;</span>
+        </a>
       </div>
 
       <!-- 版本信息 -->
@@ -853,5 +898,92 @@ async function handleVersionClick() {
   font-family: var(--mono-font);
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+/* 用户帮助区 */
+.help-section {
+  border-top: 1px solid var(--border-color);
+  padding-top: 20px;
+}
+
+.help-collapse-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 触发词表格包装器 */
+.trigger-table-wrapper {
+  padding: 0 !important;
+}
+
+/* 触发词表格 */
+.trigger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.trigger-table th,
+.trigger-table td {
+  padding: 10px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.trigger-table th {
+  background: var(--path-bg);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.trigger-table th:first-child {
+  border-right: 1px solid var(--border-color);
+}
+
+.trigger-table td:first-child {
+  font-weight: 600;
+  color: var(--text-main);
+  border-right: 1px solid var(--border-color);
+  width: 100px;
+}
+
+.trigger-table td:last-child {
+  color: var(--text-secondary);
+  font-family: var(--mono-font);
+  font-size: 12px;
+}
+
+.trigger-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* 文档链接 */
+.doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--accent-red);
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.doc-link:hover {
+  opacity: 0.8;
+}
+
+.doc-link-arrow {
+  font-size: 14px;
+  transition: transform 0.2s ease;
+}
+
+.doc-link:hover .doc-link-arrow {
+  transform: translateX(3px);
 }
 </style>
