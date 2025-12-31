@@ -179,15 +179,23 @@ function showStatus(env: Environment) {
 async function configureClaudeMcp(env: Environment): Promise<boolean> {
   console.log("\n" + colors.blue("配置 Claude Code MCP..."));
 
-  // 如果已配置，直接返回成功
+  // 如果已配置，直接覆盖（用户调用 setup 就是想修复配置）
   if (env.claudeCode.mcpConfigured) {
-    console.log(colors.green("  ✓ MCP 服务器已存在"));
-    return true;
+    console.log(colors.yellow("  → 覆盖现有配置..."));
   }
 
   if (env.claudeCode.cliAvailable) {
     // 使用 claude mcp add 命令
     try {
+      // 如果用户选择覆盖，先移除旧配置
+      if (env.claudeCode.mcpConfigured) {
+        try {
+          await execAsync("claude mcp remove tanmi-workspace -s user");
+          console.log("  已移除旧配置");
+        } catch {
+          // 移除失败不影响后续添加
+        }
+      }
       console.log("  执行: claude mcp add tanmi-workspace -s user -- npx tanmi-workspace");
       await execAsync("claude mcp add tanmi-workspace -s user -- npx tanmi-workspace");
       console.log(colors.green("  ✓ MCP 服务器已添加"));

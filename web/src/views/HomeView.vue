@@ -356,6 +356,7 @@ const filteredWorkspaces = computed(() => {
 
 // 获取路径显示（只显示最后两级目录）
 function getShortPath(fullPath: string): string {
+  if (!fullPath) return ''
   const parts = fullPath.split('/')
   if (parts.length <= 2) return fullPath
   return '.../' + parts.slice(-2).join('/')

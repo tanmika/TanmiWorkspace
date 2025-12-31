@@ -250,13 +250,17 @@ function readWorkspacesFromProject(projectRoot: string): WorkspaceEntry[] {
         continue;
       }
 
+      // 支持两种格式：config.json (项目工作区) 和 workspace.json (导出的工作区)
       const configPath = join(wsDir, item.name, "config.json");
-      if (!existsSync(configPath)) {
+      const workspacePath = join(wsDir, item.name, "workspace.json");
+      const actualPath = existsSync(configPath) ? configPath : existsSync(workspacePath) ? workspacePath : null;
+
+      if (!actualPath) {
         continue;
       }
 
       try {
-        const config = JSON.parse(readFileSync(configPath, "utf-8"));
+        const config = JSON.parse(readFileSync(actualPath, "utf-8"));
         entries.push({
           id: config.id || item.name,
           name: config.name || item.name,
@@ -290,7 +294,7 @@ function scanForProjects(rootPath: string, maxDepth: number = 3): string[] {
     const wsDir = join(dir, FOLDER_NAME);
     if (existsSync(wsDir)) {
       projects.push(dir);
-      return; // 找到后不再深入（一个项目只有一个 .tanmi-workspace）
+      // 继续扫描子目录，因为可能有嵌套的独立项目
     }
 
     // 继续扫描子目录
@@ -328,12 +332,15 @@ function verifyWorkspace(entry: WorkspaceEntry): { valid: boolean; reason?: stri
   }
 
   const configPath = join(wsPath, "config.json");
-  if (!existsSync(configPath)) {
-    return { valid: false, reason: "config.json 不存在" };
+  const workspacePath = join(wsPath, "workspace.json");
+  const actualPath = existsSync(configPath) ? configPath : existsSync(workspacePath) ? workspacePath : null;
+
+  if (!actualPath) {
+    return { valid: false, reason: "config.json/workspace.json 不存在" };
   }
 
   try {
-    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+    const config = JSON.parse(readFileSync(actualPath, "utf-8"));
     if (!config.id || !config.name) {
       return { valid: false, reason: "配置文件缺少必要字段" };
     }
@@ -497,6 +504,108 @@ function scanAndSync(rootPath: string, backup: boolean = true): { projects: numb
 }
 
 /**
+ * 诊断索引问题（不修改数据）
+ */
+interface DiagnoseIssue {
+  workspaceId: string;
+  workspaceName: string;
+  field: string;
+  issue: string;
+  severity: "error" | "warning";
+}
+
+function diagnoseIndex(): { total: number; issues: DiagnoseIssue[] } {
+  const index = readIndex();
+  if (!index) {
+    warn("索引文件不存在");
+    return { total: 0, issues: [] };
+  }
+
+  const issues: DiagnoseIssue[] = [];
+  const seenIds = new Set<string>();
+  const requiredFields = ["id", "name", "projectRoot", "dirName", "status"];
+
+  for (const ws of index.workspaces) {
+    const wsId = ws.id || "(无ID)";
+    const wsName = ws.name || "(无名称)";
+
+    // 检查必要字段
+    for (const field of requiredFields) {
+      const value = (ws as unknown as Record<string, unknown>)[field];
+      if (value === undefined || value === null) {
+        issues.push({
+          workspaceId: wsId,
+          workspaceName: wsName,
+          field,
+          issue: `字段缺失`,
+          severity: "error",
+        });
+      } else if (typeof value !== "string") {
+        issues.push({
+          workspaceId: wsId,
+          workspaceName: wsName,
+          field,
+          issue: `类型错误 (期望 string, 实际 ${typeof value})`,
+          severity: "error",
+        });
+      } else if (value === "") {
+        issues.push({
+          workspaceId: wsId,
+          workspaceName: wsName,
+          field,
+          issue: `字段为空`,
+          severity: field === "projectRoot" ? "error" : "warning",
+        });
+      }
+    }
+
+    // 检查 ID 重复
+    if (ws.id) {
+      if (seenIds.has(ws.id)) {
+        issues.push({
+          workspaceId: wsId,
+          workspaceName: wsName,
+          field: "id",
+          issue: `ID 重复`,
+          severity: "error",
+        });
+      }
+      seenIds.add(ws.id);
+    }
+
+    // 检查状态值
+    if (ws.status && !["active", "archived", "error"].includes(ws.status)) {
+      issues.push({
+        workspaceId: wsId,
+        workspaceName: wsName,
+        field: "status",
+        issue: `无效状态值: ${ws.status}`,
+        severity: "warning",
+      });
+    }
+
+    // 检查日期格式
+    for (const dateField of ["createdAt", "updatedAt"]) {
+      const value = (ws as unknown as Record<string, unknown>)[dateField];
+      if (value && typeof value === "string") {
+        const date = new Date(value);
+        if (isNaN(date.getTime())) {
+          issues.push({
+            workspaceId: wsId,
+            workspaceName: wsName,
+            field: dateField,
+            issue: `日期格式无效: ${value}`,
+            severity: "warning",
+          });
+        }
+      }
+    }
+  }
+
+  return { total: index.workspaces.length, issues };
+}
+
+/**
  * 验证并清理无效工作区
  */
 function verifyAndClean(backup: boolean = true): { valid: number; invalid: number; removed: string[] } {
@@ -551,6 +660,7 @@ ${colors.blue("用法:")}
   tanmi-workspace rebuild --full <path>     完全重建（清空后重新扫描）
   tanmi-workspace rebuild --scan <path>     递归扫描目录查找项目
   tanmi-workspace rebuild --verify          验证并清理无效工作区
+  tanmi-workspace rebuild --diagnose        诊断索引问题（不修改数据）
   tanmi-workspace rebuild --list            列出所有备份
   tanmi-workspace rebuild --restore <name>  还原指定备份
 
@@ -693,6 +803,50 @@ export default function main(): void {
         console.log(colors.yellow("\n已移除的工作区:"));
         for (const r of verifyResult.removed) {
           console.log(`  - ${r}`);
+        }
+      }
+      break;
+
+    case "--diagnose":
+    case "-d":
+      info("诊断索引问题...\n");
+      const diagnoseResult = diagnoseIndex();
+
+      if (diagnoseResult.total === 0) {
+        warn("索引为空");
+        break;
+      }
+
+      console.log(`${colors.blue("工作区总数:")} ${diagnoseResult.total}`);
+
+      if (diagnoseResult.issues.length === 0) {
+        console.log();
+        success("未发现问题，索引数据完整");
+      } else {
+        const errors = diagnoseResult.issues.filter((i) => i.severity === "error");
+        const warnings = diagnoseResult.issues.filter((i) => i.severity === "warning");
+
+        console.log(`${colors.red("错误:")} ${errors.length}  ${colors.yellow("警告:")} ${warnings.length}\n`);
+
+        if (errors.length > 0) {
+          console.log(colors.red("=== 错误 ==="));
+          for (const issue of errors) {
+            console.log(`  ${colors.red("✗")} [${issue.workspaceName}] ${issue.field}: ${issue.issue}`);
+          }
+          console.log();
+        }
+
+        if (warnings.length > 0) {
+          console.log(colors.yellow("=== 警告 ==="));
+          for (const issue of warnings) {
+            console.log(`  ${colors.yellow("!")} [${issue.workspaceName}] ${issue.field}: ${issue.issue}`);
+          }
+          console.log();
+        }
+
+        if (errors.length > 0) {
+          console.log(colors.gray("提示: 使用 --verify 清理无效条目，或手动修复索引文件"));
+          console.log(colors.gray(`索引路径: ${INDEX_PATH}`));
         }
       }
       break;
