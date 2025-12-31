@@ -184,6 +184,14 @@ export class JsonStorage {
 
     // 检查源目录是否存在
     if (!(await this.fs.exists(srcPath))) {
+      // 源目录不存在，尝试查找可能已存在的新格式目录
+      const shortId = extractShortId(ws.id);
+      const existingDir = await this.findDirBySuffix(baseDir, shortId);
+      if (existingDir && existingDir !== oldDirName) {
+        // 找到已存在的可读格式目录，更新 dirName
+        console.error(`[migration] 修复工作区目录名（旧目录不存在）: ${oldDirName} → ${existingDir}`);
+        return existingDir;
+      }
       console.error(`[migration] 工作区目录不存在，跳过: ${srcPath}`);
       return undefined;
     }

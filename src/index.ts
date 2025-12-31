@@ -682,6 +682,7 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
             title: args?.title as string | undefined,
             summary: args?.summary as string | undefined,
             content: args?.content as string | undefined,
+            appendContent: args?.appendContent as string | undefined,
             tags: args?.tags as string[] | undefined,
           });
           break;

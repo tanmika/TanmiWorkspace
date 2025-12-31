@@ -32,7 +32,7 @@ import type {
 import { logError } from "../utils/errorLogger.js";
 import type { NodeGraph, NodeMeta } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
-import { generateWorkspaceId, generateWorkspaceDirName, generateNodeDirName } from "../utils/id.js";
+import { generateWorkspaceId, generateWorkspaceDirName, generateNodeDirName, extractShortId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { validateWorkspaceName, validateProjectRoot } from "../utils/validation.js";
 import { devLog } from "../utils/devLog.js";
@@ -360,18 +360,29 @@ Read(file_path: <返回的路径>/SKILL.md)
     }
 
     const { projectRoot, status } = wsEntry;
-    const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
+    let wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
     const isArchived = status === "archived";
     devLog.workspaceLookup(workspaceId, true, status);
 
     // 验证项目目录存在（根据归档状态选择正确路径）
-    const workspacePath = this.fs.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
+    let workspacePath = this.fs.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
     devLog.archivePath(workspaceId, isArchived, workspacePath);
     if (!(await this.fs.exists(workspacePath))) {
-      devLog.fileError("exists", workspacePath, new Error("目录不存在"));
-      // 标记为 error 状态而不是删除
-      await this.markAsError(workspaceId, "dir_missing", `工作区目录不存在: ${workspacePath}`);
-      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在（已标记为错误状态，可通过 workspace_list 查看）`);
+      // 尝试自动修复：查找可能存在的正确目录
+      const fixedDirName = await this.tryFixWorkspaceDir(workspaceId, projectRoot, wsDirName, isArchived);
+      if (fixedDirName) {
+        wsDirName = fixedDirName;
+        workspacePath = this.fs.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
+        // 更新 index.json 中的 dirName
+        wsEntry.dirName = fixedDirName;
+        await this.json.writeIndex(index);
+        devLog.debug(`自动修复工作区目录名: ${wsEntry.dirName} → ${fixedDirName}`);
+      } else {
+        devLog.fileError("exists", workspacePath, new Error("目录不存在"));
+        // 标记为 error 状态而不是删除
+        await this.markAsError(workspaceId, "dir_missing", `工作区目录不存在: ${workspacePath}`);
+        throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在（已标记为错误状态，可通过 workspace_list 查看）`);
+      }
     }
 
     const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
@@ -1119,6 +1130,60 @@ Read(file_path: <返回的路径>/SKILL.md)
     } catch {
       return false;
     }
+  }
+
+  /**
+   * 尝试修复工作区目录名（当记录的目录不存在时，查找可能存在的正确目录）
+   * @returns 修复后的目录名，如果无法修复则返回 undefined
+   */
+  private async tryFixWorkspaceDir(
+    workspaceId: string,
+    projectRoot: string,
+    currentDirName: string,
+    isArchived: boolean
+  ): Promise<string | undefined> {
+    // 获取工作区根目录
+    const baseDir = isArchived
+      ? this.fs.getArchiveDir(projectRoot)
+      : this.fs.getWorkspaceRootPath(projectRoot);
+
+    // 检查根目录是否存在
+    if (!(await this.fs.exists(baseDir))) {
+      return undefined;
+    }
+
+    // 提取工作区 ID 的短 ID
+    const shortId = extractShortId(workspaceId);
+
+    // 在目录中查找包含短 ID 的子目录
+    try {
+      const entries = await this.fs.readdir(baseDir);
+
+      // 优先级 1: 精确匹配 `_shortId` 后缀（当前标准格式）
+      for (const entry of entries) {
+        if (entry.endsWith(`_${shortId}`)) {
+          return entry;
+        }
+      }
+
+      // 优先级 2: 匹配 `shortId` 后缀（无下划线，可能的早期格式）
+      for (const entry of entries) {
+        if (entry.endsWith(shortId) && !entry.endsWith(`_${shortId}`)) {
+          return entry;
+        }
+      }
+
+      // 优先级 3: 包含短 ID 的任意目录
+      for (const entry of entries) {
+        if (entry.includes(shortId)) {
+          return entry;
+        }
+      }
+    } catch {
+      // 读取目录失败
+    }
+
+    return undefined;
   }
 
   /**
