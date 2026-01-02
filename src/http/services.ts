@@ -18,6 +18,8 @@ import { MemoService } from "../services/MemoService.js";
 import { TutorialService } from "../services/TutorialService.js";
 import { InstallationService } from "../services/InstallationService.js";
 import { DetectionService } from "../services/DetectionService.js";
+import { BackupService } from "../services/BackupService.js";
+import { HealthService } from "../services/HealthService.js";
 import { HelpService } from "../tools/help.js";
 
 export interface Services {
@@ -38,6 +40,8 @@ export interface Services {
   tutorial: TutorialService;
   installation: InstallationService;
   detection: DetectionService;
+  backup: BackupService;
+  health: HealthService;
   help: HelpService;
 }
 
@@ -84,12 +88,15 @@ export function createServices(): Services {
   const session = new SessionService(sessionStorage, json, md, fs);
   const installation = new InstallationService();
   const detection = new DetectionService();
+  const backup = new BackupService(json, fs);
+  const health = new HealthService(json, fs);
   const help = new HelpService();
 
   // 设置服务依赖
   session.setInstallationService(installation);
   help.setInstallationService(installation);
   context.setInstallationService(installation);
+  health.setWorkspaceService(workspace);
 
   servicesInstance = {
     fs,
@@ -109,6 +116,8 @@ export function createServices(): Services {
     tutorial,
     installation,
     detection,
+    backup,
+    health,
     help,
   };
 
@@ -131,6 +140,114 @@ export function getServices(): Services {
 export async function ensureBaseSetup(): Promise<void> {
   const services = getServices();
   await services.fs.ensureIndex();
+
+  // 启动时轻量检测：验证所有工作区的基础完整性
+  await performStartupHealthCheck(services);
+}
+
+/**
+ * 启动时轻量健康检测
+ * 检测 index 中所有工作区的基础完整性，发现问题则标记为 error 状态
+ */
+async function performStartupHealthCheck(services: Services): Promise<void> {
+  try {
+    const index = await services.json.readIndex();
+    const validStatuses = new Set(["active", "archived", "error"]);
+
+    // 检测 ID 重复
+    const idSet = new Set<string>();
+    const duplicateIds = new Set<string>();
+    for (const ws of index.workspaces) {
+      if (idSet.has(ws.id)) {
+        duplicateIds.add(ws.id);
+      }
+      idSet.add(ws.id);
+    }
+
+    for (const ws of index.workspaces) {
+      // 跳过已标记为 error 的工作区
+      if (ws.status === "error") continue;
+
+      try {
+        // 1. 字段完整性检测
+        const requiredFields = ["id", "name", "dirName", "projectRoot", "status", "createdAt", "updatedAt"];
+        for (const field of requiredFields) {
+          if (!ws[field as keyof typeof ws]) {
+            console.error(`[health] 工作区 ${ws.id} 缺少必填字段: ${field}`);
+          }
+        }
+
+        // 2. 状态值有效性检测
+        if (!validStatuses.has(ws.status)) {
+          console.error(`[health] 工作区 ${ws.id} 状态值无效: ${ws.status}`);
+        }
+
+        // 3. ID 重复检测
+        if (duplicateIds.has(ws.id)) {
+          console.error(`[health] 工作区 ID 重复: ${ws.id}`);
+        }
+
+        // 4. 目录存在检测
+        const wsDirName = ws.dirName || ws.id;
+        const isArchived = ws.status === "archived";
+        const workspacePath = isArchived
+          ? services.fs.getArchivePath(ws.projectRoot, wsDirName)
+          : services.fs.getWorkspacePath(ws.projectRoot, wsDirName);
+
+        if (!(await services.fs.exists(workspacePath))) {
+          await services.workspace.markAsError(ws.id, "dir_missing", `工作区目录不存在: ${workspacePath}`);
+          console.error(`[health] 工作区 ${ws.id} 目录不存在，已标记为 error`);
+          continue;
+        }
+
+        // 5. 配置文件检测
+        const configPath = isArchived
+          ? `${services.fs.getArchivePath(ws.projectRoot, wsDirName)}/workspace.json`
+          : services.fs.getWorkspaceConfigPath(ws.projectRoot, wsDirName);
+
+        if (!(await services.fs.exists(configPath))) {
+          await services.workspace.markAsError(ws.id, "config_corrupted", `配置文件不存在: workspace.json`);
+          console.error(`[health] 工作区 ${ws.id} 配置文件不存在，已标记为 error`);
+          continue;
+        }
+
+        try {
+          const configContent = await services.fs.readFile(configPath);
+          JSON.parse(configContent);
+        } catch {
+          await services.workspace.markAsError(ws.id, "config_corrupted", `配置文件 JSON 格式无效`);
+          console.error(`[health] 工作区 ${ws.id} 配置文件格式错误，已标记为 error`);
+          continue;
+        }
+
+        // 6. 图文件检测
+        const graphPath = isArchived
+          ? services.fs.getGraphPathWithArchive(ws.projectRoot, wsDirName, true)
+          : services.fs.getGraphPath(ws.projectRoot, wsDirName);
+
+        if (!(await services.fs.exists(graphPath))) {
+          await services.workspace.markAsError(ws.id, "graph_corrupted", `图文件不存在: graph.json`);
+          console.error(`[health] 工作区 ${ws.id} 图文件不存在，已标记为 error`);
+          continue;
+        }
+
+        try {
+          const graphContent = await services.fs.readFile(graphPath);
+          JSON.parse(graphContent);
+        } catch {
+          await services.workspace.markAsError(ws.id, "graph_corrupted", `图文件 JSON 格式无效`);
+          console.error(`[health] 工作区 ${ws.id} 图文件格式错误，已标记为 error`);
+          continue;
+        }
+      } catch (e) {
+        // 单个工作区检测失败不阻止其他工作区
+        console.error(`[health] 工作区 ${ws.id} 检测失败:`, e instanceof Error ? e.message : e);
+      }
+    }
+  } catch (e) {
+    // 整体检测失败不阻止服务启动
+    console.error("[health] 启动时健康检测失败:", e instanceof Error ? e.message : e);
+  }
 }
 
 // ============================================================================

@@ -97,6 +97,17 @@ interface BackupInfo {
   size: number;
 }
 
+interface WorkspaceBackupMeta {
+  name: string;
+  workspaceId: string;
+  workspaceName: string;
+  createdAt: string;
+  trigger: "manual" | "auto" | "pre_operation";
+  codeVersion: string;
+  size: number;
+  verified: boolean;
+}
+
 // ============================================================================
 // 工具函数
 // ============================================================================
@@ -226,6 +237,204 @@ function restoreBackup(name: string): boolean {
 
   copyFileSync(backupPath, INDEX_PATH);
   return true;
+}
+
+// ============================================================================
+// 工作区备份管理
+// ============================================================================
+
+/**
+ * 获取工作区备份目录路径
+ */
+function getWorkspaceBackupDir(projectRoot: string, wsDirName: string): string {
+  return join(projectRoot, FOLDER_NAME, wsDirName, ".backups");
+}
+
+/**
+ * 读取工作区备份元信息
+ */
+function readWorkspaceBackupMeta(projectRoot: string, wsDirName: string): WorkspaceBackupMeta[] {
+  const backupDir = getWorkspaceBackupDir(projectRoot, wsDirName);
+  const metaPath = join(backupDir, "backup-meta.json");
+
+  if (!existsSync(metaPath)) {
+    return [];
+  }
+
+  try {
+    const content = readFileSync(metaPath, "utf-8");
+    return JSON.parse(content) as WorkspaceBackupMeta[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 写入工作区备份元信息
+ */
+function writeWorkspaceBackupMeta(projectRoot: string, wsDirName: string, metas: WorkspaceBackupMeta[]): void {
+  const backupDir = getWorkspaceBackupDir(projectRoot, wsDirName);
+  const metaPath = join(backupDir, "backup-meta.json");
+  ensureDir(backupDir);
+  writeFileSync(metaPath, JSON.stringify(metas, null, 2), "utf-8");
+}
+
+/**
+ * 根据 workspaceId 查找工作区位置
+ */
+function findWorkspaceLocation(workspaceId: string): { projectRoot: string; dirName: string; name: string } | null {
+  const index = readIndex();
+  if (!index) return null;
+
+  const entry = index.workspaces.find(ws => ws.id === workspaceId);
+  if (!entry) return null;
+
+  return {
+    projectRoot: entry.projectRoot,
+    dirName: entry.dirName || entry.id,
+    name: entry.name,
+  };
+}
+
+/**
+ * 列出工作区备份
+ */
+function listWorkspaceBackups(workspaceId: string): void {
+  const location = findWorkspaceLocation(workspaceId);
+  if (!location) {
+    error(`工作区不存在: ${workspaceId}`);
+    process.exit(1);
+  }
+
+  const { projectRoot, dirName, name } = location;
+  const metas = readWorkspaceBackupMeta(projectRoot, dirName);
+
+  console.log(`\n${colors.bold(`工作区备份列表: ${name}`)}`);
+  console.log(colors.gray("─".repeat(50)));
+
+  if (metas.length === 0) {
+    console.log(colors.yellow("暂无备份"));
+    return;
+  }
+
+  // 按时间倒序
+  metas.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  for (const meta of metas) {
+    const verified = meta.verified ? colors.green("✓") : colors.yellow("?");
+    const sizeKb = (meta.size / 1024).toFixed(1);
+    const date = new Date(meta.createdAt);
+    const triggerMap: Record<string, string> = {
+      manual: "手动",
+      auto: "自动",
+      pre_operation: "操作前",
+    };
+
+    console.log(`  ${colors.blue(meta.name)} ${verified}`);
+    console.log(`    时间: ${formatDateReadable(date)}  大小: ${sizeKb} KB  触发: ${triggerMap[meta.trigger] || meta.trigger}`);
+  }
+
+  console.log(`\n${colors.gray("还原命令: tanmi-workspace rebuild --restore-workspace " + workspaceId + " <备份名>")}\n`);
+}
+
+/**
+ * 恢复工作区备份
+ */
+function restoreWorkspaceBackup(workspaceId: string, backupName: string): void {
+  const location = findWorkspaceLocation(workspaceId);
+  if (!location) {
+    error(`工作区不存在: ${workspaceId}`);
+    process.exit(1);
+  }
+
+  const { projectRoot, dirName, name } = location;
+  const backupDir = getWorkspaceBackupDir(projectRoot, dirName);
+  const backupPath = join(backupDir, backupName);
+  const workspacePath = join(projectRoot, FOLDER_NAME, dirName);
+
+  // 1. 验证备份文件存在
+  if (!existsSync(backupPath)) {
+    error(`备份文件不存在: ${backupName}`);
+    console.log(colors.gray("提示: 使用 --list-ws-backups 查看可用备份"));
+    process.exit(1);
+  }
+
+  // 2. 验证备份完整性
+  info("验证备份完整性...");
+  try {
+    const { execSync } = require("child_process");
+    execSync(`tar -tzf "${backupPath}" > /dev/null`, { stdio: "pipe" });
+  } catch {
+    error("备份文件损坏，无法恢复");
+    process.exit(1);
+  }
+
+  // 3. 创建恢复前备份
+  info("创建恢复前备份...");
+  const timestamp = formatDate(new Date());
+  const preRestoreBackupName = `backup_${timestamp}.tar.gz`;
+  const preRestoreBackupPath = join(backupDir, preRestoreBackupName);
+
+  try {
+    const { execSync } = require("child_process");
+    execSync(`tar -czf "${preRestoreBackupPath}" --exclude='.backups' -C "${workspacePath}" .`, { stdio: "pipe" });
+
+    // 更新元信息
+    const metas = readWorkspaceBackupMeta(projectRoot, dirName);
+    const stat = statSync(preRestoreBackupPath);
+    metas.push({
+      name: preRestoreBackupName,
+      workspaceId,
+      workspaceName: name,
+      createdAt: new Date().toISOString(),
+      trigger: "pre_operation",
+      codeVersion: "cli",
+      size: stat.size,
+      verified: true,
+    });
+
+    // 保留最多10个备份
+    if (metas.length > 10) {
+      const toDelete = metas.slice(0, metas.length - 10);
+      for (const old of toDelete) {
+        const oldPath = join(backupDir, old.name);
+        if (existsSync(oldPath)) {
+          rmSync(oldPath);
+        }
+      }
+      metas.splice(0, metas.length - 10);
+    }
+
+    writeWorkspaceBackupMeta(projectRoot, dirName, metas);
+    success(`已创建恢复前备份: ${preRestoreBackupName}`);
+  } catch (e) {
+    warn(`创建恢复前备份失败: ${e instanceof Error ? e.message : e}`);
+  }
+
+  // 4. 清空工作区目录（保留 .backups）
+  info("清理工作区...");
+  try {
+    const entries = readdirSync(workspacePath);
+    for (const entry of entries) {
+      if (entry === ".backups") continue;
+      const entryPath = join(workspacePath, entry);
+      rmSync(entryPath, { recursive: true, force: true });
+    }
+  } catch (e) {
+    error(`清理失败: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  }
+
+  // 5. 解压恢复
+  info("恢复备份...");
+  try {
+    const { execSync } = require("child_process");
+    execSync(`tar -xzf "${backupPath}" -C "${workspacePath}"`, { stdio: "pipe" });
+    success(`工作区 "${name}" 已成功恢复`);
+  } catch (e) {
+    error(`恢复失败: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  }
 }
 
 // ============================================================================
@@ -661,8 +870,10 @@ ${colors.blue("用法:")}
   tanmi-workspace rebuild --scan <path>     递归扫描目录查找项目
   tanmi-workspace rebuild --verify          验证并清理无效工作区
   tanmi-workspace rebuild --diagnose        诊断索引问题（不修改数据）
-  tanmi-workspace rebuild --list            列出所有备份
-  tanmi-workspace rebuild --restore <name>  还原指定备份
+  tanmi-workspace rebuild --list            列出所有索引备份
+  tanmi-workspace rebuild --restore <name>  还原索引备份
+  tanmi-workspace rebuild --list-ws-backups <id>        列出工作区备份
+  tanmi-workspace rebuild --restore-workspace <id> <backup>  恢复工作区备份
 
 ${colors.blue("选项:")}
   --no-backup                               不创建备份
@@ -874,6 +1085,31 @@ export default function main(): void {
       console.log();
       success(`重建完成: ${fullResult.total} 个工作区`);
       break;
+
+    case "--list-ws-backups":
+    case "-lwb":
+      if (!param) {
+        error("请指定工作区 ID");
+        process.exit(1);
+      }
+      listWorkspaceBackups(param);
+      break;
+
+    case "--restore-workspace":
+    case "-rw": {
+      if (!param) {
+        error("请指定工作区 ID");
+        process.exit(1);
+      }
+      const backupName = filteredArgs[2];
+      if (!backupName) {
+        error("请指定备份文件名");
+        console.log(colors.gray(`提示: 使用 --list-ws-backups ${param} 查看可用备份`));
+        process.exit(1);
+      }
+      restoreWorkspaceBackup(param, backupName);
+      break;
+    }
 
     default:
       // 默认：增量同步

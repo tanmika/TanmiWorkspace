@@ -29,6 +29,7 @@ import type {
   WorkspaceErrorInfo,
   ManualChange,
 } from "../types/workspace.js";
+import type { HealthIssue } from "../types/health.js";
 import { logError } from "../utils/errorLogger.js";
 import type { NodeGraph, NodeMeta } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
@@ -322,11 +323,12 @@ Read(file_path: <返回的路径>/SKILL.md)
       });
     }
 
-    // 为每个工作区添加 webUrl
+    // 为每个工作区添加 webUrl 和 hasWarning 状态
     const port = getHttpPort();
     const workspaces = filteredWorkspaces.map(ws => ({
       ...ws,
       webUrl: `http://localhost:${port}/workspace/${ws.id}`,
+      hasWarning: ws.hasUnresolvedIssues === true,
     }));
 
     // 检查是否有错误状态的工作区，添加排查提示
@@ -420,7 +422,10 @@ Read(file_path: <返回的路径>/SKILL.md)
       }
     }
 
-    return {
+    // 节点完整性检测（并行检测）
+    const issues = await this.validateNodesIntegrity(projectRoot, wsDirName, graph, isArchived);
+
+    const result: WorkspaceGetResult = {
       config,
       graph,
       workspaceMd,
@@ -429,6 +434,26 @@ Read(file_path: <返回的路径>/SKILL.md)
       rulesCount,
       rulesHash,
     };
+
+    // 如果有问题，添加 warning 字段并设置警告标记
+    if (issues.length > 0) {
+      // 检查是否应该显示警告（24小时内只警告一次）
+      const shouldWarn = await this.shouldShowWarning(workspaceId);
+      if (shouldWarn) {
+        await this.setWarningFlag(workspaceId, issues);
+      }
+
+      result.warning = {
+        message: `检测到 ${issues.length} 个节点完整性问题`,
+        issues,
+        suggestion: "可使用 workspace_health 工具查看详情并进行修复",
+      };
+    } else {
+      // 检测通过，清除警告标记
+      await this.clearWarningFlag(workspaceId);
+    }
+
+    return result;
   }
 
   /**
@@ -1133,6 +1158,73 @@ Read(file_path: <返回的路径>/SKILL.md)
   }
 
   /**
+   * 验证节点完整性（并行检测）
+   * 检测节点目录和 Info.md 是否存在
+   */
+  private async validateNodesIntegrity(
+    projectRoot: string,
+    wsDirName: string,
+    graph: NodeGraph,
+    isArchived: boolean
+  ): Promise<HealthIssue[]> {
+    const issues: HealthIssue[] = [];
+    const nodeIds = Object.keys(graph.nodes);
+
+    // 并行检测所有节点
+    const results = await Promise.all(
+      nodeIds.map(async (nodeId) => {
+        const node = graph.nodes[nodeId];
+        const nodeDirName = node.dirName || nodeId;
+        const nodeIssues: HealthIssue[] = [];
+
+        // 跳过 root 节点（目录名固定为 "root"）
+        if (nodeId === "root") {
+          nodeDirName === "root"; // 确保 root 节点目录名正确
+        }
+
+        // 获取节点目录路径
+        const nodesDir = isArchived
+          ? `${this.fs.getArchivePath(projectRoot, wsDirName)}/nodes`
+          : this.fs.getNodesDir(projectRoot, wsDirName);
+        const nodePath = `${nodesDir}/${nodeDirName}`;
+
+        // 1. 检测目录存在
+        if (!(await this.fs.exists(nodePath))) {
+          nodeIssues.push({
+            type: "node_corrupt",
+            severity: "error",
+            target: nodeId,
+            message: `节点目录不存在: ${nodeDirName}`,
+            suggestion: "从备份恢复或删除该节点",
+          });
+          return nodeIssues; // 目录不存在则跳过文件检测
+        }
+
+        // 2. 检测 Info.md 存在
+        const infoPath = `${nodePath}/Info.md`;
+        if (!(await this.fs.exists(infoPath))) {
+          nodeIssues.push({
+            type: "node_corrupt",
+            severity: "warning",
+            target: nodeId,
+            message: `节点 Info.md 缺失: ${nodeDirName}`,
+            suggestion: "可尝试重建节点信息文件",
+          });
+        }
+
+        return nodeIssues;
+      })
+    );
+
+    // 合并所有问题
+    for (const nodeIssues of results) {
+      issues.push(...nodeIssues);
+    }
+
+    return issues;
+  }
+
+  /**
    * 尝试修复工作区目录名（当记录的目录不存在时，查找可能存在的正确目录）
    * @returns 修复后的目录名，如果无法修复则返回 undefined
    */
@@ -1336,5 +1428,73 @@ Read(file_path: <返回的路径>/SKILL.md)
       default:
         return "通用";
     }
+  }
+
+  // ========== 警告机制 ==========
+
+  /** 警告频率限制：24 小时 */
+  private static readonly WARNING_DEBOUNCE_MS = 24 * 60 * 60 * 1000;
+
+  /**
+   * 设置工作区警告标记
+   * 用于标记检测到问题的工作区
+   * @param workspaceId 工作区 ID
+   * @param issues 检测到的问题列表（用于日志记录）
+   */
+  async setWarningFlag(workspaceId: string, issues: HealthIssue[]): Promise<void> {
+    const index = await this.json.readIndex();
+    const entry = index.workspaces.find(w => w.id === workspaceId);
+    if (!entry) return;
+
+    entry.hasUnresolvedIssues = true;
+    entry.lastWarningAt = new Date().toISOString();
+    entry.updatedAt = now();
+
+    await this.json.writeIndex(index);
+
+    // 记录日志
+    devLog.debug(`工作区 ${workspaceId} 设置警告标记，发现 ${issues.length} 个问题`);
+  }
+
+  /**
+   * 清除工作区警告标记
+   * 在健康检测通过时调用
+   * @param workspaceId 工作区 ID
+   */
+  async clearWarningFlag(workspaceId: string): Promise<void> {
+    const index = await this.json.readIndex();
+    const entry = index.workspaces.find(w => w.id === workspaceId);
+    if (!entry) return;
+
+    // 只有存在警告标记时才更新
+    if (entry.hasUnresolvedIssues || entry.lastWarningAt) {
+      delete entry.hasUnresolvedIssues;
+      delete entry.lastWarningAt;
+      entry.updatedAt = now();
+
+      await this.json.writeIndex(index);
+      devLog.debug(`工作区 ${workspaceId} 清除警告标记`);
+    }
+  }
+
+  /**
+   * 检查是否应该显示警告
+   * 同一工作区 24 小时内只警告一次
+   * @param workspaceId 工作区 ID
+   * @returns 是否应该警告
+   */
+  async shouldShowWarning(workspaceId: string): Promise<boolean> {
+    const index = await this.json.readIndex();
+    const entry = index.workspaces.find(w => w.id === workspaceId);
+    if (!entry) return false;
+
+    // 如果没有上次警告时间，应该警告
+    if (!entry.lastWarningAt) {
+      return true;
+    }
+
+    // 检查是否超过 24 小时
+    const lastWarningTime = new Date(entry.lastWarningAt).getTime();
+    return Date.now() - lastWarningTime > WorkspaceService.WARNING_DEBOUNCE_MS;
   }
 }

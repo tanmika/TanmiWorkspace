@@ -1,5 +1,8 @@
 // src/storage/JsonStorage.ts
 
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import { createRequire } from "module";
 import type { FileSystemAdapter } from "./FileSystemAdapter.js";
 import type { WorkspaceIndex, WorkspaceConfig, WorkspaceEntry } from "../types/workspace.js";
 import type { NodeGraph } from "../types/node.js";
@@ -20,7 +23,27 @@ import { generateWorkspaceDirName, generateNodeDirName, extractShortId } from ".
  * - 根节点目录固定为 "root"
  */
 export class JsonStorage {
+  private currentCodeVersion: string | null = null;
+
   constructor(private fs: FileSystemAdapter) {}
+
+  /**
+   * 获取当前代码版本（从 package.json 读取）
+   * ESM 兼容写法
+   */
+  getCurrentCodeVersion(): string {
+    if (this.currentCodeVersion) return this.currentCodeVersion;
+    try {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      const require = createRequire(import.meta.url);
+      const pkg = require(join(__dirname, "..", "..", "package.json")) as { version: string };
+      this.currentCodeVersion = pkg.version;
+      return this.currentCodeVersion;
+    } catch {
+      return "0.0.0";
+    }
+  }
 
   // ========== Global Index ==========
 
@@ -582,6 +605,29 @@ export class JsonStorage {
       }
     }
 
+    // 代码版本检测（lastWriteCodeVersion）
+    if (graph.lastWriteCodeVersion) {
+      const currentVersion = this.getCurrentCodeVersion();
+      const dataVersion = graph.lastWriteCodeVersion;
+
+      // 比较 major.minor（忽略 patch）
+      const [dataMajor, dataMinor] = dataVersion.split(".").map(Number);
+      const [curMajor, curMinor] = currentVersion.split(".").map(Number);
+
+      if (dataMajor > curMajor || (dataMajor === curMajor && dataMinor > curMinor)) {
+        // 运行时标记（不写入文件）
+        (graph as NodeGraph & { __readOnly?: boolean; __versionMismatch?: object }).__readOnly = true;
+        (graph as NodeGraph & { __readOnly?: boolean; __versionMismatch?: object }).__versionMismatch = {
+          dataVersion,
+          currentVersion,
+          message: `数据由 v${dataVersion} 写入，当前版本 v${currentVersion} 可能不兼容，已设为只读`,
+        };
+      } else if (dataVersion !== currentVersion) {
+        // patch 差异或旧版本数据，只记录日志
+        console.log(`[version] 数据版本 ${dataVersion}，当前版本 ${currentVersion}`);
+      }
+    }
+
     return graph;
   }
 
@@ -636,7 +682,23 @@ export class JsonStorage {
    * @param graph 节点图
    */
   async writeGraph(projectRoot: string, wsDirName: string, graph: NodeGraph): Promise<void> {
+    // 只读检测
+    const graphAny = graph as NodeGraph & { __readOnly?: boolean; __versionMismatch?: { message?: string } };
+    if (graphAny.__readOnly) {
+      throw new TanmiError(
+        "VERSION_READONLY",
+        graphAny.__versionMismatch?.message || "数据版本高于当前代码版本，禁止写入"
+      );
+    }
+
     const graphPath = this.fs.getGraphPath(projectRoot, wsDirName);
-    await this.fs.writeFile(graphPath, JSON.stringify(graph, null, 2));
+
+    // 写入时添加代码版本
+    const graphWithVersion: NodeGraph = {
+      ...graph,
+      lastWriteCodeVersion: this.getCurrentCodeVersion(),
+    };
+
+    await this.fs.writeFile(graphPath, JSON.stringify(graphWithVersion, null, 2));
   }
 }

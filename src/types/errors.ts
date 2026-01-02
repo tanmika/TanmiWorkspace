@@ -76,6 +76,7 @@ export const ErrorCodes = {
 
   // 版本错误
   VERSION_TOO_HIGH: "VERSION_TOO_HIGH",
+  VERSION_READONLY: "VERSION_READONLY",
 } as const;
 
 /**
@@ -151,4 +152,5 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   DISPATCH_CHILDREN_EXIST: "派发子节点已存在，无法重复创建",
   INVALID_CONFIG: "配置文件无效",
   VERSION_TOO_HIGH: "数据版本过高，请升级 tanmi-workspace",
+  VERSION_READONLY: "数据版本高于当前代码版本，禁止写入",
 };

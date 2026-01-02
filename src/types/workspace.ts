@@ -34,6 +34,8 @@ export interface WorkspaceEntry {
   createdAt: string;                // ISO 8601 时间戳
   updatedAt: string;                // ISO 8601 时间戳
   errorInfo?: WorkspaceErrorInfo;   // 错误信息（仅 status="error" 时存在）
+  hasUnresolvedIssues?: boolean;    // 是否有未解决的健康问题
+  lastWarningAt?: string;           // 最后警告时间 (ISO 8601)
 }
 
 /**
@@ -264,6 +266,11 @@ export interface WorkspaceGetResult {
   webUrl: string;                     // Web UI 访问地址
   rulesCount: number;                 // 规则条数
   rulesHash: string;                  // 规则内容哈希（用于验证）
+  warning?: {                         // 节点完整性检测警告
+    message: string;
+    issues: import("./health.js").HealthIssue[];
+    suggestion: string;
+  };
 }
 
 /**

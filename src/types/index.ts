@@ -8,3 +8,4 @@ export * from "./confirmation.js";
 export * from "./guidance.js";
 export * from "./memo.js";
 export * from "./capability.js";
+export * from "./health.js";

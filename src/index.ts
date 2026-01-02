@@ -317,6 +317,25 @@ function createMcpServer(services: Services): Server {
           });
           break;
 
+        case "workspace_health": {
+          const diagnosticToken = args?.diagnosticToken as string | undefined;
+
+          // 令牌校验
+          if (!diagnosticToken || !services.health.validateToken(diagnosticToken)) {
+            result = {
+              actionRequired: {
+                type: "read_diagnostic_guide",
+                message: "健康检测需要先阅读诊断指南获取令牌。请阅读指南文件，从 frontmatter 中获取 diagnosticToken，然后携带 token 再次调用。",
+                guidePath: services.health.getGuidePath(),
+                hint: "诊断指南包含常见问题解决方案和修复建议",
+              },
+            };
+          } else {
+            result = await services.health.checkHealth(args?.workspaceId as string | undefined);
+          }
+          break;
+        }
+
         // Node 工具
         case "node_create": {
           const nodeRole = args?.role as "info_collection" | "info_summary" | "dispatch_exec" | "dispatch_spec" | "dispatch_quality" | undefined;

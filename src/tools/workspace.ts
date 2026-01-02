@@ -224,6 +224,41 @@ export const workspaceRestoreTool: Tool = {
 };
 
 /**
+ * workspace_health 工具定义
+ */
+export const workspaceHealthTool: Tool = {
+  name: "workspace_health",
+  description: `检测工作区健康状态。
+
+**首次调用**：需要先阅读诊断指南获取令牌。
+
+**检测内容**：
+- 目录完整性
+- 配置文件有效性
+- 节点文件完整性
+- 版本兼容性
+
+**使用方式**：
+1. 首次调用返回诊断指南路径
+2. 阅读诊断指南获取 diagnosticToken
+3. 携带 token 再次调用执行检测`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID（可选，不填则检测所有活跃工作区）",
+      },
+      diagnosticToken: {
+        type: "string",
+        description: "诊断令牌（从诊断指南获取）",
+      },
+    },
+    required: [],
+  },
+};
+
+/**
  * 所有工作区工具
  */
 export const workspaceTools: Tool[] = [
@@ -235,4 +270,5 @@ export const workspaceTools: Tool[] = [
   workspaceUpdateRulesTool,
   workspaceArchiveTool,
   workspaceRestoreTool,
+  workspaceHealthTool,
 ];
