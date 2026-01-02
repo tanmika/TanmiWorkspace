@@ -31,7 +31,7 @@ function getWorkspaceConfig(workspaceId) {
     return null;
   }
 
-  const configPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, workspaceId, 'workspace.json');
+  const configPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, entry.dirName, 'workspace.json');
   return readJsonFile(configPath);
 }
 
@@ -77,7 +77,7 @@ function getWorkspaceMdData(workspaceId) {
     return null;
   }
 
-  const mdPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, workspaceId, 'Workspace.md');
+  const mdPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, entry.dirName, 'Workspace.md');
   try {
     const content = fs.readFileSync(mdPath, 'utf-8');
     return parseWorkspaceMd(content);
@@ -97,7 +97,7 @@ function getNodeGraph(workspaceId) {
     return null;
   }
 
-  const graphPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, workspaceId, 'graph.json');
+  const graphPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, entry.dirName, 'graph.json');
   return readJsonFile(graphPath);
 }
 
@@ -146,7 +146,7 @@ function getNodeInfo(workspaceId, nodeId) {
     return null;
   }
 
-  const infoPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, workspaceId, 'nodes', nodeId, 'Info.md');
+  const infoPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, entry.dirName, 'nodes', nodeId, 'Info.md');
   try {
     const content = fs.readFileSync(infoPath, 'utf-8');
     return parseNodeInfo(content);
@@ -202,7 +202,7 @@ function getNodeLog(workspaceId, nodeId) {
     return null;
   }
 
-  const logPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, workspaceId, 'nodes', nodeId, 'Log.md');
+  const logPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, entry.dirName, 'nodes', nodeId, 'Log.md');
   try {
     const content = fs.readFileSync(logPath, 'utf-8');
     return parseLogMd(content);
@@ -255,7 +255,7 @@ function getNodeProblem(workspaceId, nodeId) {
     return null;
   }
 
-  const problemPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, workspaceId, 'nodes', nodeId, 'Problem.md');
+  const problemPath = path.join(entry.projectRoot, `.tanmi-workspace${DIR_SUFFIX}`, entry.dirName, 'nodes', nodeId, 'Problem.md');
   try {
     const content = fs.readFileSync(problemPath, 'utf-8');
     return parseProblemMd(content);
