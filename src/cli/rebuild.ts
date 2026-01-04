@@ -533,31 +533,84 @@ function scanForProjects(rootPath: string, maxDepth: number = 3): string[] {
 /**
  * 验证工作区是否有效（目录存在且配置完整）
  */
-function verifyWorkspace(entry: WorkspaceEntry): { valid: boolean; reason?: string } {
-  const wsPath = join(entry.projectRoot, FOLDER_NAME, entry.dirName);
-
-  if (!existsSync(wsPath)) {
-    return { valid: false, reason: "工作区目录不存在" };
+function verifyWorkspace(entry: WorkspaceEntry): { valid: boolean; reason?: string; upgradedDirName?: string } {
+  // 检查必要字段
+  if (!entry.id) {
+    return { valid: false, reason: "索引条目缺少 id 字段" };
+  }
+  if (!entry.projectRoot) {
+    return { valid: false, reason: "索引条目缺少 projectRoot 字段" };
   }
 
-  const configPath = join(wsPath, "config.json");
-  const workspacePath = join(wsPath, "workspace.json");
-  const actualPath = existsSync(configPath) ? configPath : existsSync(workspacePath) ? workspacePath : null;
+  // 辅助函数：读取并验证配置文件
+  const readAndValidateConfig = (wsPath: string): { valid: boolean; config?: any; reason?: string } => {
+    const configPath = join(wsPath, "config.json");
+    const workspacePath = join(wsPath, "workspace.json");
+    const actualPath = existsSync(configPath) ? configPath : existsSync(workspacePath) ? workspacePath : null;
 
-  if (!actualPath) {
-    return { valid: false, reason: "config.json/workspace.json 不存在" };
-  }
-
-  try {
-    const config = JSON.parse(readFileSync(actualPath, "utf-8"));
-    if (!config.id || !config.name) {
-      return { valid: false, reason: "配置文件缺少必要字段" };
+    if (!actualPath) {
+      return { valid: false, reason: "config.json/workspace.json 不存在" };
     }
-  } catch {
-    return { valid: false, reason: "config.json 无法解析" };
+
+    try {
+      const config = JSON.parse(readFileSync(actualPath, "utf-8"));
+      if (!config.id || !config.name) {
+        return { valid: false, reason: "配置文件缺少必要字段" };
+      }
+      return { valid: true, config };
+    } catch {
+      return { valid: false, reason: "配置文件无法解析" };
+    }
+  };
+
+  // 辅助函数：扫描项目目录查找匹配的工作区
+  const findMatchingWorkspace = (excludeDirName?: string): string | null => {
+    const wsDir = join(entry.projectRoot, FOLDER_NAME);
+    if (!existsSync(wsDir)) return null;
+
+    try {
+      const items = readdirSync(wsDir, { withFileTypes: true });
+      for (const item of items) {
+        if (!item.isDirectory() || SYSTEM_DIRS.includes(item.name)) continue;
+        if (excludeDirName && item.name === excludeDirName) continue;
+
+        const itemPath = join(wsDir, item.name);
+        const result = readAndValidateConfig(itemPath);
+        if (result.valid && result.config.id === entry.id) {
+          return item.name;
+        }
+      }
+    } catch { /* ignore */ }
+    return null;
+  };
+
+  const originalDirName = entry.dirName;
+
+  // 如果 dirName 存在，先尝试直接验证
+  if (originalDirName) {
+    const wsPath = join(entry.projectRoot, FOLDER_NAME, originalDirName);
+
+    if (existsSync(wsPath)) {
+      const result = readAndValidateConfig(wsPath);
+      if (result.valid && result.config.id === entry.id) {
+        // 验证通过
+        return { valid: true };
+      }
+      // ID 不匹配或配置无效，继续尝试补全逻辑
+    }
+    // 目录不存在或验证失败，继续尝试补全逻辑
   }
 
-  return { valid: true };
+  // dirName 缺失或验证失败，尝试从项目目录中查找匹配的工作区（排除已验证过的目录）
+  const foundDirName = findMatchingWorkspace(originalDirName);
+  if (foundDirName) {
+    return { valid: true, upgradedDirName: foundDirName };
+  }
+
+  return { valid: false, reason: originalDirName
+    ? `目录 ${originalDirName} 无效且无法自动修复`
+    : "索引条目缺少 dirName 字段且无法自动补全"
+  };
 }
 
 // ============================================================================
@@ -817,11 +870,11 @@ function diagnoseIndex(): { total: number; issues: DiagnoseIssue[] } {
 /**
  * 验证并清理无效工作区
  */
-function verifyAndClean(backup: boolean = true): { valid: number; invalid: number; removed: string[] } {
+function verifyAndClean(backup: boolean = true): { valid: number; invalid: number; upgraded: number; removed: string[] } {
   const index = readIndex();
   if (!index || index.workspaces.length === 0) {
     info("索引为空，无需验证");
-    return { valid: 0, invalid: 0, removed: [] };
+    return { valid: 0, invalid: 0, upgraded: 0, removed: [] };
   }
 
   // 备份
@@ -834,10 +887,17 @@ function verifyAndClean(backup: boolean = true): { valid: number; invalid: numbe
 
   const validWorkspaces: WorkspaceEntry[] = [];
   const removed: string[] = [];
+  let upgraded = 0;
 
   for (const ws of index.workspaces) {
     const result = verifyWorkspace(ws);
     if (result.valid) {
+      // 如果有升级的 dirName，更新条目
+      if (result.upgradedDirName) {
+        ws.dirName = result.upgradedDirName;
+        upgraded++;
+        success(`升级工作区索引: ${ws.name} (补全 dirName: ${result.upgradedDirName})`);
+      }
       validWorkspaces.push(ws);
     } else {
       removed.push(`${ws.name} (${ws.id}): ${result.reason}`);
@@ -847,12 +907,13 @@ function verifyAndClean(backup: boolean = true): { valid: number; invalid: numbe
 
   const invalid = index.workspaces.length - validWorkspaces.length;
 
-  if (invalid > 0) {
+  // 有变更时写入索引
+  if (invalid > 0 || upgraded > 0) {
     index.workspaces = validWorkspaces;
     writeIndex(index);
   }
 
-  return { valid: validWorkspaces.length, invalid, removed };
+  return { valid: validWorkspaces.length, invalid, upgraded, removed };
 }
 
 // ============================================================================
@@ -1009,7 +1070,11 @@ export default function main(): void {
       info("验证索引中的工作区...");
       const verifyResult = verifyAndClean(!noBackup);
       console.log();
-      success(`验证完成: ${verifyResult.valid} 有效, ${verifyResult.invalid} 无效`);
+      let summaryParts = [`${verifyResult.valid} 有效`, `${verifyResult.invalid} 无效`];
+      if (verifyResult.upgraded > 0) {
+        summaryParts.push(`${verifyResult.upgraded} 已升级`);
+      }
+      success(`验证完成: ${summaryParts.join(", ")}`);
       if (verifyResult.removed.length > 0) {
         console.log(colors.yellow("\n已移除的工作区:"));
         for (const r of verifyResult.removed) {

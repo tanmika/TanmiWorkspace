@@ -45,8 +45,8 @@ async function checkForUpdates() {
       updateCheckInterval: 1000 * 60 * 60 * 24, // 每天检查一次
     });
 
-    // 如果有更新，显示通知
-    if (notifier.update) {
+    // 如果有更新，显示通知（需要确认版本确实不同，因为缓存可能滞后）
+    if (notifier.update && notifier.update.current !== notifier.update.latest) {
       console.log(`
 ╭───────────────────────────────────────────╮
 │                                           │
