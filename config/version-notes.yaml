@@ -9,6 +9,15 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.5
+    requirement: 日志系统、Mermaid 图表、工作区稳定性增强
+    conclusion: |-
+      - 新增统一日志系统，便于问题排查
+      - WebUI 支持 Mermaid 图表渲染
+      - 工作区自恢复能力增强
+      - 新增 CLI 自更新命令
+      - 多项 Bug 修复
+    note: ""
   - version: 1.10.4
     requirement: 帮助系统增强、Skill 声明机制、文档体系重构
     conclusion: |-

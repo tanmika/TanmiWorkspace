@@ -50,6 +50,12 @@ export class ConfigService {
         config.logLevel = DEFAULT_LOG_LEVEL;
       }
 
+      // 迁移：如果 logLevel 不存在，添加默认值并写回
+      if (config.logLevel === undefined) {
+        config.logLevel = DEFAULT_LOG_LEVEL;
+        await this.writeConfig(config);
+      }
+
       return config;
     } catch (err) {
       // 文件不存在时返回默认配置
@@ -82,6 +88,9 @@ export class ConfigService {
       ...current,
       ...(partial.defaultDispatchMode !== undefined && {
         defaultDispatchMode: partial.defaultDispatchMode,
+      }),
+      ...(partial.logLevel !== undefined && {
+        logLevel: partial.logLevel,
       }),
     };
 

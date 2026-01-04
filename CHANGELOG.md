@@ -11,6 +11,26 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.10.5] - 2026-01-04
+
+### Added
+
+- **统一日志系统**: 支持生产环境问题排查
+- **Mermaid 图表渲染**: WebUI 支持 Mermaid 图表渲染
+- **工作区抗风险增强**: 增强工作区自恢复能力
+- **CLI 自更新命令**: 添加 `tanmi-workspace update` 命令及开发便捷脚本
+
+### Fixed
+
+- **Hook 脚本路径**: 工作区路径构建使用 dirName 替代 workspaceId
+- **memo_update 参数**: 修复参数遗漏及工作区目录路径不一致问题
+- **setup 命令**: 允许覆盖已有 MCP 配置
+- **配置迁移**: 修复 logLevel 配置项迁移与更新问题
+
+### Docs
+
+- 添加 Plugin 系统和 Skill 系统文档
+
 ## [1.10.4] - 2025-12-30
 
 ### Added
