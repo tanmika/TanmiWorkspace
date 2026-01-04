@@ -6,3 +6,4 @@ export * from "./validation.js";
 export * from "./devLog.js";
 export * from "./git.js";
 export * from "./errorLogger.js";
+export * from "./logger.js";

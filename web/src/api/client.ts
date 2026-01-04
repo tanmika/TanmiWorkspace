@@ -2,6 +2,7 @@
 import axios from 'axios'
 import { useServiceStore } from '@/stores/service'
 import { useToastStore } from '@/stores/toast'
+import { reportError } from '@/utils/errorReporter'
 
 const client = axios.create({
   baseURL: '/api',
@@ -39,6 +40,19 @@ client.interceptors.response.use(
 
     const message = error.response?.data?.error?.message || error.response?.data?.message || error.message || '请求失败'
     console.error('API Error:', message)
+
+    // 上报 API 错误到后端
+    reportError({
+      type: 'api',
+      message,
+      extra: {
+        url: error.config?.url,
+        method: error.config?.method?.toUpperCase(),
+        status: error.response?.status,
+        code: error.code,
+      },
+    })
+
     return Promise.reject(new Error(message))
   }
 )
