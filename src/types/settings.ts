@@ -1,15 +1,31 @@
 // src/types/settings.ts
 
 /**
+ * 日志级别类型
+ */
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+/**
+ * 有效的日志级别值
+ */
+export const VALID_LOG_LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
+
+/**
  * 全局配置接口
  * 存储在 ~/.tanmi-workspace/config.json
  */
 export interface GlobalConfig {
   version: "1.0";
   defaultDispatchMode: "none" | "git" | "no-git";
+  logLevel?: LogLevel;  // 日志级别，默认 'info'
   tutorialCreated?: boolean;  // 教程工作区是否已创建（只创建一次）
   tutorialVersion?: string;   // 上次运行的系统版本，版本变更时创建更新工作区
 }
+
+/**
+ * 默认日志级别
+ */
+export const DEFAULT_LOG_LEVEL: LogLevel = "info";
 
 /**
  * 默认全局配置
@@ -17,6 +33,7 @@ export interface GlobalConfig {
 export const DEFAULT_CONFIG: GlobalConfig = {
   version: "1.0",
   defaultDispatchMode: "none",  // 默认不启用派发
+  logLevel: DEFAULT_LOG_LEVEL,  // 默认日志级别
 };
 
 /**
@@ -31,6 +48,7 @@ export interface ConfigGetResult {
  */
 export interface ConfigSetParams {
   defaultDispatchMode?: "none" | "git" | "no-git";
+  logLevel?: LogLevel;
 }
 
 /**

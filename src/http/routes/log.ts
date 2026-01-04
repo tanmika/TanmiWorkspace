@@ -1,8 +1,9 @@
 // src/http/routes/log.ts
 // 日志相关 API 路由
 
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { getServices } from "../services.js";
+import { logger } from "../../utils/logger.js";
 import type {
   LogAppendParams,
   ProblemUpdateParams,
@@ -28,8 +29,55 @@ interface ProblemUpdateBody {
   nextStep?: string;
 }
 
+// 前端客户端日志请求体
+interface ClientLogBody {
+  type: string;       // 日志类型，如 'vue', 'js', 'promise'
+  message: string;    // 错误信息
+  stack?: string;     // 堆栈信息
+  component?: string; // Vue 组件名
+  url?: string;       // 发生错误的 URL
+  extra?: Record<string, unknown>; // 额外信息
+}
+
 export async function logRoutes(fastify: FastifyInstance): Promise<void> {
   const services = getServices();
+
+  /**
+   * POST /api/logs/client - 接收前端客户端错误日志
+   * 用于前端错误上报，写入 system.log
+   */
+  fastify.post<{ Body: ClientLogBody }>(
+    "/logs/client",
+    async (request: FastifyRequest<{ Body: ClientLogBody }>, reply: FastifyReply) => {
+      const { type, message, stack, component, url, extra } = request.body;
+
+      // 验证必填字段
+      if (!type || !message) {
+        return reply.status(400).send({
+          error: "Bad Request",
+          message: "Missing required fields: type and message are required",
+        });
+      }
+
+      // 构建日志数据
+      const logData: Record<string, unknown> = {
+        type,
+        message,
+      };
+
+      // 添加可选字段
+      if (stack) logData.stack = stack;
+      if (component) logData.component = component;
+      if (url) logData.url = url;
+      if (extra) logData.extra = extra;
+
+      // 记录日志（异步写入，不阻塞响应）
+      logger.error("client", logData);
+
+      // 快速返回
+      return { success: true };
+    }
+  );
 
   /**
    * POST /api/workspaces/:wid/logs - 追加工作区日志

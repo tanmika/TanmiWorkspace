@@ -8,8 +8,9 @@ import type {
   ConfigGetResult,
   ConfigSetParams,
   ConfigSetResult,
+  LogLevel,
 } from "../types/settings.js";
-import { DEFAULT_CONFIG } from "../types/settings.js";
+import { DEFAULT_CONFIG, VALID_LOG_LEVELS, DEFAULT_LOG_LEVEL } from "../types/settings.js";
 import { TanmiError } from "../types/errors.js";
 
 /**
@@ -42,6 +43,11 @@ export class ConfigService {
       // 验证 defaultDispatchMode
       if (!["none", "git", "no-git"].includes(config.defaultDispatchMode)) {
         throw new TanmiError("INVALID_CONFIG", `无效的 defaultDispatchMode: ${config.defaultDispatchMode}`);
+      }
+
+      // 验证 logLevel，非法值使用默认值
+      if (config.logLevel !== undefined && !VALID_LOG_LEVELS.includes(config.logLevel)) {
+        config.logLevel = DEFAULT_LOG_LEVEL;
       }
 
       return config;
