@@ -92,8 +92,64 @@ description: Use when [触发条件]. [能力说明]
 
 **加载实现**: `src/services/CapabilityService.ts` parseSkillFrontmatter()
 
+## OpenCode 兼容性
+
+> Skills 在 OpenCode 上**高度兼容**，是最易迁移的组件
+
+### 兼容性评估
+
+| 方面 | 兼容性 | 说明 |
+|------|--------|------|
+| 文件格式 | ✅ 100% | 相同的 SKILL.md 格式 |
+| Frontmatter | ✅ 100% | YAML 格式通用 |
+| 调用方式 | ✅ 100% | `skill` 工具加载 |
+| 目录结构 | ⚠️ 需复制 | 位置不同 |
+
+### 目录差异
+
+| 平台 | Skills 目录 |
+|------|-------------|
+| TanmiWorkspace | `plugin/skills/` |
+| OpenCode 项目级 | `.opencode/skill/` |
+| OpenCode 全局 | `~/.config/opencode/skill/` |
+
+### 迁移方式
+
+直接复制 Skills 到 OpenCode 目录：
+```bash
+# 项目级迁移
+cp -r plugin/skills/* .opencode/skill/
+
+# 全局迁移
+cp -r plugin/skills/* ~/.config/opencode/skill/
+```
+
+### 派发类 Skills 限制
+
+以下 Skills 在 OpenCode 上功能受限：
+
+| Skill | 限制原因 |
+|-------|----------|
+| dispatching-parent | 依赖 Task 工具并行派发 |
+| executing-task | 需作为子代理被调用 |
+| reviewing-spec | 需作为子代理被调用 |
+| reviewing-quality | 需作为子代理被调用 |
+| preparing-dispatch | 派发系统依赖 |
+
+**替代方案**：用户手动切换 Agent 执行，而非自动派发。
+
+### 完全兼容的 Skills
+
+以下 Skills 可完整使用：
+
+| 类别 | Skills |
+|------|--------|
+| 流程引导 | bootstrapping-workspace, starting-info-flow |
+| 能力执行 | aligning-intent, discovering-context, researching-tech, diagnosing-issues, analyzing-measurements, designing-solutions, planning-verification |
+
 ## 相关文档
 
 - 插件系统概览: `plugin/README.md`
 - 引导内容配置: `src/prompts/guidanceContent.ts`
 - API 参考: `assets/api-reference.md` actionRequired 章节
+- OpenCode 调研: 工作区 Memo `OpenCode 特性调研报告`

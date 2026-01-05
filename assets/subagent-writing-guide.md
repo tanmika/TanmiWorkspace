@@ -548,6 +548,97 @@ Integration with other agents:
 
 ---
 
+## OpenCode Agent 差异
+
+> ⚠️ OpenCode 的 Agent 系统与 Claude Code Subagent 有本质差异
+
+### 核心差异
+
+| 概念 | Claude Code Subagent | OpenCode Agent |
+|------|---------------------|----------------|
+| **调用方式** | `Task` 工具启动独立进程 | `@mention` 或 Tab 切换 |
+| **并行能力** | ✅ 真正并行执行 | ❌ 串行，单线程 |
+| **上下文隔离** | ✅ 独立上下文 | ❌ 共享会话上下文 |
+| **用途** | 复杂任务分解并行执行 | 角色切换（build → plan） |
+
+### OpenCode Agent Mode
+
+```yaml
+mode: primary   # 用户可通过 Tab 键切换的主代理
+mode: subagent  # 仅供 @mention 调用的辅助代理
+mode: all       # 两者皆可
+```
+
+**注意**：`mode: subagent` 只是**可见性控制**，不是真正的并行子代理。
+
+### 格式对比
+
+**Claude Code（TanmiWorkspace 格式）**：
+```yaml
+---
+name: tanmi-executor
+description: TanmiWorkspace node executor...
+tools: Read, Write, Edit, Bash, Glob, Grep, tanmi-workspace/*
+model: opus
+---
+```
+
+**OpenCode 格式**：
+```yaml
+---
+description: TanmiWorkspace node executor...
+mode: subagent
+model: anthropic/claude-opus-4-5
+tools:
+  read: true
+  write: true
+  edit: true
+  bash: true
+permission:
+  bash: "ask"
+---
+```
+
+### 格式转换要点
+
+| Claude Code | OpenCode | 说明 |
+|-------------|----------|------|
+| `name` | 文件名 | OpenCode 用文件名决定 agent 名 |
+| `tools: A, B, C` | `tools: {a: true}` | 对象格式，key 小写 |
+| `model: opus` | `model: anthropic/claude-opus-4-5` | 需完整提供商路径 |
+| - | `mode: subagent` | OpenCode 必填 |
+| - | `permission: {}` | 可配置工具权限 |
+
+### TanmiWorkspace 派发系统影响
+
+Claude Code 派发流程：
+```
+协调者 → Task(tanmi-executor) → 独立上下文执行 → 返回结论
+            ↓
+        上下文隔离，不污染协调者
+```
+
+OpenCode 替代方案：
+```
+用户手动切换 Agent → 执行 → 手动切换回
+            ↓
+        上下文混杂，需要 auto-compact 缓解
+```
+
+### OpenCode Agent 目录
+
+- `.opencode/agent/` - 项目级
+- `~/.config/opencode/agent/` - 全局
+
+### 迁移建议
+
+1. **保留 Claude Code 格式**作为主格式
+2. **额外提供 OpenCode 格式**的转换版本
+3. **文档说明**派发功能在 OpenCode 上的限制
+4. **用户指导**手动执行的工作流程
+
+---
+
 ## 总结
 
 编写完美 Subagent 的核心公式：

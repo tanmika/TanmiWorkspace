@@ -6,25 +6,27 @@
 
 ```typescript
 // 工作区生命周期
-workspace_init(name, goal, rules?, docs?)      // 创建工作区
+workspace_init(name, goal, scenario, rules?, docs?)  // 创建工作区
 workspace_get(workspaceId)                     // 获取详情
-workspace_list(status?)                        // 列出工作区
+workspace_list(status?, cwd?)                  // 列出工作区
 workspace_delete(workspaceId, force?)          // 删除工作区
 workspace_status(workspaceId, format?)         // 可视化状态
 workspace_update_rules(workspaceId, action, rule?, rules?)  // 更新规则
 workspace_archive(workspaceId)                 // 归档工作区
 workspace_restore(workspaceId)                 // 恢复归档
+workspace_health(workspaceId?, diagnosticToken?)  // 健康检测
 workspace_import_guide(path, type, changeId?)  // 导入引导
 workspace_import_list(path, type)              // 列出可导入项
 
 // 节点管理
-node_create(workspaceId, parentId, type, title, requirement, rulesHash?, role?, docs?)
+node_create(workspaceId, parentId, type, title, requirement, rulesHash?, role?, docs?, ...)
 node_get(workspaceId, nodeId)
 node_list(workspaceId, rootId?, depth?)
 node_update(workspaceId, nodeId, title?, requirement?, note?, conclusion?)
 node_delete(workspaceId, nodeId)
 node_move(workspaceId, nodeId, newParentId)
-node_transition(workspaceId, nodeId, action, conclusion?, reason?)
+node_reorder(workspaceId, nodeId, orderedChildIds)  // 重排子节点顺序
+node_transition(workspaceId, nodeId, action, conclusion?, reason?, confirmation?)
 
 // 上下文管理
 context_get(workspaceId, nodeId, includeLog?, includeProblem?, maxLogEntries?)
@@ -52,6 +54,18 @@ dispatch_disable(workspaceId)                  // 禁用派发（查询状态）
 dispatch_disable_execute(workspaceId, mergeStrategy, ...)  // 执行禁用
 dispatch_cleanup(workspaceId, cleanupType?)    // 清理分支
 
+// 备忘系统
+memo_create(workspaceId, title, summary, content, tags)  // 创建备忘
+memo_list(workspaceId, tags?)                  // 列出备忘
+memo_get(workspaceId, memoId)                  // 获取备忘
+memo_update(workspaceId, memoId, ...)          // 更新备忘
+memo_delete(workspaceId, memoId)               // 删除备忘
+
+// 能力包系统
+capability_list(scenario?, sessionId?)         // 获取能力包列表
+capability_select(workspaceId, selected, infoType?, nodeId?)  // 选择能力包
+plugin_path()                                  // 获取插件目录路径
+
 // 配置管理
 config_get()                                   // 获取配置
 config_set(defaultDispatchMode?)               // 设置配置
@@ -75,6 +89,7 @@ tanmi_prompt(template, params?)
 |------|------|:----:|------|
 | `name` | string | ✅ | 工作区名称（不能包含特殊字符: / \ : * ? " < > \|） |
 | `goal` | string | ✅ | 工作区目标描述 |
+| `scenario` | string | ✅ | 任务场景类型：`feature`(新功能)、`debug`(调试)、`optimize`(优化)、`summary`(总结)、`misc`(其他) |
 | `rules` | string[] | - | 初始规则列表 |
 | `docs` | DocRef[] | - | 初始文档引用列表 |
 
@@ -156,7 +171,12 @@ workspace_init({
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|:----:|------|
-| `status` | string | - | 筛选状态：`active`、`archived`、`all`（默认 `all`） |
+| `status` | string | - | 筛选状态：`active`、`archived`、`all`（默认 `active`） |
+| `cwd` | string | - | 当前工作目录，匹配的工作区优先显示 |
+
+**排序规则**
+- 如果提供了 `cwd` 参数，匹配当前路径的工作区优先显示
+- 同级别按更新时间降序排列
 
 **返回值**
 
@@ -299,6 +319,46 @@ workspace_init({
 
 ---
 
+### workspace_health
+
+检测工作区健康状态。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | - | 工作区 ID（不填则检测所有活跃工作区） |
+| `diagnosticToken` | string | - | 诊断令牌（从诊断指南获取） |
+
+**使用流程**
+
+1. 首次调用返回诊断指南路径
+2. 阅读诊断指南获取 `diagnosticToken`
+3. 携带 token 再次调用执行检测
+
+**检测内容**
+
+- 目录完整性
+- 配置文件有效性
+- 节点文件完整性
+- 版本兼容性
+
+**返回值**
+
+```typescript
+{
+  healthy: boolean;
+  issues: Array<{
+    workspaceId: string;
+    type: string;
+    message: string;
+    suggestion?: string;
+  }>;
+}
+```
+
+---
+
 ### workspace_import_guide
 
 获取外部规范的导入引导信息。
@@ -438,8 +498,18 @@ node_create({
 | `workspaceId` | string | ✅ | 工作区 ID |
 | `nodeId` | string | ✅ | 节点 ID |
 | `action` | string | ✅ | 转换动作（见下表） |
-| `conclusion` | string | - | 结论（`complete`/`fail`/`cancel` 时必填） |
+| `conclusion` | string | - | 结论（`complete`/`fail`/`cancel` 时必填，不能包含 `##` 二级标题） |
 | `reason` | string | - | 转换原因（记录到日志） |
+| `confirmation` | object | - | Confirmation Token 验证数据（当 actionRequired 返回 confirmationToken 时必须提供） |
+
+**confirmation 结构**
+
+```typescript
+{
+  token: string;     // 待验证的 confirmation token
+  userInput: string; // 用户的真实输入
+}
+```
 
 **执行节点 (execution) 动作**
 
@@ -615,6 +685,33 @@ interface NodeTreeItem {
 
 ---
 
+### node_reorder
+
+重新排序节点的子节点顺序。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `nodeId` | string | ✅ | 父节点 ID（要重排其子节点） |
+| `orderedChildIds` | string[] | ✅ | 按新顺序排列的所有子节点 ID 数组 |
+
+**限制**
+- 必须提供所有子节点的 ID，不能增减
+- 用于调整子节点的显示顺序
+
+**返回值**
+
+```typescript
+{
+  success: boolean;
+  hint: string;
+}
+```
+
+---
+
 ## 上下文管理
 
 ### context_get
@@ -719,7 +816,7 @@ interface ChildConclusion {
 
 ### node_reference
 
-管理文档/节点引用的生命周期。
+管理节点的文档/节点引用。
 
 **参数**
 
@@ -728,17 +825,15 @@ interface ChildConclusion {
 | `workspaceId` | string | ✅ | 工作区 ID |
 | `nodeId` | string | ✅ | 节点 ID |
 | `targetIdOrPath` | string | ✅ | 目标节点 ID 或文档路径 |
-| `action` | string | ✅ | 操作：`add`、`remove`、`expire`、`activate` |
+| `action` | string | ✅ | 操作：`add`、`remove` |
 | `description` | string | - | 引用说明（`add` 时建议填写） |
 
 **动作说明**
 
 | 动作 | 说明 |
 |------|------|
-| `add` | 添加新引用（status=active） |
+| `add` | 添加新引用 |
 | `remove` | 删除引用 |
-| `expire` | 标记引用过期（移出上下文窗口，保留审计记录） |
-| `activate` | 重新激活过期引用 |
 
 **返回值**
 
@@ -1200,13 +1295,16 @@ interface ChildConclusion {
 | `tools` | 工具速查表 |
 | `start` | 如何开始新任务 |
 | `resume` | 如何继续之前的任务 |
-| `session_restore` | 会话恢复 |
+| `session_restore` | 会话恢复（从摘要恢复时验证 ID） |
 | `blocked` | 任务遇到问题时怎么办 |
 | `split` | 何时以及如何分解任务 |
 | `complete` | 如何完成任务 |
 | `progress` | 如何查看和报告进度 |
 | `guide` | 如何引导不熟悉的用户 |
-| `docs` | 文档引用管理 |
+| `docs` | 文档引用管理（派发、查找、生命周期） |
+| `dispatch` | 派发模式（subagent 执行、自动验证、失败回滚） |
+| `status` | 插件安装状态（查看各平台组件版本） |
+| `server` | 服务器状态与自检（端口、CLI 命令、常见问题） |
 | `all` | 获取完整指南 |
 
 **返回值**
@@ -1247,6 +1345,254 @@ interface ChildConclusion {
   prompt: string;   // 格式化的话术文本
 }
 ```
+
+---
+
+## 备忘系统
+
+备忘（Memo）是独立于节点树的草稿区，用于记录灵感、讨论、调研结果等。
+
+### memo_create
+
+创建工作区备忘。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `title` | string | ✅ | 备忘标题 |
+| `summary` | string | ✅ | 备忘摘要（用于列表显示） |
+| `content` | string | ✅ | 完整内容（Markdown 格式） |
+| `tags` | string[] | ✅ | 标签列表（至少 2 个，用于分类和过滤） |
+
+**返回值**
+
+```typescript
+{
+  memoId: string;
+  hint: string;
+}
+```
+
+**说明**
+
+- 创建后可使用 `node_reference` 关联到节点
+- 标签用于分类，方便后续检索
+
+---
+
+### memo_list
+
+列出工作区的所有备忘。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `tags` | string[] | - | 标签过滤（返回包含任一指定标签的备忘） |
+
+**返回值**
+
+```typescript
+{
+  memos: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    tags: string[];
+    createdAt: number;
+    updatedAt: number;
+  }>;
+  allTags: string[];  // 所有已使用的标签列表
+}
+```
+
+---
+
+### memo_get
+
+获取备忘的完整内容。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `memoId` | string | ✅ | 备忘 ID |
+
+**返回值**
+
+```typescript
+{
+  memo: {
+    id: string;
+    title: string;
+    summary: string;
+    content: string;
+    tags: string[];
+    createdAt: number;
+    updatedAt: number;
+  };
+}
+```
+
+---
+
+### memo_update
+
+更新备忘。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `memoId` | string | ✅ | 备忘 ID |
+| `title` | string | - | 新标题 |
+| `summary` | string | - | 新摘要 |
+| `content` | string | - | 新内容（替换全部，与 `appendContent` 互斥） |
+| `appendContent` | string | - | 追加内容（追加到末尾，与 `content` 互斥） |
+| `tags` | string[] | - | 新标签列表（完全替换现有标签） |
+
+**返回值**
+
+```typescript
+{
+  success: boolean;
+  hint: string;
+}
+```
+
+**说明**
+
+- 只更新提供的字段，保留其他字段不变
+- `content` 和 `appendContent` 互斥，不能同时使用
+
+---
+
+### memo_delete
+
+删除备忘。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `memoId` | string | ✅ | 备忘 ID |
+
+**返回值**
+
+```typescript
+{
+  success: boolean;
+}
+```
+
+**说明**
+
+- 会同时删除备忘文件和索引
+- 删除后无法恢复
+
+---
+
+## 能力包系统
+
+能力包系统用于在工作区初始化后选择和配置特定能力。
+
+### capability_list
+
+获取指定场景的能力包列表。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `scenario` | string | - | 任务场景：`feature`、`debug`、`optimize`、`summary`、`misc` |
+| `sessionId` | string | - | 会话 ID（用于自动从绑定的工作区获取 scenario） |
+
+**返回值**
+
+```typescript
+{
+  basePackages: Array<{
+    id: string;
+    name: string;
+    description: string;
+    selected: boolean;  // 默认选中
+  }>;
+  optionalPackages: Array<{
+    id: string;
+    name: string;
+    description: string;
+    selected: boolean;
+  }>;
+}
+```
+
+**说明**
+
+- 如果已绑定工作区且未传入 `scenario`，会自动从工作区配置获取
+- 返回基础包（默认选中）和选装包（用户可选）
+
+---
+
+### capability_select
+
+确认选择的能力包，创建对应节点。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `selected` | string[] | ✅ | 选择的能力 ID 列表 |
+| `infoType` | string | - | 信息节点类型：`info_collection` 或 `info_summary`（首次调用时必填） |
+| `nodeId` | string | - | 现有 info 节点 ID（追加能力时使用） |
+
+**返回值**
+
+```typescript
+{
+  nodeId: string;      // 创建的 info 节点 ID
+  childNodes: Array<{
+    id: string;
+    title: string;
+    requirement: string;
+  }>;
+  hint: string;
+}
+```
+
+**说明**
+
+- 首次调用：创建 info 节点和子节点
+- 追加调用：在指定节点下追加子节点
+
+---
+
+### plugin_path
+
+获取 TanmiWorkspace 插件目录的绝对路径。
+
+**参数**
+
+无参数。
+
+**返回值**
+
+```typescript
+{
+  path: string;  // 插件目录绝对路径
+}
+```
+
+**说明**
+
+- 当需要读取插件资源（如 Skill、Agent 模板）但找不到时使用
+- 返回的路径可用于后续文件操作
 
 ---
 

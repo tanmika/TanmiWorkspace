@@ -292,6 +292,167 @@ fi
 
 ---
 
+## OpenCode Hook 系统
+
+> ⚠️ OpenCode 使用不同的 Hook 机制，需要适配
+
+### 可用事件（25+ 种）
+
+OpenCode 使用 **插件系统** 而非配置文件来实现 Hooks，按类别分为 8 大类。
+
+#### Command 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `command.executed` | 命令执行完成 | - |
+
+#### File 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `file.edited` | 文件被修改 | - |
+| `file.watcher.updated` | 文件系统变更 | - |
+
+#### Installation 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `installation.updated` | 安装状态变更 | - |
+
+#### LSP 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `lsp.client.diagnostics` | LSP 诊断信息 | - |
+| `lsp.updated` | LSP 服务器更新 | - |
+
+#### Message 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `message.part.removed` | 消息组件删除 | - |
+| `message.part.updated` | 消息组件更新 | - |
+| `message.removed` | 整条消息删除 | - |
+| `message.updated` | 消息更新 | - |
+
+#### Permission 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `permission.replied` | 权限请求响应 | PermissionRequest |
+| `permission.updated` | 权限设置变更 | - |
+
+#### Server 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `server.connected` | 服务器连接建立 | - |
+
+#### Session 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `session.created` | 会话创建 | SessionStart |
+| `session.compacted` | 上下文压缩 | PreCompact |
+| `session.deleted` | 会话删除 | SessionEnd |
+| `session.diff` | 会话差异 | - |
+| `session.error` | 会话错误 | - |
+| `session.idle` | 会话空闲 | Stop（部分） |
+| `session.status` | 会话状态变更 | - |
+| `session.updated` | 会话更新 | - |
+
+#### Todo 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `todo.updated` | 任务列表变更 | - |
+
+#### Tool 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `tool.execute.before` | 工具执行前 | PreToolUse |
+| `tool.execute.after` | 工具执行后 | PostToolUse |
+
+#### TUI 事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `tui.prompt.append` | 提示追加 | - |
+| `tui.command.execute` | TUI 命令执行 | - |
+| `tui.toast.show` | Toast 通知显示 | Notification |
+
+#### 实验性事件
+| 事件 | 触发时机 | 对应 Claude Code |
+|------|---------|------------------|
+| `experimental.session.compacting` | 压缩前注入上下文 | PreCompact（增强）|
+
+### 与 Claude Code 的差异
+
+| 特性 | Claude Code | OpenCode |
+|------|------------|----------|
+| 配置方式 | JSON 配置文件 | JS/TS 插件代码 |
+| 事件数量 | 10 种 | 25+ 种 |
+| Matcher | ✅ 正则匹配 | ❌ 不支持 |
+| 工具参数修改 | ✅ updatedInput | ❌ 不支持 |
+| **UserPromptSubmit** | ✅ 支持 | ❌ **无对应** |
+| 会话标识 | `session_id` | `event.session.id` |
+| 热加载 | ❌ 需重启 | ✅ 支持 |
+
+### 配置位置
+
+**插件目录**：
+- `.opencode/plugin/` - 项目级
+- `~/.config/opencode/plugin/` - 全局
+
+### 插件格式
+
+```typescript
+// .opencode/plugin/tanmi-hooks.ts
+export default function tanmiPlugin(ctx) {
+  return {
+    // session.created → SessionStart
+    "session.created": async (event) => {
+      const sessionId = event.session.id;
+      // 注入上下文
+      return { context: "..." };
+    },
+
+    // tool.execute.after → PostToolUse
+    "tool.execute.after": async (event) => {
+      if (event.tool.name === 'edit') {
+        return { message: "提醒记录日志" };
+      }
+    },
+
+    // OpenCode 独有：文件编辑后
+    "file.edited": async (event) => {
+      console.log(`文件已编辑: ${event.path}`);
+    }
+  };
+}
+```
+
+### TanmiWorkspace 兼容性
+
+| Hook 功能 | 兼容性 | 说明 |
+|-----------|--------|------|
+| 会话上下文注入 | ⚠️ 部分 | 通过 session.created 实现 |
+| MCP 调用错误提醒 | ✅ | 通过 tool.execute.after |
+| 文件变更提醒 | ✅ | 通过 file.edited |
+| 用户输入检测 | ❌ | 无 UserPromptSubmit 替代 |
+| 智能提醒 | ⚠️ 降级 | 需要其他机制替代 |
+
+### 适配建议
+
+1. **环境变量检测平台**：
+   ```typescript
+   const isOpenCode = process.env.OPENCODE === "true";
+   ```
+
+2. **双模式输出**：
+   ```typescript
+   function outputResponse(context) {
+     if (isOpenCode) {
+       return { context, continue: true };
+     } else {
+       // Claude Code 格式
+       console.log(JSON.stringify({ hookSpecificOutput: { ... } }));
+     }
+   }
+   ```
+
+---
+
 ## 最佳实践
 
 ### 1. 规则提醒时机选择

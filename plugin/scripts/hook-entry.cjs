@@ -343,6 +343,9 @@ function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
 /**
  * 处理 TodoWrite 工具
  * 提醒 AI 应该在工作区创建执行节点跟踪任务
+ *
+ * 注意：此提醒【不需要节流】，每次都提醒
+ * 原因：AI 可能忘记同步到工作区，用户在 WebUI 看不到本地 Todo 进度
  */
 function handleTodoWriteToolUse(sessionId, binding, tool_input, tool_response) {
   // 统计 todo 数量

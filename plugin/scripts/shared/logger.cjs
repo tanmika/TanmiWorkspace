@@ -136,7 +136,7 @@ function logHookOutput(sessionId, hookEvent, action, details = {}, output = null
     ...details
   };
 
-  if (output) {
+  if (output && typeof output === 'string') {
     // 截断输出内容，避免日志过大
     logData.output = output.length > 500 ? output.slice(0, 500) + '...[truncated]' : output;
   }
