@@ -106,6 +106,10 @@ export class ReferenceService {
     const currentTime = now();
     const timestamp = formatShort(currentTime);
     const nodeMeta = graph.nodes[nodeId];
+    // 兼容旧数据：确保 references 数组存在
+    if (!nodeMeta.references) {
+      nodeMeta.references = [];
+    }
     const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
 
     // 3. 读取节点 Info.md

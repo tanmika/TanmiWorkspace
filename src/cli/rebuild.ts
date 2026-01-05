@@ -1022,6 +1022,23 @@ function showBackupList(): void {
 // 主函数
 // ============================================================================
 
+// ============================================================================
+// 导出供 HTTP API 使用的函数
+// ============================================================================
+
+export {
+  incrementalSync,
+  scanAndSync,
+  verifyAndClean,
+  readWorkspacesFromProject,
+  verifyWorkspace,
+  readIndex,
+  writeIndex,
+  scanForProjects,
+};
+
+export type { WorkspaceEntry, IndexFile };
+
 export default function main(): void {
   const args = process.argv.slice(3); // 跳过 node, script, "rebuild"
 

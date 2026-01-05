@@ -122,7 +122,7 @@ export class ContextService {
     const references: ContextChainItem[] = [];
     const memoReferences: MemoReferenceItem[] = [];
 
-    for (const ref of nodeMeta.references) {
+    for (const ref of nodeMeta.references || []) {
       // 检查是否为 memo 引用
       if (ref.startsWith("memo://")) {
         const memoId = ref.substring(7); // 去掉 "memo://" 前缀

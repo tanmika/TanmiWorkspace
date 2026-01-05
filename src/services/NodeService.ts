@@ -598,6 +598,16 @@ export class NodeService {
     const logMd = await this.md.readLogRaw(projectRoot, wsDirName, nodeDirName, isArchived);
     const problemMd = await this.md.readProblemRaw(projectRoot, wsDirName, nodeDirName, isArchived);
 
+    // 兼容旧数据：从 Info.md 补充缺失的 meta 字段
+    if (!meta.status || !meta.createdAt || !meta.updatedAt) {
+      const nodeInfo = await this.md.readNodeInfoFull(projectRoot, wsDirName, nodeDirName, isArchived);
+      if (!meta.status) meta.status = nodeInfo.status;
+      if (!meta.createdAt) meta.createdAt = nodeInfo.createdAt;
+      if (!meta.updatedAt) meta.updatedAt = nodeInfo.updatedAt;
+      if (!meta.conclusion && nodeInfo.conclusion) meta.conclusion = nodeInfo.conclusion;
+      if (!meta.references) meta.references = [];
+    }
+
     return {
       meta,
       infoMd,
@@ -650,7 +660,7 @@ export class NodeService {
       id: nodeId,
       type: node.type,
       title: nodeInfo.title,
-      status: node.status,
+      status: node.status || nodeInfo.status,  // 兼容旧数据：优先用 graph.json，fallback 到 Info.md
       role: node.role,
       dispatch: node.dispatch,
       children: [],

@@ -4,11 +4,13 @@ import { useSettingsStore } from '@/stores/settings'
 import { useToastStore } from '@/stores/toast'
 import { workspaceApi, type DevInfoResult } from '@/api/workspace'
 import { settingsApi, type InstallationStatusResult, type PlatformStatus, type ComponentStatus } from '@/api/settings'
+import { adminApi, type IndexStatsResult } from '@/api/admin'
 import WsModal from '@/components/ui/WsModal.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 import WsCollapse from '@/components/ui/WsCollapse.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
+import IndexManagementModal from '@/components/IndexManagementModal.vue'
 import { quickStartContent, triggerWords } from '@/data/helpContent'
 
 const settingsStore = useSettingsStore()
@@ -20,6 +22,10 @@ const frontendBuildTime = __BUILD_TIME__
 
 // 插件安装状态
 const installationStatus = ref<InstallationStatusResult | null>(null)
+
+// 索引管理
+const indexStats = ref<IndexStatsResult | null>(null)
+const showIndexManagement = ref(false)
 
 // 计算前后端编译时间差异是否超过100秒
 const buildTimeDiffTooLarge = computed(() => {
@@ -70,8 +76,33 @@ watch(() => props.visible, async (isVisible) => {
     if (installRes.status === 'fulfilled') {
       installationStatus.value = installRes.value
     }
+    // 加载索引统计
+    try {
+      indexStats.value = await adminApi.getIndexStats()
+    } catch {
+      // 忽略错误
+    }
   }
 })
+
+// 加载索引统计
+async function loadIndexStats() {
+  try {
+    indexStats.value = await adminApi.getIndexStats()
+  } catch {
+    // 忽略错误
+  }
+}
+
+// 打开索引管理弹窗
+function openIndexManagement() {
+  showIndexManagement.value = true
+}
+
+// 工作区导入后刷新统计
+function handleWorkspaceImported() {
+  loadIndexStats()
+}
 
 // 格式化时间
 function formatTime(isoString?: string | null) {
@@ -340,6 +371,28 @@ async function handleVersionClick() {
         </div>
       </div>
 
+      <!-- 索引管理 -->
+      <div class="setting-section index-section">
+        <div class="setting-section-title">索引管理</div>
+        <div class="setting-section-desc">
+          导入外部工作区或管理本地索引
+        </div>
+
+        <div class="index-entry">
+          <div class="index-entry-info">
+            <div class="index-entry-title">工作区索引</div>
+            <div class="index-entry-desc">当前已索引的工作区数量</div>
+          </div>
+          <div class="index-entry-stats">
+            <div class="stat-box">
+              <div class="stat-number">{{ indexStats?.total ?? '-' }}</div>
+              <div class="stat-label">已索引</div>
+            </div>
+          </div>
+          <WsButton variant="primary" @click="openIndexManagement">管理</WsButton>
+        </div>
+      </div>
+
       <!-- 用户帮助 -->
       <div class="setting-section help-section">
         <div class="setting-section-title">用户帮助</div>
@@ -438,6 +491,12 @@ async function handleVersionClick() {
     confirm-text="确定设置"
     cancel-text="取消"
     @confirm="doSave"
+  />
+
+  <!-- 索引管理弹窗 -->
+  <IndexManagementModal
+    v-model:visible="showIndexManagement"
+    @workspace-imported="handleWorkspaceImported"
   />
 </template>
 
@@ -986,4 +1045,60 @@ async function handleVersionClick() {
 .doc-link:hover .doc-link-arrow {
   transform: translateX(3px);
 }
+
+/* 索引管理区 */
+.index-section {
+  border-top: 1px solid var(--border-color);
+  padding-top: 20px;
+}
+
+.index-entry {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--path-bg);
+  border: 1px solid var(--border-color);
+}
+
+.index-entry-info {
+  flex: 1;
+}
+
+.index-entry-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.index-entry-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.index-entry-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.stat-box {
+  text-align: center;
+  min-width: 50px;
+}
+
+.stat-number {
+  font-family: var(--mono-font);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
 </style>
