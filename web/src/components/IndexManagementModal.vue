@@ -30,10 +30,11 @@ const importLoading = ref(false)
 const importResult = ref<ImportResult | null>(null)
 
 // 同步清理相关
-type SyncCleanState = 'idle' | 'previewing' | 'previewed' | 'executing' | 'done'
+type SyncCleanState = 'idle' | 'previewing' | 'previewed' | 'executing' | 'done' | 'error'
 const syncCleanState = ref<SyncCleanState>('idle')
 const syncCleanPreview = ref<SyncCleanPreviewResult | null>(null)
 const syncCleanResult = ref<SyncCleanExecuteResult | null>(null)
+const syncCleanError = ref<string | null>(null)
 
 // 计算属性
 const hasPreviewChanges = computed(() => {
@@ -59,6 +60,7 @@ watch(() => props.visible, async (isVisible) => {
     syncCleanState.value = 'idle'
     syncCleanPreview.value = null
     syncCleanResult.value = null
+    syncCleanError.value = null
     await loadStats()
     loading.value = false
   }
@@ -119,6 +121,7 @@ async function handleSyncCleanPreview() {
   syncCleanState.value = 'previewing'
   syncCleanPreview.value = null
   syncCleanResult.value = null
+  syncCleanError.value = null
 
   try {
     const result = await adminApi.syncCleanPreview()
@@ -129,14 +132,18 @@ async function handleSyncCleanPreview() {
       toastStore.info('索引已是最新状态')
     }
   } catch (e) {
-    toastStore.error('预览失败')
-    syncCleanState.value = 'idle'
+    console.error('同步清理预览失败:', e)
+    const errorMsg = e instanceof Error ? e.message : '预览失败'
+    syncCleanError.value = errorMsg
+    syncCleanState.value = 'error'
+    toastStore.error(errorMsg)
   }
 }
 
 // 执行同步清理
 async function handleSyncCleanExecute() {
   syncCleanState.value = 'executing'
+  syncCleanError.value = null
 
   try {
     const result = await adminApi.syncCleanExecute()
@@ -151,8 +158,11 @@ async function handleSyncCleanExecute() {
       }
     }
   } catch (e) {
-    toastStore.error('执行失败')
-    syncCleanState.value = 'previewed'
+    console.error('同步清理执行失败:', e)
+    const errorMsg = e instanceof Error ? e.message : '执行失败'
+    syncCleanError.value = errorMsg
+    syncCleanState.value = 'error'
+    toastStore.error(errorMsg)
   }
 }
 
@@ -161,6 +171,7 @@ function resetSyncClean() {
   syncCleanState.value = 'idle'
   syncCleanPreview.value = null
   syncCleanResult.value = null
+  syncCleanError.value = null
 }
 </script>
 
@@ -240,14 +251,14 @@ function resetSyncClean() {
         <div class="function-header">
           <div class="function-title">同步清理</div>
           <WsButton
-            v-if="syncCleanState === 'idle' || syncCleanState === 'done' || syncCleanState === 'previewing'"
+            v-if="syncCleanState === 'idle' || syncCleanState === 'done' || syncCleanState === 'previewing' || syncCleanState === 'error'"
             variant="secondary"
             size="sm"
             :loading="syncCleanState === 'previewing'"
             :disabled="syncCleanState === 'previewing'"
             @click="handleSyncCleanPreview"
           >
-            检查更新
+            {{ syncCleanState === 'error' ? '重试' : '检查更新' }}
           </WsButton>
         </div>
         <div class="function-desc">扫描已索引路径发现新工作区，清理无效的索引条目</div>
@@ -332,6 +343,14 @@ function resetSyncClean() {
               <span class="ws-badge is-removed">清理</span>
               <span class="ws-name">{{ ws.name }}</span>
             </div>
+          </div>
+        </div>
+
+        <!-- 错误状态 -->
+        <div v-if="syncCleanState === 'error' && syncCleanError" class="result-area error">
+          <div class="error-content">
+            <span class="error-icon">✕</span>
+            <span class="error-message">{{ syncCleanError }}</span>
           </div>
         </div>
       </div>
@@ -694,5 +713,32 @@ function resetSyncClean() {
 
 .no-changes-icon {
   font-size: 14px;
+}
+
+/* 错误状态 */
+.result-area.error {
+  background: #ffebee;
+  border-color: var(--accent-red);
+}
+
+[data-theme="dark"] .result-area.error {
+  background: #2d1b1b;
+}
+
+.error-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-red);
+  font-size: 12px;
+}
+
+.error-icon {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.error-message {
+  flex: 1;
 }
 </style>

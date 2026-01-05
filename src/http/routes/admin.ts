@@ -5,7 +5,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { exec } from "child_process";
 import { promisify } from "util";
 import os from "os";
-import { existsSync } from "fs";
+import { existsSync, statSync } from "fs";
 import { basename, dirname, join } from "path";
 import {
   scanForProjects,
@@ -21,6 +21,27 @@ const execAsync = promisify(exec);
 
 // 工作区目录名称
 const FOLDER_NAME = ".tanmi-workspace";
+
+// ============================================================================
+// 索引操作队列（防止并发写入竞态条件）
+// ============================================================================
+
+let indexOperationQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * 序列化索引操作，确保不会有并发读写冲突
+ * 所有修改索引的操作都应该通过这个函数执行
+ */
+async function withIndexLock<T>(operation: () => T | Promise<T>): Promise<T> {
+  const currentOperation = indexOperationQueue.then(async () => {
+    return await operation();
+  });
+
+  // 更新队列，但不让错误阻塞后续操作
+  indexOperationQueue = currentOperation.catch(() => {});
+
+  return currentOperation;
+}
 
 /**
  * 跨平台原生文件夹选择对话框
@@ -63,6 +84,26 @@ async function selectFolder(): Promise<string | null> {
 }
 
 /**
+ * 验证路径是否为有效目录
+ */
+function validateDirectoryPath(inputPath: string): { valid: boolean; error?: string } {
+  if (!existsSync(inputPath)) {
+    return { valid: false, error: "路径不存在" };
+  }
+
+  try {
+    const stat = statSync(inputPath);
+    if (!stat.isDirectory()) {
+      return { valid: false, error: "路径不是目录" };
+    }
+  } catch (e) {
+    return { valid: false, error: `无法访问路径: ${e instanceof Error ? e.message : "权限不足"}` };
+  }
+
+  return { valid: true };
+}
+
+/**
  * 检测路径类型并智能导入
  * 支持：项目目录、.tanmi-workspace 目录、名称_id 工作区目录
  */
@@ -73,8 +114,10 @@ function smartImport(inputPath: string): {
   workspaces: Array<{ id: string; name: string; isNew: boolean }>;
   error?: string;
 } {
-  if (!existsSync(inputPath)) {
-    return { success: false, added: 0, existing: 0, workspaces: [], error: "路径不存在" };
+  // 验证路径
+  const validation = validateDirectoryPath(inputPath);
+  if (!validation.valid) {
+    return { success: false, added: 0, existing: 0, workspaces: [], error: validation.error };
   }
 
   const index = readIndex() || { version: "1.0", workspaces: [] };
@@ -173,21 +216,31 @@ function smartImport(inputPath: string): {
   return { success: true, added, existing, workspaces: results };
 }
 
-/**
- * 同步清理预览：扫描已索引路径，返回预览结果
- */
-function syncCleanPreview(): {
-  toAdd: Array<{ id: string; name: string; projectRoot: string }>;
+// ============================================================================
+// 同步清理：公共逻辑提取
+// ============================================================================
+
+interface SyncCleanAnalysis {
+  index: IndexFile;
+  existingIds: Set<string>;
+  projectRoots: Set<string>;
+  toAdd: Array<{ id: string; name: string; projectRoot: string; entry: WorkspaceEntry }>;
   toRemove: Array<{ id: string; name: string; reason: string }>;
-} {
+}
+
+/**
+ * 分析索引状态，找出需要添加和移除的工作区
+ * 公共逻辑，供 preview 和 execute 共用
+ */
+function analyzeSyncClean(): SyncCleanAnalysis | null {
   const index = readIndex();
   if (!index || index.workspaces.length === 0) {
-    return { toAdd: [], toRemove: [] };
+    return null;
   }
 
   const existingIds = new Set(index.workspaces.map((ws) => ws.id));
-  const toAdd: Array<{ id: string; name: string; projectRoot: string }> = [];
-  const toRemove: Array<{ id: string; name: string; reason: string }> = [];
+  const toAdd: SyncCleanAnalysis["toAdd"] = [];
+  const toRemove: SyncCleanAnalysis["toRemove"] = [];
 
   // 收集所有唯一的 projectRoot
   const projectRoots = new Set<string>();
@@ -206,7 +259,7 @@ function syncCleanPreview(): {
     const workspaces = readWorkspacesFromProject(projectRoot);
     for (const ws of workspaces) {
       if (!existingIds.has(ws.id)) {
-        toAdd.push({ id: ws.id, name: ws.name, projectRoot });
+        toAdd.push({ id: ws.id, name: ws.name, projectRoot, entry: ws });
       }
     }
   }
@@ -223,11 +276,30 @@ function syncCleanPreview(): {
     }
   }
 
-  return { toAdd, toRemove };
+  return { index, existingIds, projectRoots, toAdd, toRemove };
 }
 
 /**
- * 执行同步清理
+ * 同步清理预览：扫描已索引路径，返回预览结果（只读操作）
+ */
+function syncCleanPreview(): {
+  toAdd: Array<{ id: string; name: string; projectRoot: string }>;
+  toRemove: Array<{ id: string; name: string; reason: string }>;
+} {
+  const analysis = analyzeSyncClean();
+  if (!analysis) {
+    return { toAdd: [], toRemove: [] };
+  }
+
+  // 预览只返回简化信息，不包含完整 entry
+  return {
+    toAdd: analysis.toAdd.map(({ id, name, projectRoot }) => ({ id, name, projectRoot })),
+    toRemove: analysis.toRemove,
+  };
+}
+
+/**
+ * 执行同步清理（写入操作）
  */
 function syncCleanExecute(): {
   added: number;
@@ -235,52 +307,35 @@ function syncCleanExecute(): {
   addedList: Array<{ id: string; name: string }>;
   removedList: Array<{ id: string; name: string }>;
 } {
-  const index = readIndex();
-  if (!index) {
+  const analysis = analyzeSyncClean();
+  if (!analysis) {
     return { added: 0, removed: 0, addedList: [], removedList: [] };
   }
 
-  const existingIds = new Set(index.workspaces.map((ws) => ws.id));
+  const { index, toAdd, toRemove } = analysis;
   const addedList: Array<{ id: string; name: string }> = [];
   const removedList: Array<{ id: string; name: string }> = [];
+  const removeIds = new Set(toRemove.map((r) => r.id));
 
-  // 收集所有唯一的 projectRoot
-  const projectRoots = new Set<string>();
-  for (const ws of index.workspaces) {
-    if (ws.projectRoot) {
-      projectRoots.add(ws.projectRoot);
-    }
-  }
-
-  // 扫描每个 projectRoot 添加新工作区
-  for (const projectRoot of projectRoots) {
-    if (!existsSync(projectRoot)) {
-      continue;
-    }
-
-    const workspaces = readWorkspacesFromProject(projectRoot);
-    for (const ws of workspaces) {
-      if (!existingIds.has(ws.id)) {
-        index.workspaces.push(ws);
-        existingIds.add(ws.id);
-        addedList.push({ id: ws.id, name: ws.name });
-      }
-    }
+  // 添加新工作区
+  for (const item of toAdd) {
+    index.workspaces.push(item.entry);
+    addedList.push({ id: item.id, name: item.name });
   }
 
   // 过滤掉无效的工作区
-  const validWorkspaces: WorkspaceEntry[] = [];
-  for (const ws of index.workspaces) {
-    const verification = verifyWorkspace(ws);
-    if (verification.valid) {
-      validWorkspaces.push(ws);
-    } else {
+  index.workspaces = index.workspaces.filter((ws) => {
+    if (removeIds.has(ws.id)) {
       removedList.push({ id: ws.id, name: ws.name });
+      return false;
     }
-  }
+    return true;
+  });
 
-  index.workspaces = validWorkspaces;
-  writeIndex(index);
+  // 只在有变更时写入
+  if (addedList.length > 0 || removedList.length > 0) {
+    writeIndex(index);
+  }
 
   return {
     added: addedList.length,
@@ -332,6 +387,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * POST /api/admin/import - 智能导入工作区
    * 支持：项目目录、.tanmi-workspace 目录、名称_id 工作区目录
    * 使用 2 层递归扫描
+   * 使用操作队列防止并发写入冲突
    */
   fastify.post<{ Body: ImportBody }>(
     "/admin/import",
@@ -340,7 +396,8 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       const { path } = request.body;
 
       try {
-        const result = smartImport(path);
+        // 使用锁序列化索引操作
+        const result = await withIndexLock(() => smartImport(path));
 
         if (!result.success) {
           return reply.status(400).send({
@@ -390,10 +447,12 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * POST /api/admin/sync-clean-execute - 执行同步清理
+   * 使用操作队列防止并发写入冲突
    */
   fastify.post("/admin/sync-clean-execute", async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const result = syncCleanExecute();
+      // 使用锁序列化索引操作
+      const result = await withIndexLock(() => syncCleanExecute());
       return {
         success: true,
         added: result.added,
