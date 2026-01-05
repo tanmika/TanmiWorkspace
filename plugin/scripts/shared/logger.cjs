@@ -123,6 +123,28 @@ function logHook(sessionId, hookEvent, details = {}) {
 }
 
 /**
+ * 记录 Hook 完整输出（包含发送给 AI 的内容）
+ * @param {string} sessionId - 会话 ID
+ * @param {string} hookEvent - Hook 事件类型
+ * @param {string} action - 动作类型 (output|throttled|silent)
+ * @param {object} details - 详细信息
+ * @param {string} [output] - 实际输出给 AI 的内容（截断到 500 字符）
+ */
+function logHookOutput(sessionId, hookEvent, action, details = {}, output = null) {
+  const logData = {
+    action,
+    ...details
+  };
+
+  if (output) {
+    // 截断输出内容，避免日志过大
+    logData.output = output.length > 500 ? output.slice(0, 500) + '...[truncated]' : output;
+  }
+
+  log(sessionId, 'hook', `${hookEvent}:${action}`, logData);
+}
+
+/**
  * 记录 MCP 工具调用开始
  * @param {string} sessionId - 会话 ID
  * @param {string} toolName - 工具名称
@@ -166,6 +188,7 @@ module.exports = {
   MAX_LOG_FILES,
   log,
   logHook,
+  logHookOutput,
   logMcpStart,
   logMcpEnd,
   logError,

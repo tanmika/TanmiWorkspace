@@ -21,6 +21,7 @@ const {
   shouldThrottle,
   updateLastReminder,
   logHook,
+  logHookOutput,
   getNodeGraph,
   getWorkspacesByCwd
 } = require('./shared/index.cjs');
@@ -96,11 +97,12 @@ session_bind(workspaceId: "${matchedWorkspaces[0].id}")
  */
 function handleSessionStart(sessionId, binding, input) {
   let context = '';
+  let logDetails = {};
 
   if (binding) {
     // 已绑定：注入工作区上下文
     context = getFullWorkspaceContext(binding);
-    logHook(sessionId, 'SessionStart', { bound: true, workspaceId: binding.workspaceId });
+    logDetails = { bound: true, workspaceId: binding.workspaceId };
   } else {
     // 未绑定：检查是否有匹配的工作区
     const cwd = input?.cwd || process.cwd();
@@ -109,21 +111,23 @@ function handleSessionStart(sessionId, binding, input) {
     if (matchedWorkspaces.length > 0) {
       // 有匹配的工作区：生成绑定建议
       context = generateBindingSuggestion(sessionId, matchedWorkspaces);
-      logHook(sessionId, 'SessionStart', {
+      logDetails = {
         bound: false,
-        matchedWorkspaces: matchedWorkspaces.map(ws => ws.id),
-        suggestion: true
-      });
+        matchedCount: matchedWorkspaces.length,
+        matchedWorkspaces: matchedWorkspaces.slice(0, 5).map(ws => ws.id)
+      };
     } else {
       // 无匹配工作区：仅注入 sessionId
       context = generateSessionIdContext(sessionId, 'claude-code');
-      logHook(sessionId, 'SessionStart', { bound: false });
+      logDetails = { bound: false, matchedCount: 0 };
     }
   }
 
   if (context) {
+    logHookOutput(sessionId, 'SessionStart', 'output', logDetails, context);
     outputHookResponse('SessionStart', context);
   } else {
+    logHookOutput(sessionId, 'SessionStart', 'silent', logDetails);
     process.exit(0);
   }
 }
@@ -170,9 +174,9 @@ function handleMcpToolUse(sessionId, tool_name, tool_response) {
 
   const isError = tool_response?.isError ||
                   errorPatterns.some(pattern => responseStr.includes(pattern));
+  const toolPath = tool_name.replace('mcp__tanmi-workspace__', 'tanmi-workspace/');
 
   if (isError) {
-    const toolPath = tool_name.replace('mcp__tanmi-workspace__', 'tanmi-workspace/');
     const reminder = `<tanmi-mcp-error-hint>
 ⚠️ MCP 调用可能使用了错误的参数名。
 
@@ -184,14 +188,18 @@ mcp-cli info ${toolPath}
 然后使用正确的参数名重试。
 </tanmi-mcp-error-hint>`;
 
-    logHook(sessionId, 'PostToolUse', {
+    logHookOutput(sessionId, 'PostToolUse', 'output', {
       tool: toolPath,
       error: true,
       response: responseStr.slice(0, 200)
-    });
+    }, reminder);
 
     outputHookResponse('PostToolUse', reminder);
   } else {
+    logHookOutput(sessionId, 'PostToolUse', 'silent', {
+      tool: toolPath,
+      error: false
+    });
     process.exit(0);
   }
 }
@@ -201,8 +209,16 @@ mcp-cli info ${toolPath}
  * 成功后提醒记录日志
  */
 function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_response) {
+  const filePath = tool_input?.file_path || '';
+  const fileName = filePath.split('/').pop() || filePath;
+
   // 未绑定工作区时不提醒
   if (!binding?.workspaceId) {
+    logHookOutput(sessionId, 'PostToolUse', 'silent', {
+      tool: tool_name,
+      file: fileName,
+      reason: 'not_bound'
+    });
     process.exit(0);
     return;
   }
@@ -210,18 +226,25 @@ function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_respo
   // 检查是否成功
   const isSuccess = tool_response?.success !== false;
   if (!isSuccess) {
+    logHookOutput(sessionId, 'PostToolUse', 'silent', {
+      tool: tool_name,
+      file: fileName,
+      reason: 'not_success'
+    });
     process.exit(0);
     return;
   }
 
   // 节流检查：file_changed 类型，10秒内不重复提醒
   if (shouldThrottle(binding, 'file_changed', 10000)) {
+    logHookOutput(sessionId, 'PostToolUse', 'throttled', {
+      tool: tool_name,
+      file: fileName,
+      reminderType: 'file_changed'
+    });
     process.exit(0);
     return;
   }
-
-  const filePath = tool_input?.file_path || '';
-  const fileName = filePath.split('/').pop() || filePath;
 
   const reminder = `<tanmi-post-tool-reminder>
 📝 文件 \`${fileName}\` 已${tool_name === 'Edit' ? '编辑' : '写入'}。
@@ -230,11 +253,12 @@ function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_respo
 </tanmi-post-tool-reminder>`;
 
   updateLastReminder(sessionId, 'file_changed');
-  logHook(sessionId, 'PostToolUse', {
+
+  logHookOutput(sessionId, 'PostToolUse', 'output', {
     tool: tool_name,
     file: fileName,
-    reminder: 'file_changed'
-  });
+    reminderType: 'file_changed'
+  }, reminder);
 
   outputHookResponse('PostToolUse', reminder);
 }
@@ -244,8 +268,16 @@ function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_respo
  * 失败后提醒记录问题
  */
 function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
+  const command = tool_input?.command || '';
+  const cmdPreview = command.length > 50 ? command.slice(0, 50) + '...' : command;
+
   // 未绑定工作区时不提醒
   if (!binding?.workspaceId) {
+    logHookOutput(sessionId, 'PostToolUse', 'silent', {
+      tool: 'Bash',
+      command: cmdPreview,
+      reason: 'not_bound'
+    });
     process.exit(0);
     return;
   }
@@ -267,18 +299,26 @@ function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
   const isError = hasExitError || hasErrorKeyword;
 
   if (!isError) {
+    logHookOutput(sessionId, 'PostToolUse', 'silent', {
+      tool: 'Bash',
+      command: cmdPreview,
+      reason: 'no_error'
+    });
     process.exit(0);
     return;
   }
 
   // 节流检查：bash_error 类型，5秒内不重复提醒
   if (shouldThrottle(binding, 'bash_error', 5000)) {
+    logHookOutput(sessionId, 'PostToolUse', 'throttled', {
+      tool: 'Bash',
+      command: cmdPreview,
+      exitCode,
+      reminderType: 'bash_error'
+    });
     process.exit(0);
     return;
   }
-
-  const command = tool_input?.command || '';
-  const cmdPreview = command.length > 50 ? command.slice(0, 50) + '...' : command;
 
   const reminder = `<tanmi-post-tool-reminder>
 ⚠️ 命令执行出错${hasExitError ? ` (exit code: ${exitCode})` : ''}。
@@ -289,12 +329,13 @@ function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
 </tanmi-post-tool-reminder>`;
 
   updateLastReminder(sessionId, 'bash_error');
-  logHook(sessionId, 'PostToolUse', {
+
+  logHookOutput(sessionId, 'PostToolUse', 'output', {
     tool: 'Bash',
     command: cmdPreview,
     exitCode,
-    reminder: 'bash_error'
-  });
+    reminderType: 'bash_error'
+  }, reminder);
 
   outputHookResponse('PostToolUse', reminder);
 }
@@ -304,8 +345,18 @@ function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
  * 提醒 AI 应该在工作区创建执行节点跟踪任务
  */
 function handleTodoWriteToolUse(sessionId, binding, tool_input, tool_response) {
+  // 统计 todo 数量
+  const todos = tool_input?.todos || [];
+  const pendingCount = todos.filter(t => t.status === 'pending').length;
+  const inProgressCount = todos.filter(t => t.status === 'in_progress').length;
+
   // 未绑定工作区时不提醒
   if (!binding?.workspaceId) {
+    logHookOutput(sessionId, 'PostToolUse', 'silent', {
+      tool: 'TodoWrite',
+      todoCount: todos.length,
+      reason: 'not_bound'
+    });
     process.exit(0);
     return;
   }
@@ -313,14 +364,14 @@ function handleTodoWriteToolUse(sessionId, binding, tool_input, tool_response) {
   // 检查是否成功
   const isSuccess = tool_response?.success !== false;
   if (!isSuccess) {
+    logHookOutput(sessionId, 'PostToolUse', 'silent', {
+      tool: 'TodoWrite',
+      todoCount: todos.length,
+      reason: 'not_success'
+    });
     process.exit(0);
     return;
   }
-
-  // 统计 todo 数量
-  const todos = tool_input?.todos || [];
-  const pendingCount = todos.filter(t => t.status === 'pending').length;
-  const inProgressCount = todos.filter(t => t.status === 'in_progress').length;
 
   const reminder = `<tanmi-post-tool-reminder>
 📋 TodoWrite 已更新 (${todos.length} 项，${inProgressCount} 进行中，${pendingCount} 待办)。
@@ -329,14 +380,13 @@ function handleTodoWriteToolUse(sessionId, binding, tool_input, tool_response) {
 **MUST** 评估是否需要同步到工作区（创建节点或使用 log_append 记录）。
 </tanmi-post-tool-reminder>`;
 
-  updateLastReminder(sessionId, 'todo_write');
-  logHook(sessionId, 'PostToolUse', {
+  logHookOutput(sessionId, 'PostToolUse', 'output', {
     tool: 'TodoWrite',
     todoCount: todos.length,
     pending: pendingCount,
     inProgress: inProgressCount,
-    reminder: 'todo_write'
-  });
+    reminderType: 'todo_write'
+  }, reminder);
 
   outputHookResponse('PostToolUse', reminder);
 }
@@ -350,18 +400,21 @@ function handleStop(sessionId, binding, input) {
 
   // 未绑定工作区时不处理
   if (!binding?.workspaceId) {
+    logHookOutput(sessionId, 'Stop', 'silent', { reason: 'not_bound' });
     process.exit(0);
     return;
   }
 
   // 如果已经因为 Stop hook 继续过，避免无限循环
   if (input.stop_hook_active) {
+    logHookOutput(sessionId, 'Stop', 'silent', { reason: 'stop_hook_active' });
     process.exit(0);
     return;
   }
 
   // 节流检查：stop_error 类型，30秒内不重复提醒
   if (shouldThrottle(binding, 'stop_error', 30000)) {
+    logHookOutput(sessionId, 'Stop', 'throttled', { reminderType: 'stop_error' });
     process.exit(0);
     return;
   }
@@ -369,6 +422,7 @@ function handleStop(sessionId, binding, input) {
   // 读取 transcript 分析错误
   const transcriptPath = input.transcript_path;
   if (!transcriptPath) {
+    logHookOutput(sessionId, 'Stop', 'silent', { reason: 'no_transcript' });
     process.exit(0);
     return;
   }
@@ -432,27 +486,33 @@ function handleStop(sessionId, binding, input) {
 
     if (errorContext) {
       updateLastReminder(sessionId, 'stop_error');
-      logHook(sessionId, 'Stop', {
-        error: true,
-        context: errorContext.slice(0, 100)
-      });
 
       // 使用 decision: block 来提醒 AI
-      const response = {
-        decision: 'block',
-        reason: `<tanmi-error-detected>
+      const blockReason = `<tanmi-error-detected>
 ⚠️ 检测到可能遇到了问题或阻碍。
 
 上下文: "${errorContext}"
 
 **MUST** 使用 \`problem_update\` 记录当前问题和下一步计划。
-</tanmi-error-detected>`
+</tanmi-error-detected>`;
+
+      logHookOutput(sessionId, 'Stop', 'output', {
+        errorDetected: true,
+        context: errorContext.slice(0, 100),
+        reminderType: 'stop_error'
+      }, blockReason);
+
+      const response = {
+        decision: 'block',
+        reason: blockReason
       };
       console.log(JSON.stringify(response));
     } else {
+      logHookOutput(sessionId, 'Stop', 'silent', { reason: 'no_error_detected' });
       process.exit(0);
     }
   } catch {
+    logHookOutput(sessionId, 'Stop', 'silent', { reason: 'read_error' });
     process.exit(0);
   }
 }
@@ -470,46 +530,78 @@ function handleUserPromptSubmit(sessionId, binding, input) {
     // 优先从 graph.currentFocus 获取焦点节点（权威来源）
     const graph = getNodeGraph(binding.workspaceId);
     const focusNodeId = graph?.currentFocus || binding.focusedNodeId;
+
     if (focusNodeId) {
       // 分析节点状态
       const reminderInfo = analyzeNodeStatus(binding.workspaceId, focusNodeId);
 
       if (reminderInfo) {
         // 检查是否应该节流
-        if (!shouldThrottle(binding, reminderInfo.type)) {
-          // 更新上次提醒记录
-          updateLastReminder(sessionId, reminderInfo.type);
-
-          logHook(sessionId, 'UserPromptSubmit', {
+        if (shouldThrottle(binding, reminderInfo.type)) {
+          // 被节流，记录但不输出
+          logHookOutput(sessionId, 'UserPromptSubmit', 'throttled', {
             bound: true,
-            reminder: reminderInfo.type,
+            workspaceId: binding.workspaceId,
+            focusNodeId,
+            reminderType: reminderInfo.type,
             prompt: promptPreview
           });
-
-          // 输出智能提醒
-          const reminderContent = `<tanmi-smart-reminder>\n${reminderInfo.message}\n</tanmi-smart-reminder>`;
-          outputHookResponse('UserPromptSubmit', reminderContent);
+          process.exit(0);
           return;
         }
+
+        // 更新上次提醒记录
+        updateLastReminder(sessionId, reminderInfo.type);
+
+        // 输出智能提醒
+        const reminderContent = `<tanmi-smart-reminder>\n${reminderInfo.message}\n</tanmi-smart-reminder>`;
+
+        logHookOutput(sessionId, 'UserPromptSubmit', 'output', {
+          bound: true,
+          workspaceId: binding.workspaceId,
+          focusNodeId,
+          reminderType: reminderInfo.type,
+          prompt: promptPreview
+        }, reminderContent);
+
+        outputHookResponse('UserPromptSubmit', reminderContent);
+        return;
       }
     }
 
-    logHook(sessionId, 'UserPromptSubmit', { bound: true, reminder: null, prompt: promptPreview });
     // 无需提醒，静默退出
+    logHookOutput(sessionId, 'UserPromptSubmit', 'silent', {
+      bound: true,
+      workspaceId: binding.workspaceId,
+      focusNodeId: focusNodeId || null,
+      reason: focusNodeId ? 'no_reminder_needed' : 'no_focus_node',
+      prompt: promptPreview
+    });
     process.exit(0);
+    return;
   }
 
   // 未绑定：检测用户消息是否涉及工作区
   const hasKeywords = containsWorkspaceKeywords(userPrompt);
 
   if (hasKeywords) {
-    logHook(sessionId, 'UserPromptSubmit', { bound: false, keywordDetected: true, prompt: promptPreview });
     // 检测到工作区关键词，提醒绑定
     const reminder = generateBindingReminder(sessionId, 'claude-code');
+
+    logHookOutput(sessionId, 'UserPromptSubmit', 'output', {
+      bound: false,
+      keywordDetected: true,
+      prompt: promptPreview
+    }, reminder);
+
     outputHookResponse('UserPromptSubmit', reminder);
   } else {
-    logHook(sessionId, 'UserPromptSubmit', { bound: false, keywordDetected: false, prompt: promptPreview });
     // 普通对话，静默退出
+    logHookOutput(sessionId, 'UserPromptSubmit', 'silent', {
+      bound: false,
+      keywordDetected: false,
+      prompt: promptPreview
+    });
     process.exit(0);
   }
 }
