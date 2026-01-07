@@ -425,6 +425,37 @@ Read(file_path: <返回的路径>/SKILL.md)
     // 节点完整性检测（并行检测）
     const issues = await this.validateNodesIntegrity(projectRoot, wsDirName, graph, isArchived);
 
+    // 构建轻量级拓扑结构
+    // 1. 计算 focusPath（从 currentFocus 到 root 的路径）
+    const focusPath = new Set<string>();
+    let currentNodeId = graph.currentFocus;
+    while (currentNodeId) {
+      focusPath.add(currentNodeId);
+      const node = graph.nodes[currentNodeId];
+      if (!node || currentNodeId === "root") break;
+      currentNodeId = node.parentId || "";
+    }
+
+    // 2. 收集各节点的标题（并行读取所有节点的 info.md）
+    const nodeIds = Object.keys(graph.nodes);
+    const titles: Record<string, string> = {};
+    await Promise.all(
+      nodeIds.map(async (nodeId) => {
+        const node = graph.nodes[nodeId];
+        const nodeDirName = node.dirName || nodeId;
+        try {
+          const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName, isArchived);
+          titles[nodeId] = nodeInfo.title || nodeId;
+        } catch {
+          // 读取失败时使用 nodeId 作为标题
+          titles[nodeId] = nodeId;
+        }
+      })
+    );
+
+    // 3. 构建拓扑结构
+    const topology = this.buildTopology(graph.nodes, "root", focusPath, titles);
+
     const result: WorkspaceGetResult = {
       config,
       graph,
@@ -433,6 +464,7 @@ Read(file_path: <返回的路径>/SKILL.md)
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
       rulesCount,
       rulesHash,
+      topology,
     };
 
     // 如果有问题，添加 warning 字段并设置警告标记
@@ -1496,5 +1528,159 @@ Read(file_path: <返回的路径>/SKILL.md)
     // 检查是否超过 24 小时
     const lastWarningTime = new Date(entry.lastWarningAt).getTime();
     return Date.now() - lastWarningTime > WorkspaceService.WARNING_DEBOUNCE_MS;
+  }
+
+  // ========== 拓扑构建 ==========
+
+  /** 状态缩写映射表 */
+  private static readonly STATUS_ABBREV: Record<string, string> = {
+    completed: "com",
+    implementing: "imp",
+    validating: "val",
+    planning: "pla",
+    pending: "pen",
+    monitoring: "mon",
+    cancelled: "can",
+    failed: "fai",
+  };
+
+  /** 递归深度限制 */
+  private static readonly MAX_TOPOLOGY_DEPTH = 10;
+
+  /** 结论摘要最大长度 */
+  private static readonly MAX_CONCLUSION_LENGTH = 100;
+
+  /**
+   * 构建轻量级拓扑结构
+   * 基于状态的智能折叠策略，压缩完整节点树
+   *
+   * 压缩策略（优先级从高到低）：
+   * 1. 焦点路径 - focusPath 中的节点 → children 递归展开
+   * 2. 活跃状态 - implementing/validating/monitoring → children 递归展开
+   * 3. 完成子树 - completed 节点：
+   *    - 一级子节点数 ≤5 → _done: [子节点标题列表]
+   *    - 一级子节点数 >5 且有 conclusion → _sum: conclusion
+   *    - 一级子节点数 >5 且无 conclusion → _c: 子节点数量
+   * 4. 其他 - pending/cancelled/failed 等 → children 递归展开
+   *
+   * @param nodes 节点记录（从 graph.nodes）
+   * @param rootId 根节点 ID
+   * @param focusPath 焦点路径 ID 集合
+   * @param titles 节点标题映射（nodeId → title）
+   * @returns 压缩后的拓扑节点
+   */
+  buildTopology(
+    nodes: Record<string, NodeMeta>,
+    rootId: string,
+    focusPath: Set<string>,
+    titles: Record<string, string>
+  ): import("../types/workspace.js").TopologyNode {
+    const visited = new Set<string>();
+    return this.buildTopologyNode(nodes, rootId, focusPath, titles, visited, 0);
+  }
+
+  /**
+   * 递归构建拓扑节点
+   */
+  private buildTopologyNode(
+    nodes: Record<string, NodeMeta>,
+    nodeId: string,
+    focusPath: Set<string>,
+    titles: Record<string, string>,
+    visited: Set<string>,
+    depth: number
+  ): import("../types/workspace.js").TopologyNode {
+    // 循环引用检测
+    if (visited.has(nodeId)) {
+      return {
+        id: nodeId,
+        title: titles[nodeId] || nodeId,
+        status: "err",
+      };
+    }
+    visited.add(nodeId);
+
+    // 深度限制
+    if (depth >= WorkspaceService.MAX_TOPOLOGY_DEPTH) {
+      const node = nodes[nodeId];
+      return {
+        id: nodeId,
+        title: titles[nodeId] || nodeId,
+        status: WorkspaceService.STATUS_ABBREV[node?.status] || "???",
+        _c: node?.children?.length || 0,
+      };
+    }
+
+    const node = nodes[nodeId];
+    if (!node) {
+      return {
+        id: nodeId,
+        title: titles[nodeId] || nodeId,
+        status: "???",
+      };
+    }
+
+    const statusAbbrev = WorkspaceService.STATUS_ABBREV[node.status] || "???";
+    const title = titles[nodeId] || nodeId;
+
+    // 构建基础拓扑节点
+    const result: import("../types/workspace.js").TopologyNode = {
+      id: nodeId,
+      title,
+      status: statusAbbrev,
+    };
+
+    // 添加角色（如果存在）
+    if (node.role) {
+      result.role = node.role;
+    }
+
+    // 无子节点时直接返回
+    if (!node.children || node.children.length === 0) {
+      return result;
+    }
+
+    // 决定子节点展示策略
+    const childIds = node.children;
+
+    // 策略1: 焦点路径 → children 递归展开
+    if (focusPath.has(nodeId)) {
+      result.children = childIds.map(childId =>
+        this.buildTopologyNode(nodes, childId, focusPath, titles, visited, depth + 1)
+      );
+      return result;
+    }
+
+    // 策略2: 活跃状态(implementing/validating/monitoring) → children 递归展开
+    if (node.status === "implementing" || node.status === "validating" || node.status === "monitoring") {
+      result.children = childIds.map(childId =>
+        this.buildTopologyNode(nodes, childId, focusPath, titles, visited, depth + 1)
+      );
+      return result;
+    }
+
+    // 策略3: 完成子树(completed) → 折叠
+    if (node.status === "completed") {
+      if (childIds.length <= 5) {
+        // 一级子节点 ≤5 → _done: [子节点标题列表]
+        result._done = childIds.map(childId => titles[childId] || childId);
+      } else if (node.conclusion) {
+        // 一级子节点 >5 且有结论 → _sum: conclusion
+        result._sum = node.conclusion.length > WorkspaceService.MAX_CONCLUSION_LENGTH
+          ? node.conclusion.substring(0, WorkspaceService.MAX_CONCLUSION_LENGTH) + "..."
+          : node.conclusion;
+      } else {
+        // 一级子节点 >5 且无结论 → _c: 子节点数量
+        result._c = childIds.length;
+      }
+      return result;
+    }
+
+    // 策略4: 其他状态(pending/cancelled/failed/planning) → children 递归展开
+    result.children = childIds.map(childId =>
+      this.buildTopologyNode(nodes, childId, focusPath, titles, visited, depth + 1)
+    );
+
+    return result;
   }
 }

@@ -249,6 +249,23 @@ export interface WorkspaceListResult {
 }
 
 /**
+ * 拓扑节点 - 用于轻量级工作区结构展示
+ * 基于状态的智能折叠策略，压缩完整节点树
+ */
+export interface TopologyNode {
+  id: string;
+  title: string;
+  status: string;                   // 3字符缩写: com/imp/val/pla/pen/mon/can/fai
+  role?: string;
+
+  // 子节点展示（四选一，互斥）
+  children?: TopologyNode[];        // 递归子节点(活跃/未完成节点)
+  _done?: string[];                 // 已完成子节点标题列表(一级子节点≤5)
+  _sum?: string;                    // 子树结论摘要(一级子节点>5且有结论)
+  _c?: number;                      // 已完成子节点数量(一级子节点>5且无结论)
+}
+
+/**
  * workspace_get 输入
  */
 export interface WorkspaceGetParams {
@@ -266,6 +283,7 @@ export interface WorkspaceGetResult {
   webUrl: string;                     // Web UI 访问地址
   rulesCount: number;                 // 规则条数
   rulesHash: string;                  // 规则内容哈希（用于验证）
+  topology?: TopologyNode;            // 轻量级拓扑结构（智能压缩）
   warning?: {                         // 节点完整性检测警告
     message: string;
     issues: import("./health.js").HealthIssue[];
