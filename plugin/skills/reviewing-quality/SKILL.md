@@ -84,6 +84,21 @@ Look for:
 
 **Output**: Potential issues list
 
+### 5.5. Incomplete Implementation Check
+
+**Goal**: Detect shortcuts and deferred work.
+
+**Search for**:
+- `TODO`, `FIXME`, `HACK`, `XXX` comments in changed code
+- "暂时"、"临时"、"简化实现" in comments or variable names
+- Placeholder values (e.g., hardcoded IDs, magic numbers)
+- Commented-out code with "later" or "future" notes
+- Stub implementations that don't fully implement the interface
+
+**Severity**: These are typically HIGH - they indicate incomplete work.
+
+**Output**: List of incomplete markers with locations
+
 ### 6. Compile Assessment
 
 **Goal**: Deliver quality verdict.
@@ -99,6 +114,8 @@ Look for:
   - Severe readability problems
   - Missing critical error handling
   - Major standards violations
+  - TODO/FIXME/HACK markers indicating incomplete work
+  - Simplified or temporary implementations
 
 **Output**: Verdict with prioritized findings
 
@@ -128,6 +145,12 @@ Look for:
 - [ ] Performance considered
 - [ ] Security reviewed
 - [ ] No critical problems found
+
+### Completeness
+- [ ] No TODO/FIXME/HACK markers
+- [ ] No "暂时/临时/简化" workarounds
+- [ ] No placeholder or hardcoded values
+- [ ] No stub implementations
 
 ## Output Template
 

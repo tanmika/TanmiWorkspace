@@ -1172,7 +1172,14 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
 - You MUST invoke Skill(executing-task) FIRST for detailed SOP
 - You MUST call node_transition(start) to begin the task
 - You MUST call dispatch_complete to finalize
-**SCOPE CONTROL**: Execute only what is specified. If task is unclear or too large, FAIL with clear reason.`);
+
+**SCOPE CONTROL**: Execute only what is specified. If task is unclear or too large, FAIL with clear reason.
+
+**IMPLEMENTATION CONSTRAINTS** (NEVER violate):
+- MUST implement exactly as specified - NEVER simplify, skip, or defer any part
+- NEVER use TODO/FIXME/HACK comments as placeholder for missing implementation
+- NEVER use temporary workarounds ("暂时"、"简化"、"临时")
+- If requirement is unclear → FAIL with info_insufficient, don't guess or simplify`);
 
     return sections.join("\n\n");
   }

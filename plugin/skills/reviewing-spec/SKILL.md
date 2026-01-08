@@ -70,6 +70,20 @@ For each criterion (WHEN/THEN format):
 
 **Output**: Coverage assessment
 
+### 3.5. Implementation Completeness Check
+
+**Goal**: Verify no shortcuts or deferred work.
+
+**Search changed files for**:
+- `TODO`, `FIXME`, `HACK`, `XXX` comments
+- "暂时"、"临时"、"简化实现" in comments or code
+- Placeholder values or hardcoded data that should be configurable
+- Commented-out code with "later" notes
+
+**If found**: FAIL with specific locations and required fixes.
+
+**Output**: Completeness verification (PASS if no incomplete markers found)
+
 ### 4. Compile Verdict
 
 **Goal**: Deliver final review result.
@@ -83,6 +97,8 @@ For each criterion (WHEN/THEN format):
   - ANY acceptance criterion failed
   - Missing required functionality
   - Critical implementation issues
+  - TODO/FIXME/HACK markers found in code
+  - Simplified or temporary implementations detected
 
 **Output**: Verdict with detailed findings
 
@@ -103,6 +119,12 @@ For each criterion (WHEN/THEN format):
 - [ ] All requirements addressed
 - [ ] No scope deviation
 - [ ] Implementation matches intent
+
+### Completeness
+- [ ] No TODO/FIXME/HACK markers in changed code
+- [ ] No "暂时/临时/简化" workarounds
+- [ ] No placeholder or hardcoded values
+- [ ] No deferred implementations
 
 ### Verdict
 - [ ] Pass/fail determined
@@ -186,6 +208,8 @@ For each criterion (WHEN/THEN format):
 2. **No evidence** - Passing without verifiable proof
 3. **Subjective judgment** - Opinion-based instead of evidence-based
 4. **Partial pass** - Passing when some criteria fail
+5. **Ignore incomplete markers** - Passing code with TODO/FIXME/HACK
+6. **Accept shortcuts** - Passing simplified implementations
 
 ## Mandatory Rules
 
@@ -194,6 +218,8 @@ For each criterion (WHEN/THEN format):
 3. **MUST provide evidence** - Every pass/fail needs verifiable proof
 4. **MUST fail if ANY criterion fails** - Partial pass is not pass
 5. **NEVER be lenient** - Pass only when ALL criteria are met
+6. **MUST check for incomplete markers** - TODO/FIXME/HACK in code = automatic FAIL
+7. **MUST reject simplified implementations** - "暂时/临时/简化" workarounds = FAIL
 
 ## Anti-Patterns
 
