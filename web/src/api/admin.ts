@@ -39,10 +39,66 @@ export interface IndexStatsResult {
   invalid: number
 }
 
+// 导出结果
+export interface ExportResult {
+  filename: string
+  warnings: string[]
+}
+
+// 导入 .twsp 结果
+export interface ImportTwspResult {
+  success: boolean
+  workspaceId: string
+  name: string
+  path: string
+  warnings: string[]
+  error?: string
+}
+
 export const adminApi = {
   // 打开目录选择对话框
   pickDirectory(): Promise<PickDirectoryResult> {
     return client.post('/admin/pick-directory')
+  },
+
+  /**
+   * 导出工作区
+   * 直接触发文件下载
+   */
+  async exportWorkspace(workspaceId: string): Promise<ExportResult> {
+    const response = await fetch(`/api/admin/export-workspace/${workspaceId}`)
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: '导出失败' }))
+      throw new Error(errorData.error || '导出失败')
+    }
+
+    // 获取文件名
+    const disposition = response.headers.get('Content-Disposition')
+    const filenameMatch = disposition?.match(/filename="(.+)"/)
+    const filename = filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : 'workspace.twsp'
+
+    // 获取警告信息
+    const warningsHeader = response.headers.get('X-Export-Warnings')
+    const warnings: string[] = warningsHeader ? JSON.parse(warningsHeader) : []
+
+    // 下载文件
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+
+    return { filename, warnings }
+  },
+
+  /**
+   * 预检查工作区导出（获取警告信息）
+   */
+  async checkExportWorkspace(workspaceId: string): Promise<{ canExport: boolean; warnings: string[] }> {
+    return client.get(`/admin/export-workspace/${workspaceId}/check`)
   },
 
   // 智能导入工作区（支持：项目目录、.tanmi-workspace目录、名称_id工作区目录）
@@ -63,5 +119,16 @@ export const adminApi = {
   // 获取索引统计
   getIndexStats(): Promise<IndexStatsResult> {
     return client.get('/admin/index-stats')
+  },
+
+  /**
+   * 导入 .twsp 文件
+   */
+  async importTwsp(formData: FormData): Promise<ImportTwspResult> {
+    return client.post('/admin/import-twsp', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
   },
 }

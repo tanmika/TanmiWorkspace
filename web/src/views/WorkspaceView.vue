@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 // Element Plus icons (no longer used in header/sidebar)
 import { useWorkspaceStore, useNodeStore, useSettingsStore, useToastStore, useMemoStore } from '@/stores'
+import { adminApi } from '@/api/admin'
 import { getGlobalSSE } from '@/composables/useSSE'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
@@ -450,6 +451,62 @@ function handleSwitchMode() {
 async function handleDispatchSuccess() {
   await loadWorkspace()
 }
+
+// 导出工作区
+const isExporting = ref(false)
+const showExportWarningDialog = ref(false)
+const exportWarnings = ref<string[]>([])
+
+async function handleExport() {
+  if (!workspaceId.value) return
+
+  isExporting.value = true
+  try {
+    // 先预检查是否有警告
+    const checkResult = await adminApi.checkExportWorkspace(workspaceId.value)
+
+    if (checkResult.warnings.length > 0) {
+      // 有警告，显示确认弹窗
+      exportWarnings.value = checkResult.warnings
+      showExportWarningDialog.value = true
+      isExporting.value = false
+      return // 等待用户确认
+    }
+
+    // 无警告，直接导出
+    await doExport()
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : '导出失败'
+    toastStore.error('导出失败', errorMessage)
+    isExporting.value = false
+  }
+}
+
+async function doExport() {
+  if (!workspaceId.value) return
+
+  isExporting.value = true
+  try {
+    const result = await adminApi.exportWorkspace(workspaceId.value)
+    showToast(`已导出: ${result.filename}`, 'success')
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : '导出失败'
+    toastStore.error('导出失败', errorMessage)
+  } finally {
+    isExporting.value = false
+  }
+}
+
+async function confirmExportWithWarnings() {
+  showExportWarningDialog.value = false
+  exportWarnings.value = []
+  await doExport()
+}
+
+function closeExportWarningDialog() {
+  showExportWarningDialog.value = false
+  exportWarnings.value = []
+}
 </script>
 
 <template>
@@ -479,6 +536,7 @@ async function handleDispatchSuccess() {
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
           </svg>
         </button>
+        <button class="ws-btn" @click="handleExport" :disabled="isExporting" title="导出工作区">↓ EXPORT</button>
         <button class="ws-btn" @click="handleFocusCurrent" :disabled="isFocusing" title="聚焦当前任务">▶ FOCUS</button>
         <button class="ws-btn" @click="handleRefresh" :disabled="isRefreshing" title="刷新数据">⇄ SYNC</button>
         <button class="ws-btn primary" @click="openCreateDialog">+ NEW</button>
@@ -747,6 +805,21 @@ async function handleDispatchSuccess() {
       v-model="showSwitchModeDialog"
       @success="handleDispatchSuccess"
     />
+
+    <!-- 导出警告弹窗 -->
+    <WsModal v-model="showExportWarningDialog" title="导出警告">
+      <div class="export-warning-content">
+        <p class="warning-intro">检测到以下警告，是否继续导出？</p>
+        <ul class="warning-list">
+          <li v-for="(warning, idx) in exportWarnings" :key="idx">{{ warning }}</li>
+        </ul>
+        <p class="warning-note">这些外部引用在导入时可能无法正确解析。</p>
+      </div>
+      <template #footer>
+        <WsButton variant="secondary" @click="closeExportWarningDialog">取消</WsButton>
+        <WsButton variant="primary" @click="confirmExportWithWarnings">继续导出</WsButton>
+      </template>
+    </WsModal>
   </div>
 </template>
 
@@ -1647,5 +1720,43 @@ async function handleDispatchSuccess() {
     transform: translateX(100%);
     opacity: 0;
   }
+}
+
+/* ===== 导出警告弹窗 ===== */
+.export-warning-content {
+  padding: 8px 0;
+}
+
+.warning-intro {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.warning-list {
+  margin: 0 0 16px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.warning-list li {
+  padding: 10px 12px;
+  background: #fff8e6;
+  border-left: 3px solid #e6a23c;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+[data-theme="dark"] .warning-list li {
+  background: #4a3c1a;
+  border-left-color: #e6a23c;
+}
+
+.warning-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 </style>

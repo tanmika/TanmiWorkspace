@@ -7,6 +7,7 @@ import { settingsApi, type InstallationStatusResult, type PlatformStatus } from 
 import { getGlobalSSE } from '@/composables/useSSE'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
 import SettingsModal from '@/components/SettingsModal.vue'
+import ImportWorkspaceModal from '@/components/ImportWorkspaceModal.vue'
 import WsModal from '@/components/ui/WsModal.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 
@@ -20,6 +21,7 @@ const theme = ref<'light' | 'dark'>('light')
 // 状态
 const showCreateDialog = ref(false)
 const showSettingsModal = ref(false)
+const showImportDialog = ref(false)
 
 // 确认弹窗状态
 const showConfirmDialog = ref(false)
@@ -380,6 +382,15 @@ function getBadgeText(status: string) {
   if (status === 'error') return 'Error'
   return 'Archived'
 }
+
+// 处理导入成功
+function handleImported(workspaceId: string) {
+  showImportDialog.value = false
+  // 刷新工作区列表
+  workspaceStore.fetchWorkspaces('all')
+  // 跳转到新导入的工作区
+  router.push(`/workspace/${workspaceId}`)
+}
 </script>
 
 <template>
@@ -422,6 +433,14 @@ function getBadgeText(status: string) {
             <rect x="8" y="11" width="3" height="4" fill="currentColor" stroke="none"/>
           </svg>
           SETTINGS
+        </button>
+        <button class="btn btn-secondary" @click="showImportDialog = true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          IMPORT
         </button>
         <button class="btn btn-primary" @click="showCreateDialog = true">+ NEW</button>
       </div>
@@ -533,6 +552,12 @@ function getBadgeText(status: string) {
 
     <!-- 设置弹窗 -->
     <SettingsModal v-model:visible="showSettingsModal" @tutorial-created="handleRefresh" />
+
+    <!-- 导入工作区弹窗 -->
+    <ImportWorkspaceModal
+      v-model:visible="showImportDialog"
+      @imported="handleImported"
+    />
 
     <!-- 开发模式标识 -->
     <div v-if="devInfo?.isDev" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">

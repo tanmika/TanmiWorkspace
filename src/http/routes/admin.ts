@@ -5,8 +5,10 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { exec } from "child_process";
 import { promisify } from "util";
 import os from "os";
-import { existsSync, statSync } from "fs";
+import { existsSync, statSync, createWriteStream } from "fs";
+import { mkdir, rm, unlink } from "fs/promises";
 import { basename, dirname, join } from "path";
+import { pipeline } from "stream/promises";
 import {
   scanForProjects,
   readWorkspacesFromProject,
@@ -16,6 +18,7 @@ import {
   type WorkspaceEntry,
   type IndexFile,
 } from "../../cli/rebuild.js";
+import { getServices } from "../services.js";
 
 const execAsync = promisify(exec);
 
@@ -495,5 +498,142 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       valid,
       invalid,
     };
+  });
+
+  /**
+   * GET /api/admin/export-workspace/:workspaceId/check - 预检查工作区导出
+   * 返回警告信息，不执行导出
+   */
+  fastify.get<{ Params: { workspaceId: string } }>(
+    "/admin/export-workspace/:workspaceId/check",
+    async (request: FastifyRequest<{ Params: { workspaceId: string } }>, reply: FastifyReply) => {
+      const { workspaceId } = request.params;
+
+      try {
+        const services = getServices();
+        const warnings = await services.workspace.checkExportWarnings(workspaceId);
+
+        return reply.send({
+          canExport: true,
+          warnings,
+        });
+      } catch (error) {
+        fastify.log.error(error, "检查工作区导出失败");
+        return reply.status(500).send({
+          error: "CHECK_ERROR",
+          message: error instanceof Error ? error.message : "检查失败",
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/export-workspace/:workspaceId - 导出工作区为 .twsp 文件
+   * 响应: application/zip 文件流
+   */
+  fastify.get<{ Params: { workspaceId: string } }>(
+    "/admin/export-workspace/:workspaceId",
+    async (request: FastifyRequest<{ Params: { workspaceId: string } }>, reply: FastifyReply) => {
+      const { workspaceId } = request.params;
+
+      try {
+        const services = getServices();
+        const { buffer, filename, warnings } = await services.workspace.exportAsTwsp(workspaceId);
+
+        // 设置响应头
+        reply.header("Content-Type", "application/zip");
+        reply.header("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
+        reply.header("Content-Length", buffer.length);
+
+        // 如果有警告，通过自定义 header 传递
+        if (warnings.length > 0) {
+          reply.header("X-Export-Warnings", JSON.stringify(warnings));
+        }
+
+        return reply.send(buffer);
+      } catch (error) {
+        fastify.log.error(error, "导出工作区失败");
+        return reply.status(500).send({
+          error: "EXPORT_ERROR",
+          message: error instanceof Error ? error.message : "导出失败",
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/import-twsp - 导入 .twsp 工作区文件
+   * 请求: multipart/form-data，文件字段名 file，可选字段 targetDir
+   * 响应: { workspaceId, name, path, warnings }
+   */
+  fastify.post("/admin/import-twsp", async (request: FastifyRequest, reply: FastifyReply) => {
+    let tempFilePath: string | null = null;
+
+    try {
+      // 解析 multipart 数据（使用 parts() 以同时获取文件和字段）
+      const parts = request.parts();
+      let fileData: { filename: string; file: NodeJS.ReadableStream } | null = null;
+      let targetDir: string | undefined;
+
+      for await (const part of parts) {
+        if (part.type === "file" && part.fieldname === "file") {
+          fileData = { filename: part.filename, file: part.file };
+        } else if (part.type === "field" && part.fieldname === "targetDir") {
+          targetDir = part.value as string;
+        }
+      }
+
+      if (!fileData) {
+        return reply.status(400).send({
+          error: "NO_FILE",
+          message: "未上传文件",
+        });
+      }
+
+      // 验证文件扩展名
+      const filename = fileData.filename || "upload.twsp";
+      if (!filename.endsWith(".twsp")) {
+        return reply.status(400).send({
+          error: "INVALID_FILE_TYPE",
+          message: "仅支持 .twsp 文件",
+        });
+      }
+
+      // 保存到临时文件
+      const tempDir = join(os.tmpdir(), "twsp-upload");
+      await mkdir(tempDir, { recursive: true });
+      tempFilePath = join(tempDir, `${Date.now()}-${basename(filename)}`);
+
+      // 写入临时文件
+      const writeStream = createWriteStream(tempFilePath);
+      await pipeline(fileData.file, writeStream);
+
+      // 调用导入服务
+      const services = getServices();
+      const result = await services.workspace.importFromTwsp(tempFilePath, targetDir || undefined);
+
+      return reply.send({
+        success: true,
+        workspaceId: result.workspaceId,
+        name: result.name,
+        path: result.path,
+        warnings: result.warnings,
+      });
+    } catch (error) {
+      fastify.log.error(error, "导入 .twsp 文件失败");
+      return reply.status(500).send({
+        error: "IMPORT_ERROR",
+        message: error instanceof Error ? error.message : "导入失败",
+      });
+    } finally {
+      // 清理临时文件
+      if (tempFilePath && existsSync(tempFilePath)) {
+        try {
+          await unlink(tempFilePath);
+        } catch {
+          // 清理失败不影响响应
+        }
+      }
+    }
   });
 }

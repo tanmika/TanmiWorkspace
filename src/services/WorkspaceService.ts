@@ -3,6 +3,13 @@
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs/promises";
+import { existsSync, createReadStream } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { pipeline } from "node:stream/promises";
+import * as os from "node:os";
+import archiver from "archiver";
+import { Extract } from "unzipper";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
@@ -1683,4 +1690,419 @@ Read(file_path: <返回的路径>/SKILL.md)
 
     return result;
   }
+
+  // ========== 工作区导出 ==========
+
+  /**
+   * 导出工作区为 .twsp 格式
+   * @param workspaceId 工作区 ID
+   * @returns 包含 buffer 和 filename 的对象
+   */
+  async exportAsTwsp(workspaceId: string): Promise<{
+    buffer: Buffer;
+    filename: string;
+    warnings: string[];
+  }> {
+    // 1. 获取工作区位置信息
+    const { projectRoot, dirName, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
+
+    // 2. 验证工作区目录存在
+    const workspaceDir = this.fs.getWorkspaceBasePath(projectRoot, dirName, isArchived);
+    if (!(await this.fs.exists(workspaceDir))) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区目录不存在: ${workspaceDir}`);
+    }
+
+    // 3. 读取工作区配置和图
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName, isArchived);
+    const graph = await this.json.readGraph(projectRoot, dirName, isArchived);
+
+    // 4. 检查外部引用，生成警告
+    const warnings = await this.checkExternalReferences(projectRoot, dirName, graph, isArchived);
+
+    // 5. 清洗数据
+    const cleanedConfig = this.cleanWorkspaceConfig(config);
+    const cleanedGraph = this.cleanNodeGraph(graph);
+
+    // 6. 获取当前版本号
+    const tanmiVersion = this.getCurrentVersion();
+
+    // 7. 生成 manifest
+    const manifest: TwspManifest = {
+      version: "1.0",
+      exportedAt: new Date().toISOString(),
+      tanmiVersion,
+      workspace: {
+        originalId: workspaceId,
+        name: config.name,
+        goal: (await this.md.readWorkspaceMd(projectRoot, dirName, isArchived)).goal,
+        scenario: config.scenario,
+      },
+      stats: {
+        nodeCount: Object.keys(graph.nodes).length,
+        memoCount: Object.keys(graph.memos || {}).length,
+      },
+      warnings,
+    };
+
+    // 8. 创建 zip 并打包
+    const buffer = await this.createTwspArchive(
+      workspaceDir,
+      dirName,
+      manifest,
+      cleanedConfig,
+      cleanedGraph
+    );
+
+    // 9. 生成文件名
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const safeName = config.name.replace(/[/\\:*?"<>|]/g, "_");
+    const filename = `${safeName}_${date}.twsp`;
+
+    return { buffer, filename, warnings };
+  }
+
+  /**
+   * 创建 .twsp 归档文件
+   */
+  private async createTwspArchive(
+    workspaceDir: string,
+    dirName: string,
+    manifest: TwspManifest,
+    cleanedConfig: WorkspaceConfig,
+    cleanedGraph: NodeGraph
+  ): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const archive = archiver("zip", { zlib: { level: 9 } });
+      const chunks: Buffer[] = [];
+
+      archive.on("data", (chunk: Buffer) => chunks.push(chunk));
+      archive.on("end", () => resolve(Buffer.concat(chunks)));
+      archive.on("error", (err: Error) => reject(err));
+
+      // 添加 manifest.json
+      archive.append(JSON.stringify(manifest, null, 2), { name: "manifest.json" });
+
+      // 添加清洗后的 workspace.json
+      archive.append(
+        JSON.stringify(cleanedConfig, null, 2),
+        { name: `${dirName}/workspace.json` }
+      );
+
+      // 添加清洗后的 graph.json
+      archive.append(
+        JSON.stringify(cleanedGraph, null, 2),
+        { name: `${dirName}/graph.json` }
+      );
+
+      // 添加 Workspace.md（原样复制）
+      const workspaceMdPath = path.join(workspaceDir, "Workspace.md");
+      if (existsSync(workspaceMdPath)) {
+        archive.file(workspaceMdPath, { name: `${dirName}/Workspace.md` });
+      }
+
+      // 添加 Log.md（原样复制）
+      const logMdPath = path.join(workspaceDir, "Log.md");
+      if (existsSync(logMdPath)) {
+        archive.file(logMdPath, { name: `${dirName}/Log.md` });
+      }
+
+      // 添加 Problem.md（原样复制）
+      const problemMdPath = path.join(workspaceDir, "Problem.md");
+      if (existsSync(problemMdPath)) {
+        archive.file(problemMdPath, { name: `${dirName}/Problem.md` });
+      }
+
+      // 添加 nodes 目录（原样复制）
+      const nodesDir = path.join(workspaceDir, "nodes");
+      if (existsSync(nodesDir)) {
+        archive.directory(nodesDir, `${dirName}/nodes`);
+      }
+
+      // 添加 memos 目录（原样复制）
+      const memosDir = path.join(workspaceDir, "memos");
+      if (existsSync(memosDir)) {
+        archive.directory(memosDir, `${dirName}/memos`);
+      }
+
+      archive.finalize();
+    });
+  }
+
+  /**
+   * 清洗工作区配置（删除本地信息）
+   */
+  private cleanWorkspaceConfig(config: WorkspaceConfig): WorkspaceConfig {
+    const cleaned = { ...config };
+
+    // 删除派发本地信息
+    if (cleaned.dispatch) {
+      // 重建 dispatch 对象，只保留需要导出的字段
+      // enabledAt 设为 0 表示导出状态（导入时会重置）
+      const cleanedDispatch: typeof cleaned.dispatch = {
+        enabled: cleaned.dispatch.enabled,
+        useGit: cleaned.dispatch.useGit,
+        enabledAt: 0, // 导出时重置为 0，导入后需要重新启用
+        limits: cleaned.dispatch.limits,
+        review: cleaned.dispatch.review,
+      };
+      // 不复制 Git 相关的本地信息（originalBranch, processBranch, backupBranches）
+      cleaned.dispatch = cleanedDispatch;
+    }
+
+    // 删除临时状态
+    delete cleaned.pendingManualChanges;
+
+    return cleaned;
+  }
+
+  /**
+   * 清洗节点图（删除本地信息）
+   */
+  private cleanNodeGraph(graph: NodeGraph): NodeGraph {
+    const cleaned: NodeGraph = {
+      version: graph.version,
+      currentFocus: null, // 清除聚焦状态
+      nodes: {},
+      memos: graph.memos,
+    };
+
+    // 不导出 lastWriteCodeVersion
+
+    // 清洗节点派发信息
+    for (const nodeId in graph.nodes) {
+      const node = graph.nodes[nodeId];
+      const cleanedNode = { ...node };
+
+      if (cleanedNode.dispatch) {
+        cleanedNode.dispatch = {
+          status: cleanedNode.dispatch.status,
+          // 清除执行标记
+        };
+        // 删除 startMarker, endMarker, attempts
+        delete cleanedNode.dispatch.startMarker;
+        delete cleanedNode.dispatch.endMarker;
+        delete cleanedNode.dispatch.attempts;
+      }
+
+      cleaned.nodes[nodeId] = cleanedNode;
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * 检查工作区导出的警告信息（公开方法，用于预检查）
+   */
+  async checkExportWarnings(workspaceId: string): Promise<string[]> {
+    const { projectRoot, dirName, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
+    const graph = await this.json.readGraph(projectRoot, dirName, isArchived);
+    return this.checkExternalReferences(projectRoot, dirName, graph, isArchived);
+  }
+
+  /**
+   * 检查外部引用并生成警告
+   * 读取每个节点的 Info.md，检查 docs 字段中的外部文件引用
+   */
+  private async checkExternalReferences(
+    projectRoot: string,
+    wsDirName: string,
+    graph: NodeGraph,
+    isArchived?: boolean
+  ): Promise<string[]> {
+    const warnings: string[] = [];
+
+    for (const nodeId in graph.nodes) {
+      const node = graph.nodes[nodeId];
+
+      try {
+        // 读取节点 Info.md 获取 docs 字段
+        const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, node.dirName, isArchived);
+
+        // 检查 docs 中的外部引用
+        if (nodeInfo.docs && nodeInfo.docs.length > 0) {
+          for (const doc of nodeInfo.docs) {
+            // 检查是否为外部文件引用（绝对路径或 file:// 协议）
+            // memo:// 是内部引用，不算外部
+            if (doc.path.startsWith("/") || doc.path.startsWith("file://")) {
+              warnings.push(`节点 "${nodeInfo.title}" 包含外部文件引用: ${doc.path}`);
+            }
+          }
+        }
+      } catch {
+        // 读取失败时跳过（可能是节点目录不存在）
+      }
+    }
+
+    return warnings;
+  }
+
+  /**
+   * 获取当前版本号
+   */
+  private getCurrentVersion(): string {
+    try {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+      const requireFn = createRequire(import.meta.url);
+      const pkg = requireFn(path.join(__dirname, "..", "..", "package.json")) as { version: string };
+      return pkg.version;
+    } catch {
+      return "unknown";
+    }
+  }
+
+  // ========== 工作区导入 ==========
+
+  /**
+   * 从 .twsp 文件导入工作区
+   * @param twspPath .twsp 文件路径
+   * @param targetDir 目标目录（默认 ~/.tanmi-workspace/import/）
+   * @returns 导入结果
+   */
+  async importFromTwsp(
+    twspPath: string,
+    targetDir?: string
+  ): Promise<{
+    workspaceId: string;
+    name: string;
+    path: string;
+    warnings: string[];
+  }> {
+    // 1. 确定目标目录（默认 ~/.tanmi-workspace/import/）
+    const finalTargetDir = targetDir || path.join(os.homedir(), ".tanmi-workspace", "import");
+
+    // 2. 创建临时解压目录
+    const extractDir = path.join(os.tmpdir(), `twsp-extract-${Date.now()}`);
+    await fs.mkdir(extractDir, { recursive: true });
+
+    try {
+      // 3. 解压 .twsp 文件
+      await pipeline(
+        createReadStream(twspPath),
+        Extract({ path: extractDir })
+      );
+
+      // 4. 读取并验证 manifest.json
+      const manifestPath = path.join(extractDir, "manifest.json");
+      if (!existsSync(manifestPath)) {
+        throw new TanmiError("INVALID_PATH", "无效的 .twsp 文件：缺少 manifest.json");
+      }
+
+      const manifest: TwspManifest = JSON.parse(
+        await fs.readFile(manifestPath, "utf-8")
+      );
+
+      // 5. 查找工作区目录（manifest.json 同级的第一个目录）
+      const entries = await fs.readdir(extractDir, { withFileTypes: true });
+      const workspaceDirEntry = entries.find(e => e.isDirectory());
+
+      if (!workspaceDirEntry) {
+        throw new TanmiError("INVALID_PATH", "无效的 .twsp 文件：缺少工作区目录");
+      }
+
+      const extractedWorkspaceDir = path.join(extractDir, workspaceDirEntry.name);
+
+      // 6. 验证 workspace.json 存在
+      const wsConfigPath = path.join(extractedWorkspaceDir, "workspace.json");
+      if (!existsSync(wsConfigPath)) {
+        throw new TanmiError("INVALID_PATH", "无效的 .twsp 文件：缺少 workspace.json");
+      }
+
+      // 7. 生成新的工作区 ID
+      const newWorkspaceId = generateWorkspaceId();
+
+      // 8. 确定目标目录名（处理重名）
+      const baseName = manifest.workspace.name;
+      const shortId = newWorkspaceId.replace("ws-", "");
+      let finalDirName = `${baseName}_${shortId}`;
+
+      // 确保目标目录存在
+      await fs.mkdir(finalTargetDir, { recursive: true });
+      const targetWorkspaceDir = path.join(finalTargetDir, ".tanmi-workspace", finalDirName);
+
+      // 检查目标目录是否存在（重名处理）
+      if (existsSync(targetWorkspaceDir)) {
+        // 重名，添加时间戳后缀
+        const timestamp = Date.now().toString(36);
+        finalDirName = `${baseName}_${timestamp}_${shortId}`;
+      }
+
+      const finalWorkspacePath = path.join(finalTargetDir, ".tanmi-workspace", finalDirName);
+
+      // 9. 确保父目录存在并复制文件
+      await fs.mkdir(path.dirname(finalWorkspacePath), { recursive: true });
+      await fs.cp(extractedWorkspaceDir, finalWorkspacePath, { recursive: true });
+
+      // 10. 更新 workspace.json 中的 ID 和 dirName
+      const wsConfig = JSON.parse(await fs.readFile(path.join(finalWorkspacePath, "workspace.json"), "utf-8"));
+      wsConfig.id = newWorkspaceId;
+      wsConfig.dirName = finalDirName;
+      wsConfig.updatedAt = now();
+      await fs.writeFile(
+        path.join(finalWorkspacePath, "workspace.json"),
+        JSON.stringify(wsConfig, null, 2)
+      );
+
+      // 11. 注册到索引（使用 smartImport 逻辑）
+      const index = await this.json.readIndex();
+
+      // 构建工作区条目
+      const currentTime = now();
+      index.workspaces.push({
+        id: newWorkspaceId,
+        name: manifest.workspace.name,
+        dirName: finalDirName,
+        projectRoot: finalTargetDir,
+        status: "active",
+        createdAt: currentTime,
+        updatedAt: currentTime,
+      });
+
+      await this.json.writeIndex(index);
+
+      // 12. 追加日志
+      await this.md.appendLog(finalTargetDir, finalDirName, {
+        time: currentTime,
+        operator: "system",
+        event: `工作区从 .twsp 文件导入（原 ID: ${manifest.workspace.originalId}）`,
+      });
+
+      // 13. 发送事件通知
+      eventService.emitWorkspaceUpdate(newWorkspaceId);
+
+      return {
+        workspaceId: newWorkspaceId,
+        name: manifest.workspace.name,
+        path: finalWorkspacePath,
+        warnings: manifest.warnings || [],
+      };
+    } finally {
+      // 14. 清理临时解压目录
+      try {
+        await fs.rm(extractDir, { recursive: true, force: true });
+      } catch {
+        // 清理失败不影响主流程
+      }
+    }
+  }
+}
+
+/**
+ * .twsp 文件 manifest 结构
+ */
+interface TwspManifest {
+  version: string;              // 格式版本
+  exportedAt: string;           // 导出时间 (ISO 8601)
+  tanmiVersion: string;         // TanmiWorkspace 版本号
+  workspace: {
+    originalId: string;         // 原工作区 ID
+    name: string;               // 工作区名称
+    goal?: string;              // 工作区目标
+    scenario?: string;          // 场景类型
+  };
+  stats: {
+    nodeCount: number;          // 节点数量
+    memoCount: number;          // MEMO 数量
+  };
+  warnings: string[];           // 导出警告（如外部引用被移除）
 }

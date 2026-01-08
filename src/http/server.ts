@@ -7,6 +7,7 @@ import * as fs from "node:fs";
 import Fastify, { FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
+import multipart from "@fastify/multipart";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { ensureBaseSetup } from "./services.js";
 import { eventService, EventService } from "../services/EventService.js";
@@ -57,6 +58,13 @@ export async function createServer(): Promise<FastifyInstance> {
     origin: true, // 开发环境允许所有来源
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+  });
+
+  // 注册 multipart 插件（用于文件上传）
+  await server.register(multipart, {
+    limits: {
+      fileSize: 100 * 1024 * 1024, // 100MB 限制
+    },
   });
 
   // 设置错误处理器

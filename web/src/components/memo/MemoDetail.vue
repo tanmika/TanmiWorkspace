@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useMemoStore, useWorkspaceStore } from '@/stores'
+import { useMemoStore, useWorkspaceStore, useToastStore } from '@/stores'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import NodeIcon from '@/components/tree/NodeIcon.vue'
 import WsButton from '@/components/ui/WsButton.vue'
@@ -16,6 +16,7 @@ const emit = defineEmits<{
 
 const memoStore = useMemoStore()
 const workspaceStore = useWorkspaceStore()
+const toastStore = useToastStore()
 
 // 从 store 获取 memo 数据
 const memo = computed(() => memoStore.currentMemo)
@@ -60,6 +61,91 @@ onMounted(() => {
 watch(() => props.memoId, () => {
   loadMemo()
 })
+
+// ========== MEMO 导出功能 ==========
+
+/**
+ * 格式化 MEMO 内容为导出格式
+ */
+function formatMemoForExport(): string {
+  if (!memo.value) return ''
+
+  const lines: string[] = []
+
+  // 标题
+  lines.push(`# ${memo.value.title}`)
+  lines.push('')
+
+  // 摘要
+  if (memo.value.summary) {
+    lines.push(`> ${memo.value.summary}`)
+    lines.push('')
+  }
+
+  // 标签
+  if (memo.value.tags && memo.value.tags.length > 0) {
+    lines.push(`标签: ${memo.value.tags.join(', ')}`)
+    lines.push('')
+  }
+
+  // 分隔线
+  lines.push('---')
+  lines.push('')
+
+  // 正文
+  lines.push(memo.value.content || '')
+
+  return lines.join('\n')
+}
+
+/**
+ * 生成文件名
+ * 格式: {标题}_{YYYYMMDD}.md
+ */
+function generateFilename(): string {
+  if (!memo.value) return 'memo.md'
+
+  // 清理标题中的特殊字符
+  const cleanTitle = memo.value.title.replace(/[/\\:*?"<>|]/g, '_')
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  return `${cleanTitle}_${date}.md`
+}
+
+/**
+ * 下载为文件
+ */
+function downloadMemo(): void {
+  if (!memo.value) return
+
+  const content = formatMemoForExport()
+  const filename = generateFilename()
+
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+
+  toastStore.success('已下载')
+}
+
+/**
+ * 复制到剪贴板
+ */
+async function copyMemoToClipboard(): Promise<void> {
+  if (!memo.value) return
+
+  const content = formatMemoForExport()
+
+  try {
+    await navigator.clipboard.writeText(content)
+    toastStore.success('已复制到剪贴板')
+  } catch {
+    toastStore.error('复制失败')
+  }
+}
 </script>
 
 <template>
@@ -120,7 +206,14 @@ watch(() => props.memoId, () => {
 
     <!-- 操作按钮区（固定底部） -->
     <div class="action-bar">
-      <div class="action-group"></div>
+      <div class="action-group">
+        <WsButton variant="secondary" size="sm" @click="downloadMemo">
+          下载
+        </WsButton>
+        <WsButton variant="secondary" size="sm" @click="copyMemoToClipboard">
+          复制
+        </WsButton>
+      </div>
       <div class="action-group">
         <WsButton
           variant="danger"

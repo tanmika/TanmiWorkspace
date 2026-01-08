@@ -47,3 +47,4 @@ pids/
 # Coverage
 coverage/
 .nyc_output/
+**/CLAUDE.md
