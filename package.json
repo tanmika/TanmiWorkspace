@@ -5,7 +5,10 @@
   "type": "module",
   "main": "dist/cli/check-node-version.js",
   "bin": {
-    "tanmi-workspace": "./dist/cli/check-node-version.js"
+    "tanmi-workspace": "./dist/cli/check-node-version.js",
+    "tw": "./dist/cli/check-node-version.js",
+    "tanmiworkspace": "./dist/cli/check-node-version.js",
+    "tsworkspace": "./dist/cli/check-node-version.js"
   },
   "engines": {
     "node": ">=20.0.0"
