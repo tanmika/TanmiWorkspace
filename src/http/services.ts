@@ -21,6 +21,7 @@ import { DetectionService } from "../services/DetectionService.js";
 import { BackupService } from "../services/BackupService.js";
 import { HealthService } from "../services/HealthService.js";
 import { HelpService } from "../tools/help.js";
+import { extractShortId } from "../utils/id.js";
 
 export interface Services {
   fs: FileSystemAdapter;
@@ -164,6 +165,8 @@ async function performStartupHealthCheck(services: Services): Promise<void> {
       idSet.add(ws.id);
     }
 
+    let needSaveIndex = false;
+
     for (const ws of index.workspaces) {
       // 跳过已标记为 error 的工作区
       if (ws.status === "error") continue;
@@ -187,17 +190,49 @@ async function performStartupHealthCheck(services: Services): Promise<void> {
           console.error(`[health] 工作区 ID 重复: ${ws.id}`);
         }
 
-        // 4. 目录存在检测
-        const wsDirName = ws.dirName || ws.id;
+        // 4. 目录存在检测（含自动修复）
+        let wsDirName = ws.dirName || ws.id;
         const isArchived = ws.status === "archived";
-        const workspacePath = isArchived
+        let workspacePath = isArchived
           ? services.fs.getArchivePath(ws.projectRoot, wsDirName)
           : services.fs.getWorkspacePath(ws.projectRoot, wsDirName);
 
         if (!(await services.fs.exists(workspacePath))) {
-          await services.workspace.markAsError(ws.id, "dir_missing", `工作区目录不存在: ${workspacePath}`);
-          console.error(`[health] 工作区 ${ws.id} 目录不存在，已标记为 error`);
-          continue;
+          // 尝试通过 shortId 查找实际目录
+          const baseDir = isArchived
+            ? services.fs.getArchiveDir(ws.projectRoot)
+            : services.fs.getWorkspaceRootPath(ws.projectRoot);
+
+          let fixedDirName: string | undefined;
+          if (await services.fs.exists(baseDir)) {
+            const shortId = extractShortId(ws.id);
+            try {
+              const entries = await services.fs.readdir(baseDir);
+              // 优先匹配 _shortId 后缀
+              fixedDirName = entries.find(e => e.endsWith(`_${shortId}`));
+              // 兜底：包含 shortId 的目录
+              if (!fixedDirName && shortId.length >= 6) {
+                fixedDirName = entries.find(e => e.includes(shortId));
+              }
+            } catch {
+              // 读取目录失败，继续使用原逻辑
+            }
+          }
+
+          if (fixedDirName) {
+            // 自动修复：更新 index.json 中的 dirName
+            ws.dirName = fixedDirName;
+            wsDirName = fixedDirName;
+            workspacePath = isArchived
+              ? services.fs.getArchivePath(ws.projectRoot, wsDirName)
+              : services.fs.getWorkspacePath(ws.projectRoot, wsDirName);
+            needSaveIndex = true;
+            console.error(`[health] 工作区 ${ws.id} 自动修复 dirName: ${fixedDirName}`);
+          } else {
+            await services.workspace.markAsError(ws.id, "dir_missing", `工作区目录不存在: ${workspacePath}`);
+            console.error(`[health] 工作区 ${ws.id} 目录不存在，已标记为 error`);
+            continue;
+          }
         }
 
         // 5. 配置文件检测
@@ -242,6 +277,16 @@ async function performStartupHealthCheck(services: Services): Promise<void> {
       } catch (e) {
         // 单个工作区检测失败不阻止其他工作区
         console.error(`[health] 工作区 ${ws.id} 检测失败:`, e instanceof Error ? e.message : e);
+      }
+    }
+
+    // 如果有自动修复，保存 index.json
+    if (needSaveIndex) {
+      try {
+        await services.json.writeIndex(index);
+        console.error("[health] 已保存自动修复的 index.json");
+      } catch (e) {
+        console.error("[health] 保存 index.json 失败:", e instanceof Error ? e.message : e);
       }
     }
   } catch (e) {

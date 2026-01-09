@@ -98,6 +98,9 @@ switch (subcommand) {
   case "rebuild":
     import("./rebuild.js").then((m) => m.default());
     break;
+  case "repair":
+    import("./repair.js").then((m) => m.default());
+    break;
   case "update":
     import("./update.js").then((m) => m.default());
     break;
@@ -120,6 +123,7 @@ TanmiWorkspace v${getVersion()} - AI 工作区管理系统
   plugins    插件管理 (安装/卸载/查看状态)
   webui      启动/管理 WebUI 服务
   rebuild    索引管理 (同步/重建/验证/备份)
+  repair     工作区修复 (诊断问题/自动修复)
   update     更新到最新版本
   -v         显示版本
 
@@ -138,6 +142,11 @@ WebUI 子命令:
   tanmi-workspace rebuild <path>             增量同步项目
   tanmi-workspace rebuild --verify           验证并清理
   tanmi-workspace rebuild --list             列出备份
+
+修复工具子命令:
+  tanmi-workspace repair <工作区路径>             诊断指定工作区
+  tanmi-workspace repair --fix <工作区路径>       修复指定工作区
+  tanmi-workspace repair --fix -i <工作区路径>    交互式修复
 
 更多帮助:
   tanmi-workspace plugins help   插件管理帮助
