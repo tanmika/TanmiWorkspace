@@ -9,6 +9,15 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.6
+    requirement: MEMO 导出、工作区导出/导入、索引管理、派发增强
+    conclusion: |-
+      - MEMO 导出：支持将 MEMO 内容导出为独立文件
+      - 工作区导出/导入：支持工作区完整导出和跨项目导入
+      - 索引管理：WebUI 新增索引管理界面，可查看和重建索引
+      - 功能介绍入口转正：设置页面新增功能介绍生成入口
+      - 多项 Bug 修复和稳定性提升
+    note: ""
   - version: 1.10.5
     requirement: 日志系统、Mermaid 图表、工作区稳定性增强
     conclusion: |-
