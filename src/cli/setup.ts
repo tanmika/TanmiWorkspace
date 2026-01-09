@@ -61,19 +61,24 @@ function getPackageVersion(): string {
 // 检测环境
 interface Environment {
   nodeVersion: string;
+  currentVersion: string;  // 当前 package 版本
   claudeCode: {
     installed: boolean;
     cliAvailable: boolean;
     mcpConfigured: boolean;
     permissionConfigured: boolean;
     hookInstalled: boolean;
+    hookNeedsUpdate?: boolean;
     agentsInstalled: number;  // 已安装 Agent 数量
+    agentsNeedsUpdate?: boolean;
     skillsInstalled: number;  // 已安装 Skill 数量
+    skillsNeedsUpdate?: boolean;
   };
   cursor: {
     installed: boolean;
     mcpConfigured: boolean;
     hookInstalled: boolean;
+    hookNeedsUpdate?: boolean;
   };
 }
 
@@ -134,21 +139,38 @@ async function detectEnvironment(): Promise<Environment> {
 
   return {
     nodeVersion: process.versions.node,
+    currentVersion: pluginStatus.currentVersion,
     claudeCode: {
       installed: existsSync(CLAUDE_HOME),
       cliAvailable: claudeCliAvailable,
       mcpConfigured: claudeMcpConfigured,
       permissionConfigured: claudePermissionConfigured,
       hookInstalled: pluginStatus.claude.hooks,
+      hookNeedsUpdate: pluginStatus.claude.hooksNeedsUpdate,
       agentsInstalled: pluginStatus.claude.agents.length,
+      agentsNeedsUpdate: pluginStatus.claude.agentsNeedsUpdate,
       skillsInstalled: pluginStatus.claude.skills.length,
+      skillsNeedsUpdate: pluginStatus.claude.skillsNeedsUpdate,
     },
     cursor: {
       installed: existsSync(CURSOR_HOME),
       mcpConfigured: cursorMcpConfigured,
       hookInstalled: pluginStatus.cursor.hooks,
+      hookNeedsUpdate: pluginStatus.cursor.hooksNeedsUpdate,
     },
   };
+}
+
+// 格式化插件状态
+function formatPluginStatus(installed: boolean, count: number | null, needsUpdate?: boolean): string {
+  if (!installed && (count === null || count === 0)) {
+    return colors.yellow("○ 未安装");
+  }
+  const countStr = count !== null ? ` (${count})` : "";
+  if (needsUpdate) {
+    return colors.yellow(`⚠ 需更新${countStr}`);
+  }
+  return colors.green(`✓ 已安装${countStr}`);
 }
 
 // 显示状态
@@ -163,15 +185,15 @@ function showStatus(env: Environment) {
   console.log(`  CLI:    ${env.claudeCode.cliAvailable ? colors.green("✓ 可用") : colors.yellow("✗ 未安装")}`);
   console.log(`  MCP:    ${env.claudeCode.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
   console.log(`  权限:   ${env.claudeCode.permissionConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
-  console.log(`  Hooks:  ${env.claudeCode.hookInstalled ? colors.green("✓ 已安装") : colors.yellow("○ 未安装")}`);
-  console.log(`  Agents: ${env.claudeCode.agentsInstalled > 0 ? colors.green(`✓ 已安装 (${env.claudeCode.agentsInstalled})`) : colors.yellow("○ 未安装")}`);
-  console.log(`  Skills: ${env.claudeCode.skillsInstalled > 0 ? colors.green(`✓ 已安装 (${env.claudeCode.skillsInstalled})`) : colors.yellow("○ 未安装")}`);
+  console.log(`  Hooks:  ${formatPluginStatus(env.claudeCode.hookInstalled, null, env.claudeCode.hookNeedsUpdate)}`);
+  console.log(`  Agents: ${formatPluginStatus(env.claudeCode.agentsInstalled > 0, env.claudeCode.agentsInstalled, env.claudeCode.agentsNeedsUpdate)}`);
+  console.log(`  Skills: ${formatPluginStatus(env.claudeCode.skillsInstalled > 0, env.claudeCode.skillsInstalled, env.claudeCode.skillsNeedsUpdate)}`);
   console.log("");
 
   console.log(colors.bold("Cursor:"));
   console.log(`  目录:  ${env.cursor.installed ? colors.green("✓") : colors.red("✗")} ${CURSOR_HOME}`);
   console.log(`  MCP:   ${env.cursor.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
-  console.log(`  Hooks: ${env.cursor.hookInstalled ? colors.green("✓ 已安装") : colors.yellow("○ 未安装")}`);
+  console.log(`  Hooks: ${formatPluginStatus(env.cursor.hookInstalled, null, env.cursor.hookNeedsUpdate)}`);
   console.log("");
 }
 
@@ -373,9 +395,9 @@ export default async function setup() {
     console.log(colors.bold("当前状态:"));
     console.log(`  MCP:    ${env.claudeCode.mcpConfigured ? colors.green("已配置") : colors.yellow("未配置")}`);
     console.log(`  权限:   ${env.claudeCode.permissionConfigured ? colors.green("已配置") : colors.yellow("未配置")}`);
-    console.log(`  Hooks:  ${env.claudeCode.hookInstalled ? colors.green("已安装") : colors.yellow("未安装")}`);
-    console.log(`  Agents: ${env.claudeCode.agentsInstalled > 0 ? colors.green(`已安装 (${env.claudeCode.agentsInstalled})`) : colors.yellow("未安装")}`);
-    console.log(`  Skills: ${env.claudeCode.skillsInstalled > 0 ? colors.green(`已安装 (${env.claudeCode.skillsInstalled})`) : colors.yellow("未安装")}`);
+    console.log(`  Hooks:  ${formatPluginStatus(env.claudeCode.hookInstalled, null, env.claudeCode.hookNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
+    console.log(`  Agents: ${formatPluginStatus(env.claudeCode.agentsInstalled > 0, env.claudeCode.agentsInstalled, env.claudeCode.agentsNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
+    console.log(`  Skills: ${formatPluginStatus(env.claudeCode.skillsInstalled > 0, env.claudeCode.skillsInstalled, env.claudeCode.skillsNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
     console.log("");
 
     const choice = await select({

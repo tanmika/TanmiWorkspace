@@ -253,19 +253,42 @@ function isDirEmpty(dirPath: string): boolean {
 // ============================================================================
 
 interface PluginStatus {
+  currentVersion: string; // 当前 package 版本
   claude: {
     hooks: boolean;
+    hooksVersion?: string; // 安装时的版本
+    hooksNeedsUpdate?: boolean; // 是否需要更新
     agents: string[]; // 已安装的 agent 文件名
+    agentsVersion?: string;
+    agentsNeedsUpdate?: boolean;
     skills: string[]; // 已安装的 skill 目录名
+    skillsVersion?: string;
+    skillsNeedsUpdate?: boolean;
   };
   cursor: {
     hooks: boolean;
+    hooksVersion?: string;
+    hooksNeedsUpdate?: boolean;
   };
 }
 
+// 比较版本，只比较 major.minor 部分
+function needsVersionUpdate(installedVersion: string | undefined, currentVersion: string): boolean {
+  if (!installedVersion) return false; // 没有记录版本信息，无法判断
+  const installedParts = installedVersion.split(".").slice(0, 2).join(".");
+  const currentParts = currentVersion.split(".").slice(0, 2).join(".");
+  return installedParts !== currentParts;
+}
+
 function getPluginStatus(): PluginStatus {
+  const currentVersion = getPackageVersion();
+  const meta = readInstallationMeta();
+  const claudePlatform = meta.global.platforms["claudeCode"];
+  const cursorPlatform = meta.global.platforms["cursor"];
+
   // Claude hooks
   const claudeHooksInstalled = existsSync(join(TANMI_SCRIPTS, "hook-entry.cjs"));
+  const claudeHooksVersion = claudePlatform?.components?.hooks?.version;
 
   // Claude agents - 动态检测已安装的 agent
   const agentsDir = join(CLAUDE_HOME, "agents");
@@ -279,6 +302,7 @@ function getPluginStatus(): PluginStatus {
       }
     }
   }
+  const claudeAgentsVersion = claudePlatform?.components?.agents?.version;
 
   // Claude skills
   const skillsDir = join(CLAUDE_HOME, "skills");
@@ -294,44 +318,74 @@ function getPluginStatus(): PluginStatus {
       }
     }
   }
+  const claudeSkillsVersion = claudePlatform?.components?.skills?.version;
 
   // Cursor hooks
   const cursorHooksInstalled = existsSync(join(TANMI_SCRIPTS, "cursor-hook-entry.cjs"));
+  const cursorHooksVersion = cursorPlatform?.components?.hooks?.version;
 
   return {
+    currentVersion,
     claude: {
       hooks: claudeHooksInstalled,
+      hooksVersion: claudeHooksVersion,
+      hooksNeedsUpdate: claudeHooksInstalled && needsVersionUpdate(claudeHooksVersion, currentVersion),
       agents: installedAgents,
+      agentsVersion: claudeAgentsVersion,
+      agentsNeedsUpdate: installedAgents.length > 0 && needsVersionUpdate(claudeAgentsVersion, currentVersion),
       skills: installedSkills,
+      skillsVersion: claudeSkillsVersion,
+      skillsNeedsUpdate: installedSkills.length > 0 && needsVersionUpdate(claudeSkillsVersion, currentVersion),
     },
     cursor: {
       hooks: cursorHooksInstalled,
+      hooksVersion: cursorHooksVersion,
+      hooksNeedsUpdate: cursorHooksInstalled && needsVersionUpdate(cursorHooksVersion, currentVersion),
     },
   };
 }
 
+// 格式化组件状态显示
+function formatComponentStatus(
+  installed: boolean,
+  count: number | null, // null 表示不显示数量
+  needsUpdate: boolean | undefined,
+  installedVersion: string | undefined
+): string {
+  if (!installed && count !== null && count === 0) {
+    return colors.gray("未安装");
+  }
+  if (!installed) {
+    return colors.gray("未安装");
+  }
+
+  const countStr = count !== null ? ` (${count})` : "";
+
+  if (needsUpdate) {
+    const versionStr = installedVersion ? ` v${installedVersion}` : "";
+    return colors.yellow(`需更新${countStr}${versionStr}`);
+  }
+
+  return colors.green(`已安装${countStr}`);
+}
+
 function showStatus(): void {
   const status = getPluginStatus();
-  const version = getPackageVersion();
 
   console.log("");
-  console.log(colors.bold(`TanmiWorkspace 插件状态 (v${version})`));
+  console.log(colors.bold(`TanmiWorkspace 插件状态 (v${status.currentVersion})`));
   console.log("");
 
   // Claude Code
   console.log(colors.bold("Claude Code:"));
-  console.log(`  Hooks:  ${status.claude.hooks ? colors.green("已安装") : colors.gray("未安装")}`);
-  console.log(
-    `  Agents: ${status.claude.agents.length > 0 ? colors.green(`已安装 (${status.claude.agents.length})`) : colors.gray("未安装")}`
-  );
+  console.log(`  Hooks:  ${formatComponentStatus(status.claude.hooks, null, status.claude.hooksNeedsUpdate, status.claude.hooksVersion)}`);
+  console.log(`  Agents: ${formatComponentStatus(status.claude.agents.length > 0, status.claude.agents.length, status.claude.agentsNeedsUpdate, status.claude.agentsVersion)}`);
   if (status.claude.agents.length > 0) {
     for (const agent of status.claude.agents) {
       console.log(`          ${colors.gray("-")} ${agent}`);
     }
   }
-  console.log(
-    `  Skills: ${status.claude.skills.length > 0 ? colors.green(`已安装 (${status.claude.skills.length})`) : colors.gray("未安装")}`
-  );
+  console.log(`  Skills: ${formatComponentStatus(status.claude.skills.length > 0, status.claude.skills.length, status.claude.skillsNeedsUpdate, status.claude.skillsVersion)}`);
   if (status.claude.skills.length > 0) {
     for (const skill of status.claude.skills) {
       console.log(`          ${colors.gray("-")} ${skill}`);
@@ -341,7 +395,7 @@ function showStatus(): void {
 
   // Cursor
   console.log(colors.bold("Cursor:"));
-  console.log(`  Hooks:  ${status.cursor.hooks ? colors.green("已安装") : colors.gray("未安装")}`);
+  console.log(`  Hooks:  ${formatComponentStatus(status.cursor.hooks, null, status.cursor.hooksNeedsUpdate, status.cursor.hooksVersion)}`);
   console.log("");
 
   // 安装路径
