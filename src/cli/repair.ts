@@ -230,9 +230,17 @@ function resolveWorkspacePath(input: string): WorkspaceLocation | null {
 
         // 尝试从 index 中找对应条目
         const index = readIndex();
-        const indexEntry = index?.workspaces.find(w =>
+        // 先尝试通过 dirName 或目录名匹配
+        let indexEntry = index?.workspaces.find(w =>
           w.dirName === wsDirName || w.id === wsDirName
         );
+        // 如果没找到，读取 workspace.json 中的 id 再尝试匹配
+        if (!indexEntry) {
+          const config = readJson<WorkspaceConfig>(configPath);
+          if (config?.id) {
+            indexEntry = index?.workspaces.find(w => w.id === config.id);
+          }
+        }
 
         return { projectRoot, wsDir, wsDirName, wsPath, indexEntry };
       }
