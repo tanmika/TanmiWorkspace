@@ -589,40 +589,32 @@ export class TutorialService {
   }
 
   /**
-   * 手动触发创建教程工作区（通过设置页面连续点击版本号5次触发）
-   * 如果教程不存在，创建完整版本历史
+   * 手动触发创建教程工作区（覆盖模式）
+   * 删除现有工作区后重新创建
    */
   async manualTriggerTutorial(): Promise<{ created: boolean; message: string }> {
     const tutorialDir = this.getTutorialDir();
     const existingWorkspaces = await this.workspace.list({});
 
-    // 检查功能简介工作区
+    // 查找并删除现有工作区
     const introWs = existingWorkspaces.workspaces.find(
       ws => ws.name === "TanmiWorkspace 功能简介" && ws.projectRoot === tutorialDir
     );
-
-    // 检查版本更新工作区
     const versionWs = existingWorkspaces.workspaces.find(
       ws => ws.name === "TanmiWorkspace 版本更新" && ws.projectRoot === tutorialDir
     );
 
-    const results: string[] = [];
-
-    // 创建缺失的工作区
-    if (!introWs) {
-      await this.createTutorialWorkspace();
-      results.push("功能简介");
+    // 删除现有工作区
+    if (introWs) {
+      await this.workspace.delete({ workspaceId: introWs.id, force: true });
+    }
+    if (versionWs) {
+      await this.workspace.delete({ workspaceId: versionWs.id, force: true });
     }
 
-    if (!versionWs) {
-      // 手动触发时显示完整版本历史
-      await this.createVersionUpdateWorkspace(undefined, true);
-      results.push("版本更新（完整历史）");
-    }
-
-    if (results.length === 0) {
-      return { created: false, message: "教程工作区已存在" };
-    }
+    // 重新创建工作区
+    await this.createTutorialWorkspace();
+    await this.createVersionUpdateWorkspace(undefined, true);
 
     // 更新配置
     const currentConfig = await this.config.readConfig();
@@ -632,7 +624,7 @@ export class TutorialService {
       tutorialVersion: TUTORIAL_VERSION,
     });
 
-    return { created: true, message: `已创建：${results.join("、")}` };
+    return { created: true, message: "已重新生成功能简介与版本更新记录" };
   }
 
   /**

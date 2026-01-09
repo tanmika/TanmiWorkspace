@@ -36,10 +36,6 @@ const buildTimeDiffTooLarge = computed(() => {
   return diffSeconds > 100
 })
 
-// 版本点击计数（连续点击5次触发教程创建）
-const versionClickCount = ref(0)
-const versionClickTimer = ref<number | null>(null)
-const tutorialTriggering = ref(false)
 
 // Props
 interface Props {
@@ -170,45 +166,30 @@ function openFullDocs() {
   window.open('/docs', '_blank')
 }
 
-// 版本号点击处理（连续点击5次触发教程创建 - 彩蛋功能）
-async function handleVersionClick() {
-  if (tutorialTriggering.value) return
+// 生成功能介绍工作区
+const tutorialGenerating = ref(false)
+const showTutorialConfirm = ref(false)
 
-  // 清除之前的计时器
-  if (versionClickTimer.value) {
-    clearTimeout(versionClickTimer.value)
-  }
-
-  // 增加点击计数
-  versionClickCount.value++
-
-  // 达到5次触发教程创建
-  if (versionClickCount.value >= 5) {
-    versionClickCount.value = 0
-    tutorialTriggering.value = true
-
-    try {
-      const result = await settingsApi.triggerTutorial()
-      if (result.created) {
-        toastStore.info('叮~')
-        emit('tutorialCreated')
-      } else {
-        // 彩蛋：已存在时显示喵~
-        toastStore.info('喵~')
-      }
-    } catch (e) {
-      console.error('[Tutorial] trigger failed:', e)
-    } finally {
-      tutorialTriggering.value = false
-    }
-    return
-  }
-
-  // 设置1秒超时重置计数
-  versionClickTimer.value = window.setTimeout(() => {
-    versionClickCount.value = 0
-  }, 1000)
+function confirmGenerateTutorial() {
+  showTutorialConfirm.value = true
 }
+
+async function handleGenerateTutorial() {
+  if (tutorialGenerating.value) return
+  tutorialGenerating.value = true
+
+  try {
+    const result = await settingsApi.triggerTutorial()
+    toastStore.success(result.message || '已生成功能介绍与版本更新记录')
+    emit('tutorialCreated')
+  } catch (e) {
+    console.error('[Tutorial] generate failed:', e)
+    toastStore.error('生成失败')
+  } finally {
+    tutorialGenerating.value = false
+  }
+}
+
 </script>
 
 <template>
@@ -425,9 +406,19 @@ async function handleVersionClick() {
           </WsCollapse>
         </div>
 
-        <a class="doc-link" href="javascript:void(0)" @click="openFullDocs">
-          查看完整手册 <span class="doc-link-arrow">&rarr;</span>
-        </a>
+        <div class="doc-links">
+          <a class="doc-link" href="javascript:void(0)" @click="openFullDocs">
+            查看完整手册 <span class="doc-link-arrow">&rarr;</span>
+          </a>
+          <a
+            class="doc-link"
+            :class="{ disabled: tutorialGenerating }"
+            href="javascript:void(0)"
+            @click="confirmGenerateTutorial"
+          >
+            {{ tutorialGenerating ? '生成中...' : '生成功能介绍与版本更新记录' }} <span class="doc-link-arrow">&rarr;</span>
+          </a>
+        </div>
       </div>
 
       <!-- 版本信息 -->
@@ -436,14 +427,7 @@ async function handleVersionClick() {
         <div class="tech-spec">
           <div class="spec-item">
             <label>BACKEND VERSION</label>
-            <div
-              class="spec-value version-clickable"
-              :class="{ 'version-clicking': versionClickCount > 2 }"
-              @click="handleVersionClick"
-            >
-              v{{ devInfo?.packageVersion || '-' }}
-              <span v-if="versionClickCount > 2" class="click-indicator">{{ versionClickCount }}/5</span>
-            </div>
+            <div class="spec-value">v{{ devInfo?.packageVersion || '-' }}</div>
           </div>
           <div class="spec-item">
             <label>NODE VERSION</label>
@@ -497,6 +481,17 @@ async function handleVersionClick() {
   <IndexManagementModal
     v-model:visible="showIndexManagement"
     @workspace-imported="handleWorkspaceImported"
+  />
+
+  <!-- 生成功能介绍确认弹窗 -->
+  <WsConfirmDialog
+    v-model="showTutorialConfirm"
+    title="生成功能介绍"
+    message="将重新生成「功能简介」和「版本更新」工作区。如果已存在，将被覆盖。确定继续吗？"
+    type="info"
+    confirm-text="确定生成"
+    cancel-text="取消"
+    @confirm="handleGenerateTutorial"
   />
 </template>
 
@@ -734,31 +729,6 @@ async function handleVersionClick() {
 
 [data-theme="dark"] .spec-warning {
   color: #fbbf24;
-}
-
-/* 版本号可点击样式（彩蛋，隐藏交互反馈） */
-.version-clickable {
-  cursor: text;  /* 隐藏可点击的暗示 */
-  user-select: none;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* 只在点击超过2次后才显示反馈 */
-.version-clicking {
-  color: var(--accent-red);
-  transition: color 0.15s ease;
-}
-
-.click-indicator {
-  font-size: 10px;
-  background: var(--accent-red);
-  color: #fff;
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-weight: 600;
 }
 
 /* 插件详情区 */
@@ -1020,12 +990,18 @@ async function handleVersionClick() {
   border-bottom: none;
 }
 
-/* 文档链接 */
+/* 文档链接组 */
+.doc-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .doc-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-top: 16px;
   font-size: 13px;
   color: var(--accent-red);
   text-decoration: none;
@@ -1035,6 +1011,12 @@ async function handleVersionClick() {
 
 .doc-link:hover {
   opacity: 0.8;
+}
+
+.doc-link.disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .doc-link-arrow {
