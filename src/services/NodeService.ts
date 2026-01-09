@@ -596,7 +596,25 @@ export class NodeService {
     }
 
     const infoMd = await this.md.readNodeInfoRaw(projectRoot, wsDirName, nodeDirName, isArchived);
-    const logMd = await this.md.readLogRaw(projectRoot, wsDirName, nodeDirName, isArchived);
+
+    // 读取并压缩日志：截取最新 5 条，简化格式
+    const MAX_LOG_ENTRIES = 5;
+    const logContent = await this.md.readLogRaw(projectRoot, wsDirName, nodeDirName, isArchived);
+    const logs = this.md.parseLogTable(logContent);
+    const recentLogs = logs.slice(-MAX_LOG_ENTRIES);
+
+    let logMd = "";
+    if (recentLogs.length > 0) {
+      const lines = recentLogs.map(log => {
+        const operator = log.operator !== "AI" ? `[${log.operator}] ` : "";
+        return `- [${log.timestamp}] ${operator}${log.event}`;
+      });
+      if (logs.length > MAX_LOG_ENTRIES) {
+        lines.unshift(`（共 ${logs.length} 条，显示最新 ${MAX_LOG_ENTRIES} 条）`);
+      }
+      logMd = lines.join("\n");
+    }
+
     const problemMd = await this.md.readProblemRaw(projectRoot, wsDirName, nodeDirName, isArchived);
 
     // 兼容旧数据：从 Info.md 补充缺失的 meta 字段
