@@ -463,9 +463,27 @@ Read(file_path: <返回的路径>/SKILL.md)
     // 3. 构建拓扑结构
     const topology = this.buildTopology(graph.nodes, "root", focusPath, titles);
 
+    // 构建轻量 graph（移除 nodes，用 topology 替代）
+    // 压缩 memos：只保留 id, title, summary
+    const lightMemos = graph.memos
+      ? Object.fromEntries(
+          Object.entries(graph.memos).map(([key, memo]) => [
+            key,
+            { id: memo.id, title: memo.title, summary: memo.summary },
+          ])
+        )
+      : undefined;
+
+    const lightGraph = {
+      version: graph.version,
+      currentFocus: graph.currentFocus,
+      lastWriteCodeVersion: graph.lastWriteCodeVersion,
+      memos: lightMemos,
+    };
+
     const result: WorkspaceGetResult = {
       config,
-      graph,
+      graph: lightGraph as typeof graph,
       workspaceMd,
       logMd,
       webUrl: `http://localhost:${getHttpPort()}/workspace/${workspaceId}`,
