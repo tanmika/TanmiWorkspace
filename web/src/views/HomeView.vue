@@ -939,6 +939,8 @@ function getBadgeText(status: string) {
   border-left: 4px solid var(--border-heavy);
   transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .card:hover {
@@ -984,6 +986,7 @@ function getBadgeText(status: string) {
 
 .card-body {
   padding: 0 20px 16px;
+  flex: 1;
 }
 
 .path-box {
