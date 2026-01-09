@@ -409,7 +409,26 @@ Read(file_path: <返回的路径>/SKILL.md)
     }
 
     const workspaceMd = await this.md.readWorkspaceMdRaw(projectRoot, wsDirName, isArchived);
-    const logMd = await this.md.readLogRaw(projectRoot, wsDirName, undefined, isArchived);
+
+    // 读取并压缩日志：截取最新 5 条，简化格式
+    const MAX_LOG_ENTRIES = 5;
+    const logContent = await this.md.readLogRaw(projectRoot, wsDirName, undefined, isArchived);
+    const logs = this.md.parseLogTable(logContent);
+    const recentLogs = logs.slice(-MAX_LOG_ENTRIES);
+
+    let logMd = "";
+    if (recentLogs.length > 0) {
+      const lines = recentLogs.map(log => {
+        // 只有非 AI 操作才标注操作者
+        const operator = log.operator !== "AI" ? `[${log.operator}] ` : "";
+        return `- [${log.timestamp}] ${operator}${log.event}`;
+      });
+      // 如果有更多历史，提示总数
+      if (logs.length > MAX_LOG_ENTRIES) {
+        lines.unshift(`（共 ${logs.length} 条，显示最新 ${MAX_LOG_ENTRIES} 条）`);
+      }
+      logMd = lines.join("\n");
+    }
 
     // 解析规则并计算哈希
     const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName, isArchived);
