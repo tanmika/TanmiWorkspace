@@ -134,6 +134,27 @@ const TUTORIAL_CONTENT = {
           targetStatus: "completed",
           conclusion: "刷新机制确保 WebUI 与后端数据同步",
         },
+        {
+          type: "execution" as const,
+          title: "索引管理",
+          requirement: `管理工作区的导入导出。
+
+**导出工作区**
+工作区详情页 →「EXPORT」按钮
+- 导出为 .twsp 文件
+- 包含完整工作区数据，可用于备份或迁移
+
+**导入工作区**
+设置 → 索引管理 → 管理
+- 拖拽 .twsp 文件直接导入
+- 拖拽项目目录自动扫描
+- 手动输入路径
+
+**同步清理**
+扫描已索引路径，发现新工作区并清理无效条目。`,
+          targetStatus: "completed",
+          conclusion: "通过 .twsp 文件可以迁移和备份工作区",
+        },
       ],
     },
     // 节点体系 - 规划节点
@@ -328,6 +349,10 @@ MEMO 是节点级的长篇内容记录功能，适合存储：
 ## 使用方法
 
 在对话中告知AI使用memo创建草稿/总结上文/跟进讨论
+
+## 导出功能
+
+MEMO 支持导出为独立 Markdown 文件，点击详情页「下载」按钮即可导出。
 `,
           },
         },

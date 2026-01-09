@@ -10,7 +10,7 @@ import WsButton from '@/components/ui/WsButton.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 import WsCollapse from '@/components/ui/WsCollapse.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
-import IndexManagementModal from '@/components/IndexManagementModal.vue'
+import IndexManagementModal from '@/components/IndexManagementModalNew.vue'
 import { quickStartContent, triggerWords } from '@/data/helpContent'
 
 const settingsStore = useSettingsStore()

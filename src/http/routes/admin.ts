@@ -570,47 +570,57 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     let tempFilePath: string | null = null;
 
     try {
-      // 解析 multipart 数据（使用 parts() 以同时获取文件和字段）
+      fastify.log.info("开始处理 .twsp 导入请求");
+
+      // 解析 multipart 数据
+      // 注意：file 流必须在遍历过程中立即消费，不能等到循环结束后
       const parts = request.parts();
-      let fileData: { filename: string; file: NodeJS.ReadableStream } | null = null;
+      let filename: string | null = null;
       let targetDir: string | undefined;
+
+      // 先准备临时目录
+      const tempDir = join(os.tmpdir(), "twsp-upload");
+      await mkdir(tempDir, { recursive: true });
 
       for await (const part of parts) {
         if (part.type === "file" && part.fieldname === "file") {
-          fileData = { filename: part.filename, file: part.file };
+          filename = part.filename || "upload.twsp";
+          fastify.log.info({ filename }, "接收到文件");
+
+          // 验证文件扩展名
+          if (!filename.endsWith(".twsp")) {
+            // 必须消费掉流，否则会导致连接挂起
+            await part.file.resume();
+            return reply.status(400).send({
+              error: "INVALID_FILE_TYPE",
+              message: "仅支持 .twsp 文件",
+            });
+          }
+
+          // 立即保存到临时文件（在循环内消费流）
+          tempFilePath = join(tempDir, `${Date.now()}-${basename(filename)}`);
+          const writeStream = createWriteStream(tempFilePath);
+          await pipeline(part.file, writeStream);
+          fastify.log.info({ tempFilePath }, "文件已保存到临时路径");
+
         } else if (part.type === "field" && part.fieldname === "targetDir") {
           targetDir = part.value as string;
+          fastify.log.info({ targetDir }, "目标目录");
         }
       }
 
-      if (!fileData) {
+      if (!tempFilePath || !filename) {
         return reply.status(400).send({
           error: "NO_FILE",
           message: "未上传文件",
         });
       }
 
-      // 验证文件扩展名
-      const filename = fileData.filename || "upload.twsp";
-      if (!filename.endsWith(".twsp")) {
-        return reply.status(400).send({
-          error: "INVALID_FILE_TYPE",
-          message: "仅支持 .twsp 文件",
-        });
-      }
-
-      // 保存到临时文件
-      const tempDir = join(os.tmpdir(), "twsp-upload");
-      await mkdir(tempDir, { recursive: true });
-      tempFilePath = join(tempDir, `${Date.now()}-${basename(filename)}`);
-
-      // 写入临时文件
-      const writeStream = createWriteStream(tempFilePath);
-      await pipeline(fileData.file, writeStream);
-
       // 调用导入服务
+      fastify.log.info("开始导入工作区");
       const services = getServices();
       const result = await services.workspace.importFromTwsp(tempFilePath, targetDir || undefined);
+      fastify.log.info({ workspaceId: result.workspaceId }, "导入完成");
 
       return reply.send({
         success: true,

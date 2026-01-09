@@ -129,6 +129,7 @@ export const adminApi = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 120000, // 文件上传需要更长超时时间（2分钟）
     })
   },
 }

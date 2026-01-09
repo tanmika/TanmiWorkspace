@@ -9,7 +9,7 @@ import { createRequire } from "node:module";
 import { pipeline } from "node:stream/promises";
 import * as os from "node:os";
 import archiver from "archiver";
-import { Extract } from "unzipper";
+import AdmZip from "adm-zip";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
@@ -1968,19 +1968,18 @@ Read(file_path: <返回的路径>/SKILL.md)
     path: string;
     warnings: string[];
   }> {
-    // 1. 确定目标目录（默认 ~/.tanmi-workspace/import/）
-    const finalTargetDir = targetDir || path.join(os.homedir(), ".tanmi-workspace", "import");
+    // 1. 确定目标目录（默认 ~/{localDirName}/import/）
+    const localDirName = this.fs.getDirName();
+    const finalTargetDir = targetDir || path.join(os.homedir(), localDirName, "import");
 
     // 2. 创建临时解压目录
     const extractDir = path.join(os.tmpdir(), `twsp-extract-${Date.now()}`);
     await fs.mkdir(extractDir, { recursive: true });
 
     try {
-      // 3. 解压 .twsp 文件
-      await pipeline(
-        createReadStream(twspPath),
-        Extract({ path: extractDir })
-      );
+      // 3. 解压 .twsp 文件（使用 adm-zip 以正确处理中文路径）
+      const zip = new AdmZip(twspPath);
+      zip.extractAllTo(extractDir, true);
 
       // 4. 读取并验证 manifest.json
       const manifestPath = path.join(extractDir, "manifest.json");
@@ -2018,7 +2017,7 @@ Read(file_path: <返回的路径>/SKILL.md)
 
       // 确保目标目录存在
       await fs.mkdir(finalTargetDir, { recursive: true });
-      const targetWorkspaceDir = path.join(finalTargetDir, ".tanmi-workspace", finalDirName);
+      const targetWorkspaceDir = path.join(finalTargetDir, localDirName, finalDirName);
 
       // 检查目标目录是否存在（重名处理）
       if (existsSync(targetWorkspaceDir)) {
@@ -2027,7 +2026,7 @@ Read(file_path: <返回的路径>/SKILL.md)
         finalDirName = `${baseName}_${timestamp}_${shortId}`;
       }
 
-      const finalWorkspacePath = path.join(finalTargetDir, ".tanmi-workspace", finalDirName);
+      const finalWorkspacePath = path.join(finalTargetDir, localDirName, finalDirName);
 
       // 9. 确保父目录存在并复制文件
       await fs.mkdir(path.dirname(finalWorkspacePath), { recursive: true });
