@@ -432,7 +432,60 @@ async function diagnoseWorkspace(location: WorkspaceLocation): Promise<Issue[]> 
         id: "invalid-workspace-json",
         severity: "error",
         message: "workspace.json 格式无效 (JSON 解析失败)",
-        detail: `请手动检查文件: ${configPath}`,
+        detail: `文件路径: ${configPath}`,
+        interactiveFix: async (rl) => {
+          console.log(`\nworkspace.json 文件损坏，无法解析 JSON。`);
+          console.log(`\n可选操作:`);
+          console.log(`  1. 查看文件内容（前 10 行）`);
+          console.log(`  2. 备份并重建 workspace.json`);
+          console.log(`  3. 跳过`);
+
+          const choice = await prompt(rl, "请选择 (1/2/3): ");
+
+          if (choice === "1") {
+            try {
+              const content = readFileSync(configPath, "utf-8");
+              const lines = content.split("\n").slice(0, 10);
+              console.log(`\n--- 文件内容 (前 10 行) ---`);
+              lines.forEach((line, i) => console.log(`${i + 1}: ${line}`));
+              console.log(`--- 结束 ---\n`);
+              console.log(`请手动编辑文件修复 JSON 格式错误后重新运行 repair`);
+            } catch (e) {
+              error(`读取文件失败: ${e instanceof Error ? e.message : e}`);
+            }
+            return false;
+          }
+
+          if (choice === "2") {
+            // 备份损坏的文件
+            const backupName = createBackup(configPath);
+            if (backupName) {
+              info(`已备份损坏文件: ${backupName}`);
+            }
+
+            // 从 index 获取信息
+            const id = indexEntry?.id || await prompt(rl, "工作区 ID (如 ws-xxx-yyy): ");
+            const name = indexEntry?.name || await prompt(rl, "工作区名称: ");
+
+            if (!id || !name) {
+              error("ID 和名称不能为空");
+              return false;
+            }
+
+            const newConfig: WorkspaceConfig = {
+              id,
+              name,
+              dirName: wsDirName,
+              status: "active",
+              rootNodeId: "root",
+            };
+            writeJson(configPath, newConfig);
+            success(`已重建 workspace.json`);
+            return true;
+          }
+
+          return false;
+        },
       });
     } else {
       // 2.1 缺少 dirName
@@ -548,7 +601,83 @@ status: planning
         id: "invalid-graph-json",
         severity: "error",
         message: "graph.json 格式无效 (JSON 解析失败)",
-        detail: `请手动检查文件: ${graphPath}`,
+        detail: `文件路径: ${graphPath}`,
+        interactiveFix: async (rl) => {
+          console.log(`\ngraph.json 文件损坏，无法解析 JSON。`);
+          console.log(colors.yellow(`\n⚠️  警告：重建 graph.json 会丢失节点关系数据！`));
+          console.log(`\n可选操作:`);
+          console.log(`  1. 查看文件内容（前 10 行）`);
+          console.log(`  2. 备份并重建 graph.json（节点目录仍保留）`);
+          console.log(`  3. 跳过`);
+
+          const choice = await prompt(rl, "请选择 (1/2/3): ");
+
+          if (choice === "1") {
+            try {
+              const content = readFileSync(graphPath, "utf-8");
+              const lines = content.split("\n").slice(0, 10);
+              console.log(`\n--- 文件内容 (前 10 行) ---`);
+              lines.forEach((line, i) => console.log(`${i + 1}: ${line}`));
+              console.log(`--- 结束 ---\n`);
+              console.log(`请手动编辑文件修复 JSON 格式错误后重新运行 repair`);
+            } catch (e) {
+              error(`读取文件失败: ${e instanceof Error ? e.message : e}`);
+            }
+            return false;
+          }
+
+          if (choice === "2") {
+            const confirmed = await confirm(rl, "确认重建 graph.json？节点关系数据将丢失，但节点目录文件会保留");
+            if (!confirmed) return false;
+
+            // 备份损坏的文件
+            const backupName = createBackup(graphPath);
+            if (backupName) {
+              info(`已备份损坏文件: ${backupName}`);
+            }
+
+            // 尝试从节点目录重建
+            const nodesDir = join(wsPath, "nodes");
+            const newGraph: NodeGraph = {
+              version: STORAGE_VERSION,
+              currentFocus: "root",
+              nodes: {
+                root: {
+                  id: "root",
+                  dirName: "root",
+                  status: "planning",
+                  parentId: null,
+                  children: [],
+                },
+              },
+            };
+
+            // 扫描节点目录，添加为 root 的子节点
+            if (existsSync(nodesDir)) {
+              try {
+                const entries = readdirSync(nodesDir, { withFileTypes: true });
+                for (const entry of entries) {
+                  if (!entry.isDirectory() || entry.name === "root") continue;
+                  const nodeId = `node-recovered-${entry.name}`;
+                  newGraph.nodes[nodeId] = {
+                    id: nodeId,
+                    dirName: entry.name,
+                    status: "planning",
+                    parentId: "root",
+                    children: [],
+                  };
+                  newGraph.nodes.root.children!.push(nodeId);
+                }
+              } catch { /* ignore */ }
+            }
+
+            writeJson(graphPath, newGraph);
+            success(`已重建 graph.json，恢复了 ${Object.keys(newGraph.nodes).length - 1} 个节点目录`);
+            return true;
+          }
+
+          return false;
+        },
       });
     } else {
       // 3.1 版本检查
@@ -558,6 +687,35 @@ status: planning
           severity: "error",
           message: `graph.json 版本过高`,
           detail: `文件版本: ${graph.version}, 当前支持: ${STORAGE_VERSION}`,
+          interactiveFix: async (rl) => {
+            console.log(`\ngraph.json 版本 (${graph.version}) 高于当前支持的版本 (${STORAGE_VERSION})。`);
+            console.log(`\n这通常意味着此工作区是用更新版本的 TanmiWorkspace 创建的。`);
+            console.log(`\n${colors.yellow("建议")}: 升级 TanmiWorkspace 到最新版本`);
+            console.log(`  npm install -g tanmi-workspace@latest`);
+            console.log(`\n可选操作:`);
+            console.log(`  1. 强制降级版本号（可能丢失新版本功能）`);
+            console.log(`  2. 跳过`);
+
+            const choice = await prompt(rl, "请选择 (1/2): ");
+
+            if (choice === "1") {
+              const confirmed = await confirm(rl, `确认将版本从 ${graph.version} 降级到 ${STORAGE_VERSION}？`);
+              if (!confirmed) return false;
+
+              // 备份
+              const backupName = createBackup(graphPath);
+              if (backupName) {
+                info(`已备份: ${backupName}`);
+              }
+
+              graph.version = STORAGE_VERSION;
+              writeJson(graphPath, graph);
+              success(`已将版本降级到 ${STORAGE_VERSION}`);
+              return true;
+            }
+
+            return false;
+          },
         });
       }
 
