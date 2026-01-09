@@ -42,6 +42,7 @@ import { logMcpStart, logMcpEnd, logMcpError } from "./utils/sessionLogger.js";
 import { formatManualChangeReminder } from "./utils/manualChangeFormatter.js";
 import { devLog } from "./utils/devLog.js";
 import { INTERNAL_RULES_HASH } from "./services/NodeService.js";
+import { aiAdapter } from "./adapters/OutputAdapter.js";
 
 // ============================================================================
 // 配置
@@ -394,13 +395,16 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
           });
           break;
 
-        case "node_list":
-          result = await services.node.list({
+        case "node_list": {
+          const fullResult = await services.node.list({
             workspaceId: args?.workspaceId as string,
             rootId: args?.rootId as string | undefined,
             depth: args?.depth as number | undefined,
           });
+          // AI 适配器：简化输出，只保留 id 和 title
+          result = aiAdapter.transformNodeList(fullResult);
           break;
+        }
 
         case "node_delete":
           result = await services.node.delete({

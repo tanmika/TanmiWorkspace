@@ -1,0 +1,77 @@
+/**
+ * 输出适配器
+ * 用于将 Service 层的完整输出转换为不同消费者（前端/AI）需要的格式
+ */
+
+import type { NodeListResult, NodeTreeItem } from "../types/node.js";
+
+// ========== AI 简化类型 ==========
+
+/**
+ * 简化版节点树项（AI 用）
+ * 只保留 id 和 title，用于节点查找和定位
+ */
+export interface LiteNodeTreeItem {
+  id: string;
+  title: string;
+  children?: LiteNodeTreeItem[];
+}
+
+/**
+ * 简化版节点列表结果（AI 用）
+ */
+export interface LiteNodeListResult {
+  tree: LiteNodeTreeItem;
+}
+
+// ========== 转换函数 ==========
+
+/**
+ * 将完整节点树转换为简化版
+ */
+function simplifyNodeTreeItem(item: NodeTreeItem): LiteNodeTreeItem {
+  const lite: LiteNodeTreeItem = {
+    id: item.id,
+    title: item.title,
+  };
+
+  if (item.children && item.children.length > 0) {
+    lite.children = item.children.map(simplifyNodeTreeItem);
+  }
+
+  return lite;
+}
+
+/**
+ * 将完整节点列表结果转换为简化版
+ */
+export function simplifyNodeList(result: NodeListResult): LiteNodeListResult {
+  return {
+    tree: simplifyNodeTreeItem(result.tree),
+  };
+}
+
+// ========== 适配器接口 ==========
+
+/**
+ * 输出适配器接口
+ * 定义各工具输出的转换方法
+ */
+export interface OutputAdapter {
+  /** 转换 node_list 输出 */
+  transformNodeList(result: NodeListResult): NodeListResult | LiteNodeListResult;
+}
+
+/**
+ * 前端适配器（identity，原样返回）
+ */
+export const frontendAdapter: OutputAdapter = {
+  transformNodeList: (result) => result,
+};
+
+/**
+ * AI 适配器（简化格式）
+ */
+export const aiAdapter: OutputAdapter = {
+  transformNodeList: simplifyNodeList,
+};
