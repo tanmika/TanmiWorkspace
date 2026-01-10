@@ -4,6 +4,7 @@
  */
 
 import type { NodeListResult, NodeTreeItem } from "../types/node.js";
+import type { WorkspaceListResult } from "../types/workspace.js";
 
 // ========== AI 简化类型 ==========
 
@@ -22,6 +23,28 @@ export interface LiteNodeTreeItem {
  */
 export interface LiteNodeListResult {
   tree: LiteNodeTreeItem;
+}
+
+/**
+ * 简化版工作区列表项（AI 用）
+ * 只保留 id, name, projectRoot
+ * status 仅在 filter="all" 时保留
+ */
+export interface LiteWorkspaceListItem {
+  id: string;
+  name: string;
+  projectRoot: string;
+  status?: string;  // 仅在 filter="all" 时存在
+}
+
+/**
+ * 简化版工作区列表结果（AI 用）
+ * - filter 非 "all" 时：顶层显示 filter 字段，各项不含 status
+ * - filter 为 "all" 时：无顶层 filter，各项包含 status
+ */
+export interface LiteWorkspaceListResult {
+  filter?: string;  // 仅在 filter 非 "all" 时存在
+  workspaces: LiteWorkspaceListItem[];
 }
 
 // ========== 转换函数 ==========
@@ -51,6 +74,40 @@ export function simplifyNodeList(result: NodeListResult): LiteNodeListResult {
   };
 }
 
+/**
+ * 将完整工作区列表结果转换为简化版
+ * @param result 完整工作区列表
+ * @param filter 过滤条件（默认 "active"）
+ */
+export function simplifyWorkspaceList(
+  result: WorkspaceListResult,
+  filter?: "active" | "archived" | "all"
+): LiteWorkspaceListResult {
+  const effectiveFilter = filter ?? "active";
+
+  if (effectiveFilter === "all") {
+    // all: 各项保留 status，无顶层 filter
+    return {
+      workspaces: result.workspaces.map(ws => ({
+        id: ws.id,
+        name: ws.name,
+        projectRoot: ws.projectRoot,
+        status: ws.status,
+      })),
+    };
+  } else {
+    // active/archived: 顶层 filter 字段，各项不含 status
+    return {
+      filter: effectiveFilter,
+      workspaces: result.workspaces.map(ws => ({
+        id: ws.id,
+        name: ws.name,
+        projectRoot: ws.projectRoot,
+      })),
+    };
+  }
+}
+
 // ========== 适配器接口 ==========
 
 /**
@@ -60,6 +117,11 @@ export function simplifyNodeList(result: NodeListResult): LiteNodeListResult {
 export interface OutputAdapter {
   /** 转换 node_list 输出 */
   transformNodeList(result: NodeListResult): NodeListResult | LiteNodeListResult;
+  /** 转换 workspace_list 输出 */
+  transformWorkspaceList(
+    result: WorkspaceListResult,
+    filter?: "active" | "archived" | "all"
+  ): WorkspaceListResult | LiteWorkspaceListResult;
 }
 
 /**
@@ -67,6 +129,7 @@ export interface OutputAdapter {
  */
 export const frontendAdapter: OutputAdapter = {
   transformNodeList: (result) => result,
+  transformWorkspaceList: (result) => result,
 };
 
 /**
@@ -74,4 +137,5 @@ export const frontendAdapter: OutputAdapter = {
  */
 export const aiAdapter: OutputAdapter = {
   transformNodeList: simplifyNodeList,
+  transformWorkspaceList: (result, filter) => simplifyWorkspaceList(result, filter),
 };

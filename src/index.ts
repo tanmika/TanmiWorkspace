@@ -271,11 +271,15 @@ function createMcpServer(services: Services): Server {
           break;
         }
 
-        case "workspace_list":
-          result = await services.workspace.list({
-            status: args?.status as "active" | "archived" | "all" | undefined,
-          });
+        case "workspace_list": {
+          const statusFilter = args?.status as "active" | "archived" | "all" | undefined;
+          const fullResult = await services.workspace.list({ status: statusFilter });
+          // AI 适配器：简化输出
+          // - active/archived: 顶层 filter 字段，各项不含 status
+          // - all: 各项保留 status
+          result = aiAdapter.transformWorkspaceList(fullResult, statusFilter);
           break;
+        }
 
         case "workspace_get":
           result = await services.workspace.get({
