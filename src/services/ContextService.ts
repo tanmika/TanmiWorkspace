@@ -24,6 +24,27 @@ import type { GuidanceContext } from "../types/guidance.js";
 import type { InstallationService } from "./InstallationService.js";
 import { eventService } from "./EventService.js";
 
+// ========== 结论截取常量 ==========
+const CONCLUSION_TRUNCATE_THRESHOLD = 600;  // 超过此长度才截取
+const CONCLUSION_HEAD_LENGTH = 400;         // 保留头部字符数
+const CONCLUSION_TAIL_LENGTH = 200;         // 保留尾部字符数
+
+/**
+ * 软截取结论：前 400 + 尾 200，中间用省略标记
+ * 用于 childConclusions，避免超长老结论占用过多 token
+ */
+function truncateConclusion(conclusion: string): string {
+  if (conclusion.length <= CONCLUSION_TRUNCATE_THRESHOLD) {
+    return conclusion;
+  }
+
+  const head = conclusion.slice(0, CONCLUSION_HEAD_LENGTH);
+  const tail = conclusion.slice(-CONCLUSION_TAIL_LENGTH);
+  const omitted = conclusion.length - CONCLUSION_HEAD_LENGTH - CONCLUSION_TAIL_LENGTH;
+
+  return `${head}\n\n...[已截取 ${omitted} 字符，完整内容请用 node_get 查看]...\n\n${tail}`;
+}
+
 /**
  * 上下文服务
  * 处理上下文获取和焦点管理
@@ -158,6 +179,7 @@ export class ContextService {
 
     // 6. 收集所有直接子节点信息
     // 内容数据以 Info.md 为权威来源
+    // 对超长结论进行软截取（前 400 + 尾 200）
     const childConclusions: ChildConclusionItem[] = [];
     for (const childId of nodeMeta.children) {
       const childMeta = graph.nodes[childId];
@@ -168,7 +190,7 @@ export class ContextService {
           nodeId: childId,
           title: childInfo.title,
           status: childMeta.status,
-          conclusion: childInfo.conclusion || "",
+          conclusion: truncateConclusion(childInfo.conclusion || ""),
         });
       }
     }
