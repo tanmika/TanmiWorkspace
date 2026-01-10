@@ -176,10 +176,10 @@ export class MemoService {
   }
 
   /**
-   * 获取备忘完整内容
+   * 获取备忘内容（支持按行分页）
    */
   async get(params: MemoGetParams): Promise<MemoGetResult> {
-    const { workspaceId, memoId } = params;
+    const { workspaceId, memoId, lineOffset = 1, lineLimit = 500 } = params;
 
     // 1. 获取工作区信息
     const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
@@ -197,18 +197,36 @@ export class MemoService {
     // 4. 读取 Content.md
     const memoDirName = memoMeta.dirName;
     const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
-    const content = await this.fs.readFile(contentPath);
+    const fullContent = await this.fs.readFile(contentPath);
 
-    // 5. 构造完整备忘对象
+    // 5. 按行分页
+    const lines = fullContent.split("\n");
+    const totalLines = lines.length;
+    const startLine = Math.max(1, Math.min(lineOffset, totalLines));
+    const endLine = Math.min(startLine + lineLimit - 1, totalLines);
+    const content = lines.slice(startLine - 1, endLine).join("\n");
+    const contentTruncated = startLine > 1 || endLine < totalLines;
+
+    // 6. 构造备忘对象
     const memo: Memo = {
       ...memoMeta,
       content,
     };
 
-    // 6. 计算内容 hash
-    const contentHash = computeContentHash(content);
+    // 7. 计算内容 hash（基于完整内容）
+    const contentHash = computeContentHash(fullContent);
 
-    return { memo, contentHash };
+    // 8. 返回结果
+    const result: MemoGetResult = { memo, totalLines, contentHash };
+    if (contentTruncated) {
+      result.contentTruncated = true;
+      // 生成继续读取提示
+      if (endLine < totalLines) {
+        result.hint = `已返回第 ${startLine}-${endLine} 行（共 ${totalLines} 行）。继续读取：memo_get({ lineOffset: ${endLine + 1} })`;
+      }
+    }
+
+    return result;
   }
 
   /**

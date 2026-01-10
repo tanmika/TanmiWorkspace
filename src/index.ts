@@ -701,6 +701,8 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
           result = await services.memo.get({
             workspaceId: args?.workspaceId as string,
             memoId: args?.memoId as string,
+            lineOffset: args?.lineOffset as number | undefined,
+            lineLimit: args?.lineLimit as number | undefined,
           });
           break;
         }

@@ -66,7 +66,21 @@ export const memoListTool: Tool = {
  */
 export const memoGetTool: Tool = {
   name: "memo_get",
-  description: "获取备忘的完整内容。返回的 contentHash 用于后续 memo_update 校验，确保更新时内容未被其他操作修改。",
+  description: `获取备忘内容（支持按行分页）。返回 contentHash 用于 memo_update 校验。
+
+**分页参数**:
+- lineOffset: 起始行号（从 1 开始，默认 1）
+- lineLimit: 返回行数（默认 500）
+
+**返回**:
+- memo: 备忘数据（content 可能被截取）
+- totalLines: 总行数
+- contentHash: 用于 memo_update 校验
+- contentTruncated: 是否被截取
+
+**使用示例**:
+- 读取: memo_get({ workspaceId, memoId })
+- 继续: memo_get({ workspaceId, memoId, lineOffset: 501 })`,
   inputSchema: {
     type: "object",
     properties: {
@@ -77,6 +91,14 @@ export const memoGetTool: Tool = {
       memoId: {
         type: "string",
         description: "备忘 ID",
+      },
+      lineOffset: {
+        type: "number",
+        description: "起始行号（从 1 开始，默认 1）",
+      },
+      lineLimit: {
+        type: "number",
+        description: "返回行数（默认 500）",
       },
     },
     required: ["workspaceId", "memoId"],

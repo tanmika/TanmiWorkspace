@@ -81,15 +81,20 @@ export interface MemoListResult {
 export interface MemoGetParams {
   workspaceId: string;
   memoId: string;
+  lineOffset?: number;              // 起始行（从 1 开始，默认 1）
+  lineLimit?: number;               // 返回行数（默认 500）
 }
 
 /**
  * memo_get 输出
  */
 export interface MemoGetResult {
-  memo: Memo;                       // 完整内容
+  memo: Memo;                       // memo 数据（content 可能被截取）
+  totalLines: number;               // 总行数
+  contentTruncated?: boolean;       // content 是否被截取
   /** 内容的 MD5 hash，用于先读后写校验 */
   contentHash: string;
+  hint?: string;                    // 继续读取提示（截取时返回）
 }
 
 /**
