@@ -33,6 +33,7 @@ import { dispatchTools } from "./tools/dispatch.js";
 import { configTools } from "./tools/config.js";
 import { memoTools } from "./tools/memo.js";
 import { capabilityTools } from "./tools/capability.js";
+import { searchTools } from "./tools/search.js";
 import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
@@ -172,7 +173,7 @@ function createMcpServer(services: Services): Server {
   ];
 
   // 汇总所有工具（用于列表和参数验证）
-  const allToolsWithExtras = [...allTools, ...memoTools, ...capabilityTools];
+  const allToolsWithExtras = [...allTools, ...memoTools, ...capabilityTools, ...searchTools];
 
   // 创建工具名到 Tool 定义的映射（用于参数验证）
   const toolMap = new Map(allToolsWithExtras.map(tool => [tool.name, tool]));
@@ -888,6 +889,27 @@ Read(file_path: <skillsPath>/<skill-name>/SKILL.md)
             path: pluginPath,
             skillsPath: join(pluginPath, "skills"),
           };
+          break;
+        }
+
+        // Search 工具
+        case "workspace_search": {
+          result = await services.search.workspaceSearch({
+            query: args?.query as string,
+            limit: args?.limit as number | undefined,
+          });
+          break;
+        }
+
+        case "content_search": {
+          result = await services.search.contentSearch({
+            workspaceId: args?.workspaceId as string,
+            query: args?.query as string,
+            id: args?.id as string | undefined,
+            target: args?.target as "all" | "node" | "memo" | undefined,
+            limit: args?.limit as number | undefined,
+            context: args?.context as number | undefined,
+          });
           break;
         }
 
