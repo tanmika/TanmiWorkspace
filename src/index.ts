@@ -290,13 +290,6 @@ function createMcpServer(services: Services): Server {
           });
           break;
 
-        case "workspace_status":
-          result = await services.workspace.status({
-            workspaceId: args?.workspaceId as string,
-            format: args?.format as "box" | "markdown" | undefined,
-          });
-          break;
-
         case "workspace_update_rules":
           result = await services.workspace.updateRules({
             workspaceId: args?.workspaceId as string,
@@ -1040,7 +1033,7 @@ Read(file_path: <skillsPath>/<skill-name>/SKILL.md)
 
 ## 常用工具
 - tanmi_help(topic="overview") - 获取系统概述
-- workspace_status - 查看当前状态
+- workspace_get - 获取工作区详情
 - context_get - 获取聚焦上下文
 
 详细信息请调用 tanmi_help(topic="all")`,

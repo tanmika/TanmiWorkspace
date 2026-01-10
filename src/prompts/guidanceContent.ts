@@ -105,7 +105,7 @@ workspace_restore({ workspaceId: "..." })
 工作区已从归档恢复为活跃状态。
 
 ### 恢复后建议
-1. 使用 workspace_status 查看整体进度
+1. 使用 workspace_get 查看整体进度
 2. 使用 context_get 获取当前聚焦节点上下文
 3. 继续执行未完成的任务`,
     relatedHelpTopics: ["resume_task"],

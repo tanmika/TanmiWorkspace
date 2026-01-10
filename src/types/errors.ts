@@ -23,6 +23,7 @@ export const ErrorCodes = {
   // 状态转换错误
   INVALID_TRANSITION: "INVALID_TRANSITION",
   CONCLUSION_REQUIRED: "CONCLUSION_REQUIRED",
+  CONCLUSION_TOO_LONG: "CONCLUSION_TOO_LONG",
   INFO_COLLECTION_REQUIRED: "INFO_COLLECTION_REQUIRED",
   INVALID_CONFIRMATION_TOKEN: "INVALID_CONFIRMATION_TOKEN",
   CONFIRMATION_MISMATCH: "CONFIRMATION_MISMATCH",
@@ -118,6 +119,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   CANNOT_DELETE_ROOT: "无法删除根节点",
   INVALID_TRANSITION: "非法状态转换",
   CONCLUSION_REQUIRED: "complete/fail 动作必须提供 conclusion",
+  CONCLUSION_TOO_LONG: "结论过长，请创建 memo 记录详情后提交精简结论",
   INFO_COLLECTION_REQUIRED: "根节点 start 前必须完成信息收集节点",
   INVALID_CONFIRMATION_TOKEN: "confirmation token 无效或已过期",
   CONFIRMATION_MISMATCH: "confirmation token 对应的节点不匹配",

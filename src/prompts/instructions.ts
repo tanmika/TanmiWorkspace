@@ -199,7 +199,7 @@ export const CORE_WORKFLOW = `
 | \`ask_user\` | workspace_init 完成 | 有文档时询问是否使用；无文档时询问用户是否有其他文档可提供 |
 | \`show_plan\` | node_create 创建计划节点后 | 向用户展示当前计划，等待用户确认（"好"/"继续"/"可以"）后再执行 |
 | \`check_docs\` | 执行节点完成且有文档引用 | 向用户确认引用的文档是否需要同步更新 |
-| \`review_structure\` | reopen 且有子节点 | 先调用 node_list/workspace_status 查看现有结构，评估是否调整现有节点而非创建新节点 |
+| \`review_structure\` | reopen 且有子节点 | 先调用 node_list 查看现有结构，评估是否调整现有节点而非创建新节点 |
 | \`ask_dispatch\` | 首个执行节点启动且项目是 Git 仓库 | 询问用户是否启用派发模式（subagent 执行 + 自动验证 + 失败回滚） |
 | \`dispatch_task\` | dispatch_node 准备完成 | 使用 Task tool 调用 subagent 执行任务，按返回的 prompt 和参数调用 |
 
@@ -303,7 +303,6 @@ export const TOOLS_QUICK_REFERENCE = `
 | workspace_list | 列出所有工作区 | status? (active/archived/all) |
 | workspace_get | 获取工作区详情 | workspaceId |
 | workspace_delete | 删除工作区 | workspaceId, force? |
-| workspace_status | 显示状态概览 | workspaceId, format? |
 
 **重要**：workspace_init 返回 \`webUrl\`，务必告知用户此地址可在浏览器中查看任务进度。
 
@@ -587,7 +586,7 @@ workspace_list({ status: "active" })
 
 **步骤 3：获取工作区状态**
 \`\`\`typescript
-workspace_status({ workspaceId: "xxx", format: "markdown" })
+workspace_get({ workspaceId: "xxx" })
 \`\`\`
 
 **步骤 4：找到当前焦点或最近活跃的节点**
@@ -826,7 +825,7 @@ node_transition({
 
 **获取工作区状态**
 \`\`\`typescript
-workspace_status({ workspaceId: "xxx", format: "markdown" })
+workspace_get({ workspaceId: "xxx" })
 \`\`\`
 
 **输出格式示例**：
@@ -1117,7 +1116,7 @@ node_transition({
 node_list({ workspaceId: "xxx", rootId: "target-node" })
 
 // 或查看工作区状态
-workspace_status({ workspaceId: "xxx", format: "markdown" })
+workspace_get({ workspaceId: "xxx" })
 \`\`\`
 
 **步骤 3：评估并决定**

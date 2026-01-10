@@ -113,29 +113,6 @@ export const workspaceDeleteTool: Tool = {
 };
 
 /**
- * workspace_status 工具定义
- */
-export const workspaceStatusTool: Tool = {
-  name: "workspace_status",
-  description: "获取工作区状态的可视化输出，包含节点树和统计信息。返回 webUrl 可在浏览器中查看完整界面。",
-  inputSchema: {
-    type: "object",
-    properties: {
-      workspaceId: {
-        type: "string",
-        description: "工作区 ID",
-      },
-      format: {
-        type: "string",
-        enum: ["box", "markdown"],
-        description: "输出格式（默认 box）",
-      },
-    },
-    required: ["workspaceId"],
-  },
-};
-
-/**
  * workspace_update_rules 工具定义
  */
 export const workspaceUpdateRulesTool: Tool = {
@@ -186,7 +163,7 @@ export const workspaceArchiveTool: Tool = {
 **归档后**：
 - 工作区状态变为 archived
 - 目录移动到 .tanmi-workspace/archive/ 下
-- 仍可通过 workspace_get/workspace_status 查看
+- 仍可通过 workspace_get 查看
 - 可通过 workspace_restore 恢复`,
   inputSchema: {
     type: "object",
@@ -266,7 +243,6 @@ export const workspaceTools: Tool[] = [
   workspaceListTool,
   workspaceGetTool,
   workspaceDeleteTool,
-  workspaceStatusTool,
   workspaceUpdateRulesTool,
   workspaceArchiveTool,
   workspaceRestoreTool,

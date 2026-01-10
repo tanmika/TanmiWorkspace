@@ -23,6 +23,7 @@ Skills 是指导 AI 执行特定任务的 SOP（标准操作流程）文档。�
 | 流程引导 | actionRequired 强制触发 | 3 |
 | 能力执行 | capability_select 创建能力节点 | 7 |
 | 派发角色 | 派发系统分配角色 | 4 |
+| 功能指南 | AI 主动调用 | 1 |
 
 ### 流程引导类（3 个）
 
@@ -68,6 +69,14 @@ Skills 是指导 AI 执行特定任务的 SOP（标准操作流程）文档。�
 | `executing-task` | dispatch_exec | 执行具体任务 |
 | `reviewing-spec` | dispatch_spec | 规格审查，验证是否满足需求 |
 | `reviewing-quality` | dispatch_quality | 质量审查，检查代码质量 |
+
+### 功能指南类（1 个）
+
+AI 在执行特定功能时主动调用，获取最佳实践指导。
+
+| Skill | 触发场景 | 作用 |
+|-------|----------|------|
+| `memo-create` | 创建 MEMO 时 | 指导 title/summary/content/tags 的格式规范 |
 
 ## Agents（代理）
 

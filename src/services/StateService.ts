@@ -27,6 +27,12 @@ import { isGitRepo, getCurrentCommit } from "../utils/git.js";
 import { eventService } from "./EventService.js";
 
 /**
+ * 结论最大长度（字符数）
+ * 超过此长度时拒绝写入，要求 AI 创建 memo 记录详情后提交精简结论
+ */
+const CONCLUSION_MAX_LENGTH = 600;
+
+/**
  * 待确认 Token 信息
  */
 export interface PendingConfirmation {
@@ -286,6 +292,21 @@ export class StateService {
     // 6. 验证 conclusion 格式（在任何写入操作之前验证，避免数据不一致）
     if (conclusion) {
       validateMultilineContent(conclusion, "结论");
+
+      // 6.1 验证 conclusion 长度（仅 complete 时）
+      if (action === "complete" && conclusion.length > CONCLUSION_MAX_LENGTH) {
+        throw new TanmiError(
+          "CONCLUSION_TOO_LONG",
+          `结论过长(${conclusion.length}字符)，限制${CONCLUSION_MAX_LENGTH}字符。\n\n` +
+          `请按以下步骤处理：\n\n` +
+          `1. 创建 memo 记录完整信息:\n` +
+          `   memo_create({ workspaceId, title, summary, content, tags })\n\n` +
+          `2. 提交精简结论完成节点:\n` +
+          `   node_transition({ action: "complete", conclusion: "精简结论" })\n\n` +
+          `3. 添加 memo 引用（可在 WebUI 跳转查看）:\n` +
+          `   node_reference({ nodeId, targetIdOrPath: "memo:memoId", action: "add" })`
+        );
+      }
     }
 
     // 7. 更新 graph.json 中的节点状态和 conclusion
@@ -459,7 +480,7 @@ export class StateService {
 
       result.actionRequired = {
         type: "review_structure",
-        message: "节点已重开，存在已有子节点。请先调用 node_list 或 workspace_status 查看现有结构，评估是否需要调整现有节点而非创建新节点。",
+        message: "节点已重开，存在已有子节点。请先调用 node_list 查看现有结构，评估是否需要调整现有节点而非创建新节点。",
         data: {
           childCount: nodeMeta.children.length,
           childrenOverview,
