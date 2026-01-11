@@ -93,6 +93,9 @@ export class ContextService {
     if (!wsEntry) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
+    if (wsEntry.status === "error" && wsEntry.errorInfo) {
+      throw new TanmiError("WORKSPACE_ERROR", `工作区 "${workspaceId}" 处于错误状态: ${wsEntry.errorInfo.message}`);
+    }
     const isArchived = wsEntry.status === "archived";
     const wsDirName = wsEntry.dirName || wsEntry.id;  // 向后兼容
     if (isArchived) {

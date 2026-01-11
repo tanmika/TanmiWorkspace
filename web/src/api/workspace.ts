@@ -75,6 +75,21 @@ export const workspaceApi = {
   reload(id: string): Promise<{ success: boolean; message: string }> {
     return client.post(`/workspaces/${id}/reload`)
   },
+
+  // 诊断工作区问题
+  diagnose(id: string): Promise<DiagnoseResult> {
+    return client.post(`/workspaces/${id}/diagnose`)
+  },
+
+  // 修复工作区问题
+  repair(id: string, issueIds?: string[]): Promise<RepairResult> {
+    return client.post(`/workspaces/${id}/repair`, { issueIds })
+  },
+
+  // 标记工作区为错误状态
+  markError(id: string, message: string, errorType?: string): Promise<{ success: boolean }> {
+    return client.post(`/workspaces/${id}/mark-error`, { message, errorType })
+  },
 }
 
 // 开发信息结果类型
@@ -87,4 +102,41 @@ export interface DevInfoResult {
   nodeVersion?: string
   platform?: string
   dataDir?: string
+}
+
+// 诊断问题类型
+export interface RepairIssue {
+  id: string
+  severity: 'error' | 'warning' | 'info'
+  message: string
+  detail?: string
+  fixType: 'auto' | 'interactive' | 'manual'
+}
+
+// 诊断结果类型
+export interface DiagnoseResult {
+  workspaceId: string
+  workspacePath: string
+  issues: RepairIssue[]
+  summary: {
+    total: number
+    errors: number
+    warnings: number
+    autoFixable: number
+    interactiveFixable: number
+    manualFixable: number
+  }
+}
+
+// 修复结果类型
+export interface RepairResult {
+  workspaceId: string
+  fixed: number
+  failed: number
+  skipped: number
+  details: {
+    issueId: string
+    success: boolean
+    message?: string
+  }[]
 }

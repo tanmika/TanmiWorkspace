@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWorkspaceStore, useToastStore } from '@/stores'
-import { workspaceApi, type DevInfoResult } from '@/api/workspace'
+import { workspaceApi, type DevInfoResult, type DiagnoseResult, type RepairIssue } from '@/api/workspace'
 import { settingsApi, type InstallationStatusResult, type PlatformStatus } from '@/api/settings'
 import { getGlobalSSE } from '@/composables/useSSE'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
@@ -286,6 +286,62 @@ function showErrorInfo(ws: WorkspaceEntry) {
 const currentErrorWorkspace = ref<WorkspaceEntry | null>(null)
 const isReloading = ref(false)
 
+// 诊断相关状态
+const diagnoseResult = ref<DiagnoseResult | null>(null)
+const isDiagnosing = ref(false)
+const isRepairing = ref(false)
+
+// 诊断工作区问题
+async function handleDiagnose() {
+  if (!currentErrorWorkspace.value || isDiagnosing.value) return
+
+  isDiagnosing.value = true
+  diagnoseResult.value = null
+  try {
+    diagnoseResult.value = await workspaceApi.diagnose(currentErrorWorkspace.value.id)
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '诊断失败'
+    toastStore.error('诊断失败', message)
+  } finally {
+    isDiagnosing.value = false
+  }
+}
+
+// 修复工作区问题
+async function handleRepair() {
+  if (!currentErrorWorkspace.value || isRepairing.value || !diagnoseResult.value) return
+
+  // 只修复可自动修复的问题
+  const autoFixableIds = diagnoseResult.value.issues
+    .filter(i => i.fixType === 'auto')
+    .map(i => i.id)
+
+  if (autoFixableIds.length === 0) {
+    toastStore.warning('没有可自动修复的问题')
+    return
+  }
+
+  isRepairing.value = true
+  try {
+    const result = await workspaceApi.repair(currentErrorWorkspace.value.id, autoFixableIds)
+    if (result.fixed > 0) {
+      toastStore.success('修复完成', `成功修复 ${result.fixed} 个问题`)
+      // 重新诊断查看剩余问题
+      await handleDiagnose()
+      // 刷新工作区列表
+      await workspaceStore.fetchWorkspaces('all')
+    }
+    if (result.failed > 0) {
+      toastStore.warning('部分修复失败', `${result.failed} 个问题修复失败`)
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '修复失败'
+    toastStore.error('修复失败', message)
+  } finally {
+    isRepairing.value = false
+  }
+}
+
 // 重新加载错误工作区
 async function handleReload() {
   if (!currentErrorWorkspace.value || isReloading.value) return
@@ -296,6 +352,7 @@ async function handleReload() {
     if (result.success) {
       toastStore.success('重新加载成功', result.message)
       showErrorDialog.value = false
+      diagnoseResult.value = null
       // 刷新工作区列表
       await workspaceStore.fetchWorkspaces('all')
     } else {
@@ -307,6 +364,20 @@ async function handleReload() {
   } finally {
     isReloading.value = false
   }
+}
+
+// 获取问题图标
+function getIssueIcon(issue: RepairIssue): string {
+  if (issue.fixType === 'auto') return '✓'
+  if (issue.fixType === 'interactive') return '⚠'
+  return '✗'
+}
+
+// 获取问题样式类
+function getIssueClass(issue: RepairIssue): string {
+  if (issue.fixType === 'auto') return 'issue-auto'
+  if (issue.fixType === 'interactive') return 'issue-interactive'
+  return 'issue-manual'
 }
 
 // 格式化时间
@@ -550,13 +621,55 @@ function getBadgeText(status: string) {
     />
 
     <!-- 错误信息弹窗 -->
-    <WsModal v-model="showErrorDialog" :title="errorDialogTitle" width="480px">
+    <WsModal v-model="showErrorDialog" :title="errorDialogTitle" width="520px">
       <div class="error-message-box">{{ errorDialogMessage }}</div>
+
+      <!-- 诊断结果 -->
+      <div v-if="diagnoseResult" class="diagnose-result">
+        <div class="diagnose-header">
+          <span class="diagnose-title">诊断结果</span>
+          <span class="diagnose-summary">
+            {{ diagnoseResult.summary.total }} 个问题
+            <template v-if="diagnoseResult.summary.autoFixable > 0">
+              ({{ diagnoseResult.summary.autoFixable }} 个可自动修复)
+            </template>
+          </span>
+        </div>
+        <div class="issue-list">
+          <div
+            v-for="issue in diagnoseResult.issues"
+            :key="issue.id"
+            class="issue-item"
+            :class="getIssueClass(issue)"
+          >
+            <span class="issue-icon">{{ getIssueIcon(issue) }}</span>
+            <span class="issue-message">{{ issue.message }}</span>
+            <span v-if="issue.fixType === 'auto'" class="issue-tag tag-auto">可自动修复</span>
+            <span v-else-if="issue.fixType === 'interactive'" class="issue-tag tag-cli">需 CLI 修复</span>
+            <span v-else class="issue-tag tag-manual">需手动修复</span>
+          </div>
+        </div>
+        <div v-if="diagnoseResult.issues.length === 0" class="no-issues">
+          未发现问题，可尝试重新加载
+        </div>
+      </div>
+
       <template #footer>
+        <button class="btn btn-secondary" @click="handleDiagnose" :disabled="isDiagnosing">
+          {{ isDiagnosing ? '诊断中...' : '诊断' }}
+        </button>
+        <button
+          v-if="diagnoseResult && diagnoseResult.summary.autoFixable > 0"
+          class="btn btn-accent"
+          @click="handleRepair"
+          :disabled="isRepairing"
+        >
+          {{ isRepairing ? '修复中...' : `自动修复 (${diagnoseResult.summary.autoFixable})` }}
+        </button>
         <button class="btn btn-secondary" @click="handleReload" :disabled="isReloading">
           {{ isReloading ? '加载中...' : '重新加载' }}
         </button>
-        <button class="btn btn-primary" @click="showErrorDialog = false">关闭</button>
+        <button class="btn btn-primary" @click="showErrorDialog = false; diagnoseResult = null">关闭</button>
       </template>
     </WsModal>
   </div>
@@ -1284,5 +1397,102 @@ function getBadgeText(status: string) {
   background: var(--path-bg);
   padding: 16px;
   border-left: 4px solid var(--accent-red);
+}
+
+/* 诊断结果 */
+.diagnose-result {
+  margin-top: 16px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+}
+
+.diagnose-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--card-footer);
+}
+
+.diagnose-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.diagnose-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--mono-font);
+}
+
+.issue-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.issue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+}
+
+.issue-item:last-child {
+  border-bottom: none;
+}
+
+.issue-icon {
+  width: 16px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.issue-auto .issue-icon {
+  color: var(--accent-green, #22c55e);
+}
+
+.issue-interactive .issue-icon {
+  color: var(--accent-orange, #f59e0b);
+}
+
+.issue-manual .issue-icon {
+  color: var(--accent-red);
+}
+
+.issue-message {
+  flex: 1;
+  color: var(--text-main);
+}
+
+.issue-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  text-transform: uppercase;
+}
+
+.tag-auto {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--accent-green, #22c55e);
+}
+
+.tag-cli {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-orange, #f59e0b);
+}
+
+.tag-manual {
+  background: rgba(217, 43, 43, 0.15);
+  color: var(--accent-red);
+}
+
+.no-issues {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 </style>

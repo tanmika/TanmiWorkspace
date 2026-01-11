@@ -312,4 +312,79 @@ export async function workspaceRoutes(fastify: FastifyInstance): Promise<void> {
       }
     }
   );
+
+  /**
+   * POST /api/workspaces/:id/diagnose - 诊断工作区问题
+   * 返回问题列表，不执行修复
+   */
+  fastify.post<{ Params: WorkspaceIdParams }>(
+    "/workspaces/:id/diagnose",
+    { schema: workspaceIdParamsSchema },
+    async (request: FastifyRequest<{ Params: WorkspaceIdParams }>) => {
+      const workspaceId = request.params.id;
+      return await services.repair.diagnose({ workspaceId });
+    }
+  );
+
+  /**
+   * POST /api/workspaces/:id/repair - 修复工作区问题
+   * 执行自动修复，返回修复结果
+   */
+  fastify.post<{ Params: WorkspaceIdParams; Body: { issueIds?: string[] } }>(
+    "/workspaces/:id/repair",
+    { schema: workspaceIdParamsSchema },
+    async (request: FastifyRequest<{ Params: WorkspaceIdParams; Body: { issueIds?: string[] } }>) => {
+      const workspaceId = request.params.id;
+      const issueIds = request.body?.issueIds;
+      const result = await services.repair.repair({ workspaceId, issueIds });
+
+      // 如果修复成功且没有失败，尝试清除错误状态
+      if (result.fixed > 0 && result.failed === 0) {
+        try {
+          // 尝试重新加载验证
+          await services.workspace.get({ workspaceId });
+          await services.node.list({ workspaceId });
+          // 验证成功，清除错误状态
+          await services.workspace.clearError(workspaceId);
+        } catch {
+          // 验证失败，保持错误状态
+        }
+      }
+
+      return result;
+    }
+  );
+
+  /**
+   * POST /api/workspaces/:id/mark-error - 标记工作区为错误状态
+   * 前端在加载工作区失败时调用
+   */
+  fastify.post<{
+    Params: WorkspaceIdParams;
+    Body: { errorType?: string; message: string };
+  }>(
+    "/workspaces/:id/mark-error",
+    { schema: workspaceIdParamsSchema },
+    async (
+      request: FastifyRequest<{
+        Params: WorkspaceIdParams;
+        Body: { errorType?: string; message: string };
+      }>
+    ) => {
+      const workspaceId = request.params.id;
+      const { errorType = "config_corrupted", message } = request.body || {};
+
+      if (!message) {
+        return { success: false, error: "message is required" };
+      }
+
+      await services.workspace.markAsError(
+        workspaceId,
+        errorType as "dir_missing" | "config_corrupted" | "graph_corrupted" | "version_too_high" | "node_corrupted",
+        message
+      );
+
+      return { success: true };
+    }
+  );
 }

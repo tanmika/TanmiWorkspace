@@ -30,9 +30,13 @@ export class LogService {
    * 根据 workspaceId 获取工作区信息
    */
   private async resolveWorkspaceInfo(workspaceId: string): Promise<{ projectRoot: string; wsDirName: string }> {
-    const entry = await this.json.findWorkspaceEntry(workspaceId);
+    const index = await this.json.readIndex();
+    const entry = index.workspaces.find(ws => ws.id === workspaceId);
     if (!entry) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+    if (entry.status === "error" && entry.errorInfo) {
+      throw new TanmiError("WORKSPACE_ERROR", `工作区 "${workspaceId}" 处于错误状态: ${entry.errorInfo.message}`);
     }
     return {
       projectRoot: entry.projectRoot,

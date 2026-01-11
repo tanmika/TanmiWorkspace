@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 // Element Plus icons (no longer used in header/sidebar)
 import { useWorkspaceStore, useNodeStore, useSettingsStore, useToastStore, useMemoStore } from '@/stores'
 import { adminApi } from '@/api/admin'
+import { workspaceApi } from '@/api/workspace'
 import { getGlobalSSE } from '@/composables/useSSE'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
@@ -134,6 +135,12 @@ async function loadWorkspace() {
     await memoStore.fetchMemos(workspaceId.value)
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : '未知错误'
+    // 标记工作区为错误状态
+    try {
+      await workspaceApi.markError(workspaceId.value, errorMessage)
+    } catch {
+      // 标记失败不影响主流程
+    }
     toastStore.error('加载工作区失败', errorMessage)
     router.push('/')
   }

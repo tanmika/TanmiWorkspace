@@ -373,6 +373,20 @@ Read(file_path: <返回的路径>/SKILL.md)
     const isArchived = status === "archived";
     devLog.workspaceLookup(workspaceId, true, status);
 
+    // 如果工作区处于 error 状态，返回错误信息而不是尝试读取文件
+    if (status === "error" && wsEntry.errorInfo) {
+      throw new TanmiError(
+        "WORKSPACE_ERROR",
+        `工作区 "${workspaceId}" 处于错误状态: ${wsEntry.errorInfo.message}\n` +
+        `错误类型: ${wsEntry.errorInfo.type}\n` +
+        `检测时间: ${wsEntry.errorInfo.detectedAt}\n\n` +
+        `**修复建议**：\n` +
+        `- WebUI: 在首页找到该工作区，点击"查看错误"进行诊断和修复\n` +
+        `- CLI: 运行 tanmi-workspace repair ${workspaceId}\n` +
+        `- 强制删除: workspace_delete(workspaceId, force=true)`
+      );
+    }
+
     // 验证项目目录存在（根据归档状态选择正确路径）
     let workspacePath = this.fs.getWorkspaceBasePath(projectRoot, wsDirName, isArchived);
     devLog.archivePath(workspaceId, isArchived, workspacePath);

@@ -21,6 +21,7 @@ import { DetectionService } from "../services/DetectionService.js";
 import { BackupService } from "../services/BackupService.js";
 import { HealthService } from "../services/HealthService.js";
 import { SearchService } from "../services/SearchService.js";
+import { RepairService } from "../services/RepairService.js";
 import { HelpService } from "../tools/help.js";
 import { extractShortId } from "../utils/id.js";
 
@@ -45,6 +46,7 @@ export interface Services {
   backup: BackupService;
   health: HealthService;
   search: SearchService;
+  repair: RepairService;
   help: HelpService;
 }
 
@@ -94,6 +96,7 @@ export function createServices(): Services {
   const backup = new BackupService(json, fs);
   const health = new HealthService(json, fs);
   const search = new SearchService(json, md, fs);
+  const repair = new RepairService(json, fs);
   const help = new HelpService();
 
   // 设置服务依赖
@@ -123,6 +126,7 @@ export function createServices(): Services {
     backup,
     health,
     search,
+    repair,
     help,
   };
 
