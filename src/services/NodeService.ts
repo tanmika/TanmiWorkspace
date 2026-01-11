@@ -26,6 +26,7 @@ import { TanmiError } from "../types/errors.js";
 import { generateNodeId, generateNodeDirName, extractShortId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { validateNodeTitle } from "../utils/validation.js";
+import { computeNodeHash } from "../utils/hash.js";
 import { devLog } from "../utils/devLog.js";
 import { GuidanceService } from "./GuidanceService.js";
 
@@ -608,11 +609,21 @@ export class NodeService {
       if (!meta.references) meta.references = [];
     }
 
+    // 计算 nodeHash（用于先读后写校验）
+    const nodeInfoParsed = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName, isArchived);
+    const nodeHash = computeNodeHash({
+      title: nodeInfoParsed.title,
+      requirement: nodeInfoParsed.requirement,
+      note: nodeInfoParsed.notes,
+      conclusion: nodeInfoParsed.conclusion,
+    });
+
     return {
       meta,
       infoMd,
       logMd,
       problemMd,
+      nodeHash,
     };
   }
 
@@ -812,18 +823,18 @@ export class NodeService {
    * 更新节点
    */
   async update(params: NodeUpdateParams): Promise<NodeUpdateResult> {
-    const { workspaceId, nodeId, title, requirement, note, conclusion } = params;
+    const { workspaceId, nodeId, nodeHash, title, requirement, note, conclusion, field, old_str, new_str } = params;
 
     // 1. 获取 projectRoot 和 wsDirName
     const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
 
-    // 2. 验证节点存在
+    // 3. 验证节点存在
     const graph = await this.json.readGraph(projectRoot, wsDirName);
     if (!graph.nodes[nodeId]) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
 
-    // 3. 如果提供了新标题，验证合法性
+    // 4. 如果提供了新标题，验证合法性
     if (title !== undefined) {
       validateNodeTitle(title);
     }
@@ -831,28 +842,67 @@ export class NodeService {
     const currentTime = now();
     let nodeDirName = graph.nodes[nodeId].dirName || nodeId;  // 向后兼容
 
-    // 4. 读取现有 Info.md
+    // 5. 读取现有 Info.md
     const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
-    // 5. 更新指定字段
+    // 6. 如果提供了 nodeHash，进行先读后写校验（MCP 调用必须提供，内部调用可跳过）
+    if (nodeHash) {
+      const currentHash = computeNodeHash({
+        title: nodeInfo.title,
+        requirement: nodeInfo.requirement,
+        note: nodeInfo.notes,
+        conclusion: nodeInfo.conclusion,
+      });
+      if (currentHash !== nodeHash) {
+        throw new TanmiError("CONTENT_CHANGED", "内容已变更，请重新 node_get");
+      }
+    }
+
+    // 7. 处理精确替换逻辑（field + old_str + new_str）
     const updates: string[] = [];
     let titleChanged = false;
-    if (title !== undefined && title !== nodeInfo.title) {
-      nodeInfo.title = title;
-      updates.push(`标题: "${title}"`);
-      titleChanged = true;
-    }
-    if (requirement !== undefined && requirement !== nodeInfo.requirement) {
-      nodeInfo.requirement = requirement;
-      updates.push("需求描述");
-    }
-    if (note !== undefined && note !== nodeInfo.notes) {
-      nodeInfo.notes = note;
-      updates.push("备注");
-    }
-    if (conclusion !== undefined && conclusion !== nodeInfo.conclusion) {
-      nodeInfo.conclusion = conclusion;
-      updates.push("结论");
+
+    if (field && old_str !== undefined && new_str !== undefined) {
+      // 精确替换模式
+      const fieldKey = field === "note" ? "notes" : field;
+      const targetContent = nodeInfo[fieldKey] || "";
+
+      // 使用正则计算匹配次数（转义特殊字符）
+      const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(escapeRegExp(old_str), "g");
+      const matches = targetContent.match(regex);
+      const count = matches ? matches.length : 0;
+
+      if (count === 0) {
+        throw new TanmiError("NO_MATCH", "未找到匹配内容");
+      }
+      if (count > 1) {
+        throw new TanmiError("MULTI_MATCH", `找到 ${count} 处匹配，请提供更多上下文`);
+      }
+
+      // 执行替换
+      const newContent = targetContent.replace(old_str, new_str);
+      nodeInfo[fieldKey] = newContent;
+      updates.push(`${field} 精确替换`);
+    } else {
+      // 传统整体更新模式
+      if (title !== undefined && title !== nodeInfo.title) {
+        nodeInfo.title = title;
+        updates.push(`标题: "${title}"`);
+        titleChanged = true;
+      }
+      if (requirement !== undefined && requirement !== nodeInfo.requirement) {
+        nodeInfo.requirement = requirement;
+        updates.push("需求描述");
+      }
+      if (note !== undefined && note !== nodeInfo.notes) {
+        nodeInfo.notes = note;
+        updates.push("备注");
+      }
+      if (conclusion !== undefined && conclusion !== nodeInfo.conclusion) {
+        nodeInfo.conclusion = conclusion;
+        updates.push("结论");
+      }
     }
 
     // 如果没有任何更新，直接返回

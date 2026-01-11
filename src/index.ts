@@ -410,16 +410,26 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
           break;
 
         // Phase 3: 节点更新
-        case "node_update":
+        case "node_update": {
+          // MCP 调用必须提供 nodeHash
+          const nodeHashParam = args?.nodeHash as string | undefined;
+          if (!nodeHashParam) {
+            throw new TanmiError("INVALID_PARAMS", "请先 node_get 获取 nodeHash");
+          }
           result = await services.node.update({
             workspaceId: args?.workspaceId as string,
             nodeId: args?.nodeId as string,
+            nodeHash: nodeHashParam,
             title: args?.title as string | undefined,
             requirement: args?.requirement as string | undefined,
             note: args?.note as string | undefined,
             conclusion: args?.conclusion as string | undefined,
+            field: args?.field as import("./types/node.js").NodeUpdateField | undefined,
+            old_str: args?.old_str as string | undefined,
+            new_str: args?.new_str as string | undefined,
           });
           break;
+        }
 
         case "node_move":
           result = await services.node.move({
@@ -698,10 +708,13 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
           result = await services.memo.update({
             workspaceId: args?.workspaceId as string,
             memoId: args?.memoId as string,
+            contentHash: args?.contentHash as string,
             title: args?.title as string | undefined,
             summary: args?.summary as string | undefined,
             content: args?.content as string | undefined,
-            appendContent: args?.appendContent as string | undefined,
+            field: args?.field as 'content' | 'summary' | undefined,
+            old_str: args?.old_str as string | undefined,
+            new_str: args?.new_str as string | undefined,
             tags: args?.tags as string[] | undefined,
           });
           break;

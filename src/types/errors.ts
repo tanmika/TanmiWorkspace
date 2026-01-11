@@ -47,6 +47,9 @@ export const ErrorCodes = {
   RULES_HASH_MISMATCH: "RULES_HASH_MISMATCH",
   INVALID_PARAMS: "INVALID_PARAMS",
   UNKNOWN_PARAMS: "UNKNOWN_PARAMS",
+  CONTENT_CHANGED: "CONTENT_CHANGED",
+  NO_MATCH: "NO_MATCH",
+  MULTI_MATCH: "MULTI_MATCH",
 
   // 校验错误
   GRAPH_CORRUPTED: "GRAPH_CORRUPTED",
@@ -131,6 +134,9 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   RULES_HASH_MISMATCH: "规则哈希不匹配，请先获取最新规则",
   INVALID_PARAMS: "参数无效",
   UNKNOWN_PARAMS: "存在未知参数",
+  CONTENT_CHANGED: "内容已变更，请重新获取",
+  NO_MATCH: "未找到匹配内容",
+  MULTI_MATCH: "找到多处匹配，请提供更多上下文",
   GRAPH_CORRUPTED: "节点图数据损坏",
   NODE_DIR_MISSING: "节点目录不存在",
   NODE_INFO_MISSING: "节点 Info.md 不存在",

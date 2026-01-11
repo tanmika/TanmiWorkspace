@@ -66,7 +66,7 @@ export const memoListTool: Tool = {
  */
 export const memoGetTool: Tool = {
   name: "memo_get",
-  description: "获取备忘的完整内容。",
+  description: "获取备忘的完整内容。返回的 contentHash 用于后续 memo_update 校验，确保更新时内容未被其他操作修改。",
   inputSchema: {
     type: "object",
     properties: {
@@ -88,7 +88,7 @@ export const memoGetTool: Tool = {
  */
 export const memoUpdateTool: Tool = {
   name: "memo_update",
-  description: "更新备忘。可部分更新 title、summary、content、tags。content 替换全部内容，appendContent 追加到末尾（二者互斥）。tags 会完全替换现有标签。",
+  description: "更新备忘。支持两种编辑模式：1) 全量替换：直接提供 content/summary/title/tags 替换整个字段；2) 精确替换：指定 field + old_str + new_str 进行字符串替换。更新前需提供 contentHash（从 memo_get 获取）进行校验。",
   inputSchema: {
     type: "object",
     properties: {
@@ -100,6 +100,10 @@ export const memoUpdateTool: Tool = {
         type: "string",
         description: "备忘 ID",
       },
+      contentHash: {
+        type: "string",
+        description: "内容 hash（必填，从 memo_get 获取）",
+      },
       title: {
         type: "string",
         description: "新标题（可选）",
@@ -110,11 +114,20 @@ export const memoUpdateTool: Tool = {
       },
       content: {
         type: "string",
-        description: "新内容（可选，替换全部内容，与 appendContent 互斥）",
+        description: "新内容（可选，替换全部内容）",
       },
-      appendContent: {
+      field: {
         type: "string",
-        description: "追加内容（可选，追加到现有内容末尾，与 content 互斥）",
+        enum: ["content", "summary"],
+        description: "要精确替换的字段",
+      },
+      old_str: {
+        type: "string",
+        description: "要替换的原文本",
+      },
+      new_str: {
+        type: "string",
+        description: "替换后的文本",
       },
       tags: {
         type: "array",
@@ -122,7 +135,7 @@ export const memoUpdateTool: Tool = {
         description: "新标签列表（可选，会完全替换现有标签）",
       },
     },
-    required: ["workspaceId", "memoId"],
+    required: ["workspaceId", "memoId", "contentHash"],
   },
 };
 

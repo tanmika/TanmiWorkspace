@@ -121,7 +121,7 @@ export const nodeCreateTool: Tool = {
  */
 export const nodeGetTool: Tool = {
   name: "node_get",
-  description: "获取节点详情，包含元数据和所有 Markdown 内容。",
+  description: "获取节点详情，包含元数据和所有 Markdown 内容。返回的 nodeHash 用于后续 node_update 的乐观锁校验。",
   inputSchema: {
     type: "object",
     properties: {
@@ -193,7 +193,20 @@ export const nodeDeleteTool: Tool = {
  */
 export const nodeUpdateTool: Tool = {
   name: "node_update",
-  description: "更新节点信息（标题、需求、备注、结论）。只更新提供的字段，保留其他字段不变。",
+  description: `更新节点信息，支持两种编辑模式：
+
+**模式一：全量替换**
+直接传入 title/requirement/note/conclusion 的完整新值进行覆盖。
+
+**模式二：精确替换（推荐）**
+传入 field + old_str + new_str 进行字符串级别精确替换，避免并发冲突。
+
+**必填参数**：
+- nodeHash：从 node_get 获取，用于乐观锁校验，防止并发覆盖
+
+**使用建议**：
+- 小修改使用模式二（精确替换），减少冲突风险
+- 大范围重写使用模式一（全量替换）`,
   inputSchema: {
     type: "object",
     properties: {
@@ -205,24 +218,41 @@ export const nodeUpdateTool: Tool = {
         type: "string",
         description: "节点 ID",
       },
+      nodeHash: {
+        type: "string",
+        description: "节点 hash（必填，从 node_get 获取）",
+      },
       title: {
         type: "string",
-        description: "新标题（可选）",
+        description: "新标题（可选，全量替换模式）",
       },
       requirement: {
         type: "string",
-        description: "新需求描述（可选）",
+        description: "新需求描述（可选，全量替换模式）",
       },
       note: {
         type: "string",
-        description: "新备注（可选）",
+        description: "新备注（可选，全量替换模式）",
       },
       conclusion: {
         type: "string",
-        description: "新结论（可选，用于修正已完成节点的结论）",
+        description: "新结论（可选，全量替换模式，用于修正已完成节点的结论）",
+      },
+      field: {
+        type: "string",
+        enum: ["requirement", "note", "conclusion"],
+        description: "要精确替换的字段（精确替换模式）",
+      },
+      old_str: {
+        type: "string",
+        description: "要替换的原文本（精确替换模式）",
+      },
+      new_str: {
+        type: "string",
+        description: "替换后的文本（精确替换模式）",
       },
     },
-    required: ["workspaceId", "nodeId"],
+    required: ["workspaceId", "nodeId", "nodeHash"],
   },
 };
 

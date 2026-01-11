@@ -311,10 +311,40 @@ export const TOOLS_QUICK_REFERENCE = `
 | 工具 | 用途 | 关键参数 |
 |------|------|----------|
 | node_create | 创建子节点 | workspaceId, parentId, **type**, title, requirement, docs? |
-| node_get | 获取节点详情 | workspaceId, nodeId |
+| node_get | 获取节点详情（返回 nodeHash） | workspaceId, nodeId |
 | node_list | 列出节点树 | workspaceId, rootId?, depth? |
-| node_update | 更新节点信息 | workspaceId, nodeId, title?, requirement?, note? |
+| node_update | 更新节点信息（需 nodeHash） | workspaceId, nodeId, **nodeHash**, ... |
 | node_delete | 删除节点 | workspaceId, nodeId |
+
+**★ node_update 先读后写机制（重要！）**：
+
+更新节点前**必须**先调用 \`node_get\` 获取 \`nodeHash\`，然后在 \`node_update\` 中提供该 hash。这是乐观锁机制，防止并发覆盖。
+
+**两种编辑模式**：
+1. **全量替换**：直接提供新值覆盖整个字段
+   \`\`\`typescript
+   node_update({
+     workspaceId: "ws-xxx",
+     nodeId: "node-xxx",
+     nodeHash: "abc123",  // 从 node_get 获取
+     title: "新标题",
+     requirement: "新需求"
+   })
+   \`\`\`
+
+2. **精确替换**：使用 \`field\` + \`old_str\` + \`new_str\` 只替换部分内容
+   \`\`\`typescript
+   node_update({
+     workspaceId: "ws-xxx",
+     nodeId: "node-xxx",
+     nodeHash: "abc123",
+     field: "requirement",    // 目标字段
+     old_str: "旧的部分内容",  // 要替换的内容
+     new_str: "新的部分内容"   // 替换后的内容
+   })
+   \`\`\`
+
+⚠️ **注意**：\`node_update\` 成功后**不返回新 hash**，如需再次更新，必须重新调用 \`node_get\` 获取最新 hash。
 
 **★ type 参数（必填）**：
 - **planning**：规划节点，负责分析、分解任务、创建子节点、汇总结论
@@ -359,6 +389,45 @@ export const TOOLS_QUICK_REFERENCE = `
 | log_append | 追加日志 | workspaceId, nodeId?, operator, event |
 | problem_update | 更新问题 | workspaceId, nodeId?, problem, nextStep? |
 | problem_clear | 清除问题 | workspaceId, nodeId? |
+
+### 备忘录管理
+| 工具 | 用途 | 关键参数 |
+|------|------|----------|
+| memo_create | 创建备忘录 | workspaceId, title, content, tags? |
+| memo_list | 列出备忘录 | workspaceId, tag? |
+| memo_get | 获取备忘录详情（返回 contentHash） | workspaceId, memoId |
+| memo_update | 更新备忘录（需 contentHash） | workspaceId, memoId, **contentHash**, ... |
+| memo_delete | 删除备忘录 | workspaceId, memoId |
+
+**★ memo_update 先读后写机制（重要！）**：
+
+更新备忘录前**必须**先调用 \`memo_get\` 获取 \`contentHash\`，然后在 \`memo_update\` 中提供该 hash。这是乐观锁机制，防止并发覆盖。
+
+**两种编辑模式**：
+1. **全量替换**：直接提供新值覆盖整个字段
+   \`\`\`typescript
+   memo_update({
+     workspaceId: "ws-xxx",
+     memoId: "memo-xxx",
+     contentHash: "def456",  // 从 memo_get 获取
+     title: "新标题",
+     content: "新内容"
+   })
+   \`\`\`
+
+2. **精确替换**：使用 \`field\` + \`old_str\` + \`new_str\` 只替换部分内容
+   \`\`\`typescript
+   memo_update({
+     workspaceId: "ws-xxx",
+     memoId: "memo-xxx",
+     contentHash: "def456",
+     field: "content",         // 目标字段
+     old_str: "旧的部分内容",   // 要替换的内容
+     new_str: "新的部分内容"    // 替换后的内容
+   })
+   \`\`\`
+
+⚠️ **注意**：\`memo_update\` 成功后**不返回新 hash**，如需再次更新，必须重新调用 \`memo_get\` 获取最新 hash。
 
 ### 派发模式（可选）
 | 工具 | 用途 | 关键参数 |

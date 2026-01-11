@@ -22,6 +22,7 @@ import { generateMemoId, generateMemoDirName } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { devLog } from "../utils/devLog.js";
 import { eventService } from "./EventService.js";
+import { computeContentHash } from "../utils/hash.js";
 
 /**
  * Memo 服务
@@ -204,18 +205,21 @@ export class MemoService {
       content,
     };
 
-    return { memo };
+    // 6. 计算内容 hash
+    const contentHash = computeContentHash(content);
+
+    return { memo, contentHash };
   }
 
   /**
    * 更新备忘
    */
   async update(params: MemoUpdateParams): Promise<MemoUpdateResult> {
-    const { workspaceId, memoId, title, summary, content, appendContent, tags } = params;
+    const { workspaceId, memoId, contentHash, title, summary, content, field, old_str, new_str, tags } = params;
 
-    // 0. 验证 content 和 appendContent 互斥
-    if (content !== undefined && appendContent !== undefined) {
-      throw new TanmiError("INVALID_PARAMS", "content 和 appendContent 不能同时使用");
+    // 0. 校验 contentHash 必填
+    if (!contentHash) {
+      throw new TanmiError("INVALID_PARAMS", "请先 memo_get 获取 contentHash");
     }
 
     // 1. 获取工作区信息
@@ -231,21 +235,47 @@ export class MemoService {
       throw new TanmiError("MEMO_NOT_FOUND", `备忘 "${memoId}" 不存在`);
     }
 
-    // 4. 获取目录名
+    // 4. 获取目录名并读取当前内容
     const memoDirName = memoMeta.dirName;
     const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
+    const existingContent = await this.fs.readFile(contentPath);
 
-    // 5. 处理内容更新
-    let finalContent: string | undefined;
-    if (content !== undefined) {
-      finalContent = content;
-    } else if (appendContent !== undefined) {
-      // 读取现有内容并追加
-      const existingContent = await this.fs.readFile(contentPath);
-      finalContent = existingContent + appendContent;
+    // 5. 校验 contentHash
+    const currentHash = computeContentHash(existingContent);
+    if (currentHash !== contentHash) {
+      throw new TanmiError("CONTENT_CHANGED", "内容已变更，请重新 memo_get");
     }
 
-    // 6. 更新备忘元数据
+    // 6. 处理内容更新
+    let finalContent: string | undefined;
+
+    // 6.1 精确替换模式
+    if (field && old_str !== undefined && new_str !== undefined) {
+      const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const targetContent = field === 'content' ? existingContent : memoMeta.summary;
+      const regex = new RegExp(escapeRegExp(old_str), 'g');
+      const matches = targetContent.match(regex);
+      const count = matches ? matches.length : 0;
+      if (count === 0) {
+        throw new TanmiError("NO_MATCH", "未找到匹配内容");
+      }
+      if (count > 1) {
+        throw new TanmiError("MULTI_MATCH", `找到 ${count} 处匹配，请提供更多上下文`);
+      }
+      // 执行替换
+      if (field === 'content') {
+        finalContent = targetContent.replace(old_str, new_str);
+      } else {
+        memoMeta.summary = targetContent.replace(old_str, new_str);
+      }
+    }
+
+    // 6.2 全量替换模式
+    if (content !== undefined) {
+      finalContent = content;
+    }
+
+    // 7. 更新备忘元数据
     const timestamp = now();
     if (title !== undefined) memoMeta.title = title;
     if (summary !== undefined) memoMeta.summary = summary;
@@ -253,15 +283,15 @@ export class MemoService {
     if (finalContent !== undefined) memoMeta.contentLength = finalContent.length;
     memoMeta.updatedAt = timestamp;
 
-    // 7. 写回 graph.json
+    // 8. 写回 graph.json
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 8. 更新 Content.md（如果有内容变更）
+    // 9. 更新 Content.md（如果有内容变更）
     if (finalContent !== undefined) {
       await this.fs.writeFile(contentPath, finalContent);
     }
 
-    // 9. 发送事件通知
+    // 10. 发送事件通知
     eventService.emitMemoUpdate(workspaceId, memoId);
 
     return {

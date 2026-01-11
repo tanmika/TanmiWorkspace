@@ -249,6 +249,8 @@ export interface NodeGetResult {
   infoMd: string;
   logMd: string;
   problemMd: string;
+  /** 节点内容的 hash，用于先读后写校验 */
+  nodeHash: string;
 }
 
 /**
@@ -322,15 +324,34 @@ export interface NodeTransitionResult {
 // ========== Phase 3: 节点更新 ==========
 
 /**
+ * 精确替换的目标字段类型
+ */
+export type NodeUpdateField = 'requirement' | 'note' | 'conclusion';
+
+/**
  * node_update 输入
+ *
+ * 支持两种更新模式：
+ * 1. 整体替换：直接提供 requirement/note/conclusion 字段值
+ * 2. 精确替换：提供 field + old_str + new_str 进行字符串替换
+ *
+ * 两种模式都需要提供 nodeHash 进行先读后写校验
  */
 export interface NodeUpdateParams {
   workspaceId: string;
   nodeId: string;
+  /** 节点内容的 hash，用于先读后写校验（MCP 调用必填，内部调用可省略） */
+  nodeHash?: string;
   title?: string;
   requirement?: string;
   note?: string;
   conclusion?: string;
+  /** 指定要精确替换的字段（与 old_str/new_str 配合使用） */
+  field?: NodeUpdateField;
+  /** 要替换的原文本（精确替换模式） */
+  old_str?: string;
+  /** 替换后的文本（精确替换模式） */
+  new_str?: string;
 }
 
 /**
