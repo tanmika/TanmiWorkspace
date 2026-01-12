@@ -5,6 +5,8 @@ import { spawn } from "child_process";
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { readFileSync } from "fs";
+import { parse as parseYaml } from "yaml";
 
 function getVersion(): string {
   try {
@@ -15,6 +17,93 @@ function getVersion(): string {
     return pkg.version || "0.0.0";
   } catch {
     return "0.0.0";
+  }
+}
+
+interface VersionNote {
+  version: string;
+  requirement: string;
+  conclusion: string;
+  note?: string;
+}
+
+interface VersionNotesFile {
+  versions: VersionNote[];
+}
+
+// 比较版本号，返回 1 (a > b), -1 (a < b), 0 (a == b)
+function compareVersions(a: string, b: string): number {
+  const partsA = a.split(".").map(Number);
+  const partsB = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+    const numA = partsA[i] || 0;
+    const numB = partsB[i] || 0;
+    if (numA > numB) return 1;
+    if (numA < numB) return -1;
+  }
+  return 0;
+}
+
+// 显示更新内容
+async function showUpdateNotes(
+  fromVersion: string,
+  toVersion: string
+): Promise<void> {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const notesPath = join(__dirname, "..", "..", "config", "version-notes.yaml");
+    const content = readFileSync(notesPath, "utf-8");
+    const data = parseYaml(content) as VersionNotesFile;
+
+    if (!data.versions || !Array.isArray(data.versions)) {
+      return;
+    }
+
+    // 找出从 fromVersion（不含）到 toVersion（含）之间的版本
+    const relevantVersions = data.versions.filter((v) => {
+      const cmpFrom = compareVersions(v.version, fromVersion);
+      const cmpTo = compareVersions(v.version, toVersion);
+      return cmpFrom > 0 && cmpTo <= 0;
+    });
+
+    if (relevantVersions.length === 0) {
+      return;
+    }
+
+    // 按版本号降序排列（最新的在前）
+    relevantVersions.sort((a, b) => compareVersions(b.version, a.version));
+
+    console.log("");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("📋 更新内容:");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    // 最多显示 3 个版本的详细内容
+    const maxDisplay = 3;
+    const displayVersions = relevantVersions.slice(0, maxDisplay);
+    const hiddenCount = relevantVersions.length - maxDisplay;
+
+    for (const v of displayVersions) {
+      console.log("");
+      console.log(`v${v.version}: ${v.requirement}`);
+      if (v.conclusion) {
+        const lines = v.conclusion.split("\n");
+        for (const line of lines) {
+          console.log(`  ${line}`);
+        }
+      }
+    }
+
+    if (hiddenCount > 0) {
+      console.log("");
+      console.log(`... 还有 ${hiddenCount} 个版本的更新，详见 CHANGELOG.md`);
+    }
+
+    console.log("");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  } catch {
+    // 读取失败时静默忽略，不影响更新流程
   }
 }
 
@@ -67,10 +156,16 @@ export default async function update() {
     stdio: "inherit",
   });
 
-  child.on("close", (code) => {
+  child.on("close", async (code) => {
     if (code === 0) {
       console.log(`\n更新成功! v${currentVersion} -> v${latestVersion}`);
-      console.log("请重新启动 WebUI 服务以应用更新: tanmi-workspace webui");
+      console.log("");
+      console.log("请重启相关服务以应用更新:");
+      console.log("  - 重启编辑器 (Claude Code / Cursor)");
+      console.log("  - 重启 WebUI: tanmi-workspace webui");
+
+      // 显示更新内容
+      await showUpdateNotes(currentVersion, latestVersion);
     } else {
       console.error("\n更新失败，请尝试手动更新:");
       console.error("  npm install -g tanmi-workspace");
