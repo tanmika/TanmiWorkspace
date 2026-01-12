@@ -11,6 +11,28 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.10.7] - 2026-01-12
+
+### Added
+
+- **WebUI 工作区诊断修复**: 新增诊断/修复功能，工作区加载失败时自动标记为 error 状态，所有 MCP 工具拒绝操作 error 状态工作区
+- **workspace_search/content_search**: 新增跨工作区搜索和全文内容搜索 MCP 工具
+- **先读后写机制**: node_update/memo_update 新增 contentHash 参数，防止并发修改冲突
+- **工作区修复工具**: 添加 CLI repair 命令和启动时自动修复
+
+### Improved
+
+- **MCP 输出优化**: workspace_get/node_get 日志智能压缩、context_get 子结论软截取、移除冗余 workspace_status、结论长度限制
+- **memo_get 分页**: 支持按行分页，默认 500 行限制
+- **MCP 日志分离**: 日志按会话 ID 分离存储，便于问题追踪
+- **前后端解耦**: 引入 OutputAdapter 统一输出格式
+- **CLI 别名**: 新增 tw/tanmiworkspace/tsworkspace 命令别名
+- **插件状态检查**: 增加版本匹配检测
+
+### Fixed
+
+- **repair 工具**: 修复无法识别 index 中缺失 dirName 的问题
+
 ## [1.10.6] - 2026-01-09
 
 ### Added

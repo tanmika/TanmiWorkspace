@@ -342,6 +342,17 @@ async function handleRepair() {
   }
 }
 
+// 复制 CLI 命令
+function copyCliCommand() {
+  if (!currentErrorWorkspace.value) return
+  const command = `tw repair ${currentErrorWorkspace.value.id}`
+  navigator.clipboard.writeText(command).then(() => {
+    toastStore.success('已复制', command)
+  }).catch(() => {
+    toastStore.error('复制失败', '请手动复制命令')
+  })
+}
+
 // 重新加载错误工作区
 async function handleReload() {
   if (!currentErrorWorkspace.value || isReloading.value) return
@@ -651,6 +662,22 @@ function getBadgeText(status: string) {
         </div>
         <div v-if="diagnoseResult.issues.length === 0" class="no-issues">
           未发现问题，可尝试重新加载
+        </div>
+        <!-- CLI 命令提示 -->
+        <div v-if="diagnoseResult.summary.interactiveFixable > 0 || diagnoseResult.summary.manualFixable > 0" class="cli-hint-box">
+          <div class="cli-hint-header">
+            <span class="cli-hint-tag">CLI</span>
+            <span class="cli-hint-text">部分问题需要在命令行修复</span>
+          </div>
+          <div class="cli-hint-command">
+            <code class="cli-command">tw repair {{ currentErrorWorkspace?.id }}</code>
+            <button class="cli-copy-btn" @click="copyCliCommand" title="复制命令">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1494,5 +1521,66 @@ function getBadgeText(status: string) {
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.cli-hint-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--card-footer);
+}
+
+.cli-hint-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cli-hint-tag {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-orange, #f59e0b);
+  text-transform: uppercase;
+}
+
+.cli-hint-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cli-hint-command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cli-command {
+  font-family: var(--mono-font);
+  font-size: 12px;
+  color: var(--text-main);
+  user-select: all;
+}
+
+.cli-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cli-copy-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 </style>

@@ -9,6 +9,15 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.7
+    requirement: 工作区诊断修复、跨工作区搜索、MCP 输出优化
+    conclusion: |-
+      - 工作区诊断修复：WebUI 新增诊断/修复功能，自动识别并修复工作区问题
+      - 跨工作区搜索：新增 workspace_search 和 content_search 工具
+      - 先读后写机制：node_update/memo_update 防止并发修改冲突
+      - MCP 输出优化：日志智能压缩，减少 token 消耗
+      - CLI 别名：新增 tw 等简短命令
+    note: ""
   - version: 1.10.6
     requirement: MEMO 导出、工作区导出/导入、索引管理、派发增强
     conclusion: |-
