@@ -295,7 +295,7 @@ function getPluginStatus(): PluginStatus {
   const installedAgents: string[] = [];
   if (existsSync(agentsDir) && existsSync(PLUGIN_AGENTS)) {
     // 从源目录获取期望的 agent 列表
-    const sourceAgents = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md"));
+    const sourceAgents = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
     for (const agent of sourceAgents) {
       if (existsSync(join(agentsDir, agent))) {
         installedAgents.push(agent);
@@ -552,8 +552,8 @@ function installDispatchAgents(): void {
     return;
   }
 
-  // 动态读取所有 .md 文件
-  const agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md"));
+  // 动态读取所有 .md 文件（排除 CLAUDE.md）
+  const agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
 
   if (agentFiles.length === 0) {
     warn("没有找到 Agent 模板文件");
@@ -648,10 +648,10 @@ function uninstallDispatchAgents(): void {
 
   const agentsDir = join(CLAUDE_HOME, "agents");
 
-  // 动态获取要卸载的 agent 列表
+  // 动态获取要卸载的 agent 列表（排除 CLAUDE.md）
   let agentFiles: string[] = [];
   if (existsSync(PLUGIN_AGENTS)) {
-    agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md"));
+    agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
   }
 
   if (agentFiles.length === 0) {
