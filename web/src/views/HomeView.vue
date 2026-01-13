@@ -615,7 +615,7 @@ function getBadgeText(status: string) {
     </WsModal>
 
     <!-- 设置弹窗 -->
-    <SettingsModal v-model:visible="showSettingsModal" @tutorial-created="handleRefresh" />
+    <SettingsModal v-model:visible="showSettingsModal" @tutorial-created="handleRefresh" @workspace-imported="handleRefresh" />
 
     <!-- 开发模式标识 -->
     <div v-if="devInfo?.isDev" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">

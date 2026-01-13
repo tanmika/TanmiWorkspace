@@ -55,10 +55,20 @@ export interface ImportTwspResult {
   error?: string
 }
 
+// 导入预检查结果
+export interface ImportPreviewResult {
+  success: boolean
+  type: 'single' | 'multiple'
+  workspaces: Array<{ id: string; name: string; isNew: boolean }>
+  needsTargetDir: boolean
+  suggestedTargetDir?: string
+  error?: string
+}
+
 export const adminApi = {
-  // 打开目录选择对话框
+  // 打开目录选择对话框（需要用户交互，设置长超时）
   pickDirectory(): Promise<PickDirectoryResult> {
-    return client.post('/admin/pick-directory')
+    return client.post('/admin/pick-directory', {}, { timeout: 300000 }) // 5分钟
   },
 
   /**
@@ -78,9 +88,9 @@ export const adminApi = {
     const filenameMatch = disposition?.match(/filename="(.+)"/)
     const filename = filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : 'workspace.twsp'
 
-    // 获取警告信息
+    // 获取警告信息（Base64 解码）
     const warningsHeader = response.headers.get('X-Export-Warnings')
-    const warnings: string[] = warningsHeader ? JSON.parse(warningsHeader) : []
+    const warnings: string[] = warningsHeader ? JSON.parse(atob(warningsHeader)) : []
 
     // 下载文件
     const blob = await response.blob()
@@ -101,9 +111,14 @@ export const adminApi = {
     return client.get(`/admin/export-workspace/${workspaceId}/check`)
   },
 
-  // 智能导入工作区（支持：项目目录、.tanmi-workspace目录、名称_id工作区目录）
-  import(path: string): Promise<ImportResult> {
-    return client.post('/admin/import', { path })
+  // 智能导入工作区（支持：项目目录、.tanmi-workspace目录、工作区目录）
+  import(path: string, targetDir?: string): Promise<ImportResult> {
+    return client.post('/admin/import', { path, targetDir })
+  },
+
+  // 导入预检查（判断是单工作区还是多工作区）
+  importPreview(path: string): Promise<ImportPreviewResult> {
+    return client.post('/admin/import-preview', { path })
   },
 
   // 同步清理预览

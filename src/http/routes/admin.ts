@@ -5,7 +5,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { exec } from "child_process";
 import { promisify } from "util";
 import os from "os";
-import { existsSync, statSync, createWriteStream } from "fs";
+import { existsSync, statSync, createWriteStream, readFileSync, cpSync, mkdirSync } from "fs";
 import { mkdir, rm, unlink } from "fs/promises";
 import { basename, dirname, join } from "path";
 import { pipeline } from "stream/promises";
@@ -22,8 +22,11 @@ import { getServices } from "../services.js";
 
 const execAsync = promisify(exec);
 
-// 工作区目录名称
-const FOLDER_NAME = ".tanmi-workspace";
+// 开发环境判断
+const IS_DEV = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
+
+// 工作区目录名称（根据环境）
+const FOLDER_NAME = IS_DEV ? ".tanmi-workspace-dev" : ".tanmi-workspace";
 
 // ============================================================================
 // 索引操作队列（防止并发写入竞态条件）
@@ -91,7 +94,7 @@ async function selectFolder(): Promise<string | null> {
  */
 function validateDirectoryPath(inputPath: string): { valid: boolean; error?: string } {
   if (!existsSync(inputPath)) {
-    return { valid: false, error: "路径不存在" };
+    return { valid: false, error: "目录不存在" };
   }
 
   try {
@@ -107,10 +110,72 @@ function validateDirectoryPath(inputPath: string): { valid: boolean; error?: str
 }
 
 /**
- * 检测路径类型并智能导入
- * 支持：项目目录、.tanmi-workspace 目录、名称_id 工作区目录
+ * 尝试作为裸工作区导入（直接包含 workspace.json 或 config.json 的目录）
+ * @param dirPath 目录路径
+ * @returns 如果是有效的裸工作区，返回工作区信息；否则返回 null 或错误
  */
-function smartImport(inputPath: string): {
+function tryImportAsWorkspace(dirPath: string): {
+  success: boolean;
+  entry?: WorkspaceEntry;
+  error?: string;
+} {
+  // 检查 workspace.json 或 config.json
+  const workspacePath = join(dirPath, "workspace.json");
+  const configPath = join(dirPath, "config.json");
+  const actualPath = existsSync(workspacePath) ? workspacePath : existsSync(configPath) ? configPath : null;
+
+  if (!actualPath) {
+    return { success: false, error: "workspace.json 不存在" };
+  }
+
+  // 读取并解析配置文件
+  let config: { id?: string; name?: string; status?: string; createdAt?: string; updatedAt?: string };
+  try {
+    const content = readFileSync(actualPath, "utf-8");
+    config = JSON.parse(content);
+  } catch (e) {
+    return { success: false, error: `workspace.json 格式错误: ${e instanceof Error ? e.message : "JSON 解析失败"}` };
+  }
+
+  // 验证必要字段
+  const missingFields: string[] = [];
+  if (!config.id) missingFields.push("id");
+  if (!config.name) missingFields.push("name");
+
+  if (missingFields.length > 0) {
+    return { success: false, error: `workspace.json 缺少必要字段: ${missingFields.join(", ")}` };
+  }
+
+  // 构建工作区条目
+  // 裸工作区的 projectRoot 是其父目录的父目录（假设结构为 projectRoot/.tanmi-workspace/dirName）
+  // 但对于裸工作区，我们使用其父目录作为 projectRoot
+  const dirName = basename(dirPath);
+  const parentDir = dirname(dirPath);
+
+  // 检测是否在 .tanmi-workspace 目录下
+  const grandParentDir = dirname(parentDir);
+  const isUnderTanmiWorkspace = basename(parentDir) === FOLDER_NAME;
+
+  const entry: WorkspaceEntry = {
+    id: config.id!,
+    name: config.name!,
+    projectRoot: isUnderTanmiWorkspace ? grandParentDir : parentDir,
+    dirName: dirName,
+    status: config.status || "active",
+    createdAt: config.createdAt || new Date().toISOString(),
+    updatedAt: config.updatedAt || new Date().toISOString(),
+  };
+
+  return { success: true, entry };
+}
+
+/**
+ * 检测路径类型并智能导入
+ * 优先级：裸工作区 → .tanmi-workspace 目录 → 递归扫描
+ * @param inputPath 输入路径
+ * @param targetDir 目标目录（仅裸工作区导入时使用，复制工作区到此目录）
+ */
+function smartImport(inputPath: string, targetDir?: string): {
   success: boolean;
   added: number;
   existing: number;
@@ -132,44 +197,78 @@ function smartImport(inputPath: string): {
   // 检测路径类型
   const dirName = basename(inputPath);
 
-  // 情况1：直接是 名称_id 格式的工作区目录
-  if (dirName.includes("_ws-") || dirName.includes("_node-")) {
-    // 检查是否有 config.json 或 workspace.json
-    const configPath = join(inputPath, "config.json");
-    const workspacePath = join(inputPath, "workspace.json");
+  // 优先级1：尝试作为裸工作区导入（直接包含 workspace.json/config.json 的目录）
+  const bareWorkspaceResult = tryImportAsWorkspace(inputPath);
+  if (bareWorkspaceResult.success && bareWorkspaceResult.entry) {
+    let entry = bareWorkspaceResult.entry;
 
-    if (existsSync(configPath) || existsSync(workspacePath)) {
-      // 解析工作区信息
-      const match = dirName.match(/^(.+)_(ws-[a-z0-9]+)$/);
-      if (match) {
-        const [, name, id] = match;
-        const parentDir = dirname(inputPath);
-        const grandParentDir = dirname(parentDir);
+    // 检查是否是"裸工作区"（不在 .tanmi-workspace 目录下）
+    const parentDirName = basename(dirname(inputPath));
+    const isBareWorkspace = parentDirName !== FOLDER_NAME;
 
-        const wsEntry: WorkspaceEntry = {
-          id,
-          name,
-          projectRoot: grandParentDir,
-          dirName,
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+    // 裸工作区必须提供目标目录
+    if (isBareWorkspace && !targetDir) {
+      console.log("[smartImport] 裸工作区缺少 targetDir");
+      return { success: false, added: 0, existing: 0, workspaces: [], error: "裸工作区导入需要指定目标目录" };
+    }
 
-        if (existingIds.has(id)) {
-          existing++;
-          results.push({ id, name, isNew: false });
-        } else {
-          index.workspaces.push(wsEntry);
-          added++;
-          results.push({ id, name, isNew: true });
+    console.log("[smartImport] isBareWorkspace:", isBareWorkspace, "targetDir:", targetDir);
+
+    // 如果提供了目标目录，复制工作区到目标目录
+    if (targetDir) {
+      try {
+        // 展开 ~ 为用户主目录
+        const expandedTargetDir = targetDir.startsWith("~")
+          ? targetDir.replace("~", os.homedir())
+          : targetDir;
+
+        // 创建目标目录结构: targetDir/.tanmi-workspace/
+        const tanmiDir = join(expandedTargetDir, FOLDER_NAME);
+        console.log("[smartImport] 复制目标:", { expandedTargetDir, tanmiDir, FOLDER_NAME });
+
+        if (!existsSync(tanmiDir)) {
+          mkdirSync(tanmiDir, { recursive: true });
         }
+
+        // 目标路径: targetDir/.tanmi-workspace/dirName
+        const destPath = join(tanmiDir, entry.dirName);
+        console.log("[smartImport] 复制:", inputPath, "->", destPath);
+
+        // 检查目标是否已存在
+        if (existsSync(destPath)) {
+          return { success: false, added: 0, existing: 0, workspaces: [], error: `目标路径已存在: ${destPath}` };
+        }
+
+        // 复制工作区目录
+        cpSync(inputPath, destPath, { recursive: true });
+        console.log("[smartImport] 复制完成, 新 projectRoot:", expandedTargetDir);
+
+        // 更新 entry 的 projectRoot 为新位置
+        entry = {
+          ...entry,
+          projectRoot: expandedTargetDir,
+        };
+      } catch (e) {
+        console.error("[smartImport] 复制失败:", e);
+        return { success: false, added: 0, existing: 0, workspaces: [], error: `复制工作区失败: ${e instanceof Error ? e.message : "未知错误"}` };
       }
+    } else {
+      console.log("[smartImport] 无 targetDir，原地注册");
+    }
+
+    if (existingIds.has(entry.id)) {
+      existing++;
+      results.push({ id: entry.id, name: entry.name, isNew: false });
+    } else {
+      index.workspaces.push(entry);
+      existingIds.add(entry.id);
+      added++;
+      results.push({ id: entry.id, name: entry.name, isNew: true });
     }
   }
 
-  // 情况2：是 .tanmi-workspace 目录
-  if (dirName === FOLDER_NAME) {
+  // 优先级2：是 .tanmi-workspace 目录
+  if (results.length === 0 && dirName === FOLDER_NAME) {
     const projectRoot = dirname(inputPath);
     const workspaces = readWorkspacesFromProject(projectRoot);
 
@@ -186,7 +285,7 @@ function smartImport(inputPath: string): {
     }
   }
 
-  // 情况3：使用 2 层递归扫描
+  // 优先级3：使用 2 层递归扫描
   if (results.length === 0) {
     const projects = scanForProjects(inputPath, 2);
 
@@ -207,7 +306,13 @@ function smartImport(inputPath: string): {
     }
   }
 
+  // 根据不同情况返回具体错误信息
   if (results.length === 0) {
+    // 检查是否是因为 workspace.json 问题
+    if (bareWorkspaceResult.error && bareWorkspaceResult.error !== "workspace.json 不存在") {
+      // workspace.json 存在但有问题（格式错误或缺少字段）
+      return { success: false, added: 0, existing: 0, workspaces: [], error: bareWorkspaceResult.error };
+    }
     return { success: false, added: 0, existing: 0, workspaces: [], error: "未找到有效的工作区" };
   }
 
@@ -217,6 +322,98 @@ function smartImport(inputPath: string): {
   }
 
   return { success: true, added, existing, workspaces: results };
+}
+
+/**
+ * 导入预检查：分析路径类型，决定是否需要二级弹窗
+ * - single: 单工作区（裸工作区或 .twsp），需要选择目标目录
+ * - multiple: 多工作区（项目目录或 .tanmi-workspace），原地注册
+ */
+function importPreview(inputPath: string): {
+  success: boolean;
+  type: "single" | "multiple";
+  workspaces: Array<{ id: string; name: string; isNew: boolean }>;
+  needsTargetDir: boolean;
+  suggestedTargetDir?: string;
+  error?: string;
+} {
+  // 建议的默认导入目录（根据环境）
+  const suggestedTargetDir = `~/${FOLDER_NAME}/import/`;
+  // 验证路径
+  const validation = validateDirectoryPath(inputPath);
+  if (!validation.valid) {
+    return { success: false, type: "single", workspaces: [], needsTargetDir: false, error: validation.error };
+  }
+
+  const index = readIndex() || { version: "1.0", workspaces: [] };
+  const existingIds = new Set(index.workspaces.map((ws) => ws.id));
+  const dirName = basename(inputPath);
+
+  // 优先级1：尝试作为裸工作区检测
+  const bareWorkspaceResult = tryImportAsWorkspace(inputPath);
+  if (bareWorkspaceResult.success && bareWorkspaceResult.entry) {
+    const entry = bareWorkspaceResult.entry;
+    const isNew = !existingIds.has(entry.id);
+    return {
+      success: true,
+      type: "single",
+      workspaces: [{ id: entry.id, name: entry.name, isNew }],
+      needsTargetDir: true, // 单工作区需要选择目标目录
+      suggestedTargetDir,
+    };
+  }
+
+  // 优先级2：是 .tanmi-workspace 目录
+  if (dirName === FOLDER_NAME) {
+    const projectRoot = dirname(inputPath);
+    const workspaces = readWorkspacesFromProject(projectRoot);
+
+    if (workspaces.length > 0) {
+      return {
+        success: true,
+        type: "multiple",
+        workspaces: workspaces.map((ws) => ({
+          id: ws.id,
+          name: ws.name,
+          isNew: !existingIds.has(ws.id),
+        })),
+        needsTargetDir: false, // 多工作区原地注册
+      };
+    }
+  }
+
+  // 优先级3：递归扫描项目目录
+  const projects = scanForProjects(inputPath, 2);
+  const allWorkspaces: Array<{ id: string; name: string; isNew: boolean }> = [];
+
+  for (const project of projects) {
+    const workspaces = readWorkspacesFromProject(project);
+    for (const ws of workspaces) {
+      allWorkspaces.push({
+        id: ws.id,
+        name: ws.name,
+        isNew: !existingIds.has(ws.id),
+      });
+    }
+  }
+
+  if (allWorkspaces.length > 0) {
+    return {
+      success: true,
+      type: allWorkspaces.length === 1 ? "single" : "multiple",
+      workspaces: allWorkspaces,
+      needsTargetDir: allWorkspaces.length === 1, // 单工作区需要选择目标目录
+      suggestedTargetDir: allWorkspaces.length === 1 ? suggestedTargetDir : undefined,
+    };
+  }
+
+  // 没有找到任何工作区
+  // 返回详细错误信息
+  if (bareWorkspaceResult.error && bareWorkspaceResult.error !== "workspace.json 不存在") {
+    return { success: false, type: "single", workspaces: [], needsTargetDir: false, error: bareWorkspaceResult.error };
+  }
+
+  return { success: false, type: "single", workspaces: [], needsTargetDir: false, error: "未找到有效的工作区" };
 }
 
 // ============================================================================
@@ -351,6 +548,7 @@ function syncCleanExecute(): {
 // 请求类型定义
 interface ImportBody {
   path: string;
+  targetDir?: string; // 目标目录（仅单工作区导入时使用）
 }
 
 // JSON Schema 定义
@@ -360,6 +558,7 @@ const importSchema = {
     required: ["path"],
     properties: {
       path: { type: "string", minLength: 1 },
+      targetDir: { type: "string" },
     },
     additionalProperties: false,
   },
@@ -396,11 +595,14 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     "/admin/import",
     { schema: importSchema },
     async (request: FastifyRequest<{ Body: ImportBody }>, reply: FastifyReply) => {
-      const { path } = request.body;
+      const { path, targetDir } = request.body;
+
+      fastify.log.info({ path, targetDir, FOLDER_NAME }, "导入请求参数");
 
       try {
         // 使用锁序列化索引操作
-        const result = await withIndexLock(() => smartImport(path));
+        const result = await withIndexLock(() => smartImport(path, targetDir));
+        fastify.log.info({ result }, "导入结果");
 
         if (!result.success) {
           return reply.status(400).send({
@@ -545,9 +747,9 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         reply.header("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
         reply.header("Content-Length", buffer.length);
 
-        // 如果有警告，通过自定义 header 传递
+        // 如果有警告，通过自定义 header 传递（Base64 编码避免非 ASCII 字符问题）
         if (warnings.length > 0) {
-          reply.header("X-Export-Warnings", JSON.stringify(warnings));
+          reply.header("X-Export-Warnings", Buffer.from(JSON.stringify(warnings)).toString("base64"));
         }
 
         return reply.send(buffer);
@@ -560,6 +762,34 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       }
     }
   );
+
+  /**
+   * POST /api/admin/import-preview - 导入预检查
+   * 请求: { path: string }
+   * 响应: { success, type: "single"|"multiple", workspaces, needsTargetDir, error? }
+   */
+  fastify.post("/admin/import-preview", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { path: inputPath } = request.body as { path?: string };
+
+    if (!inputPath) {
+      return reply.status(400).send({
+        error: "MISSING_PATH",
+        message: "缺少 path 参数",
+      });
+    }
+
+    const result = importPreview(inputPath);
+
+    if (!result.success) {
+      return reply.status(400).send({
+        error: "INVALID_PATH",
+        message: result.error,
+        ...result,
+      });
+    }
+
+    return reply.send(result);
+  });
 
   /**
    * POST /api/admin/import-twsp - 导入 .twsp 工作区文件

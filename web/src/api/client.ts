@@ -30,11 +30,12 @@ client.interceptors.response.use(
   (error) => {
     const serviceStore = useServiceStore()
 
-    // 检测网络错误或服务不可用
-    if (!error.response || error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+    // 检测网络错误或服务不可用（超时不算服务不可用）
+    const isTimeout = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
+    if (!isTimeout && (!error.response || error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK')) {
       serviceStore.markUnavailable()
     } else {
-      // 有响应说明服务是可用的
+      // 有响应或超时说明服务是可用的
       serviceStore.markAvailable()
     }
 

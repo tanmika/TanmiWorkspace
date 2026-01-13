@@ -2031,7 +2031,11 @@ Read(file_path: <返回的路径>/SKILL.md)
   }> {
     // 1. 确定目标目录（默认 ~/{localDirName}/import/）
     const localDirName = this.fs.getDirName();
-    const finalTargetDir = targetDir || path.join(os.homedir(), localDirName, "import");
+    // 展开 ~ 为用户主目录
+    const expandedTargetDir = targetDir?.startsWith("~")
+      ? targetDir.replace("~", os.homedir())
+      : targetDir;
+    const finalTargetDir = expandedTargetDir || path.join(os.homedir(), localDirName, "import");
 
     // 2. 创建临时解压目录
     const extractDir = path.join(os.tmpdir(), `twsp-extract-${Date.now()}`);

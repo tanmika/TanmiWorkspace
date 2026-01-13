@@ -48,6 +48,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
   (e: 'tutorialCreated'): void
+  (e: 'workspaceImported'): void
 }>()
 
 // 本地状态
@@ -95,9 +96,10 @@ function openIndexManagement() {
   showIndexManagement.value = true
 }
 
-// 工作区导入后刷新统计
+// 工作区导入后刷新统计并通知父组件
 function handleWorkspaceImported() {
   loadIndexStats()
+  emit('workspaceImported')
 }
 
 // 格式化时间

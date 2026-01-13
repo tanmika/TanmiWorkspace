@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { adminApi, type SyncCleanPreviewResult, type SyncCleanExecuteResult, type IndexStatsResult } from '@/api/admin'
+import { adminApi, type SyncCleanPreviewResult, type SyncCleanExecuteResult, type IndexStatsResult, type ImportPreviewResult } from '@/api/admin'
 import { useToastStore } from '@/stores/toast'
 import WsModal from '@/components/ui/WsModal.vue'
 import WsButton from '@/components/ui/WsButton.vue'
+import ImportConfirmModal from '@/components/ImportConfirmModal.vue'
 
 const toastStore = useToastStore()
 
@@ -45,6 +46,11 @@ const manualPath = ref('')
 
 // 导入状态
 const importLoading = ref(false)
+
+// 导入确认弹窗相关
+const showImportConfirm = ref(false)
+const importPreviewResult = ref<ImportPreviewResult | null>(null)
+const pendingImportPath = ref('')
 
 // 结果相关
 type ResultType = 'none' | 'success' | 'warning' | 'error'
@@ -187,9 +193,8 @@ function handleFileSelect(file: File) {
     selectedName.value = file.name
     selectedMeta.value = formatFileSize(file.size)
   } else {
-    // 浏览器不支持直接拖拽目录选择，提示用户使用手动输入
-    toastStore.warning('浏览器不支持拖拽目录，请使用手动输入路径')
-    showManualInput.value = true
+    // 浏览器不支持直接拖拽目录，提示用户使用选择目录按钮
+    toastStore.warning('拖拽仅支持 .twsp 文件，目录请点击「选择目录」按钮')
   }
 }
 
@@ -217,6 +222,111 @@ async function pickTargetDir() {
   }
 }
 
+// 选择导入目录
+async function pickImportDir() {
+  try {
+    const result = await adminApi.pickDirectory()
+    if (result.path) {
+      await previewAndImport(result.path)
+    }
+  } catch (e) {
+    toastStore.error('无法打开目录选择器')
+  }
+}
+
+// 预检查并决定导入方式
+async function previewAndImport(path: string) {
+  importLoading.value = true
+  resultType.value = 'none'
+
+  try {
+    const preview = await adminApi.importPreview(path)
+
+    if (!preview.success) {
+      resultType.value = 'error'
+      resultMessage.value = preview.error || '无法识别的工作区'
+      importLoading.value = false
+      return
+    }
+
+    // 根据类型决定导入方式
+    if (preview.needsTargetDir) {
+      // 单工作区：弹窗让用户选择目标目录
+      importPreviewResult.value = preview
+      pendingImportPath.value = path
+      showImportConfirm.value = true
+      importLoading.value = false
+    } else {
+      // 多工作区：直接原地注册
+      await executeImport(path)
+    }
+  } catch (e) {
+    resultType.value = 'error'
+    resultMessage.value = e instanceof Error ? e.message : '预检查失败'
+    importLoading.value = false
+  }
+}
+
+// 确认弹窗回调：执行导入
+async function handleImportConfirm(targetDir: string) {
+  showImportConfirm.value = false
+  importLoading.value = true
+
+  try {
+    await executeImport(pendingImportPath.value, targetDir)
+  } catch (e) {
+    resultType.value = 'error'
+    resultMessage.value = e instanceof Error ? e.message : '导入失败'
+  } finally {
+    importLoading.value = false
+    importPreviewResult.value = null
+    pendingImportPath.value = ''
+  }
+}
+
+// 取消导入确认
+function handleImportCancel() {
+  showImportConfirm.value = false
+  importPreviewResult.value = null
+  pendingImportPath.value = ''
+}
+
+// 执行实际导入
+async function executeImport(path: string, targetDir?: string) {
+  try {
+    const result = await adminApi.import(path, targetDir)
+
+    if (result.success) {
+      if (result.added > 0) {
+        resultType.value = 'success'
+        resultMessage.value = `成功导入 ${result.added} 个工作区`
+        if (result.existing > 0) {
+          resultMessage.value += `，${result.existing} 个已存在`
+        }
+        emit('workspaceImported')
+      } else if (result.existing > 0) {
+        resultType.value = 'warning'
+        resultMessage.value = `${result.existing} 个工作区已存在于索引中`
+      } else {
+        resultType.value = 'warning'
+        resultMessage.value = '未找到可导入的工作区'
+      }
+      clearSelection()
+      showManualInput.value = false
+      manualPath.value = ''
+      await loadStats()
+    } else {
+      resultType.value = 'error'
+      resultMessage.value = result.error || '导入失败'
+    }
+  } catch (e) {
+    resultType.value = 'error'
+    resultMessage.value = e instanceof Error ? e.message : '导入失败'
+  } finally {
+    importLoading.value = false
+  }
+}
+
 // 导入操作
 async function handleImport() {
   if (selectedType.value === 'file' && selectedFile.value) {
@@ -236,8 +346,8 @@ async function importTwspFile() {
   try {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
-    // 发送目标目录（需要后端支持）
-    formData.append('targetDir', targetDir.value.replace('~', ''))
+    // 发送目标目录（后端会展开 ~ 为用户主目录）
+    formData.append('targetDir', targetDir.value)
 
     const result = await adminApi.importTwsp(formData)
 
@@ -250,6 +360,11 @@ async function importTwspFile() {
         resultType.value = 'success'
         resultMessage.value = `工作区「${result.name || '未知'}」导入成功`
       }
+      // 导入成功后清除选择状态（保留结果提示）
+      selectedType.value = 'none'
+      selectedFile.value = null
+      selectedName.value = ''
+      selectedMeta.value = ''
       await loadStats()
       emit('workspaceImported')
     } else {
@@ -282,6 +397,13 @@ async function importDirectory() {
       if (result.added > 0) {
         resultType.value = 'success'
         resultMessage.value = `发现并导入了 ${result.added} 个工作区`
+        // 导入成功后清除选择状态（保留结果提示）
+        selectedType.value = 'none'
+        selectedPath.value = ''
+        selectedName.value = ''
+        selectedMeta.value = ''
+        showManualInput.value = false
+        manualPath.value = ''
         await loadStats()
         emit('workspaceImported')
       } else if (result.existing > 0) {
@@ -317,7 +439,7 @@ async function handleManualImport() {
     return
   }
 
-  await importDirectory()
+  await previewAndImport(manualPath.value.trim())
 }
 
 // 同步清理预览
@@ -420,7 +542,7 @@ function resetSyncClean() {
           @dragover="handleDragOver"
           @dragleave="handleDragLeave"
           @drop="handleDrop"
-          @click="handleClick"
+          @click="pickImportDir"
         >
           <div class="drop-zone-icon">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -430,9 +552,9 @@ function resetSyncClean() {
             </svg>
           </div>
           <div class="drop-zone-text" :class="{ highlight: isDragging }">
-            {{ isDragging ? '释放以导入' : '拖入 .twsp 文件或文件夹' }}
+            {{ isDragging ? '释放以导入' : '拖入 .twsp 或点击选择目录' }}
           </div>
-          <div class="drop-zone-hint">或点击选择</div>
+          <div class="drop-zone-hint">支持工作区目录、项目目录、.twsp 文件</div>
         </div>
 
         <!-- 已选择项（文件） -->
@@ -450,15 +572,32 @@ function resetSyncClean() {
           <div class="selected-clear" @click="clearSelection">×</div>
         </div>
 
-        <!-- 目标目录（仅 .twsp 文件） -->
-        <div v-if="selectedType === 'file'" class="target-dir-row">
-          <span class="target-dir-label">目标目录：</span>
-          <input type="text" class="target-dir-input" v-model="targetDir" readonly>
-          <WsButton size="sm" variant="secondary" @click="pickTargetDir">浏览</WsButton>
+        <!-- 已选择项（目录） -->
+        <div v-if="selectedType === 'directory'" class="selected-item">
+          <div class="selected-icon directory">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div class="selected-info">
+            <div class="selected-name">{{ selectedName }}</div>
+            <div class="selected-meta">{{ selectedPath }}</div>
+          </div>
+          <div class="selected-clear" @click="clearSelection">×</div>
         </div>
 
-        <!-- 导入按钮 -->
-        <div v-if="hasSelection" class="action-row">
+        <!-- 目标目录和导入按钮（仅 .twsp 文件） -->
+        <div v-if="selectedType === 'file'" class="import-action-bar">
+          <div class="target-dir-group">
+            <span class="target-dir-label">导入到</span>
+            <input type="text" class="target-dir-input" v-model="targetDir" readonly>
+            <WsButton size="sm" variant="ghost" @click="pickTargetDir">修改</WsButton>
+          </div>
+          <WsButton variant="primary" :loading="importLoading" @click="handleImport">确认导入</WsButton>
+        </div>
+
+        <!-- 导入按钮（目录选择时） -->
+        <div v-if="selectedType === 'directory'" class="action-row">
           <WsButton variant="primary" :loading="importLoading" @click="handleImport">导入</WsButton>
         </div>
 
@@ -631,6 +770,15 @@ function resetSyncClean() {
       </div>
     </div>
   </WsModal>
+
+  <!-- 导入确认弹窗 -->
+  <ImportConfirmModal
+    v-model="showImportConfirm"
+    :workspaces="importPreviewResult?.workspaces ?? []"
+    :default-target-dir="importPreviewResult?.suggestedTargetDir ?? ''"
+    @confirm="handleImportConfirm"
+    @cancel="handleImportCancel"
+  />
 </template>
 
 <style scoped>
@@ -771,6 +919,10 @@ function resetSyncClean() {
   color: var(--text-muted);
 }
 
+.drop-zone-actions {
+  margin-top: 8px;
+}
+
 /* 已选择项 */
 .selected-item {
   display: flex;
@@ -844,31 +996,50 @@ function resetSyncClean() {
   color: var(--accent-red);
 }
 
-/* 目标目录 */
-.target-dir-row {
+/* 导入操作栏 */
+.import-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--path-bg);
+  border: 1px solid var(--border-color);
+}
+
+.target-dir-group {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border-color);
+  flex: 1;
+  min-width: 0;
 }
 
 .target-dir-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
 .target-dir-input {
   flex: 1;
+  min-width: 0;
   height: 28px;
   padding: 0 8px;
-  border: 1px solid var(--border-color);
+  border: none;
+  border-bottom: 1px solid var(--border-color);
   font-family: var(--mono-font);
   font-size: 11px;
-  background: var(--card-bg);
+  background: transparent;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.target-dir-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent-primary);
 }
 
 /* 手动输入切换 */
