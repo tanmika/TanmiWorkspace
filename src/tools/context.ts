@@ -11,7 +11,8 @@ export const contextGetTool: Tool = {
 - 工作区信息（目标、规则、活跃文档引用）
 - 上下文链（从根到当前节点的祖先路径，支持 isolate 截断）
 - 跨节点引用（显式引用的其他节点）
-- 子节点结论（已完成/失败的直接子节点结论冒泡）`,
+- 子节点结论（已完成/失败的直接子节点结论冒泡）
+- conclusionsHash（子节点结论的哈希值，用于 node_transition/node_update 验证）`,
   inputSchema: {
     type: "object",
     properties: {
@@ -49,7 +50,9 @@ export const contextGetTool: Tool = {
  */
 export const contextFocusTool: Tool = {
   name: "context_focus",
-  description: "设置当前聚焦节点，切换 AI 的工作上下文。",
+  description: `设置当前聚焦节点，切换 AI 的工作上下文。
+
+**阻断机制**：当祖先链中存在 conclusionStale=true 的节点时，切换到该节点子树外会被阻断，需先更新过期结论。`,
   inputSchema: {
     type: "object",
     properties: {

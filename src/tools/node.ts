@@ -205,8 +205,13 @@ export const nodeUpdateTool: Tool = {
 - nodeHash：从 node_get 获取，用于乐观锁校验，防止并发覆盖
 
 **使用建议**：
+- 更新 conclusion 时优先使用精确替换模式，保留历史信息
 - 小修改使用模式二（精确替换），减少冲突风险
-- 大范围重写使用模式一（全量替换）`,
+- 大范围重写使用模式一（全量替换）
+
+**过期结论处理**：
+- 当节点 conclusionStale=true 时，更新 conclusion 需要提供 conclusionsHash 参数
+- conclusionsHash 通过 context_get 获取，用于验证子节点结论未变化`,
   inputSchema: {
     type: "object",
     properties: {
@@ -250,6 +255,10 @@ export const nodeUpdateTool: Tool = {
       new_str: {
         type: "string",
         description: "替换后的文本（精确替换模式）",
+      },
+      conclusionsHash: {
+        type: "string",
+        description: "上下文 hash（stale=true 时更新 conclusion 必填，从 context_get 获取）",
       },
     },
     required: ["workspaceId", "nodeId", "nodeHash"],

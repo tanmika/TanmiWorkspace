@@ -18,6 +18,7 @@ import type {
 } from "../types/context.js";
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
+import { computeConclusionsHash } from "../utils/hash.js";
 import { devLog } from "../utils/devLog.js";
 import { GuidanceService } from "./GuidanceService.js";
 import type { GuidanceContext } from "../types/guidance.js";
@@ -44,6 +45,7 @@ function truncateConclusion(conclusion: string): string {
 
   return `${head}\n\n...[已截取 ${omitted} 字符，完整内容请用 node_get 查看]...\n\n${tail}`;
 }
+
 
 /**
  * 上下文服务
@@ -130,8 +132,16 @@ export class ContextService {
       throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
     }
 
-    // 3. 读取工作区 Workspace.md，提取 goal/rules/docs
+    // 3. 读取工作区 Workspace.md，提取 rules/docs
     const workspaceData = await this.md.readWorkspaceMdFull(projectRoot, wsDirName, isArchived);
+
+    // 3.1 从根节点读取 goal（requirement 字段）- goal 已统一到根节点
+    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
+    const rootNodeId = config.rootNodeId || "root";
+    const rootNodeMeta = graph.nodes[rootNodeId];
+    const rootNodeDirName = rootNodeMeta?.dirName || rootNodeId;
+    const rootNodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, rootNodeDirName, isArchived);
+    const goal = rootNodeInfo.requirement || "";
 
     // 4. 构建上下文链（从根到当前节点）
     const chain = await this.buildContextChain(projectRoot, wsDirName, nodeId, graph, {
@@ -216,8 +226,7 @@ export class ContextService {
     };
     const guidance = this.guidanceService.generateFromContext(guidanceContext, 0);
 
-    // 9. 读取派发配置（如果存在）
-    const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
+    // 9. 读取派发配置（如果存在）- config 已在前面读取
     const dispatch = config.dispatch?.enabled ? config.dispatch : undefined;
 
     // 10. 清除手动变更清单（AI 已获取上下文，无需再提醒历史变更）
@@ -231,10 +240,13 @@ export class ContextService {
       }
     }
 
-    // 11. 返回结果
+    // 11. 计算 conclusionsHash
+    const conclusionsHash = computeConclusionsHash(childConclusions);
+
+    // 12. 返回结果
     return {
       workspace: {
-        goal: workspaceData.goal,
+        goal,  // 从根节点 requirement 读取
         rules: workspaceData.rules,
         rulesHash,
         docs: workspaceData.docs,
@@ -244,6 +256,7 @@ export class ContextService {
       references,
       memoReferences,
       childConclusions,
+      conclusionsHash,
       hint,
       guidance: guidance.content,
     };
@@ -353,6 +366,51 @@ export class ContextService {
 
     // 3. 保存之前的焦点
     const previousFocus = graph.currentFocus;
+
+    // 3.1 检查 conclusionStale 阻断
+    if (previousFocus && previousFocus !== nodeId) {
+      // 获取当前焦点的祖先链中所有 stale 节点
+      const staleAncestors: string[] = [];
+      let currentId: string | null = previousFocus;
+      while (currentId) {
+        const currentMeta: NodeMeta | undefined = graph.nodes[currentId];
+        if (!currentMeta) break;
+        if (currentMeta.conclusionStale) {
+          staleAncestors.push(currentId);
+        }
+        currentId = currentMeta.parentId;
+      }
+
+      // 如果有 stale 祖先，检查目标节点是否在其子树内
+      if (staleAncestors.length > 0) {
+        // 获取目标节点的祖先链（包含自身）
+        const targetAncestors = new Set<string>();
+        let targetId: string | null = nodeId;
+        while (targetId) {
+          targetAncestors.add(targetId);
+          const targetMeta: NodeMeta | undefined = graph.nodes[targetId];
+          if (!targetMeta) break;
+          targetId = targetMeta.parentId;
+        }
+
+        // 检查是否切换到了 stale 节点子树外
+        // 如果目标节点的祖先链包含 stale 节点，则在子树内（允许）
+        // 否则在子树外（阻断）
+        for (const staleId of staleAncestors) {
+          if (!targetAncestors.has(staleId)) {
+            // 目标不在此 stale 节点的子树内，阻断
+            return {
+              success: false,
+              previousFocus,
+              currentFocus: previousFocus, // 焦点不变
+              error: "CONCLUSION_STALE",
+              staleNodeId: staleId,
+              hint: "请先 context_get 获取上下文，再用精确替换模式更新结论",
+            };
+          }
+        }
+      }
+    }
 
     // 4. 更新 currentFocus
     graph.currentFocus = nodeId;

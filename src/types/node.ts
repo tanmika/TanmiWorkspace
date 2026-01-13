@@ -152,6 +152,7 @@ export interface NodeMeta {
   isolate: boolean;                 // 是否切断上下文继承
   references: string[];             // 跨节点引用的 ID 列表
   conclusion: string | null;        // 节点完成时的结论
+  conclusionStale?: boolean;        // 结论是否过期
   role?: NodeRole;                  // 节点角色（可选）
   // executor?: NodeExecutor;       // 执行者（预留，用于子 agent 派发）
   createdAt: string;
@@ -305,6 +306,7 @@ export interface NodeTransitionParams {
   reason?: string;
   conclusion?: string;    // complete/fail 时必填
   confirmation?: ConfirmationData;  // Confirmation Token 验证数据（当 actionRequired 返回 token 时必须提供）
+  conclusionsHash?: string;   // 规划节点 complete 时必填（先 context_get 获取）
 }
 
 /**
@@ -352,6 +354,8 @@ export interface NodeUpdateParams {
   old_str?: string;
   /** 替换后的文本（精确替换模式） */
   new_str?: string;
+  /** 上下文 hash，stale=true 时更新 conclusion 必填（先 context_get 获取） */
+  conclusionsHash?: string;
 }
 
 /**

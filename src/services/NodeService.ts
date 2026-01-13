@@ -1,6 +1,7 @@
 // src/services/NodeService.ts
 
 import * as crypto from "node:crypto";
+import { computeConclusionsHash } from "../utils/hash.js";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
@@ -210,6 +211,8 @@ export class NodeService {
         const quotedConclusion = oldConclusion.split("\n").map(line => `> ${line}`).join("\n");
         archivedConclusion = `**[历史结论 - ${timestamp}]**\n${quotedConclusion}\n\n---\n\n`;
         parentMeta.conclusion = archivedConclusion;
+        // 自动 reopen 时，如果父节点有 conclusion，设置 stale
+        parentMeta.conclusionStale = true;
       }
       autoReopened = true;
       // 同步更新 Info.md 中的状态和结论（使用父节点的 dirName）
@@ -853,7 +856,7 @@ export class NodeService {
    * 更新节点
    */
   async update(params: NodeUpdateParams): Promise<NodeUpdateResult> {
-    const { workspaceId, nodeId, nodeHash, title, requirement, note, conclusion, field, old_str, new_str } = params;
+    const { workspaceId, nodeId, nodeHash, title, requirement, note, conclusion, field, old_str, new_str, conclusionsHash } = params;
 
     // 1. 获取 projectRoot 和 wsDirName
     const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
@@ -885,6 +888,35 @@ export class NodeService {
       });
       if (currentHash !== nodeHash) {
         throw new TanmiError("CONTENT_CHANGED", "内容已变更，请重新 node_get");
+      }
+    }
+
+    // 6.1 stale 节点更新 conclusion 时要求 conclusionsHash
+    const nodeMeta = graph.nodes[nodeId];
+    const isUpdatingConclusion = conclusion !== undefined || (field === "conclusion" && old_str !== undefined);
+    if (nodeMeta.conclusionStale && isUpdatingConclusion) {
+      if (!conclusionsHash) {
+        throw new TanmiError(
+          "CONCLUSIONS_HASH_REQUIRED",
+          "结论已过期，更新前需要提供 conclusionsHash，请先调用 context_get 获取最新上下文。"
+        );
+      }
+
+      // 计算当前 conclusionsHash 并验证
+      const childConclusions = nodeMeta.children
+        .map(cid => {
+          const childMeta = graph.nodes[cid];
+          return childMeta ? { nodeId: cid, conclusion: childMeta.conclusion || "" } : null;
+        })
+        .filter((c): c is { nodeId: string; conclusion: string } => c !== null && !!c.conclusion);
+
+      const currentContextHash = computeConclusionsHash(childConclusions);
+
+      if (conclusionsHash !== currentContextHash) {
+        throw new TanmiError(
+          "CONCLUSIONS_HASH_MISMATCH",
+          "conclusionsHash 不匹配，子节点结论可能已变化。请重新调用 context_get 获取最新上下文。"
+        );
       }
     }
 

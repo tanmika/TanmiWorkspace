@@ -66,6 +66,7 @@ export interface ContextGetResult {
   references: ContextChainItem[]; // 跨节点引用
   memoReferences: MemoReferenceItem[]; // Memo 引用
   childConclusions: ChildConclusionItem[]; // 子节点结论冒泡
+  conclusionsHash: string;          // childConclusions 的 md5 哈希，用于检测结论变化
   hint?: string;                // 工作流提示
   guidance?: string;            // 场景感知引导内容（L0 级别）
 }
@@ -99,6 +100,10 @@ export interface ContextFocusResult {
   success: boolean;
   previousFocus: string | null;
   currentFocus: string;
+  // 阻断信息（当 success=false 且有 stale 节点时）
+  error?: "CONCLUSION_STALE";
+  staleNodeId?: string;
+  hint?: string;
 }
 
 /**

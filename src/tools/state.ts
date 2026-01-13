@@ -23,7 +23,9 @@ export const nodeTransitionTool: Tool = {
 - cancel: planning/monitoring → cancelled（取消规划，需提供 conclusion）
 - reopen: completed/cancelled → planning（重新规划）
 
-注意：执行节点 start/reopen 会自动级联更新父规划节点到 monitoring 状态`,
+**注意事项**：
+- 执行节点 start/reopen 会自动级联更新父规划节点到 monitoring 状态
+- 规划节点（有子节点）complete 时需要提供 conclusionsHash 参数，通过 context_get 获取`,
   inputSchema: {
     type: "object",
     properties: {
@@ -47,6 +49,10 @@ export const nodeTransitionTool: Tool = {
       conclusion: {
         type: "string",
         description: "结论/产出摘要（complete/fail/cancel 时必填）。注意：不能包含 Markdown 二级标题（## ），请使用 ### 三级标题或其他格式",
+      },
+      conclusionsHash: {
+        type: "string",
+        description: "规划节点 complete 时必填。需先调用 context_get 获取当前 conclusionsHash，用于验证子节点结论未变化",
       },
       confirmation: {
         type: "object",

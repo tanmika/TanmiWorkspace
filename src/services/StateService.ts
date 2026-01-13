@@ -18,6 +18,7 @@ import type {
 } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
+import { computeConclusionsHash } from "../utils/hash.js";
 import { validateMultilineContent } from "../utils/contentValidation.js";
 import type { DocRef } from "../types/workspace.js";
 import { randomBytes } from "crypto";
@@ -123,7 +124,7 @@ export class StateService {
    * 执行状态转换
    */
   async transition(params: NodeTransitionParams): Promise<NodeTransitionResult> {
-    const { workspaceId, nodeId, action, reason, conclusion, confirmation } = params;
+    const { workspaceId, nodeId, action, reason, conclusion, confirmation, conclusionsHash } = params;
 
     // 1. 如果提供了 confirmation，验证 token
     if (confirmation) {
@@ -210,6 +211,33 @@ export class StateService {
           "INCOMPLETE_CHILDREN",
           "规划节点有未完成的子节点，无法直接完成。请先完成所有子节点（completed/failed/cancelled）。"
         );
+      }
+
+      // 5.2.1 规划节点 complete 时验证 conclusionsHash（有子节点时必填）
+      if (nodeMeta.children.length > 0) {
+        if (!conclusionsHash) {
+          throw new TanmiError(
+            "CONCLUSIONS_HASH_REQUIRED",
+            "规划节点 complete 需要提供 conclusionsHash，请先调用 context_get 获取最新上下文。"
+          );
+        }
+
+        // 计算当前 conclusionsHash 并验证
+        const childConclusions = nodeMeta.children
+          .map(cid => {
+            const childMeta = graph.nodes[cid];
+            return childMeta ? { nodeId: cid, conclusion: childMeta.conclusion || "" } : null;
+          })
+          .filter((c): c is { nodeId: string; conclusion: string } => c !== null && !!c.conclusion);
+
+        const currentHash = computeConclusionsHash(childConclusions);
+
+        if (conclusionsHash !== currentHash) {
+          throw new TanmiError(
+            "CONCLUSIONS_HASH_MISMATCH",
+            "conclusionsHash 不匹配，子节点结论可能已变化。请重新调用 context_get 获取最新上下文后再完成。"
+          );
+        }
       }
     }
 
@@ -321,6 +349,16 @@ export class StateService {
       nodeMeta.conclusion = conclusion.replace(/\\n/g, "\n");
     }
 
+    // 7.0.0.1 节点 complete 时，清除自己的 stale 标记
+    if (action === "complete" && nodeMeta.conclusionStale) {
+      nodeMeta.conclusionStale = undefined;
+    }
+
+    // 7.0.1 reopen 时，如果节点有 conclusion，设置 stale
+    if (action === "reopen" && nodeMeta.conclusion) {
+      nodeMeta.conclusionStale = true;
+    }
+
     // 7.1 父节点状态级联（仅执行节点 start/reopen 时）
     const cascadeMessages: string[] = [];
     if (nodeType === "execution" && (action === "start" || action === "reopen")) {
@@ -381,6 +419,16 @@ export class StateService {
         currentProblem: "（暂无）",
         nextStep: "（暂无）",
       }, nodeDirName);
+    }
+
+    // 10.0.1 子节点 complete 时，设置父节点 stale
+    if (action === "complete" && nodeMeta.parentId) {
+      const parentMeta = graph.nodes[nodeMeta.parentId];
+      const terminalStatuses = new Set(["completed", "cancelled"]);
+      if (parentMeta && parentMeta.conclusion && !terminalStatuses.has(parentMeta.status)) {
+        parentMeta.conclusionStale = true;
+        await this.json.writeGraph(projectRoot, wsDirName, graph);
+      }
     }
 
     // 10.1 信息收集节点 complete 时自动归档规则和文档
