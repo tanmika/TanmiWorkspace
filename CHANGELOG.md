@@ -11,6 +11,27 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.10.8] - 2026-01-14
+
+### Added
+
+- **Conclusion Stale 机制**: 追踪父节点结论过期状态，子节点完成时自动标记父节点 stale，阻断切出过期子树
+- **Skills 测试验证增强**: designing-solutions 新增验证策略步骤，executing-task 新增 Code Logging Requirements，reviewing-quality 新增 Observability/Test Coverage Check
+- **CLI update 自动更新插件**: npm 更新成功后自动检测并更新已安装的插件
+
+### Improved
+
+- **Goal 统一到根节点**: Goal 从 Workspace.md 迁移到根节点 requirement 字段，添加懒迁移逻辑
+- **日志系统优化**: log_append/problem_update/problem_clear 的 nodeId 改为必填，workspace_get 日志智能压缩
+- **CLI update 命令**: 更新成功后显示版本更新内容（最多 3 个版本）
+- **插件版本检测**: 改为完整 semver 比较
+- **Skills 流程优化**: aligning-intent Quick Scan + 一次一问策略，preparing-dispatch 验证方法定义，reviewing-spec Gate Function 独立验证
+
+### Fixed
+
+- **工作区导入**: 修复 `.twsp` 导入时 `~` 路径未展开、开发环境目录隔离、警告信息编码、导入后自动刷新
+- **插件安装**: 排除 CLAUDE.md 文件，避免误安装为 Agent 模板
+
 ## [1.10.7] - 2026-01-12
 
 ### Added

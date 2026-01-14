@@ -9,6 +9,14 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.8
+    requirement: 结论过期检测、update 自动更新插件、Skills 增强
+    conclusion: |-
+      - 结论过期检测：子节点完成时自动提醒更新父节点结论
+      - update 自动更新插件：版本更新后自动同步插件
+      - Skills 增强：新增测试验证和可观测性设计步骤
+      - 工作区导入修复和日志系统优化
+    note: ""
   - version: 1.10.7
     requirement: 工作区诊断修复、跨工作区搜索、MCP 输出优化
     conclusion: |-
