@@ -1,12 +1,13 @@
 // src/cli/update.ts
 // 自更新命令 - 更新 tanmi-workspace 到最新版本
 
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync } from "fs";
 import { parse as parseYaml } from "yaml";
+import { getPluginStatus } from "./plugins.js";
 
 function getVersion(): string {
   try {
@@ -42,6 +43,71 @@ function compareVersions(a: string, b: string): number {
     if (numA < numB) return -1;
   }
   return 0;
+}
+
+// 颜色输出
+const colors = {
+  green: (s: string) => `\x1b[32m${s}\x1b[0m`,
+  yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  red: (s: string) => `\x1b[31m${s}\x1b[0m`,
+  gray: (s: string) => `\x1b[90m${s}\x1b[0m`,
+};
+
+interface PluginUpdateResult {
+  success: boolean;
+  failedPlatforms: string[];
+}
+
+// 检测并更新插件（导出用于测试）
+export function updatePluginsIfNeeded(): PluginUpdateResult {
+  // 获取更新后的插件状态（新进程会读取新版本的 plugin 目录）
+  const status = getPluginStatus();
+
+  const platformsToUpdate: string[] = [];
+
+  // 检测 Claude Code 插件
+  if (status.claude.hooks || status.claude.agents.length > 0 || status.claude.skills.length > 0) {
+    if (status.claude.hooksNeedsUpdate || status.claude.agentsNeedsUpdate || status.claude.skillsNeedsUpdate) {
+      platformsToUpdate.push("claude");
+    }
+  }
+
+  // 检测 Cursor 插件
+  if (status.cursor.hooks && status.cursor.hooksNeedsUpdate) {
+    platformsToUpdate.push("cursor");
+  }
+
+  if (platformsToUpdate.length === 0) {
+    return { success: true, failedPlatforms: [] }; // 无需更新
+  }
+
+  console.log("");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("📦 更新插件...");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("");
+
+  const failedPlatforms: string[] = [];
+
+  for (const platform of platformsToUpdate) {
+    const result = spawnSync("tanmi-workspace", ["plugins", "install", `--${platform}`], {
+      stdio: "inherit",
+      shell: true,
+    });
+
+    if (result.status !== 0) {
+      failedPlatforms.push(platform);
+      console.log("");
+      console.log(colors.red(`[ERROR] ${platform} 插件更新失败`));
+    }
+  }
+
+  if (failedPlatforms.length === 0) {
+    console.log("");
+    console.log(colors.green("[OK] 插件更新完成"));
+  }
+
+  return { success: failedPlatforms.length === 0, failedPlatforms };
 }
 
 // 显示更新内容
@@ -159,13 +225,27 @@ export default async function update() {
   child.on("close", async (code) => {
     if (code === 0) {
       console.log(`\n更新成功! v${currentVersion} -> v${latestVersion}`);
-      console.log("");
-      console.log("请重启相关服务以应用更新:");
-      console.log("  - 重启编辑器 (Claude Code / Cursor)");
-      console.log("  - 重启 WebUI: tanmi-workspace webui");
+
+      // 检测并更新插件
+      const pluginResult = updatePluginsIfNeeded();
 
       // 显示更新内容
       await showUpdateNotes(currentVersion, latestVersion);
+
+      // 显示重启提示
+      console.log("请重启相关服务以应用更新:");
+      console.log("  - 重启编辑器 (Claude Code / Cursor)");
+      console.log("  - 重启 WebUI: tanmi-workspace webui");
+      console.log("");
+
+      // 如果插件更新失败，给出手动更新提示（只显示失败的平台）
+      if (!pluginResult.success && pluginResult.failedPlatforms.length > 0) {
+        console.log(colors.yellow("插件更新失败，请手动重试:"));
+        for (const platform of pluginResult.failedPlatforms) {
+          console.log(`  tanmi-workspace plugins install --${platform}`);
+        }
+        console.log("");
+      }
     } else {
       console.error("\n更新失败，请尝试手动更新:");
       console.error("  npm install -g tanmi-workspace");
