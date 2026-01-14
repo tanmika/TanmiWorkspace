@@ -133,7 +133,7 @@ export interface WorkspaceMdData {
   updatedAt: string;
   rules: string[];
   docs: DocRef[];
-  goal: string;
+  // goal 已移至根节点 requirement，不再存储在 Workspace.md
 }
 
 /**

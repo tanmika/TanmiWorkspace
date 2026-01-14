@@ -4,10 +4,11 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 /**
  * log_append 工具定义
+ * nodeId 必填：AI 日志记录在具体节点上，工作区级日志由系统内部管理
  */
 export const logAppendTool: Tool = {
   name: "log_append",
-  description: "追加日志记录到节点或全局日志。",
+  description: "追加日志记录到节点。必须指定 nodeId，工作区级日志由系统自动管理。",
   inputSchema: {
     type: "object",
     properties: {
@@ -17,7 +18,7 @@ export const logAppendTool: Tool = {
       },
       nodeId: {
         type: "string",
-        description: "节点 ID（为空则追加到全局日志）",
+        description: "节点 ID（必填）",
       },
       operator: {
         type: "string",
@@ -29,16 +30,17 @@ export const logAppendTool: Tool = {
         description: "事件描述",
       },
     },
-    required: ["workspaceId", "operator", "event"],
+    required: ["workspaceId", "nodeId", "operator", "event"],
   },
 };
 
 /**
  * problem_update 工具定义
+ * nodeId 必填：问题记录在具体节点上，工作区级问题由系统内部管理
  */
 export const problemUpdateTool: Tool = {
   name: "problem_update",
-  description: "更新当前问题，记录遇到的阻碍和下一步计划。",
+  description: "更新节点问题，记录遇到的阻碍和下一步计划。必须指定 nodeId。",
   inputSchema: {
     type: "object",
     properties: {
@@ -48,7 +50,7 @@ export const problemUpdateTool: Tool = {
       },
       nodeId: {
         type: "string",
-        description: "节点 ID（为空则更新全局问题）",
+        description: "节点 ID（必填）",
       },
       problem: {
         type: "string",
@@ -59,16 +61,17 @@ export const problemUpdateTool: Tool = {
         description: "下一步计划（可选）",
       },
     },
-    required: ["workspaceId", "problem"],
+    required: ["workspaceId", "nodeId", "problem"],
   },
 };
 
 /**
  * problem_clear 工具定义
+ * nodeId 必填：问题记录在具体节点上，工作区级问题由系统内部管理
  */
 export const problemClearTool: Tool = {
   name: "problem_clear",
-  description: "清空当前问题（问题已解决）。",
+  description: "清空节点问题（问题已解决）。必须指定 nodeId。",
   inputSchema: {
     type: "object",
     properties: {
@@ -78,10 +81,10 @@ export const problemClearTool: Tool = {
       },
       nodeId: {
         type: "string",
-        description: "节点 ID（为空则清空全局问题）",
+        description: "节点 ID（必填）",
       },
     },
-    required: ["workspaceId"],
+    required: ["workspaceId", "nodeId"],
   },
 };
 

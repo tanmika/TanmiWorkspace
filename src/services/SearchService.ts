@@ -48,7 +48,16 @@ export class SearchService {
         const wsDirName = ws.dirName || ws.id;
         const workspaceMd = await this.md.readWorkspaceMd(ws.projectRoot, wsDirName);
 
-        if (workspaceMd.goal.toLowerCase().includes(lowerQuery)) {
+        // 从根节点读取 goal（requirement 字段）- goal 已统一到根节点
+        const config = await this.json.readWorkspaceConfig(ws.projectRoot, wsDirName);
+        const graph = await this.json.readGraph(ws.projectRoot, wsDirName);
+        const rootNodeId = config.rootNodeId || "root";
+        const rootNodeMeta = graph.nodes[rootNodeId];
+        const rootNodeDirName = rootNodeMeta?.dirName || rootNodeId;
+        const rootNodeInfo = await this.md.readNodeInfo(ws.projectRoot, wsDirName, rootNodeDirName);
+        const goal = rootNodeInfo.requirement || "";
+
+        if (goal.toLowerCase().includes(lowerQuery)) {
           matchedIn.push("goal");
         }
 
@@ -60,7 +69,7 @@ export class SearchService {
           matches.push({
             id: ws.id,
             name: ws.name,
-            goal: workspaceMd.goal,
+            goal,
             matchedIn,
           });
         }

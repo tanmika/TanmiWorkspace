@@ -54,19 +54,18 @@ function parseWorkspaceMd(md: string): { rules: string[]; docs: DocRef[] } {
   return { rules, docs }
 }
 
-// 解析 Log.md 提取日志条目
+// 解析 Log.md 提取日志条目（表格格式）
+// | 时间 | 操作者 | 事件 |
+// |------|--------|------|
+// | 2024-01-01 12:00:00 | AI | 事件描述 |
 function parseLogMd(md: string): TypedLogEntry[] {
   const logs: TypedLogEntry[] = []
   if (!md) return logs
 
-  // 日志格式是 Markdown 表格:
-  // | 时间 | 操作者 | 事件 |
-  // |------|--------|------|
-  // | 2024-01-01 12:00:00 | AI | 事件描述 |
   const lines = md.split('\n')
   for (const line of lines) {
     const trimmed = line.trim()
-    // 跳过标题行和分隔行
+    // 跳过非表格行、标题行和分隔行
     if (!trimmed.startsWith('|') || trimmed.includes('---') || trimmed.includes('时间')) {
       continue
     }

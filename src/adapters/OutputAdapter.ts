@@ -4,7 +4,7 @@
  */
 
 import type { NodeListResult, NodeTreeItem } from "../types/node.js";
-import type { WorkspaceListResult } from "../types/workspace.js";
+import type { WorkspaceListResult, WorkspaceGetResult, LogEntry } from "../types/workspace.js";
 
 // ========== AI 简化类型 ==========
 
@@ -108,6 +108,65 @@ export function simplifyWorkspaceList(
   }
 }
 
+// ========== 日志压缩 ==========
+
+/**
+ * 解析日志表格
+ */
+function parseLogTable(content: string): LogEntry[] {
+  if (!content || typeof content !== "string") {
+    return [];
+  }
+
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.split("\n");
+  const entries: LogEntry[] = [];
+
+  for (const line of lines) {
+    if (!line.startsWith("|")) continue;
+    if (line.includes("时间") || line.includes("Time")) continue;
+    if (/^\|[\s-:|]+\|$/.test(line)) continue;
+
+    const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+    if (cells.length >= 3) {
+      entries.push({
+        time: cells[0] || "",
+        operator: cells[1] as "AI" | "Human" | "system",
+        event: cells[2] || "",
+      });
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * 压缩 workspace_get 的 logMd（AI 用）
+ * - 截取最新 5 条
+ * - 简化格式：表格 → 列表
+ * - 省略 AI 操作者标注（只标注非 AI）
+ */
+export function compressWorkspaceLog(logMd: string): string {
+  const MAX_LOG_ENTRIES = 5;
+  const logs = parseLogTable(logMd);
+  const recentLogs = logs.slice(-MAX_LOG_ENTRIES);
+
+  if (recentLogs.length === 0) {
+    return "";
+  }
+
+  const lines = recentLogs.map(log => {
+    const operator = log.operator !== "AI" ? `[${log.operator}] ` : "";
+    return `- [${log.time}] ${operator}${log.event}`;
+  });
+
+  if (logs.length > MAX_LOG_ENTRIES) {
+    lines.unshift(`（共 ${logs.length} 条，显示最新 ${MAX_LOG_ENTRIES} 条）`);
+  }
+
+  return lines.join("\n");
+}
+
 // ========== 适配器接口 ==========
 
 /**
@@ -122,6 +181,8 @@ export interface OutputAdapter {
     result: WorkspaceListResult,
     filter?: "active" | "archived" | "all"
   ): WorkspaceListResult | LiteWorkspaceListResult;
+  /** 转换 workspace_get 的 logMd */
+  transformWorkspaceGetLog(logMd: string): string;
 }
 
 /**
@@ -130,6 +191,7 @@ export interface OutputAdapter {
 export const frontendAdapter: OutputAdapter = {
   transformNodeList: (result) => result,
   transformWorkspaceList: (result) => result,
+  transformWorkspaceGetLog: (logMd) => logMd,
 };
 
 /**
@@ -138,4 +200,5 @@ export const frontendAdapter: OutputAdapter = {
 export const aiAdapter: OutputAdapter = {
   transformNodeList: simplifyNodeList,
   transformWorkspaceList: (result, filter) => simplifyWorkspaceList(result, filter),
+  transformWorkspaceGetLog: compressWorkspaceLog,
 };

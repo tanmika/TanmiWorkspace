@@ -179,14 +179,13 @@ export class WorkspaceService {
     };
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 9. 写入 Workspace.md
+    // 9. 写入 Workspace.md（goal 已移至根节点 requirement，不再写入 Workspace.md）
     await this.md.writeWorkspaceMd(projectRoot, wsDirName, {
       name: params.name,
       createdAt: currentTime,
       updatedAt: currentTime,
       rules: params.rules || [],
       docs: params.docs || [],
-      goal: params.goal,
     });
 
     // 10. 创建空的 Log.md 和 Problem.md (工作区级别)
@@ -424,25 +423,9 @@ Read(file_path: <返回的路径>/SKILL.md)
 
     const workspaceMd = await this.md.readWorkspaceMdRaw(projectRoot, wsDirName, isArchived);
 
-    // 读取并压缩日志：截取最新 5 条，简化格式
-    const MAX_LOG_ENTRIES = 5;
-    const logContent = await this.md.readLogRaw(projectRoot, wsDirName, undefined, isArchived);
-    const logs = this.md.parseLogTable(logContent);
-    const recentLogs = logs.slice(-MAX_LOG_ENTRIES);
-
-    let logMd = "";
-    if (recentLogs.length > 0) {
-      const lines = recentLogs.map(log => {
-        // 只有非 AI 操作才标注操作者
-        const operator = log.operator !== "AI" ? `[${log.operator}] ` : "";
-        return `- [${log.timestamp}] ${operator}${log.event}`;
-      });
-      // 如果有更多历史，提示总数
-      if (logs.length > MAX_LOG_ENTRIES) {
-        lines.unshift(`（共 ${logs.length} 条，显示最新 ${MAX_LOG_ENTRIES} 条）`);
-      }
-      logMd = lines.join("\n");
-    }
+    // 读取完整日志（原始表格格式）
+    // 压缩处理在 MCP 层通过 OutputAdapter 完成
+    const logMd = await this.md.readLogRaw(projectRoot, wsDirName, undefined, isArchived);
 
     // 解析规则并计算哈希
     const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName, isArchived);
@@ -614,7 +597,29 @@ Read(file_path: <返回的路径>/SKILL.md)
 
     const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
     const graph = await this.json.readGraph(projectRoot, wsDirName, isArchived);
-    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName, isArchived);
+
+    // 从根节点读取 goal（requirement 字段）- goal 已统一到根节点
+    const rootNodeId = config.rootNodeId || "root";
+    const rootNodeMeta = graph.nodes[rootNodeId];
+    const rootNodeDirName = rootNodeMeta?.dirName || rootNodeId;
+    let rootNodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, rootNodeDirName, isArchived);
+    let goal = rootNodeInfo.requirement || "";
+
+    // 懒迁移：如果根节点 requirement 为空，检查旧版 Workspace.md 中是否有 goal
+    // 仅对非归档工作区执行迁移（归档工作区为只读）
+    if (!goal && !isArchived) {
+      const legacyGoal = await this.md.readLegacyGoal(projectRoot, wsDirName, false);
+      if (legacyGoal) {
+        // 将旧版 goal 迁移到根节点 requirement
+        rootNodeInfo = {
+          ...rootNodeInfo,
+          requirement: legacyGoal,
+        };
+        await this.md.writeNodeInfo(projectRoot, wsDirName, rootNodeDirName, rootNodeInfo);
+        goal = legacyGoal;
+        devLog.debug("懒迁移完成", { workspaceId, goal: legacyGoal.substring(0, 50) });
+      }
+    }
 
     // 计算统计信息（终态 = completed + failed + cancelled）
     const nodes = Object.values(graph.nodes);
@@ -624,7 +629,7 @@ Read(file_path: <返回的路径>/SKILL.md)
 
     const summary = {
       name: config.name,
-      goal: workspaceMdData.goal,
+      goal,
       status: config.status,
       totalNodes,
       completedNodes,
@@ -634,9 +639,9 @@ Read(file_path: <返回的路径>/SKILL.md)
     // 生成输出
     let output: string;
     if (format === "markdown") {
-      output = await this.generateMarkdownStatus(projectRoot, wsDirName, config, graph, workspaceMdData, summary, isArchived);
+      output = await this.generateMarkdownStatus(projectRoot, wsDirName, config, graph, summary, isArchived);
     } else {
-      output = await this.generateBoxStatus(projectRoot, wsDirName, config, graph, workspaceMdData, summary, isArchived);
+      output = await this.generateBoxStatus(projectRoot, wsDirName, config, graph, summary, isArchived);
     }
 
     // 收集 memo 信息
@@ -702,8 +707,7 @@ Read(file_path: <返回的路径>/SKILL.md)
     wsDirName: string,
     config: WorkspaceConfig,
     graph: NodeGraph,
-    workspaceMdData: { goal: string },
-    summary: { totalNodes: number; completedNodes: number; currentFocus: string | null },
+    summary: { goal: string; totalNodes: number; completedNodes: number; currentFocus: string | null },
     isArchived: boolean = false
   ): Promise<string> {
     const lines: string[] = [];
@@ -713,7 +717,7 @@ Read(file_path: <返回的路径>/SKILL.md)
     lines.push("│" + ` 工作区: ${config.name}`.padEnd(width - 2) + "│");
     lines.push("│" + ` 状态: ${config.status}`.padEnd(width - 2) + "│");
     lines.push("├" + "─".repeat(width - 2) + "┤");
-    lines.push("│" + ` 目标: ${workspaceMdData.goal.substring(0, width - 10)}`.padEnd(width - 2) + "│");
+    lines.push("│" + ` 目标: ${summary.goal.substring(0, width - 10)}`.padEnd(width - 2) + "│");
     lines.push("├" + "─".repeat(width - 2) + "┤");
     lines.push("│" + ` 节点统计: ${summary.completedNodes}/${summary.totalNodes} 已处理`.padEnd(width - 2) + "│");
     lines.push("│" + ` 当前聚焦: ${summary.currentFocus || "无"}`.padEnd(width - 2) + "│");
@@ -749,8 +753,7 @@ Read(file_path: <返回的路径>/SKILL.md)
     wsDirName: string,
     config: WorkspaceConfig,
     graph: NodeGraph,
-    workspaceMdData: { goal: string },
-    summary: { totalNodes: number; completedNodes: number; currentFocus: string | null },
+    summary: { goal: string; totalNodes: number; completedNodes: number; currentFocus: string | null },
     isArchived: boolean = false
   ): Promise<string> {
     const lines: string[] = [];
@@ -758,7 +761,7 @@ Read(file_path: <返回的路径>/SKILL.md)
     lines.push(`# ${config.name}`);
     lines.push("");
     lines.push(`**状态**: ${config.status}`);
-    lines.push(`**目标**: ${workspaceMdData.goal}`);
+    lines.push(`**目标**: ${summary.goal}`);
 
     // 派发模式信息
     if (config.dispatch?.enabled) {
@@ -1777,6 +1780,13 @@ Read(file_path: <返回的路径>/SKILL.md)
     // 6. 获取当前版本号
     const tanmiVersion = this.getCurrentVersion();
 
+    // 6.1 从根节点读取 goal（requirement 字段）- goal 已统一到根节点
+    const rootNodeId = config.rootNodeId || "root";
+    const rootNodeMeta = graph.nodes[rootNodeId];
+    const rootNodeDirName = rootNodeMeta?.dirName || rootNodeId;
+    const rootNodeInfo = await this.md.readNodeInfo(projectRoot, dirName, rootNodeDirName, isArchived);
+    const goal = rootNodeInfo.requirement || "";
+
     // 7. 生成 manifest
     const manifest: TwspManifest = {
       version: "1.0",
@@ -1785,7 +1795,7 @@ Read(file_path: <返回的路径>/SKILL.md)
       workspace: {
         originalId: workspaceId,
         name: config.name,
-        goal: (await this.md.readWorkspaceMd(projectRoot, dirName, isArchived)).goal,
+        goal,  // 从根节点 requirement 读取
         scenario: config.scenario,
       },
       stats: {

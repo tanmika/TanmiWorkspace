@@ -203,12 +203,7 @@ export class MarkdownStorage {
       }
     }
 
-    // 解析目标
-    let goal = "";
-    const goalMatch = parsed.content.match(/## 目标\n\n([\s\S]*?)(?=\n## |$)/);
-    if (goalMatch) {
-      goal = goalMatch[1].trim();
-    }
+    // goal 已移至根节点 requirement，不再从 Workspace.md 读取
 
     return {
       name: parsed.frontmatter.name as string || "",
@@ -216,8 +211,34 @@ export class MarkdownStorage {
       updatedAt: parsed.frontmatter.updatedAt as string || "",
       rules,
       docs,
-      goal
     };
+  }
+
+  /**
+   * 读取旧版 Workspace.md 中的 goal（仅用于懒迁移）
+   * 新版工作区 goal 存储在根节点 requirement 中
+   * @returns goal 内容，如果不存在或为空返回 null
+   */
+  async readLegacyGoal(projectRoot: string, workspaceId: string, isArchived = false): Promise<string | null> {
+    try {
+      const mdPath = isArchived
+        ? this.fs.getWorkspaceMdPathWithArchive(projectRoot, workspaceId, true)
+        : this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
+      const content = await this.fs.readFile(mdPath);
+      const parsed = this.parse(content);
+
+      // 解析旧版 ## 目标 section
+      const goalMatch = parsed.content.match(/## 目标\n\n([\s\S]*?)(?=\n## |$)/);
+      if (goalMatch) {
+        const goal = goalMatch[1].trim();
+        if (goal) {
+          return goal;
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -226,9 +247,7 @@ export class MarkdownStorage {
   async writeWorkspaceMd(projectRoot: string, workspaceId: string, data: WorkspaceMdData): Promise<void> {
     // 验证内容格式
     validateSingleLineContent(data.name, "工作区名称");
-    if (data.goal) {
-      validateMultilineContent(data.goal, "工作区目标");
-    }
+    // goal 已移至根节点 requirement，不再写入 Workspace.md
     if (data.rules.length > 0) {
       validateRules(data.rules);
     }
@@ -260,10 +279,6 @@ ${rulesContent}
 > 读写，全局参考文档
 
 ${docsContent}
-
-## 目标
-
-${data.goal ?? ""}
 `;
 
     await this.fs.writeFile(mdPath, content);
@@ -951,12 +966,7 @@ ${data.nextStep}
       }
     }
 
-    // 解析目标
-    let goal = "";
-    const goalMatch = parsed.content.match(/## 目标\n\n([\s\S]*?)(?=\n## |$)/);
-    if (goalMatch) {
-      goal = goalMatch[1].trim();
-    }
+    // goal 已移至根节点 requirement，不再从 Workspace.md 读取
 
     return {
       name: parsed.frontmatter.name as string || "",
@@ -964,7 +974,6 @@ ${data.nextStep}
       updatedAt: parsed.frontmatter.updatedAt as string || "",
       rules,
       docs,
-      goal,
     };
   }
 

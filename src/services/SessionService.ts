@@ -253,12 +253,19 @@ export class SessionService {
     const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, dirName);
     const graph = await this.json.readGraph(projectRoot, dirName);
 
+    // 从根节点读取 goal（requirement 字段）- goal 已统一到根节点
+    const rootNodeId = config.rootNodeId || "root";
+    const rootNodeMeta = graph.nodes[rootNodeId];
+    const rootNodeDirName = rootNodeMeta?.dirName || rootNodeId;
+    const rootNodeInfo = await this.md.readNodeInfo(projectRoot, dirName, rootNodeDirName);
+    const goal = rootNodeInfo.requirement || "";
+
     const result: SessionStatusBoundResult = {
       bound: true,
       workspace: {
         id: binding.workspaceId,
         name: config.name,
-        goal: workspaceMdData.goal
+        goal,  // 从根节点 requirement 读取
       },
       rules: workspaceMdData.rules
     };

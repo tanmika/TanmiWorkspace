@@ -282,11 +282,17 @@ function createMcpServer(services: Services): Server {
           break;
         }
 
-        case "workspace_get":
-          result = await services.workspace.get({
+        case "workspace_get": {
+          const fullResult = await services.workspace.get({
             workspaceId: args?.workspaceId as string,
           });
+          // AI 适配器：压缩 logMd
+          result = {
+            ...fullResult,
+            logMd: aiAdapter.transformWorkspaceGetLog(fullResult.logMd),
+          };
           break;
+        }
 
         case "workspace_delete":
           result = await services.workspace.delete({
