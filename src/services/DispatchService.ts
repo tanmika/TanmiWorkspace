@@ -1216,6 +1216,26 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
       sections.push(`## Acceptance Criteria to Verify
 
 ${criteriaList}`);
+
+      // Gate Function 强调
+      sections.push(`## ⚠️ Gate Function: MUST RUN Verification Commands
+
+**Iron Law: NO PASS WITHOUT RUNNING VERIFICATION COMMANDS YOURSELF**
+
+For each criterion above, check if it has a **Verify** column (format: \`[cmd]\`, \`[manual]\`, \`[check]\`):
+
+- \`[cmd] <command>\` → You MUST run this command yourself (do NOT trust exec's output)
+- \`[manual] <steps>\` → Verify exec logged evidence of performing these steps
+- \`[check] <condition>\` → Inspect code to confirm condition is met
+
+**You MUST produce an Evidence Table**:
+| # | Criterion | Verify | Command/Action | Result | Status |
+|---|-----------|--------|----------------|--------|--------|
+
+**Red Flags** (if you're thinking these, STOP):
+- "Exec already ran the test" → RUN IT YOURSELF
+- "I can see exec's output in the log" → LOGS CAN LIE, RUN IT YOURSELF
+- "Code looks correct" → LOOKING CORRECT ≠ WORKING, RUN THE COMMAND`);
     }
 
     // 审查指令

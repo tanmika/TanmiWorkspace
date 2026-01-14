@@ -75,6 +75,62 @@ THEN retry is attempted up to 3 times with exponential backoff
 
 **Output**: List of WHEN/THEN acceptance criteria
 
+### 2.5. Define Verification Method (MANDATORY)
+
+**Goal**: Specify HOW each criterion will be verified.
+
+**Format**: Add Verify column to each criterion
+
+| WHEN | THEN | Verify |
+|------|------|--------|
+| 调用 API | 返回正确数据 | `[cmd] npm test` |
+| 编译项目 | 无错误 | `[cmd] make build` |
+| 打开页面 | 显示组件 | `[manual] 打开浏览器检查` |
+| 添加函数 | 函数可用 | `[check] file:function exists` |
+
+**Verify 列格式**:
+
+| 前缀 | 含义 | 示例 |
+|------|------|------|
+| `[cmd]` | 运行命令验证 | `[cmd] pytest tests/` |
+| `[manual]` | 手动验证步骤 | `[manual] 打开页面检查 UI` |
+| `[check]` | 代码检查 | `[check] no TODO/FIXME` |
+
+**Examples by project type**:
+
+```markdown
+# Node.js 项目
+| WHEN | THEN | Verify |
+|------|------|--------|
+| 调用 createUser | 返回用户 ID | `[cmd] npm test -- --grep 'createUser'` |
+| 编译项目 | 无类型错误 | `[cmd] npx tsc --noEmit` |
+
+# Python 项目
+| WHEN | THEN | Verify |
+|------|------|--------|
+| 运行脚本 | 输出正确 | `[cmd] pytest tests/test_main.py` |
+| 导入模块 | 无错误 | `[cmd] python -c "import mymodule"` |
+
+# 无测试框架
+| WHEN | THEN | Verify |
+|------|------|--------|
+| 添加函数 | 可被调用 | `[check] src/utils.ts:newFunction exists` |
+| 修改配置 | 格式正确 | `[cmd] cat config.json | jq .` |
+
+# UI/文档任务
+| WHEN | THEN | Verify |
+|------|------|--------|
+| 打开设置页 | 显示新选项 | `[manual] 1.打开设置 2.检查新选项` |
+| 阅读文档 | 内容清晰 | `[manual] 检查文档完整性` |
+```
+
+**Required verifications** (至少包含一个):
+- 如果有构建步骤：`[cmd] <build command>`
+- 如果有自动化测试：`[cmd] <test command>`
+- 如果是代码任务：`[check] no TODO/FIXME in changed files`
+
+**Output**: Each criterion has a Verify method defined
+
 ### 3. Attach References
 
 **Goal**: Provide context the executor needs.
@@ -123,6 +179,11 @@ node_reference(nodeId, targetPath, action="add", description="...")
 - [ ] Main feature covered
 - [ ] Edge cases included
 - [ ] Error scenarios included
+
+### Verification Method
+- [ ] Each criterion has Verify column defined
+- [ ] At least one `[cmd]` verification (if applicable)
+- [ ] `[check] no TODO/FIXME` included for code tasks
 
 ### References
 - [ ] Relevant code files linked
@@ -195,16 +256,18 @@ node_reference({
 
 1. **Vague requirements** - "Make it better" without specifics
 2. **No acceptance criteria** - No way to verify completion
-3. **Missing context** - Executor will need to guess
-4. **Scope too large** - Should be split into multiple nodes
+3. **No verification method** - Criteria without Verify column = untestable
+4. **Missing context** - Executor will need to guess
+5. **Scope too large** - Should be split into multiple nodes
 
 ## Mandatory Rules
 
 1. **MUST write specific requirements** - Vague requirements cause executor confusion
 2. **MUST have at least 2 acceptance criteria** - No criteria = no way to verify done
-3. **MUST attach references** - Context-free tasks lead to wrong assumptions
-4. **MUST verify readiness before dispatch** - Unclear nodes waste retry cycles
-5. **NEVER dispatch scope-too-large tasks** - Split first, dispatch smaller units
+3. **MUST define verification method for each criterion** - No verification = no way to prove done
+4. **MUST attach references** - Context-free tasks lead to wrong assumptions
+5. **MUST verify readiness before dispatch** - Unclear nodes waste retry cycles
+6. **NEVER dispatch scope-too-large tasks** - Split first, dispatch smaller units
 
 ## Anti-Patterns
 

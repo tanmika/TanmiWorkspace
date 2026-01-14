@@ -47,18 +47,58 @@ As a `dispatch_spec` node, you are part of the dispatch flow:
 
 **Output**: Clear understanding of review scope
 
-### 2. Systematic Criterion Verification
+### 2. Systematic Criterion Verification (Gate Function)
 
-**Goal**: Check each acceptance criterion individually.
+**Goal**: INDEPENDENTLY verify each criterion by RUNNING verification commands.
 
-For each criterion (WHEN/THEN format):
-1. **Understand the condition** (WHEN)
-2. **Identify how to verify** (code inspection, test execution, manual check)
-3. **Execute verification**
-4. **Record evidence** (code location, test output, observation)
-5. **Determine status** (pass/fail)
+**Iron Law: NO PASS WITHOUT RUNNING VERIFICATION COMMANDS**
 
-**Output**: Criterion-by-criterion results with evidence
+For each criterion, check its **Verify** column and execute accordingly:
+
+#### If `[cmd]` - RUN the Command (MANDATORY)
+
+```bash
+# You MUST actually run the command, not assume it passes
+npm test -- --grep 'xxx'
+# or
+pytest tests/test_main.py
+# or whatever command is specified
+```
+
+1. **RUN** the command (FRESH - do not trust exec's output)
+2. **READ** the full output
+3. **CHECK** exit code (0 = success, non-zero = failure)
+4. **RECORD** evidence: `"[cmd] npm test → exit 0, 5/5 pass"`
+
+#### If `[manual]` - Verify Manual Steps Were Done
+
+1. **READ** exec's log for manual verification evidence
+2. **ASSESS** if steps were actually performed
+3. **RECORD** evidence: `"[manual] exec logged: 打开页面 → 组件显示正常"`
+
+#### If `[check]` - Perform Code Inspection
+
+1. **INSPECT** the specified target (file, function, pattern)
+2. **CONFIRM** condition is met
+3. **RECORD** evidence: `"[check] no TODO → grep found 0 matches"`
+
+#### If No Verify Column
+
+1. **INSPECT** code changes
+2. **ASSESS** if WHEN/THEN is logically satisfied
+3. **RECORD** reasoning (lower confidence)
+4. **⚠️ WARNING**: Flag as "unverified by command"
+
+**Evidence Table** (MUST produce):
+```markdown
+| # | Criterion | Verify | Command/Action | Result | Status |
+|---|-----------|--------|----------------|--------|--------|
+| 1 | WHEN... THEN... | [cmd] | npm test | exit 0, 3/3 | PASS |
+| 2 | WHEN... THEN... | [check] | grep TODO | 0 found | PASS |
+| 3 | WHEN... THEN... | [manual] | exec log | "UI checked" | PASS |
+```
+
+**Output**: Evidence table with command outputs for each criterion
 
 ### 3. Requirement Coverage Check
 
@@ -110,10 +150,12 @@ For each criterion (WHEN/THEN format):
 - [ ] Acceptance criteria extracted
 - [ ] Execution conclusion reviewed
 
-### Criterion Verification
-- [ ] Each WHEN/THEN criterion checked
-- [ ] Evidence collected for each
-- [ ] Status recorded (pass/fail)
+### Criterion Verification (Gate Function)
+- [ ] Each `[cmd]` command ACTUALLY RUN (not trusted from exec)
+- [ ] Each `[manual]` step verified from exec's log
+- [ ] Each `[check]` inspection performed
+- [ ] Evidence Table produced with command outputs
+- [ ] Status recorded (pass/fail) with evidence
 
 ### Coverage
 - [ ] All requirements addressed
@@ -140,12 +182,13 @@ For each criterion (WHEN/THEN format):
 **Review Node**: [review-node-id]
 **Verdict**: PASS / FAIL
 
-### Acceptance Criteria Results
+### Verification Evidence Table (MANDATORY)
 
-| # | Criterion | Status | Evidence |
-|---|-----------|--------|----------|
-| 1 | WHEN [condition] THEN [result] | PASS/FAIL | [evidence] |
-| 2 | WHEN [condition] THEN [result] | PASS/FAIL | [evidence] |
+| # | Criterion | Verify | Command/Action | Result | Status |
+|---|-----------|--------|----------------|--------|--------|
+| 1 | WHEN [condition] THEN [result] | [cmd] | `npm test` | exit 0, 3/3 pass | PASS |
+| 2 | WHEN [condition] THEN [result] | [check] | `grep TODO` | 0 found | PASS |
+| 3 | WHEN [condition] THEN [result] | [manual] | exec log | "verified" | PASS |
 
 ### Requirement Coverage
 
@@ -205,21 +248,26 @@ For each criterion (WHEN/THEN format):
 ## Red Flags
 
 1. **Skip criteria** - Not checking all WHEN/THEN conditions
-2. **No evidence** - Passing without verifiable proof
-3. **Subjective judgment** - Opinion-based instead of evidence-based
-4. **Partial pass** - Passing when some criteria fail
-5. **Ignore incomplete markers** - Passing code with TODO/FIXME/HACK
-6. **Accept shortcuts** - Passing simplified implementations
+2. **Trust exec's output** - Using exec's command output instead of running yourself
+3. **No evidence** - Passing without verifiable proof
+4. **Skip [cmd]** - Not actually running the verification command
+5. **Subjective judgment** - Opinion-based instead of evidence-based
+6. **No Evidence Table** - Verdict without structured evidence
+7. **Partial pass** - Passing when some criteria fail
+8. **Ignore incomplete markers** - Passing code with TODO/FIXME/HACK
+9. **Accept shortcuts** - Passing simplified implementations
 
 ## Mandatory Rules
 
 1. **MUST verify INDEPENDENTLY** - NEVER trust exec's conclusion, verify yourself
-2. **MUST check ALL criteria** - Skipping any criterion is review failure
-3. **MUST provide evidence** - Every pass/fail needs verifiable proof
-4. **MUST fail if ANY criterion fails** - Partial pass is not pass
-5. **NEVER be lenient** - Pass only when ALL criteria are met
-6. **MUST check for incomplete markers** - TODO/FIXME/HACK in code = automatic FAIL
-7. **MUST reject simplified implementations** - "暂时/临时/简化" workarounds = FAIL
+2. **MUST RUN verification commands** - `[cmd]` means YOU run it, not trust exec ran it
+3. **MUST check ALL criteria** - Skipping any criterion is review failure
+4. **MUST provide evidence** - Every pass/fail needs verifiable proof (command output)
+5. **MUST produce Evidence Table** - No table = incomplete review
+6. **MUST fail if ANY criterion fails** - Partial pass is not pass
+7. **NEVER be lenient** - Pass only when ALL criteria are met
+8. **MUST check for incomplete markers** - TODO/FIXME/HACK in code = automatic FAIL
+9. **MUST reject simplified implementations** - "暂时/临时/简化" workarounds = FAIL
 
 ## Anti-Patterns
 
@@ -236,9 +284,11 @@ For each criterion (WHEN/THEN format):
 | Excuse | Why Wrong | Correct Action |
 |--------|-----------|----------------|
 | "Exec's conclusion looks thorough" | Exec may have missed something | Verify independently |
+| "Exec already ran the test" | You need FRESH evidence, exec may have lied/erred | RUN the command yourself |
+| "I can see exec's output in the log" | Logs can be fabricated or outdated | RUN and see output yourself |
 | "It mostly works, close enough" | Partial implementation = partial pass = FAIL | ALL criteria must pass |
 | "The missing part is minor" | Criteria exist for a reason | Fail and specify what's missing |
-| "Code looks good, must work" | Looking good != working correctly | Test/verify each criterion |
+| "Code looks good, must work" | Looking good != working correctly | RUN verification command |
 | "I'll be lenient this time" | Leniency erodes quality standards | Standards apply equally every time |
 
 ---

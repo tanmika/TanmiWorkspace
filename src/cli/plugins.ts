@@ -272,12 +272,10 @@ interface PluginStatus {
   };
 }
 
-// 比较版本，只比较 major.minor 部分
+// 比较版本，完整比较 major.minor.patch
 function needsVersionUpdate(installedVersion: string | undefined, currentVersion: string): boolean {
   if (!installedVersion) return false; // 没有记录版本信息，无法判断
-  const installedParts = installedVersion.split(".").slice(0, 2).join(".");
-  const currentParts = currentVersion.split(".").slice(0, 2).join(".");
-  return installedParts !== currentParts;
+  return installedVersion !== currentVersion;
 }
 
 function getPluginStatus(): PluginStatus {
