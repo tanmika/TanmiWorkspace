@@ -11,6 +11,13 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.10.9] - 2026-01-14
+
+### Fixed
+
+- **版本更新工作区创建失败**: 修复 TutorialService 完成规划节点时缺少 conclusionsHash 导致的 CONCLUSIONS_HASH_REQUIRED 错误
+- **前端版本号不同步**: 修复发布脚本顺序问题，确保 web/package.json 版本号在编译前更新
+
 ## [1.10.8] - 2026-01-14
 
 ### Added

@@ -16,6 +16,7 @@ import type { ReferenceService } from "./ReferenceService.js";
 import type { DispatchService } from "./DispatchService.js";
 import type { ConfigService } from "./ConfigService.js";
 import type { MemoService } from "./MemoService.js";
+import { computeConclusionsHash } from "../utils/hash.js";
 import pkg from "../../package.json" with { type: "json" };
 
 /**
@@ -1033,11 +1034,21 @@ export class TutorialService {
       // 将 major 规划节点标记为已完成
       // 由于添加子节点后，规划节点已自动进入 monitoring 状态
       // 所有子节点已完成，可直接标记 complete
+      // 需要计算 conclusionsHash 以通过校验
+      const majorNodeForComplete = await this.node.get({ workspaceId, nodeId: majorNodeId });
+      const majorChildConclusions = [];
+      for (const childId of majorNodeForComplete.meta.children) {
+        const child = await this.node.get({ workspaceId, nodeId: childId });
+        majorChildConclusions.push({ nodeId: childId, conclusion: child.meta.conclusion || "" });
+      }
+      const majorConclusionsHash = computeConclusionsHash(majorChildConclusions);
+
       await this.state.transition({
         workspaceId,
         nodeId: majorNodeId,
         action: "complete",
         conclusion: `v${mm} 版本更新完成`,
+        conclusionsHash: majorConclusionsHash,
       });
     }
 
@@ -1073,11 +1084,20 @@ export class TutorialService {
     // 完成根节点（如果还未完成）
     const rootNode = await this.node.get({ workspaceId, nodeId: "root" });
     if (rootNode.meta.status === "monitoring") {
+      // 计算根节点子节点的 conclusionsHash
+      const rootChildConclusions = [];
+      for (const childId of rootNode.meta.children) {
+        const child = await this.node.get({ workspaceId, nodeId: childId });
+        rootChildConclusions.push({ nodeId: childId, conclusion: child.meta.conclusion || "" });
+      }
+      const rootConclusionsHash = computeConclusionsHash(rootChildConclusions);
+
       await this.state.transition({
         workspaceId,
         nodeId: "root",
         action: "complete",
         conclusion: "版本更新说明",
+        conclusionsHash: rootConclusionsHash,
       });
     }
 

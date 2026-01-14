@@ -9,6 +9,12 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.9
+    requirement: 修复版本更新工作区创建失败、前端版本号不同步
+    conclusion: |-
+      - 修复版本更新工作区创建时 CONCLUSIONS_HASH_REQUIRED 错误
+      - 修复发布脚本版本同步顺序，确保前端版本号正确
+    note: ""
   - version: 1.10.8
     requirement: 结论过期检测、update 自动更新插件、Skills 增强
     conclusion: |-
