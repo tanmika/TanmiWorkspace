@@ -9,6 +9,14 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.10.10
+    requirement: 工作区置顶、全局备份管理、验收标准动态列
+    conclusion: |-
+      - 工作区置顶：将重要工作区固定在列表顶部
+      - 全局备份管理：WebUI 备份界面，支持创建/恢复/导入/导出
+      - 验收标准动态列：支持任意列结构
+      - 设置页面优化和备份功能修复
+    note: ""
   - version: 1.10.9
     requirement: 修复版本更新工作区创建失败、前端版本号不同步
     conclusion: |-

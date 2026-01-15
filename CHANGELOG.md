@@ -11,6 +11,24 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.10.10] - 2026-01-15
+
+### Added
+
+- **工作区置顶功能**: 支持将重要工作区固定在列表顶部，悬浮显示 PIN 徽派，功能简介/版本更新工作区默认置顶
+- **全局备份管理**: CLI `update --beta` 命令支持更新到 beta 版本，更新前自动备份；WebUI 新增备份管理界面，支持创建/恢复/导入/导出备份
+
+### Improved
+
+- **设置页面优化**: 版本更新检测弹窗、派发配置移至二级弹窗、更新命令改为 `tanmi-workspace update`
+- **验收标准动态列**: AcceptanceCriteria 支持任意列结构（when/then、given/when/then、scenario/input/expected 等）
+
+### Fixed
+
+- **node_transition 参数**: 修复 conclusionsHash 参数未正确传递的问题
+- **备份功能安全性**: 添加路径遍历防护、前后端类型统一、移除无效代码
+- **备份功能代码质量**: restoreGlobalBackup 返回备份信息、添加并发操作防护、文件上传限制 10MB
+
 ## [1.10.9] - 2026-01-14
 
 ### Fixed
