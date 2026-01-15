@@ -212,6 +212,17 @@ export async function workspaceRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
+   * POST /api/workspaces/:id/pin - 切换工作区置顶状态
+   */
+  fastify.post<{ Params: WorkspaceIdParams }>(
+    "/workspaces/:id/pin",
+    { schema: workspaceIdParamsSchema },
+    async (request: FastifyRequest<{ Params: WorkspaceIdParams }>) => {
+      return services.workspace.togglePin(request.params.id);
+    }
+  );
+
+  /**
    * POST /api/workspaces/:id/dispatch/enable - 启用派发模式
    */
   fastify.post<{ Params: WorkspaceIdParams; Body: { useGit?: boolean } }>(

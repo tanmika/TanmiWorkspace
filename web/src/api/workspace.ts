@@ -46,6 +46,11 @@ export const workspaceApi = {
     return client.post(`/workspaces/${id}/restore`)
   },
 
+  // 切换置顶状态
+  togglePin(id: string): Promise<{ pinned: boolean }> {
+    return client.post(`/workspaces/${id}/pin`)
+  },
+
   // 获取开发调试信息
   getDevInfo(): Promise<DevInfoResult> {
     return client.get('/dev-info')

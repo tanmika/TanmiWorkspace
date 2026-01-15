@@ -81,6 +81,7 @@ export interface WorkspaceEntry {
   createdAt: string
   updatedAt: string
   errorInfo?: WorkspaceErrorInfo
+  pinned?: boolean
 }
 
 // 派发资源限制配置

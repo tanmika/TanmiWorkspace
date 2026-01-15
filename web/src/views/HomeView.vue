@@ -428,8 +428,12 @@ const filteredWorkspaces = computed(() => {
     )
   }
 
-  // 3. 排序
+  // 3. 排序（置顶优先，然后按时间）
   list.sort((a, b) => {
+    // 置顶的始终在前
+    if (a.pinned && !b.pinned) return -1
+    if (!a.pinned && b.pinned) return 1
+    // 同级别按时间排序
     const aTime = new Date(a[sortBy.value]).getTime()
     const bTime = new Date(b[sortBy.value]).getTime()
     return sortOrder.value === 'desc' ? bTime - aTime : aTime - bTime
@@ -463,6 +467,16 @@ function getBadgeText(status: string) {
   if (status === 'active') return 'Active'
   if (status === 'error') return 'Error'
   return 'Archived'
+}
+
+// 切换置顶状态
+async function handleTogglePin(id: string, event: Event) {
+  event.stopPropagation()
+  try {
+    await workspaceStore.togglePin(id)
+  } catch {
+    toastStore.error('操作失败')
+  }
 }
 
 </script>
@@ -579,10 +593,13 @@ function getBadgeText(status: string) {
           v-for="ws in filteredWorkspaces"
           :key="ws.id"
           class="card"
-          :class="{ archived: ws.status === 'archived' }"
+          :class="{ archived: ws.status === 'archived', pinned: ws.pinned }"
         >
           <div class="card-header">
             <h3 class="card-title" @click="ws.status !== 'error' && handleEnter(ws)">{{ ws.name }}</h3>
+            <!-- PIN 徽派：置顶时常驻显示，未置顶时悬浮显示 -->
+            <span v-if="ws.pinned" class="pin-badge pin-badge-active" @click="handleTogglePin(ws.id, $event)">PIN</span>
+            <span v-else class="pin-badge pin-badge-hint" @click="handleTogglePin(ws.id, $event)">PIN</span>
             <span class="badge" :class="getBadgeClass(ws.status)">{{ getBadgeText(ws.status) }}</span>
           </div>
           <div class="card-body">
@@ -1118,8 +1135,8 @@ function getBadgeText(status: string) {
 .card-header {
   padding: 20px 20px 12px;
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
+  gap: 8px;
 }
 
 .card-title {
@@ -1131,6 +1148,8 @@ function getBadgeText(status: string) {
   padding: 8px;
   cursor: pointer;
   transition: color 0.2s;
+  flex: 1;
+  min-width: 0;
 }
 
 .card-title:hover {
@@ -1595,5 +1614,79 @@ function getBadgeText(status: string) {
 .cli-copy-btn:hover {
   border-color: var(--accent-color);
   color: var(--accent-color);
+}
+
+/* ========== PIN 置顶功能样式 ========== */
+
+/* 置顶卡片样式 */
+.card.pinned {
+  border-left-color: var(--accent-red);
+  border-top: 3px solid var(--accent-red);
+}
+
+.card.pinned:hover {
+  border-left-color: var(--accent-red);
+}
+
+/* PIN 徽派基础样式 */
+.pin-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+/* PIN 提示状态（黑底白字，默认隐藏，悬浮显示） */
+.pin-badge-hint {
+  background: var(--border-heavy);
+  color: #fff;
+  display: none;
+  position: relative;
+}
+
+/* > 符号闪烁效果 */
+.pin-badge-hint::before {
+  content: '>';
+  margin-right: 2px;
+  animation: pin-blink 0.8s ease-in-out infinite;
+}
+
+@keyframes pin-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* 卡片悬浮时显示 hint */
+.card:hover .pin-badge-hint {
+  display: inline-block;
+}
+
+/* PIN 激活状态（红底白字，常驻显示） */
+.pin-badge-active {
+  background: var(--accent-red);
+  color: #fff;
+}
+
+.pin-badge-active:hover {
+  background: #b82424;
+}
+
+/* 置顶卡片不显示 hint（因为已经有 active） */
+.card.pinned .pin-badge-hint {
+  display: none !important;
+}
+
+/* 深色模式适配 */
+[data-theme="dark"] .pin-badge-hint {
+  background: #fff;
+  color: #111;
+}
+
+[data-theme="dark"] .pin-badge-active {
+  background: var(--accent-red);
+  color: #fff;
 }
 </style>

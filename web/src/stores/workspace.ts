@@ -227,6 +227,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  async function togglePin(id: string) {
+    try {
+      const result = await workspaceApi.togglePin(id)
+      // 更新本地状态
+      const ws = workspaces.value.find((w) => w.id === id)
+      if (ws) {
+        ws.pinned = result.pinned
+      }
+      return result
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '切换置顶状态失败'
+      throw e
+    }
+  }
+
   function clearCurrent() {
     currentWorkspace.value = null
     currentGraph.value = null
@@ -317,6 +332,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     deleteWorkspace,
     archiveWorkspace,
     restoreWorkspace,
+    togglePin,
     clearCurrent,
     enableDispatch,
     disableDispatch,

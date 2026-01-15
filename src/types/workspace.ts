@@ -36,6 +36,7 @@ export interface WorkspaceEntry {
   errorInfo?: WorkspaceErrorInfo;   // 错误信息（仅 status="error" 时存在）
   hasUnresolvedIssues?: boolean;    // 是否有未解决的健康问题
   lastWarningAt?: string;           // 最后警告时间 (ISO 8601)
+  pinned?: boolean;                 // 是否置顶（WebUI 使用）
 }
 
 /**

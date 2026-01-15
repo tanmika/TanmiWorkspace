@@ -317,17 +317,25 @@ Read(file_path: <返回的路径>/SKILL.md)
       filteredWorkspaces = filteredWorkspaces.filter(ws => ws.status === statusFilter);
     }
 
-    // 如果提供了 cwd，优先显示匹配的工作区
-    if (cwd) {
-      filteredWorkspaces = [...filteredWorkspaces].sort((a, b) => {
+    // 排序逻辑：置顶 > cwd匹配 > 更新时间
+    filteredWorkspaces = [...filteredWorkspaces].sort((a, b) => {
+      // 1. 置顶优先
+      const aPinned = a.pinned === true;
+      const bPinned = b.pinned === true;
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+
+      // 2. cwd 匹配优先（如果提供了 cwd）
+      if (cwd) {
         const aMatch = a.projectRoot === cwd || cwd.startsWith(a.projectRoot + "/");
         const bMatch = b.projectRoot === cwd || cwd.startsWith(b.projectRoot + "/");
         if (aMatch && !bMatch) return -1;
         if (!aMatch && bMatch) return 1;
-        // 同级别按更新时间降序
-        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      });
-    }
+      }
+
+      // 3. 按更新时间降序
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
 
     // 为每个工作区添加 webUrl 和 hasWarning 状态
     const port = getHttpPort();
@@ -879,6 +887,32 @@ Read(file_path: <返回的路径>/SKILL.md)
       default:
         return "?";
     }
+  }
+
+  /**
+   * 切换工作区置顶状态
+   * @param workspaceId 工作区 ID
+   * @returns 新的置顶状态
+   */
+  async togglePin(workspaceId: string): Promise<{ pinned: boolean }> {
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+
+    if (!wsEntry) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+
+    // 切换置顶状态
+    const newPinned = !wsEntry.pinned;
+    wsEntry.pinned = newPinned || undefined; // false 时删除字段以节省空间
+    wsEntry.updatedAt = now();
+
+    await this.json.writeIndex(index);
+
+    // 发送事件通知
+    eventService.emitWorkspaceUpdate(workspaceId);
+
+    return { pinned: newPinned };
   }
 
   /**

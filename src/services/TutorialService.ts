@@ -159,6 +159,20 @@ const TUTORIAL_CONTENT = {
           targetStatus: "completed",
           conclusion: "通过数据管理可以导入导出工作区和管理全局备份",
         },
+        {
+          type: "execution" as const,
+          title: "置顶功能",
+          requirement: `工作区支持置顶功能，将重要工作区固定在列表顶部：
+
+- **悬浮显示**：鼠标悬浮卡片时，标题右侧显示 \`>PIN\` 徽派
+- **点击置顶**：点击徽派后变为红色 \`PIN\` 常驻显示
+- **再次点击**：点击红色 \`PIN\` 取消置顶
+- **排序优先**：置顶工作区始终排在最前，不受排序方式影响
+
+功能简介和版本更新工作区默认置顶，方便快速访问。`,
+          targetStatus: "completed",
+          conclusion: "置顶功能帮助快速访问重要工作区",
+        },
       ],
     },
     // 节点体系 - 规划节点
@@ -788,6 +802,9 @@ export class TutorialService {
     });
 
     await this.addVersionNodes(result.workspaceId, oldVersion, fullHistory);
+
+    // 置顶版本更新工作区，方便用户快速访问
+    await this.workspace.togglePin(result.workspaceId);
   }
 
   /**
@@ -1200,6 +1217,9 @@ tanmi-workspace plugins
 
     // 启用 no-git 派发模式
     await this.dispatch.enable({ workspaceId: result.workspaceId, useGit: false });
+
+    // 置顶教程工作区，方便用户快速访问
+    await this.workspace.togglePin(result.workspaceId);
   }
 
   /**
