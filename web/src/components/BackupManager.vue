@@ -7,11 +7,11 @@ import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 
 const toastStore = useToastStore()
 
-// 备份元数据类型
+// 备份元数据类型（与后端 GlobalBackupTrigger 保持一致）
 interface BackupMeta {
   name: string
   createdAt: string
-  trigger: 'manual' | 'auto' | 'pre_operation' | 'pre_update'
+  trigger: 'manual' | 'beta_update' | 'pre_restore'
   codeVersion: string
   size: number
 }
@@ -272,13 +272,12 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// 触发类型标签
+// 触发类型标签（与后端 GlobalBackupTrigger 保持一致）
 function triggerLabel(trigger: string): string {
   const labels: Record<string, string> = {
     manual: '手动',
-    auto: '自动',
-    pre_operation: '操作前',
-    pre_update: '更新前'
+    beta_update: 'Beta更新前',
+    pre_restore: '恢复前'
   }
   return labels[trigger] || trigger
 }
@@ -512,26 +511,24 @@ function triggerLabel(trigger: string): string {
   color: #64b5f6;
 }
 
-.trigger-tag.auto {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-[data-theme="dark"] .trigger-tag.auto {
-  background: #1b3320;
-  color: #66bb6a;
-}
-
-.trigger-tag.pre_operation,
-.trigger-tag.pre_update {
+.trigger-tag.beta_update {
   background: #fff8e1;
   color: #f57c00;
 }
 
-[data-theme="dark"] .trigger-tag.pre_operation,
-[data-theme="dark"] .trigger-tag.pre_update {
+[data-theme="dark"] .trigger-tag.beta_update {
   background: #2a2010;
   color: #ffb74d;
+}
+
+.trigger-tag.pre_restore {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+[data-theme="dark"] .trigger-tag.pre_restore {
+  background: #1b3320;
+  color: #66bb6a;
 }
 
 .backup-actions {

@@ -595,11 +595,7 @@ export class BackupService {
         }
       }
 
-      // 验证 checksum
-      const extractedFiles = BackupService.GLOBAL_BACKUP_FILES
-        .map((f) => path.join(tempDir, f))
-        .filter(async (f) => await this.fs.exists(f));
-
+      // 验证 checksum（calculateChecksum 内部会跳过不存在的文件）
       const actualChecksum = await this.calculateChecksum(
         BackupService.GLOBAL_BACKUP_FILES.map((f) => path.join(tempDir, f))
       );

@@ -15,13 +15,29 @@ interface CreateBackupBody {
   trigger?: GlobalBackupTrigger;
 }
 
+/**
+ * 验证备份文件名安全性（防止路径遍历）
+ * @returns 清理后的安全文件名，或 null 表示非法
+ */
+function sanitizeBackupName(name: string): string | null {
+  // 只允许 .twbak 后缀
+  if (!name.endsWith(".twbak")) return null;
+  // 提取基础文件名（去除路径）
+  const baseName = path.basename(name);
+  // 检查是否包含路径遍历字符
+  if (baseName !== name || name.includes("..") || name.includes("/") || name.includes("\\")) {
+    return null;
+  }
+  return baseName;
+}
+
 // JSON Schema 定义
 const backupNameParamsSchema = {
   params: {
     type: "object",
     required: ["name"],
     properties: {
-      name: { type: "string", minLength: 1, maxLength: 200 },
+      name: { type: "string", minLength: 1, maxLength: 200, pattern: "^[^/\\\\]+\\.twbak$" },
     },
   },
 };
@@ -30,7 +46,7 @@ const createBackupSchema = {
   body: {
     type: "object",
     properties: {
-      trigger: { type: "string", enum: ["manual", "pre_update", "pre_restore"] },
+      trigger: { type: "string", enum: ["manual", "beta_update", "pre_restore"] },
     },
     additionalProperties: false,
   },
@@ -66,13 +82,16 @@ export async function backupRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post<{ Params: BackupNameParams }>(
     "/backup/global/:name/restore",
     { schema: backupNameParamsSchema },
-    async (request: FastifyRequest<{ Params: BackupNameParams }>) => {
-      const { name } = request.params;
+    async (request: FastifyRequest<{ Params: BackupNameParams }>, reply: FastifyReply) => {
+      const safeName = sanitizeBackupName(request.params.name);
+      if (!safeName) {
+        return reply.status(400).send({ error: "无效的备份文件名" });
+      }
       const backupDir = path.join(
         services.fs.getGlobalBasePath(),
         "backups"
       );
-      const backupPath = path.join(backupDir, name);
+      const backupPath = path.join(backupDir, safeName);
 
       // 恢复会自动创建 pre_restore 备份
       await services.backup.restoreGlobalBackup(backupPath);
@@ -96,9 +115,12 @@ export async function backupRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.delete<{ Params: BackupNameParams }>(
     "/backup/global/:name",
     { schema: backupNameParamsSchema },
-    async (request: FastifyRequest<{ Params: BackupNameParams }>) => {
-      const { name } = request.params;
-      await services.backup.deleteGlobalBackup(name);
+    async (request: FastifyRequest<{ Params: BackupNameParams }>, reply: FastifyReply) => {
+      const safeName = sanitizeBackupName(request.params.name);
+      if (!safeName) {
+        return reply.status(400).send({ error: "无效的备份文件名" });
+      }
+      await services.backup.deleteGlobalBackup(safeName);
       return { success: true };
     }
   );
@@ -113,12 +135,15 @@ export async function backupRoutes(fastify: FastifyInstance): Promise<void> {
       request: FastifyRequest<{ Params: BackupNameParams }>,
       reply: FastifyReply
     ) => {
-      const { name } = request.params;
+      const safeName = sanitizeBackupName(request.params.name);
+      if (!safeName) {
+        return reply.status(400).send({ error: "无效的备份文件名" });
+      }
       const backupDir = path.join(
         services.fs.getGlobalBasePath(),
         "backups"
       );
-      const backupPath = path.join(backupDir, name);
+      const backupPath = path.join(backupDir, safeName);
 
       // 检查文件是否存在
       if (!(await services.fs.exists(backupPath))) {
@@ -132,7 +157,7 @@ export async function backupRoutes(fastify: FastifyInstance): Promise<void> {
       reply.header("Content-Type", "application/octet-stream");
       reply.header(
         "Content-Disposition",
-        `attachment; filename="${encodeURIComponent(name)}"`
+        `attachment; filename="${encodeURIComponent(safeName)}"`
       );
 
       return reply.send(stream);
@@ -150,9 +175,9 @@ export async function backupRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: "未上传文件" });
     }
 
-    // 验证文件扩展名
-    const filename = data.filename;
-    if (!filename.endsWith(".twbak")) {
+    // 验证并清理文件名（防止路径遍历）
+    const safeFilename = sanitizeBackupName(data.filename);
+    if (!safeFilename) {
       return reply
         .status(400)
         .send({ error: "无效的文件格式，必须为 .twbak 文件" });
@@ -162,7 +187,7 @@ export async function backupRoutes(fastify: FastifyInstance): Promise<void> {
     const backupDir = path.join(services.fs.getGlobalBasePath(), "backups");
     await services.fs.ensureDir(backupDir);
 
-    const backupPath = path.join(backupDir, filename);
+    const backupPath = path.join(backupDir, safeFilename);
 
     // 检查文件是否已存在
     if (await services.fs.exists(backupPath)) {
@@ -198,7 +223,7 @@ export async function backupRoutes(fastify: FastifyInstance): Promise<void> {
 
       return {
         backup: {
-          name: filename,
+          name: safeFilename,
           path: backupPath,
           createdAt: manifest.createdAt,
           codeVersion: manifest.codeVersion,

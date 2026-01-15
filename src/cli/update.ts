@@ -317,7 +317,7 @@ async function performUpdate(
 
   child.on("close", async (code) => {
     if (code === 0) {
-      console.log(`\n✅ ${isBeta ? "更新" : "更新"}成功! v${currentVersion} -> v${targetVersion}`);
+      console.log(`\n✅ 更新成功! v${currentVersion} -> v${targetVersion}`);
 
       // 检测并更新插件
       const pluginResult = updatePluginsIfNeeded();
