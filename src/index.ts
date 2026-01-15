@@ -465,6 +465,8 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
             action: args?.action as TransitionAction,
             reason: args?.reason as string | undefined,
             conclusion: args?.conclusion as string | undefined,
+            conclusionsHash: args?.conclusionsHash as string | undefined,
+            confirmation: args?.confirmation as { token: string; userInput: string } | undefined,
           });
           break;
 

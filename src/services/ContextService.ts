@@ -240,8 +240,15 @@ export class ContextService {
       }
     }
 
-    // 11. 计算 conclusionsHash
-    const conclusionsHash = computeConclusionsHash(childConclusions);
+    // 11. 计算 conclusionsHash（使用 graph.json 中的原始结论，与 node_transition 保持一致）
+    // 注意：childConclusions 中的 conclusion 可能被截断，不能用于 hash 计算
+    const conclusionsForHash = nodeMeta.children
+      .map(childId => {
+        const childMeta = graph.nodes[childId];
+        return childMeta ? { nodeId: childId, conclusion: childMeta.conclusion || "" } : null;
+      })
+      .filter((c): c is { nodeId: string; conclusion: string } => c !== null && !!c.conclusion);
+    const conclusionsHash = computeConclusionsHash(conclusionsForHash);
 
     // 12. 返回结果
     return {
