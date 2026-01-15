@@ -11,6 +11,7 @@ import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 import WsCollapse from '@/components/ui/WsCollapse.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import IndexManagementModal from '@/components/IndexManagementModalNew.vue'
+import BackupManager from '@/components/BackupManager.vue'
 import { quickStartContent, triggerWords } from '@/data/helpContent'
 
 const settingsStore = useSettingsStore()
@@ -26,6 +27,23 @@ const installationStatus = ref<InstallationStatusResult | null>(null)
 // 索引管理
 const indexStats = ref<IndexStatsResult | null>(null)
 const showIndexManagement = ref(false)
+
+// 备份管理
+const showBackupManager = ref(false)
+const backupCount = ref<number | null>(null)
+
+// 加载备份数量
+async function loadBackupCount() {
+  try {
+    const response = await fetch('/api/backup/global')
+    if (response.ok) {
+      const data = await response.json()
+      backupCount.value = data.backups?.length ?? 0
+    }
+  } catch {
+    // 忽略错误
+  }
+}
 
 // 计算前后端编译时间差异是否超过100秒
 const buildTimeDiffTooLarge = computed(() => {
@@ -79,6 +97,8 @@ watch(() => props.visible, async (isVisible) => {
     } catch {
       // 忽略错误
     }
+    // 加载备份数量
+    loadBackupCount()
   }
 })
 
@@ -356,15 +376,15 @@ async function handleGenerateTutorial() {
 
       <!-- 索引管理 -->
       <div class="setting-section index-section">
-        <div class="setting-section-title">索引管理</div>
+        <div class="setting-section-title">数据管理</div>
         <div class="setting-section-desc">
-          导入外部工作区或管理本地索引
+          管理工作区索引和全局备份
         </div>
 
         <div class="index-entry">
           <div class="index-entry-info">
             <div class="index-entry-title">工作区索引</div>
-            <div class="index-entry-desc">当前已索引的工作区数量</div>
+            <div class="index-entry-desc">导入外部工作区或管理本地索引</div>
           </div>
           <div class="index-entry-stats">
             <div class="stat-box">
@@ -373,6 +393,20 @@ async function handleGenerateTutorial() {
             </div>
           </div>
           <WsButton variant="primary" @click="openIndexManagement">管理</WsButton>
+        </div>
+
+        <div class="index-entry">
+          <div class="index-entry-info">
+            <div class="index-entry-title">全局备份</div>
+            <div class="index-entry-desc">创建、恢复或导入工作台备份文件</div>
+          </div>
+          <div class="index-entry-stats">
+            <div class="stat-box">
+              <div class="stat-number">{{ backupCount ?? '-' }}</div>
+              <div class="stat-label">备份</div>
+            </div>
+          </div>
+          <WsButton variant="primary" @click="showBackupManager = true">管理</WsButton>
         </div>
       </div>
 
@@ -484,6 +518,9 @@ async function handleGenerateTutorial() {
     v-model:visible="showIndexManagement"
     @workspace-imported="handleWorkspaceImported"
   />
+
+  <!-- 备份管理弹窗 -->
+  <BackupManager v-model:visible="showBackupManager" @change="loadBackupCount" />
 
   <!-- 生成功能介绍确认弹窗 -->
   <WsConfirmDialog
@@ -1083,6 +1120,18 @@ async function handleGenerateTutorial() {
   font-size: 10px;
   color: var(--text-muted);
   margin-top: 4px;
+}
+
+.index-entry-icon {
+  width: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.index-entry + .index-entry {
+  margin-top: 12px;
 }
 
 </style>

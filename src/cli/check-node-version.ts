@@ -102,7 +102,10 @@ switch (subcommand) {
     import("./repair.js").then((m) => m.default());
     break;
   case "update":
-    import("./update.js").then((m) => m.default());
+    {
+      const betaFlag = process.argv.includes("--beta");
+      import("./update.js").then((m) => m.default({ beta: betaFlag }));
+    }
     break;
   case "version":
   case "-v":
@@ -124,7 +127,7 @@ TanmiWorkspace v${getVersion()} - AI 工作区管理系统
   webui      启动/管理 WebUI 服务
   rebuild    索引管理 (同步/重建/验证/备份)
   repair     工作区修复 (诊断问题/自动修复)
-  update     更新到最新版本
+  update     更新到最新版本 (--beta 更新到 beta 版本)
   -v         显示版本
 
 插件子命令:

@@ -59,3 +59,29 @@ export interface BackupMeta {
 export interface BackupListItem extends BackupMeta {
   path: string;           // 备份文件完整路径
 }
+
+// 全局备份触发类型
+export type GlobalBackupTrigger = "beta_update" | "manual" | "pre_restore";
+
+// 全局备份清单（打包在 .twbak 内）
+export interface GlobalBackupManifest {
+  format: "twbak";           // 固定值
+  version: "1.0";            // 格式版本
+  createdAt: string;         // ISO 8601
+  codeVersion: string;       // tanmi-workspace 版本
+  trigger: GlobalBackupTrigger;
+  checksum: string;          // 内容校验和
+  contents: {
+    workspaceCount: number;  // index.json 中的工作区数量
+  };
+}
+
+// 全局备份列表项（API 返回）
+export interface GlobalBackupItem {
+  name: string;              // 文件名
+  path: string;              // 完整路径
+  createdAt: string;
+  codeVersion: string;
+  trigger: GlobalBackupTrigger;
+  size: number;              // 字节数
+}

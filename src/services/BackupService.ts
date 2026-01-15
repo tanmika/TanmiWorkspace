@@ -7,10 +7,21 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { createRequire } from "module";
+import { createHash } from "node:crypto";
+import { createWriteStream, createReadStream } from "node:fs";
+import archiver from "archiver";
+import AdmZip from "adm-zip";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
-import type { BackupMeta, BackupListItem } from "../types/health.js";
+import type {
+  BackupMeta,
+  BackupListItem,
+  GlobalBackupTrigger,
+  GlobalBackupManifest,
+  GlobalBackupItem,
+} from "../types/health.js";
 import { TanmiError } from "../types/errors.js";
+import { devLog } from "../utils/devLog.js";
 
 const execAsync = promisify(exec);
 
@@ -311,5 +322,337 @@ export class BackupService {
     const metas = await this.readMeta(projectRoot, wsDirName);
     const filtered = metas.filter((m) => m.name !== backupName);
     await this.writeMeta(projectRoot, wsDirName, filtered);
+  }
+
+  // ========== 全局备份方法 ==========
+
+  private static readonly GLOBAL_BACKUP_DIR = "backups";
+  private static readonly GLOBAL_BACKUP_FILES = [
+    "index.json",
+    "config.json",
+    "installation-meta.json",
+  ];
+
+  /**
+   * 获取全局备份目录路径
+   */
+  private getGlobalBackupDir(): string {
+    return path.join(this.fs.getGlobalBasePath(), BackupService.GLOBAL_BACKUP_DIR);
+  }
+
+  /**
+   * 生成全局备份文件名
+   */
+  private generateGlobalBackupName(): string {
+    // ISO 时间戳，替换不安全字符
+    const timestamp = new Date().toISOString().replace(/:/g, "-").replace(/\./g, "-");
+    return `tanmi-backup-${timestamp}.twbak`;
+  }
+
+  /**
+   * 计算文件内容的 SHA256 校验和
+   */
+  private async calculateChecksum(filePaths: string[]): Promise<string> {
+    const hash = createHash("sha256");
+
+    for (const filePath of filePaths.sort()) {
+      try {
+        const content = await fs.readFile(filePath);
+        hash.update(content);
+      } catch {
+        // 文件不存在时跳过
+      }
+    }
+
+    return hash.digest("hex");
+  }
+
+  /**
+   * 创建全局备份
+   * @param trigger 触发类型
+   * @returns 备份信息
+   */
+  async createGlobalBackup(trigger: GlobalBackupTrigger): Promise<GlobalBackupItem> {
+    devLog.debug("[BackupService] createGlobalBackup 开始", { trigger });
+
+    const globalBasePath = this.fs.getGlobalBasePath();
+    const backupDir = this.getGlobalBackupDir();
+
+    // 确保备份目录存在
+    await this.fs.ensureDir(backupDir);
+    devLog.debug("[BackupService] 备份目录已确保存在", { backupDir });
+
+    // 收集要备份的文件
+    const filesToBackup: { name: string; path: string }[] = [];
+    for (const fileName of BackupService.GLOBAL_BACKUP_FILES) {
+      const filePath = path.join(globalBasePath, fileName);
+      if (await this.fs.exists(filePath)) {
+        filesToBackup.push({ name: fileName, path: filePath });
+      }
+    }
+
+    if (filesToBackup.length === 0) {
+      throw new TanmiError("INVALID_PARAMS", "没有可备份的文件");
+    }
+
+    devLog.debug("[BackupService] 找到待备份文件", { count: filesToBackup.length });
+
+    // 计算 checksum（备份前的源文件）
+    const checksum = await this.calculateChecksum(filesToBackup.map((f) => f.path));
+    devLog.debug("[BackupService] checksum 计算完成", { checksum: checksum.substring(0, 16) });
+
+    // 读取 index.json 获取工作区数量
+    let workspaceCount = 0;
+    const indexPath = path.join(globalBasePath, "index.json");
+    if (await this.fs.exists(indexPath)) {
+      try {
+        const indexContent = await this.fs.readFile(indexPath);
+        const indexData = JSON.parse(indexContent) as { workspaces?: unknown[] };
+        workspaceCount = indexData.workspaces?.length ?? 0;
+      } catch {
+        // 解析失败时保持为 0
+      }
+    }
+
+    // 创建 manifest
+    const manifest: GlobalBackupManifest = {
+      format: "twbak",
+      version: "1.0",
+      createdAt: new Date().toISOString(),
+      codeVersion: this.getCurrentCodeVersion(),
+      trigger,
+      checksum,
+      contents: {
+        workspaceCount,
+      },
+    };
+
+    // 生成备份文件名和路径
+    const backupName = this.generateGlobalBackupName();
+    const backupPath = path.join(backupDir, backupName);
+    devLog.debug("[BackupService] 备份文件路径", { backupPath });
+
+    // 创建 zip 包
+    await new Promise<void>((resolve, reject) => {
+      const output = createWriteStream(backupPath);
+      const archive = archiver("zip", { zlib: { level: 9 } });
+
+      output.on("close", () => {
+        devLog.debug("[BackupService] 压缩完成", { size: archive.pointer() });
+        resolve();
+      });
+
+      archive.on("error", (err) => {
+        devLog.error("[BackupService] 压缩失败", err);
+        reject(err);
+      });
+
+      archive.pipe(output);
+
+      // 添加 manifest.json
+      archive.append(JSON.stringify(manifest, null, 2), { name: "manifest.json" });
+
+      // 添加备份文件
+      for (const file of filesToBackup) {
+        archive.file(file.path, { name: file.name });
+      }
+
+      archive.finalize();
+    });
+
+    // 获取文件大小
+    const stats = await fs.stat(backupPath);
+
+    const result: GlobalBackupItem = {
+      name: backupName,
+      path: backupPath,
+      createdAt: manifest.createdAt,
+      codeVersion: manifest.codeVersion,
+      trigger,
+      size: stats.size,
+    };
+
+    devLog.debug("[BackupService] 全局备份创建成功", { backupName });
+    return result;
+  }
+
+  /**
+   * 列出全局备份
+   * @returns 备份列表，按时间倒序
+   */
+  async listGlobalBackups(): Promise<GlobalBackupItem[]> {
+    devLog.debug("[BackupService] listGlobalBackups 开始扫描全局备份");
+
+    const backupDir = this.getGlobalBackupDir();
+
+    // 检查备份目录是否存在
+    if (!(await this.fs.exists(backupDir))) {
+      devLog.debug("[BackupService] 备份目录不存在", { backupDir });
+      return [];
+    }
+
+    // 扫描 .twbak 文件
+    const entries = await fs.readdir(backupDir);
+    const backupFiles = entries.filter((e) => e.endsWith(".twbak"));
+    devLog.debug("[BackupService] 找到备份文件", { count: backupFiles.length });
+
+    const backups: GlobalBackupItem[] = [];
+
+    for (const fileName of backupFiles) {
+      const filePath = path.join(backupDir, fileName);
+
+      try {
+        // 读取 manifest
+        const zip = new AdmZip(filePath);
+        const manifestEntry = zip.getEntry("manifest.json");
+
+        if (!manifestEntry) {
+          devLog.warn("[BackupService] 备份文件缺少 manifest", { fileName });
+          continue;
+        }
+
+        const manifestContent = manifestEntry.getData().toString("utf-8");
+        const manifest = JSON.parse(manifestContent) as GlobalBackupManifest;
+
+        // 获取文件大小
+        const stats = await fs.stat(filePath);
+
+        backups.push({
+          name: fileName,
+          path: filePath,
+          createdAt: manifest.createdAt,
+          codeVersion: manifest.codeVersion,
+          trigger: manifest.trigger,
+          size: stats.size,
+        });
+      } catch (err) {
+        devLog.warn("[BackupService] 读取备份文件失败", { fileName, error: String(err) });
+        // 跳过损坏的备份文件
+      }
+    }
+
+    // 按时间倒序排序
+    backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    devLog.debug("[BackupService] 返回有效备份", { count: backups.length });
+    return backups;
+  }
+
+  /**
+   * 恢复全局备份
+   * @param backupPath 备份文件完整路径
+   */
+  async restoreGlobalBackup(backupPath: string): Promise<void> {
+    devLog.debug("[BackupService] 开始恢复全局备份", { backupPath });
+
+    // 验证备份文件存在
+    if (!(await this.fs.exists(backupPath))) {
+      throw new TanmiError("INVALID_PARAMS", "备份文件不存在");
+    }
+
+    // 验证文件扩展名
+    if (!backupPath.endsWith(".twbak")) {
+      throw new TanmiError("INVALID_PARAMS", "无效的 .twbak 格式");
+    }
+
+    // 读取并验证 manifest
+    let zip: AdmZip;
+    let manifest: GlobalBackupManifest;
+
+    try {
+      zip = new AdmZip(backupPath);
+      const manifestEntry = zip.getEntry("manifest.json");
+
+      if (!manifestEntry) {
+        throw new TanmiError("INVALID_PARAMS", "无效的 .twbak 格式：缺少 manifest.json");
+      }
+
+      const manifestContent = manifestEntry.getData().toString("utf-8");
+      manifest = JSON.parse(manifestContent) as GlobalBackupManifest;
+      devLog.debug("[BackupService] manifest 解析成功", { version: manifest.version });
+    } catch (err) {
+      if (err instanceof TanmiError) throw err;
+      throw new TanmiError("INVALID_PARAMS", `无效的 .twbak 格式：${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // 提取文件到临时目录验证 checksum
+    const globalBasePath = this.fs.getGlobalBasePath();
+    const tempDir = path.join(globalBasePath, ".restore-temp");
+
+    try {
+      // 清理并创建临时目录
+      if (await this.fs.exists(tempDir)) {
+        await this.fs.remove(tempDir);
+      }
+      await this.fs.ensureDir(tempDir);
+
+      // 提取文件到临时目录
+      for (const fileName of BackupService.GLOBAL_BACKUP_FILES) {
+        const entry = zip.getEntry(fileName);
+        if (entry) {
+          const content = entry.getData();
+          await fs.writeFile(path.join(tempDir, fileName), content);
+        }
+      }
+
+      // 验证 checksum
+      const extractedFiles = BackupService.GLOBAL_BACKUP_FILES
+        .map((f) => path.join(tempDir, f))
+        .filter(async (f) => await this.fs.exists(f));
+
+      const actualChecksum = await this.calculateChecksum(
+        BackupService.GLOBAL_BACKUP_FILES.map((f) => path.join(tempDir, f))
+      );
+
+      if (actualChecksum !== manifest.checksum) {
+        devLog.error("[BackupService] checksum 不匹配", undefined, { expected: manifest.checksum.substring(0, 16), actual: actualChecksum.substring(0, 16) });
+        throw new TanmiError("INVALID_PARAMS", "备份文件损坏或被篡改");
+      }
+
+      devLog.debug("[BackupService] checksum 验证通过");
+
+      // 自动备份当前状态
+      devLog.debug("[BackupService] 恢复前自动备份当前状态");
+      await this.createGlobalBackup("pre_restore");
+
+      // 覆盖目标文件
+      for (const fileName of BackupService.GLOBAL_BACKUP_FILES) {
+        const tempFilePath = path.join(tempDir, fileName);
+        const targetFilePath = path.join(globalBasePath, fileName);
+
+        if (await this.fs.exists(tempFilePath)) {
+          const content = await fs.readFile(tempFilePath, "utf-8");
+          await this.fs.writeFile(targetFilePath, content);
+          devLog.debug("[BackupService] 已恢复文件", { fileName });
+        }
+      }
+
+      devLog.debug("[BackupService] 全局备份恢复成功");
+    } finally {
+      // 清理临时目录
+      if (await this.fs.exists(tempDir)) {
+        await this.fs.remove(tempDir);
+      }
+    }
+  }
+
+  /**
+   * 删除全局备份
+   * @param backupName 备份文件名
+   */
+  async deleteGlobalBackup(backupName: string): Promise<void> {
+    devLog.debug("[BackupService] 删除全局备份", { backupName });
+
+    const backupDir = this.getGlobalBackupDir();
+    const backupPath = path.join(backupDir, backupName);
+
+    // 验证文件存在
+    if (!(await this.fs.exists(backupPath))) {
+      throw new TanmiError("INVALID_PARAMS", "备份文件不存在");
+    }
+
+    // 删除文件
+    await fs.unlink(backupPath);
+    devLog.debug("[BackupService] 全局备份已删除", { backupName });
   }
 }

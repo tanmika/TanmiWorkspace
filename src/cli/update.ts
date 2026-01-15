@@ -6,8 +6,13 @@ import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync } from "fs";
+import * as readline from "readline";
 import { parse as parseYaml } from "yaml";
+import semver from "semver";
 import { getPluginStatus } from "./plugins.js";
+import { BackupService } from "../services/BackupService.js";
+import { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
+import { JsonStorage } from "../storage/JsonStorage.js";
 
 function getVersion(): string {
   try {
@@ -197,40 +202,128 @@ async function checkLatestVersion(): Promise<string | null> {
   });
 }
 
-export default async function update() {
-  const currentVersion = getVersion();
-  console.log(`当前版本: v${currentVersion}`);
-  console.log("正在检查最新版本...");
+/**
+ * 获取所有版本列表
+ */
+async function getAllVersions(): Promise<string[]> {
+  return new Promise((resolve) => {
+    const child = spawn("npm", ["view", "tanmi-workspace", "versions", "--json"], {
+      shell: true,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
 
-  const latestVersion = await checkLatestVersion();
+    let output = "";
+    child.stdout.on("data", (data) => {
+      output += data.toString();
+    });
 
-  if (!latestVersion) {
-    console.error("\n无法获取最新版本信息，请检查网络连接");
-    process.exit(1);
+    child.on("close", (code) => {
+      if (code === 0) {
+        try {
+          const versions = JSON.parse(output.trim()) as string[];
+          resolve(Array.isArray(versions) ? versions : []);
+        } catch {
+          resolve([]);
+        }
+      } else {
+        resolve([]);
+      }
+    });
+
+    child.on("error", () => resolve([]));
+  });
+}
+
+/**
+ * 获取最新的 beta 版本
+ */
+async function getLatestBetaVersion(): Promise<string | null> {
+  const versions = await getAllVersions();
+
+  // 筛选 beta 版本
+  const betaVersions = versions.filter((v) => {
+    const prerelease = semver.prerelease(v);
+    return prerelease && prerelease[0] === "beta";
+  });
+
+  if (betaVersions.length === 0) {
+    return null;
   }
 
-  if (latestVersion === currentVersion) {
-    console.log(`\n已是最新版本 v${currentVersion}`);
-    return;
+  // 按 semver 排序，取最新的
+  betaVersions.sort((a, b) => semver.rcompare(a, b));
+  return betaVersions[0];
+}
+
+/**
+ * 判断当前版本是否为 beta
+ */
+function isBetaVersion(version: string): boolean {
+  const prerelease = semver.prerelease(version);
+  return prerelease !== null && prerelease[0] === "beta";
+}
+
+/**
+ * 用户确认提示
+ */
+async function confirm(message: string): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(`${message} (Y/n) `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() !== "n");
+    });
+  });
+}
+
+/**
+ * 创建全局备份
+ */
+async function createBackupBeforeUpdate(): Promise<{ success: boolean; backupName?: string; error?: string }> {
+  try {
+    const fsAdapter = new FileSystemAdapter();
+    const jsonStorage = new JsonStorage(fsAdapter);
+    const backupService = new BackupService(jsonStorage, fsAdapter);
+
+    console.log("\n📦 正在备份当前状态...");
+    const backup = await backupService.createGlobalBackup("beta_update");
+    console.log(colors.green(`✅ 备份完成: ${backup.name}`));
+    return { success: true, backupName: backup.name };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(colors.red(`❌ 备份失败: ${errorMsg}`));
+    return { success: false, error: errorMsg };
   }
+}
 
-  console.log(`最新版本: v${latestVersion}`);
-  console.log("\n正在更新...\n");
+/**
+ * 执行 npm install 更新
+ */
+async function performUpdate(
+  currentVersion: string,
+  targetVersion: string,
+  isBeta: boolean
+): Promise<void> {
+  console.log(`\n📥 正在安装 tanmi-workspace@${targetVersion}...\n`);
 
-  const child = spawn("npm", ["install", "-g", "tanmi-workspace@latest"], {
+  const child = spawn("npm", ["install", "-g", `tanmi-workspace@${targetVersion}`], {
     shell: true,
     stdio: "inherit",
   });
 
   child.on("close", async (code) => {
     if (code === 0) {
-      console.log(`\n更新成功! v${currentVersion} -> v${latestVersion}`);
+      console.log(`\n✅ ${isBeta ? "更新" : "更新"}成功! v${currentVersion} -> v${targetVersion}`);
 
       // 检测并更新插件
       const pluginResult = updatePluginsIfNeeded();
 
       // 显示更新内容
-      await showUpdateNotes(currentVersion, latestVersion);
+      await showUpdateNotes(currentVersion, targetVersion);
 
       // 显示重启提示
       console.log("请重启相关服务以应用更新:");
@@ -247,16 +340,166 @@ export default async function update() {
         console.log("");
       }
     } else {
-      console.error("\n更新失败，请尝试手动更新:");
-      console.error("  npm install -g tanmi-workspace");
+      console.error("\n❌ 更新失败，请尝试手动更新:");
+      console.error(`  npm install -g tanmi-workspace@${targetVersion}`);
     }
     process.exit(code || 0);
   });
 
   child.on("error", (err) => {
-    console.error("\n更新失败:", err.message);
+    console.error("\n❌ 更新失败:", err.message);
     console.error("请尝试手动更新:");
-    console.error("  npm install -g tanmi-workspace");
+    console.error(`  npm install -g tanmi-workspace@${targetVersion}`);
     process.exit(1);
   });
+}
+
+/**
+ * Beta 更新流程
+ */
+async function updateBeta(): Promise<void> {
+  const currentVersion = getVersion();
+  const currentIsBeta = isBetaVersion(currentVersion);
+
+  console.log(`当前版本: v${currentVersion}${currentIsBeta ? " (beta)" : ""}`);
+  console.log("正在检查最新 beta 版本...");
+
+  const latestBeta = await getLatestBetaVersion();
+  const latestStable = await checkLatestVersion();
+
+  // 没有可用的 beta 版本
+  if (!latestBeta) {
+    console.log(colors.yellow("\n⚠️  没有可用的 beta 版本"));
+    return;
+  }
+
+  // 当前 stable 版本高于或等于 beta
+  if (latestStable && semver.gte(currentVersion, latestBeta) && !currentIsBeta) {
+    console.log(colors.yellow(`\n⚠️  当前稳定版 v${currentVersion} 已高于最新 beta v${latestBeta}`));
+    console.log("无需更新到 beta 版本。");
+    return;
+  }
+
+  // 当前已是最新 beta
+  if (currentVersion === latestBeta) {
+    console.log(colors.green(`\n✅ 已是最新 beta 版本 v${currentVersion}`));
+    return;
+  }
+
+  // 当前是 beta，但有更新的 beta
+  if (currentIsBeta && semver.gt(latestBeta, currentVersion)) {
+    console.log(`\n最新 beta: v${latestBeta}`);
+  } else if (!currentIsBeta && semver.gt(latestBeta, currentVersion)) {
+    // 当前是 stable，有更新的 beta
+    console.log(`\n最新 beta: v${latestBeta}`);
+  } else {
+    // beta 版本不高于当前版本
+    console.log(colors.yellow(`\n⚠️  最新 beta v${latestBeta} 不高于当前版本 v${currentVersion}`));
+    return;
+  }
+
+  // 显示警告并确认
+  console.log("");
+  console.log(colors.yellow("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+  console.log(colors.yellow("⚠️  Beta 版本警告"));
+  console.log(colors.yellow("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+  console.log("");
+  console.log(`当前版本: v${currentVersion}`);
+  console.log(`最新 beta: v${latestBeta}`);
+  console.log("");
+  console.log("Beta 版本可能不稳定，更新前将自动备份。");
+  console.log("");
+
+  const confirmed = await confirm("是否继续？");
+  if (!confirmed) {
+    console.log("\n已取消更新。");
+    return;
+  }
+
+  // 创建备份
+  const backupResult = await createBackupBeforeUpdate();
+  if (!backupResult.success) {
+    console.log(colors.red("\n❌ 备份失败，中止更新。"));
+    console.log("请先解决备份问题后再尝试更新。");
+    process.exit(1);
+  }
+
+  // 执行更新
+  await performUpdate(currentVersion, latestBeta, true);
+}
+
+/**
+ * 普通更新流程（支持从 beta 回退到 stable）
+ */
+async function updateStable(): Promise<void> {
+  const currentVersion = getVersion();
+  const currentIsBeta = isBetaVersion(currentVersion);
+
+  console.log(`当前版本: v${currentVersion}${currentIsBeta ? " (beta)" : ""}`);
+  console.log("正在检查最新版本...");
+
+  const latestVersion = await checkLatestVersion();
+
+  if (!latestVersion) {
+    console.error("\n无法获取最新版本信息，请检查网络连接");
+    process.exit(1);
+  }
+
+  // 当前是 beta 版本，提示可以回退到 stable
+  if (currentIsBeta) {
+    console.log(`\n最新稳定版: v${latestVersion}`);
+    console.log("");
+    console.log(colors.yellow("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+    console.log(colors.yellow("📋 版本信息"));
+    console.log(colors.yellow("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+    console.log("");
+    console.log(`当前版本: v${currentVersion} (beta)`);
+    console.log(`最新稳定版: v${latestVersion}`);
+    console.log("");
+    console.log("检测到您正在使用 beta 版本，可回退到稳定版。");
+    console.log("");
+
+    const confirmed = await confirm(`是否回退到 v${latestVersion}？`);
+    if (!confirmed) {
+      console.log("\n已取消回退。");
+      return;
+    }
+
+    // 创建备份
+    const backupResult = await createBackupBeforeUpdate();
+    if (!backupResult.success) {
+      console.log(colors.red("\n❌ 备份失败，中止回退。"));
+      console.log("请先解决备份问题后再尝试。");
+      process.exit(1);
+    }
+
+    // 执行回退
+    await performUpdate(currentVersion, latestVersion, false);
+    return;
+  }
+
+  // 普通更新流程
+  if (latestVersion === currentVersion) {
+    console.log(`\n✅ 已是最新版本 v${currentVersion}`);
+    return;
+  }
+
+  // 检查是否需要更新
+  if (!semver.gt(latestVersion, currentVersion)) {
+    console.log(`\n✅ 当前版本 v${currentVersion} 已是最新`);
+    return;
+  }
+
+  console.log(`最新版本: v${latestVersion}`);
+
+  // 执行更新（普通更新不需要备份）
+  await performUpdate(currentVersion, latestVersion, false);
+}
+
+export default async function update(options?: { beta?: boolean }): Promise<void> {
+  if (options?.beta) {
+    await updateBeta();
+  } else {
+    await updateStable();
+  }
 }

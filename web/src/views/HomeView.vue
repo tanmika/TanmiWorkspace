@@ -7,6 +7,7 @@ import { settingsApi, type InstallationStatusResult, type PlatformStatus } from 
 import { getGlobalSSE } from '@/composables/useSSE'
 import type { WorkspaceInitParams, WorkspaceEntry } from '@/types'
 import SettingsModal from '@/components/SettingsModal.vue'
+import BackupManager from '@/components/BackupManager.vue'
 import WsModal from '@/components/ui/WsModal.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 
@@ -20,6 +21,7 @@ const theme = ref<'light' | 'dark'>('light')
 // 状态
 const showCreateDialog = ref(false)
 const showSettingsModal = ref(false)
+const showBackupManager = ref(false)
 
 // 确认弹窗状态
 const showConfirmDialog = ref(false)
@@ -495,7 +497,15 @@ function getBadgeText(status: string) {
         <button class="btn btn-secondary" @click="handleRefresh" :disabled="isRefreshing" title="刷新数据">
           <span :class="{ 'spin': isRefreshing }">⇄</span> SYNC
         </button>
-        <button class="btn btn-secondary" @click="showSettingsModal = true">
+        <button class="btn btn-secondary" @click="showBackupManager = true" title="备份管理">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <polyline points="9 13 12 16 15 13"/>
+            <line x1="12" y1="16" x2="12" y2="8"/>
+          </svg>
+          BACKUP
+        </button>
+        <button class="btn btn-secondary" @click="showSettingsModal = true" title="设置">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <line x1="1" y1="3" x2="15" y2="3"/>
             <rect x="10" y="1" width="3" height="4" fill="currentColor" stroke="none"/>
@@ -616,6 +626,9 @@ function getBadgeText(status: string) {
 
     <!-- 设置弹窗 -->
     <SettingsModal v-model:visible="showSettingsModal" @tutorial-created="handleRefresh" @workspace-imported="handleRefresh" />
+
+    <!-- 备份管理弹窗 -->
+    <BackupManager v-model:visible="showBackupManager" />
 
     <!-- 开发模式标识 -->
     <div v-if="devInfo?.isDev" class="dev-badge" title="开发模式 - 点击设置查看详细版本信息">
