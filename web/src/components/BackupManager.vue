@@ -49,6 +49,11 @@ const pendingBackup = ref<BackupMeta | null>(null)
 // 计算属性
 const hasBackups = computed(() => backups.value.length > 0)
 
+// 是否有操作正在进行（用于禁用所有操作按钮防止并发）
+const isOperating = computed(() =>
+  createLoading.value || restoreLoading.value || deleteLoading.value || importLoading.value
+)
+
 // 加载备份列表
 async function loadBackups() {
   loading.value = true
@@ -294,7 +299,7 @@ function triggerLabel(trigger: string): string {
     <div class="backup-manager">
       <!-- 操作栏 -->
       <div class="action-bar">
-        <WsButton variant="primary" :loading="createLoading" @click="handleCreate">
+        <WsButton variant="primary" :loading="createLoading" :disabled="isOperating && !createLoading" @click="handleCreate">
           + 创建备份
         </WsButton>
         <span class="action-hint">工作台备份仅包含全局索引配置，不包含具体工作区内容</span>
@@ -328,9 +333,9 @@ function triggerLabel(trigger: string): string {
             </div>
           </div>
           <div class="backup-actions">
-            <WsButton variant="ghost" size="sm" @click="confirmRestore(backup)">恢复</WsButton>
-            <WsButton variant="ghost" size="sm" @click="handleDownload(backup)">下载</WsButton>
-            <WsButton variant="danger" size="sm" @click="confirmDelete(backup)">删除</WsButton>
+            <WsButton variant="ghost" size="sm" :disabled="isOperating" @click="confirmRestore(backup)">恢复</WsButton>
+            <WsButton variant="ghost" size="sm" :disabled="isOperating" @click="handleDownload(backup)">下载</WsButton>
+            <WsButton variant="danger" size="sm" :disabled="isOperating" @click="confirmDelete(backup)">删除</WsButton>
           </div>
         </div>
       </div>
@@ -352,12 +357,12 @@ function triggerLabel(trigger: string): string {
       <div
         ref="dropZoneRef"
         class="drop-zone"
-        :class="{ dragging: isDragging }"
-        @dragenter="handleDragEnter"
-        @dragover="handleDragOver"
-        @dragleave="handleDragLeave"
-        @drop="handleDrop"
-        @click="handleImportClick"
+        :class="{ dragging: isDragging, disabled: isOperating }"
+        @dragenter="!isOperating && handleDragEnter($event)"
+        @dragover="!isOperating && handleDragOver($event)"
+        @dragleave="!isOperating && handleDragLeave($event)"
+        @drop="!isOperating && handleDrop($event)"
+        @click="!isOperating && handleImportClick()"
       >
         <div class="drop-zone-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -367,7 +372,7 @@ function triggerLabel(trigger: string): string {
           </svg>
         </div>
         <div class="drop-zone-text" :class="{ highlight: isDragging }">
-          {{ isDragging ? '释放以导入' : '拖拽 .twbak 文件到此处，或点击选择' }}
+          {{ isOperating ? '操作进行中...' : (isDragging ? '释放以导入' : '拖拽 .twbak 文件到此处，或点击选择') }}
         </div>
       </div>
     </div>
@@ -586,6 +591,16 @@ function triggerLabel(trigger: string): string {
 
 [data-theme="dark"] .drop-zone.dragging {
   background: #2d1b1b;
+}
+
+.drop-zone.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.drop-zone.disabled:hover {
+  border-color: var(--border-color);
+  background: var(--path-bg);
 }
 
 .drop-zone-icon {

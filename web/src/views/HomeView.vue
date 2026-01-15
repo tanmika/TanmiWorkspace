@@ -474,8 +474,8 @@ async function handleTogglePin(id: string, event: Event) {
   event.stopPropagation()
   try {
     await workspaceStore.togglePin(id)
-  } catch {
-    toastStore.error('操作失败')
+  } catch (e) {
+    toastStore.error(e instanceof Error ? e.message : '置顶操作失败')
   }
 }
 

@@ -902,9 +902,9 @@ Read(file_path: <返回的路径>/SKILL.md)
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
 
-    // 切换置顶状态
+    // 切换置顶状态（false 时删除字段以节省空间）
     const newPinned = !wsEntry.pinned;
-    wsEntry.pinned = newPinned || undefined; // false 时删除字段以节省空间
+    wsEntry.pinned = newPinned ? true : undefined;
     wsEntry.updatedAt = now();
 
     await this.json.writeIndex(index);

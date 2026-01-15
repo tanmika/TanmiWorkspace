@@ -37,7 +37,8 @@ const backupNameParamsSchema = {
     type: "object",
     required: ["name"],
     properties: {
-      name: { type: "string", minLength: 1, maxLength: 200, pattern: "^[^/\\\\]+\\.twbak$" },
+      // 白名单：只允许字母、数字、点、短横线、下划线
+      name: { type: "string", minLength: 1, maxLength: 200, pattern: "^[a-zA-Z0-9._-]+\\.twbak$" },
     },
   },
 };
@@ -93,18 +94,12 @@ export async function backupRoutes(fastify: FastifyInstance): Promise<void> {
       );
       const backupPath = path.join(backupDir, safeName);
 
-      // 恢复会自动创建 pre_restore 备份
-      await services.backup.restoreGlobalBackup(backupPath);
-
-      // 查找刚创建的 pre_restore 备份
-      const backups = await services.backup.listGlobalBackups();
-      const preRestoreBackup = backups.find(
-        (b) => b.trigger === "pre_restore"
-      );
+      // 恢复会自动创建 pre_restore 备份并返回
+      const preRestoreBackup = await services.backup.restoreGlobalBackup(backupPath);
 
       return {
         success: true,
-        preRestoreBackup: preRestoreBackup?.name || null,
+        preRestoreBackup: preRestoreBackup.name,
       };
     }
   );

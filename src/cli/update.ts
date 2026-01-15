@@ -21,7 +21,8 @@ function getVersion(): string {
     const require = createRequire(import.meta.url);
     const pkg = require(join(__dirname, "..", "..", "package.json"));
     return pkg.version || "0.0.0";
-  } catch {
+  } catch (err) {
+    console.error("[update] 读取版本号失败:", err instanceof Error ? err.message : String(err));
     return "0.0.0";
   }
 }
@@ -318,6 +319,11 @@ async function performUpdate(
   child.on("close", async (code) => {
     if (code === 0) {
       console.log(`\n✅ 更新成功! v${currentVersion} -> v${targetVersion}`);
+
+      // Beta 版本提示如何切换到稳定版
+      if (isBeta) {
+        console.log(colors.gray("提示: 如需切换到稳定版，运行 tanmi-workspace update"));
+      }
 
       // 检测并更新插件
       const pluginResult = updatePluginsIfNeeded();

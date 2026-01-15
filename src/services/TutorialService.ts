@@ -803,8 +803,12 @@ export class TutorialService {
 
     await this.addVersionNodes(result.workspaceId, oldVersion, fullHistory);
 
-    // 置顶版本更新工作区，方便用户快速访问
-    await this.workspace.togglePin(result.workspaceId);
+    // 置顶版本更新工作区，方便用户快速访问（失败不阻断主流程）
+    try {
+      await this.workspace.togglePin(result.workspaceId);
+    } catch {
+      // 置顶是辅助功能，失败时静默忽略
+    }
   }
 
   /**
@@ -1218,8 +1222,12 @@ tanmi-workspace plugins
     // 启用 no-git 派发模式
     await this.dispatch.enable({ workspaceId: result.workspaceId, useGit: false });
 
-    // 置顶教程工作区，方便用户快速访问
-    await this.workspace.togglePin(result.workspaceId);
+    // 置顶教程工作区，方便用户快速访问（失败不阻断主流程）
+    try {
+      await this.workspace.togglePin(result.workspaceId);
+    } catch {
+      // 置顶是辅助功能，失败时静默忽略
+    }
   }
 
   /**

@@ -360,7 +360,8 @@ export class BackupService {
         const content = await fs.readFile(filePath);
         hash.update(content);
       } catch {
-        // 文件不存在时跳过
+        // 文件不存在时跳过，但记录日志
+        devLog.debug("[BackupService] checksum 跳过不存在的文件", { filePath });
       }
     }
 
@@ -541,8 +542,9 @@ export class BackupService {
   /**
    * 恢复全局备份
    * @param backupPath 备份文件完整路径
+   * @returns 恢复前自动创建的 pre_restore 备份信息
    */
-  async restoreGlobalBackup(backupPath: string): Promise<void> {
+  async restoreGlobalBackup(backupPath: string): Promise<GlobalBackupItem> {
     devLog.debug("[BackupService] 开始恢复全局备份", { backupPath });
 
     // 验证备份文件存在
@@ -609,7 +611,7 @@ export class BackupService {
 
       // 自动备份当前状态
       devLog.debug("[BackupService] 恢复前自动备份当前状态");
-      await this.createGlobalBackup("pre_restore");
+      const preRestoreBackup = await this.createGlobalBackup("pre_restore");
 
       // 覆盖目标文件
       for (const fileName of BackupService.GLOBAL_BACKUP_FILES) {
@@ -624,10 +626,16 @@ export class BackupService {
       }
 
       devLog.debug("[BackupService] 全局备份恢复成功");
+
+      return preRestoreBackup;
     } finally {
       // 清理临时目录
       if (await this.fs.exists(tempDir)) {
-        await this.fs.remove(tempDir);
+        try {
+          await this.fs.remove(tempDir);
+        } catch (err) {
+          devLog.warn("[BackupService] 清理临时目录失败", { tempDir, error: String(err) });
+        }
       }
     }
   }

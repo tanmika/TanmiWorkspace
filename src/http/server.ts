@@ -64,7 +64,7 @@ export async function createServer(): Promise<FastifyInstance> {
   // 注册 multipart 插件（用于文件上传）
   await server.register(multipart, {
     limits: {
-      fileSize: 100 * 1024 * 1024, // 100MB 限制
+      fileSize: 10 * 1024 * 1024, // 10MB 限制（全局备份文件通常很小）
     },
   });
 
