@@ -21,6 +21,15 @@ const toastStore = useToastStore()
 const devInfo = ref<DevInfoResult | null>(null)
 const frontendBuildTime = __BUILD_TIME__
 
+// 版本更新信息
+interface VersionInfo {
+  currentVersion: string
+  latestVersion: string | null
+  updateAvailable: boolean
+}
+const versionInfo = ref<VersionInfo | null>(null)
+const showVersionModal = ref(false)
+
 // 插件安装状态
 const installationStatus = ref<InstallationStatusResult | null>(null)
 
@@ -44,6 +53,20 @@ async function loadBackupCount() {
     // 忽略错误
   }
 }
+
+// 派发配置弹窗
+const showDispatchConfig = ref(false)
+const tempMode = ref<'none' | 'git' | 'no-git'>('none')
+
+// 派发模式显示文字
+const dispatchModeLabel = computed(() => {
+  switch (localMode.value) {
+    case 'none': return '每次询问'
+    case 'git': return 'Git 模式'
+    case 'no-git': return '无 Git 模式'
+    default: return '-'
+  }
+})
 
 // 计算前后端编译时间差异是否超过100秒
 const buildTimeDiffTooLarge = computed(() => {
@@ -81,15 +104,19 @@ watch(() => props.visible, async (isVisible) => {
     await settingsStore.loadSettings()
     localMode.value = settingsStore.settings.defaultDispatchMode
     // 并行加载版本信息和插件状态
-    const [devInfoRes, installRes] = await Promise.allSettled([
+    const [devInfoRes, installRes, versionRes] = await Promise.allSettled([
       workspaceApi.getDevInfo(),
-      settingsApi.getInstallationStatus()
+      settingsApi.getInstallationStatus(),
+      fetch('/api/version').then(r => r.ok ? r.json() : null)
     ])
     if (devInfoRes.status === 'fulfilled') {
       devInfo.value = devInfoRes.value
     }
     if (installRes.status === 'fulfilled') {
       installationStatus.value = installRes.value
+    }
+    if (versionRes.status === 'fulfilled' && versionRes.value) {
+      versionInfo.value = versionRes.value
     }
     // 加载索引统计
     try {
@@ -154,38 +181,68 @@ function handleClose() {
   emit('update:visible', false)
 }
 
-// 保存配置
-function handleSave() {
+// 选择模式（弹窗内临时选择）
+function selectMode(mode: 'none' | 'git' | 'no-git') {
+  tempMode.value = mode
+}
+
+// 打开派发配置弹窗
+function openDispatchConfig() {
+  tempMode.value = localMode.value
+  showDispatchConfig.value = true
+}
+
+// 取消派发配置
+function cancelDispatchConfig() {
+  showDispatchConfig.value = false
+}
+
+// 保存派发配置
+async function saveDispatchConfig() {
   // 如果切换到 git 模式，显示警告确认
-  if (settingsStore.settings.defaultDispatchMode !== 'git' && localMode.value === 'git') {
+  if (settingsStore.settings.defaultDispatchMode !== 'git' && tempMode.value === 'git') {
     showGitWarning.value = true
     return
   }
-
-  doSave()
+  await doSaveDispatch()
 }
 
-// 执行保存
-async function doSave() {
+// 执行保存派发配置
+async function doSaveDispatch() {
   try {
     await settingsStore.updateSettings({
-      defaultDispatchMode: localMode.value,
+      defaultDispatchMode: tempMode.value,
     })
+    localMode.value = tempMode.value
     toastStore.success('配置已保存')
-    handleClose()
+    showDispatchConfig.value = false
   } catch {
     toastStore.error('保存失败')
   }
 }
 
-// 选择模式
-function selectMode(mode: 'none' | 'git' | 'no-git') {
-  localMode.value = mode
-}
-
 // 打开完整手册
 function openFullDocs() {
   window.open('/docs', '_blank')
+}
+
+// 版本更新相关
+function openVersionModal() {
+  showVersionModal.value = true
+}
+
+async function copyUpdateCommand() {
+  const command = 'tanmi-workspace update'
+  try {
+    await navigator.clipboard.writeText(command)
+    toastStore.success('已复制到剪贴板')
+  } catch {
+    toastStore.error('复制失败')
+  }
+}
+
+function openNpm() {
+  window.open('https://www.npmjs.com/package/tanmi-workspace', '_blank')
 }
 
 // 生成功能介绍工作区
@@ -223,69 +280,71 @@ async function handleGenerateTutorial() {
     @close="handleClose"
   >
     <div class="settings-content">
-      <!-- 派发模式设置 -->
+      <!-- 版本信息 -->
       <div class="setting-section">
+        <div class="setting-section-title">版本信息</div>
+        <div class="tech-spec">
+          <div class="spec-item">
+            <label>BACKEND VERSION</label>
+            <div class="spec-value-row">
+              <span class="spec-value-text">v{{ devInfo?.packageVersion || '-' }}</span>
+              <span
+                v-if="versionInfo"
+                class="version-status-tag"
+                :class="{ update: versionInfo.updateAvailable, latest: !versionInfo.updateAvailable }"
+                @click="openVersionModal"
+              >
+                {{ versionInfo.updateAvailable ? 'UPDATE' : 'LATEST' }}
+              </span>
+            </div>
+          </div>
+          <div class="spec-item">
+            <label>NODE VERSION</label>
+            <div class="spec-value">{{ devInfo?.nodeVersion || '-' }}</div>
+          </div>
+          <!-- 调试信息（仅开发模式显示） -->
+          <template v-if="devInfo?.isDev">
+            <div class="spec-item">
+              <label>后端编译</label>
+              <div class="spec-value">{{ formatTime(devInfo?.codeBuildTime) }}</div>
+            </div>
+            <div class="spec-item">
+              <label>前端编译</label>
+              <div class="spec-value">{{ formatTime(frontendBuildTime) }}</div>
+            </div>
+            <div class="spec-item">
+              <label>服务启动</label>
+              <div class="spec-value">{{ formatTime(devInfo?.serverStartTime) }}</div>
+            </div>
+          </template>
+        </div>
+        <div
+          v-if="buildTimeDiffTooLarge && devInfo?.isDev"
+          class="spec-warning"
+        >
+          [WARN] 前后端编译时间不一致，若为版本更新后需要指示 AI 重新编译前后端
+        </div>
+        <div class="version-links">
+          <a class="version-link" href="javascript:void(0)" @click="openVersionModal">
+            检查版本更新 <span class="version-link-arrow">&rarr;</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- 派发模式设置 -->
+      <div class="setting-section dispatch-section">
         <div class="setting-section-title">派发行为配置</div>
         <div class="setting-section-desc">
-          设置在工作区启用派发时的默认行为。已启用派发的工作区不受影响。
+          设置在工作区启用派发时的默认行为
         </div>
 
-        <div class="radio-group">
-          <label
-            class="radio-card"
-            :class="{ selected: localMode === 'none' }"
-            @click="selectMode('none')"
-          >
-            <input type="radio" name="dispatch-mode" :checked="localMode === 'none'">
-            <div>
-              <span class="radio-card-title">每次询问 (Recommended)</span>
-              <span class="radio-card-desc">启用派发时弹窗让用户选择模式。</span>
-            </div>
-          </label>
-
-          <label
-            class="radio-card"
-            :class="{ selected: localMode === 'no-git' }"
-            @click="selectMode('no-git')"
-          >
-            <input type="radio" name="dispatch-mode" :checked="localMode === 'no-git'">
-            <div>
-              <span class="radio-card-title">自动使用无 Git 模式</span>
-              <span class="radio-card-desc">直接启用派发，仅更新元数据，不影响代码仓库。</span>
-            </div>
-          </label>
-
-          <label
-            class="radio-card"
-            :class="{ selected: localMode === 'git' }"
-            @click="selectMode('git')"
-          >
-            <input type="radio" name="dispatch-mode" :checked="localMode === 'git'">
-            <div>
-              <span class="radio-card-title">自动使用 Git 模式 (Experimental)</span>
-              <span class="radio-card-desc">直接启用派发，自动创建分支、提交、回滚。</span>
-            </div>
-          </label>
-        </div>
-
-        <!-- Git 模式警告 -->
-        <div v-if="localMode === 'git'" class="warning-block">
-          <div class="warning-title">GIT MODE RISKS</div>
-          <ul class="warning-list">
-            <li>自动创建 <span class="code-tag">tanmi_workspace/process/*</span> 分支</li>
-            <li>任务完成时自动提交代码</li>
-            <li>测试失败时执行 <span class="code-tag">git reset --hard</span>（可能丢失未提交代码）</li>
-            <li>合并时可能产生冲突</li>
-          </ul>
-        </div>
-
-        <!-- 无 Git 模式说明 -->
-        <div v-if="localMode === 'no-git'" class="info-block">
-          <div class="info-title">NO-GIT MODE LIMITS</div>
-          <ul class="info-list">
-            <li>测试失败时无法自动回滚</li>
-            <li>建议在执行前手动备份重要文件</li>
-          </ul>
+        <div class="config-entry">
+          <div class="config-entry-info">
+            <div class="config-entry-title">默认派发模式</div>
+            <div class="config-entry-desc">已启用派发的工作区不受影响</div>
+          </div>
+          <div class="config-entry-value">{{ dispatchModeLabel }}</div>
+          <WsButton variant="primary" @click="openDispatchConfig">配置</WsButton>
         </div>
       </div>
 
@@ -370,7 +429,7 @@ async function handleGenerateTutorial() {
 
         <div class="command-bar">
           <span class="command-label">插件安装方式</span>
-          <span class="command-text">npx tanmi-workspace setup</span>
+          <span class="command-text">tanmi-workspace setup</span>
         </div>
       </div>
 
@@ -456,49 +515,10 @@ async function handleGenerateTutorial() {
           </a>
         </div>
       </div>
-
-      <!-- 版本信息 -->
-      <div class="setting-section version-section">
-        <div class="setting-section-title">版本信息</div>
-        <div class="tech-spec">
-          <div class="spec-item">
-            <label>BACKEND VERSION</label>
-            <div class="spec-value">v{{ devInfo?.packageVersion || '-' }}</div>
-          </div>
-          <div class="spec-item">
-            <label>NODE VERSION</label>
-            <div class="spec-value">{{ devInfo?.nodeVersion || '-' }}</div>
-          </div>
-          <!-- 调试信息（仅开发模式显示） -->
-          <template v-if="devInfo?.isDev">
-            <div class="spec-item">
-              <label>后端编译</label>
-              <div class="spec-value">{{ formatTime(devInfo?.codeBuildTime) }}</div>
-            </div>
-            <div class="spec-item">
-              <label>前端编译</label>
-              <div class="spec-value">{{ formatTime(frontendBuildTime) }}</div>
-            </div>
-            <div class="spec-item">
-              <label>服务启动</label>
-              <div class="spec-value">{{ formatTime(devInfo?.serverStartTime) }}</div>
-            </div>
-          </template>
-        </div>
-        <div
-          v-if="buildTimeDiffTooLarge && devInfo?.isDev"
-          class="spec-warning"
-        >
-          [WARN] 前后端编译时间不一致，若为版本更新后需要指示 AI 重新编译前后端
-        </div>
-      </div>
     </div>
 
     <template #footer>
-      <WsButton variant="cancel" @click="handleClose">取消</WsButton>
-      <WsButton variant="primary" @click="handleSave" :loading="settingsStore.loading">
-        保存更改
-      </WsButton>
+      <WsButton variant="primary" @click="handleClose">关闭</WsButton>
     </template>
   </WsModal>
 
@@ -510,7 +530,7 @@ async function handleGenerateTutorial() {
     type="warning"
     confirm-text="确定设置"
     cancel-text="取消"
-    @confirm="doSave"
+    @confirm="doSaveDispatch"
   />
 
   <!-- 索引管理弹窗 -->
@@ -532,6 +552,125 @@ async function handleGenerateTutorial() {
     cancel-text="取消"
     @confirm="handleGenerateTutorial"
   />
+
+  <!-- 版本更新弹窗 -->
+  <WsModal v-model="showVersionModal" title="VERSION INFO" width="480px">
+    <div class="version-modal-content">
+      <!-- 版本状态 -->
+      <div class="version-change">
+        <span class="version-number current">{{ versionInfo?.currentVersion }}</span>
+        <template v-if="versionInfo?.updateAvailable">
+          <span class="version-arrow">→</span>
+          <span class="version-number new">{{ versionInfo?.latestVersion }}</span>
+        </template>
+      </div>
+
+      <!-- 已是最新版本 -->
+      <div v-if="!versionInfo?.updateAvailable" class="latest-info">
+        <div class="latest-graphic">
+          <!-- 两个对齐的方块：表示版本同步 -->
+          <div class="sync-block-back"></div>
+          <div class="sync-block-front"></div>
+          <div class="sync-dot"></div>
+        </div>
+        <div class="latest-title">已是最新版本</div>
+        <div class="latest-text">v{{ versionInfo?.currentVersion }}</div>
+      </div>
+
+      <!-- 有更新可用 -->
+      <template v-else>
+        <div class="update-section">
+          <h3 class="section-title">更新方式</h3>
+          <p class="section-desc">在终端中运行以下命令：</p>
+
+          <div class="command-box-clickable" @click="copyUpdateCommand" title="点击复制">
+            <code class="command-code">tanmi-workspace update</code>
+            <span class="copy-hint">COPY</span>
+          </div>
+        </div>
+
+        <div class="tip-box">
+          <span class="tip-label">TIP</span>
+          <span class="tip-text">更新后需重启 AI 工具使新版本生效</span>
+        </div>
+      </template>
+    </div>
+
+    <template #footer>
+      <button class="btn-secondary" @click="openNpm">查看 NPM</button>
+      <button class="btn-primary" @click="showVersionModal = false">关闭</button>
+    </template>
+  </WsModal>
+
+  <!-- 派发配置弹窗 -->
+  <WsModal v-model="showDispatchConfig" title="DISPATCH CONFIG" width="520px">
+    <div class="dispatch-config-content">
+      <div class="radio-group">
+        <label
+          class="radio-card"
+          :class="{ selected: tempMode === 'none' }"
+          @click="selectMode('none')"
+        >
+          <input type="radio" name="dispatch-mode" :checked="tempMode === 'none'">
+          <div>
+            <span class="radio-card-title">每次询问 (Recommended)</span>
+            <span class="radio-card-desc">启用派发时弹窗让用户选择模式。</span>
+          </div>
+        </label>
+
+        <label
+          class="radio-card"
+          :class="{ selected: tempMode === 'no-git' }"
+          @click="selectMode('no-git')"
+        >
+          <input type="radio" name="dispatch-mode" :checked="tempMode === 'no-git'">
+          <div>
+            <span class="radio-card-title">自动使用无 Git 模式</span>
+            <span class="radio-card-desc">直接启用派发，仅更新元数据，不影响代码仓库。</span>
+          </div>
+        </label>
+
+        <label
+          class="radio-card"
+          :class="{ selected: tempMode === 'git' }"
+          @click="selectMode('git')"
+        >
+          <input type="radio" name="dispatch-mode" :checked="tempMode === 'git'">
+          <div>
+            <span class="radio-card-title">自动使用 Git 模式 (Experimental)</span>
+            <span class="radio-card-desc">直接启用派发，自动创建分支、提交、回滚。</span>
+          </div>
+        </label>
+      </div>
+
+      <!-- Git 模式警告 -->
+      <div v-if="tempMode === 'git'" class="warning-block">
+        <div class="warning-title">GIT MODE RISKS</div>
+        <ul class="warning-list">
+          <li>自动创建 <span class="code-tag">tanmi_workspace/process/*</span> 分支</li>
+          <li>任务完成时自动提交代码</li>
+          <li>测试失败时执行 <span class="code-tag">git reset --hard</span>（可能丢失未提交代码）</li>
+          <li>合并时可能产生冲突</li>
+        </ul>
+      </div>
+
+      <!-- 无 Git 模式说明 -->
+      <div v-if="tempMode === 'no-git'" class="info-block">
+        <div class="info-title">NO-GIT MODE LIMITS</div>
+        <ul class="info-list">
+          <li>测试失败时无法自动回滚</li>
+          <li>建议在执行前手动备份重要文件</li>
+        </ul>
+      </div>
+    </div>
+
+    <template #footer>
+      <WsButton variant="cancel" @click="cancelDispatchConfig">取消</WsButton>
+      <WsButton variant="primary" @click="saveDispatchConfig" :loading="settingsStore.loading">
+        保存
+      </WsButton>
+    </template>
+  </WsModal>
 </template>
 
 <style scoped>
@@ -571,6 +710,49 @@ async function handleGenerateTutorial() {
   color: var(--text-secondary);
   margin-bottom: 16px;
   line-height: 1.5;
+}
+
+/* 配置入口（类似索引管理） */
+.config-entry {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--path-bg);
+  border: 1px solid var(--border-color);
+}
+
+.config-entry-info {
+  flex: 1;
+}
+
+.config-entry-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.config-entry-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.config-entry-value {
+  font-family: var(--mono-font);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  padding: 4px 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+}
+
+/* 派发配置弹窗 */
+.dispatch-config-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* 单选卡片组 */
@@ -727,8 +909,8 @@ async function handleGenerateTutorial() {
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-/* 版本信息区 */
-.version-section {
+/* 派发配置区 */
+.dispatch-section {
   border-top: 1px solid var(--border-color);
   padding-top: 20px;
 }
@@ -1132,6 +1314,296 @@ async function handleGenerateTutorial() {
 
 .index-entry + .index-entry {
   margin-top: 12px;
+}
+/* 版本状态标签 */
+.spec-value-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.spec-value-text {
+  font-size: 14px;
+  font-family: var(--mono-font);
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.version-status-tag {
+  font-family: var(--mono-font);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.version-status-tag:hover {
+  opacity: 0.8;
+}
+
+.version-status-tag.update {
+  background: #D92424;
+  color: #fff;
+}
+
+.version-status-tag.latest {
+  background: #000;
+  color: #fff;
+}
+
+[data-theme="dark"] .version-status-tag.latest {
+  background: #fff;
+  color: #000;
+}
+
+/* 版本更新弹窗 */
+.version-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.version-change {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.version-number {
+  font-family: var(--mono-font);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.version-number.new {
+  color: var(--accent-red);
+}
+
+.version-arrow {
+  font-size: 20px;
+  color: var(--text-muted);
+}
+
+.latest-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0;
+}
+
+.latest-graphic {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+
+/* 后方方块：黑色边框 */
+.sync-block-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 56px;
+  height: 56px;
+  border: 3px solid var(--border-heavy);
+}
+
+[data-theme="dark"] .sync-block-back {
+  border-color: #fff;
+}
+
+/* 前方方块：完全对齐，偏移叠加 */
+.sync-block-front {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 56px;
+  height: 56px;
+  background: var(--border-heavy);
+}
+
+[data-theme="dark"] .sync-block-front {
+  background: #fff;
+}
+
+/* 红色确认点 */
+.sync-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  background: var(--accent-red);
+}
+
+.latest-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.latest-text {
+  font-family: var(--mono-font);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.update-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.update-section .section-title {
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+  color: var(--text-main);
+}
+
+.update-section .section-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.command-box-clickable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.command-box-clickable:hover {
+  border-color: var(--accent-red);
+}
+
+.command-box-clickable:hover .command-code {
+  color: var(--accent-red);
+}
+
+.command-box-clickable:hover .copy-hint {
+  color: var(--accent-red);
+}
+
+.command-code {
+  font-family: var(--mono-font);
+  font-size: 14px;
+  color: var(--text-main);
+  transition: color 0.15s ease;
+}
+
+.copy-hint {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.tip-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-color);
+  border-left: 4px solid var(--accent-red);
+}
+
+.tip-label {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  background: var(--accent-red);
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.tip-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 弹窗按钮 */
+.btn-primary,
+.btn-secondary {
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-primary {
+  background: var(--border-heavy);
+  border: 2px solid var(--border-heavy);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #000;
+  border-color: #000;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 2px solid var(--border-heavy);
+  color: var(--text-main);
+}
+
+.btn-secondary:hover {
+  background: var(--border-color);
+}
+
+[data-theme="dark"] .btn-primary {
+  color: #111;
+}
+
+[data-theme="dark"] .btn-primary:hover {
+  background: #fff;
+  border-color: #fff;
+  color: #111;
+}
+
+/* 版本链接 */
+.version-links {
+  margin-top: 16px;
+}
+
+.version-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--accent-red);
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.version-link:hover {
+  opacity: 0.8;
+}
+
+.version-link-arrow {
+  font-size: 14px;
+  transition: transform 0.2s ease;
+}
+
+.version-link:hover .version-link-arrow {
+  transform: translateX(3px);
 }
 
 </style>

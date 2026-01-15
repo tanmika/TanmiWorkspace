@@ -115,7 +115,7 @@ function closeModal() {
 }
 
 async function copyCommand() {
-  const command = 'npm update -g tanmi-workspace'
+  const command = 'tanmi-workspace update'
   try {
     await navigator.clipboard.writeText(command)
     toastStore.success('已复制到剪贴板')
@@ -192,7 +192,7 @@ onMounted(() => {
         <p class="section-desc">在终端中运行以下命令：</p>
 
         <div class="command-box" @click="copyCommand" title="点击复制">
-          <code class="command-text">npm update -g tanmi-workspace</code>
+          <code class="command-text">tanmi-workspace update</code>
           <span class="copy-hint">COPY</span>
         </div>
       </div>
