@@ -20,12 +20,16 @@ export type NodeRole =
   | "dispatch_quality"; // 派发质量审查：检查代码质量、最佳实践、潜在问题
 
 /**
- * 验收标准 - WHEN/THEN 格式
+ * 验收标准 - 动态键值对格式
+ *
+ * 支持任意列结构，如：
+ * - { when, then }
+ * - { given, when, then }
+ * - { scenario, input, expected }
+ *
+ * 前端会根据第一条数据的 keys 动态生成表头
  */
-export interface AcceptanceCriteria {
-  when: string;   // 触发条件，如 "用户点击登录按钮"
-  then: string;   // 期望结果，如 "显示登录成功提示"
-}
+export type AcceptanceCriteria = Record<string, string>;
 
 /**
  * 节点派发状态 - 用于跟踪派发执行进度

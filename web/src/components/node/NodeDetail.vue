@@ -45,6 +45,13 @@ const roleConfig = computed(() => nodeRole.value ? NODE_ROLE_CONFIG[nodeRole.val
 const dispatchInfo = computed(() => nodeMeta.value?.dispatch)
 const dispatchConfig = computed(() => dispatchInfo.value ? DISPATCH_STATUS_CONFIG[dispatchInfo.value.status] : null)
 
+// 验收标准列名（从第一条数据的 keys 动态获取）
+const acceptanceColumns = computed(() => {
+  const criteria = currentNode.value?.acceptanceCriteria
+  if (!criteria?.length || !criteria[0]) return []
+  return Object.keys(criteria[0])
+})
+
 // 可用的状态转换（根据节点类型）
 const availableActions = computed(() => {
   const status = nodeMeta.value?.status
@@ -240,10 +247,13 @@ function handleMemoClick(memoId: string) {
     <!-- 验收标准 -->
     <div v-if="currentNode.acceptanceCriteria?.length" class="detail-section">
       <div class="section-title">Acceptance Criteria / 验收标准</div>
-      <div class="acceptance-table">
+      <div class="acceptance-table" :style="{ '--col-count': acceptanceColumns.length }">
         <div class="acceptance-header">
-          <div class="acceptance-col-when">条件 (WHEN)</div>
-          <div class="acceptance-col-then">期望结果 (THEN)</div>
+          <div
+            v-for="col in acceptanceColumns"
+            :key="col"
+            class="acceptance-col"
+          >{{ col.toUpperCase() }}</div>
         </div>
         <div class="acceptance-body">
           <div
@@ -251,11 +261,12 @@ function handleMemoClick(memoId: string) {
             :key="index"
             class="acceptance-row"
           >
-            <div class="acceptance-col-when">
-              <MarkdownContent :content="criteria.when" />
-            </div>
-            <div class="acceptance-col-then">
-              <MarkdownContent :content="criteria.then" />
+            <div
+              v-for="col in acceptanceColumns"
+              :key="col"
+              class="acceptance-col"
+            >
+              <MarkdownContent :content="criteria[col] || ''" />
             </div>
           </div>
         </div>
@@ -749,32 +760,31 @@ function handleMemoClick(memoId: string) {
   border-bottom: none;
 }
 
-.acceptance-col-when,
-.acceptance-col-then {
+.acceptance-col {
+  flex: 1;
   padding: 12px 16px;
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-secondary);
+  border-right: 1px solid var(--border-color);
 }
 
-.acceptance-col-when {
-  flex: 0 0 40%;
-  border-right: 1px solid var(--border-color);
+.acceptance-col:last-child {
+  border-right: none;
+}
+
+.acceptance-col:first-child {
   background: #fcfcfc;
 }
 
-[data-theme="dark"] .acceptance-col-when {
+[data-theme="dark"] .acceptance-col:first-child {
   background: #1e1e1e;
 }
 
-.acceptance-col-then {
-  flex: 1;
-}
-
-.acceptance-header .acceptance-col-when,
-.acceptance-header .acceptance-col-then {
+.acceptance-header .acceptance-col {
   padding: 10px 16px;
   color: var(--text-main);
+  background: transparent;
 }
 
 /* 文档列表 */

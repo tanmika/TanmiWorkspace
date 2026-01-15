@@ -3,11 +3,8 @@
 
 // ========== 基础类型 ==========
 
-// 验收标准 - WHEN/THEN 格式
-export interface AcceptanceCriteria {
-  when: string   // 触发条件
-  then: string   // 期望结果
-}
+// 验收标准 - 动态键值对格式（支持任意列）
+export type AcceptanceCriteria = Record<string, string>
 
 export type WorkspaceStatus = 'active' | 'archived' | 'error'
 

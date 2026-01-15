@@ -23,6 +23,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { workspaceTools } from "./tools/workspace.js";
 import { nodeTools } from "./tools/node.js";
+import type { AcceptanceCriteria } from "./types/node.js";
 import { stateTools } from "./tools/state.js";
 import { contextTools } from "./tools/context.js";
 import { logTools } from "./tools/log.js";
@@ -385,7 +386,7 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
             rulesHash,
             role: nodeRole,
-            acceptanceCriteria: args?.acceptanceCriteria as Array<{ when: string; then: string }> | undefined,
+            acceptanceCriteria: args?.acceptanceCriteria as AcceptanceCriteria[] | undefined,
             isNeedTest: args?.isNeedTest as boolean | undefined,
             testRequirement: args?.testRequirement as string | undefined,
           });
@@ -659,7 +660,7 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
         case "dispatch_create": {
           const workspaceId = args?.workspaceId as string;
           const parentId = args?.parentId as string;
-          const exec = args?.exec as { requirement: string; acceptanceCriteria: Array<{ when: string; then: string }> };
+          const exec = args?.exec as { requirement: string; acceptanceCriteria: AcceptanceCriteria[] };
           const includeQuality = args?.includeQuality as boolean | undefined;
           const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
           result = await services.dispatch.createDispatchChildren(

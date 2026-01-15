@@ -589,7 +589,7 @@ export class DispatchService {
    * @returns 完整性检查结果
    */
   checkNodeReadiness(
-    nodeInfo: { title: string; requirement: string; acceptanceCriteria?: Array<{ when: string; then: string }> },
+    nodeInfo: { title: string; requirement: string; acceptanceCriteria?: AcceptanceCriteria[] },
     nodeMeta: NodeMeta
   ): NodeReadinessCheck {
     const errors: string[] = [];
@@ -1094,7 +1094,7 @@ Read(file_path: <返回的路径>/SKILL.md)
   private buildExecutorPrompt(
     workspaceId: string,
     nodeId: string,
-    nodeInfo: { title: string; requirement: string; acceptanceCriteria?: Array<{ when: string; then: string }> },
+    nodeInfo: { title: string; requirement: string; acceptanceCriteria?: AcceptanceCriteria[] },
     nodeMeta: NodeMeta
   ): string {
     const sections: string[] = [];
@@ -1192,7 +1192,7 @@ dispatch_complete(workspaceId="${workspaceId}", nodeId="${nodeId}", success=fals
     nodeId: string,
     targetNodeId: string,
     role: "dispatch_spec" | "dispatch_quality",
-    nodeInfo: { title: string; requirement?: string; acceptanceCriteria?: Array<{ when: string; then: string }> }
+    nodeInfo: { title: string; requirement?: string; acceptanceCriteria?: AcceptanceCriteria[] }
   ): string {
     const sections: string[] = [];
     const isSpec = role === "dispatch_spec";
