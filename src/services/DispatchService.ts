@@ -1497,10 +1497,13 @@ ${isSpec ? "- ANY criterion fails → entire review FAILS" : "- Report specific 
       // 9. 自动聚焦到 exec 节点（下一个要执行的节点）
       graph.currentFocus = execNodeId;
 
+      // 注意：graph.json 在所有目录和文件创建成功后才写入
+      // 这确保了事务性：如果任何文件操作失败，graph.json 不会被更新
+      // 回滚时只需删除已创建的目录，无需回滚 graph.json
       await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     } catch (error) {
-      // 回滚：删除已创建的目录
+      // 回滚：删除已创建的目录（graph.json 此时尚未写入，无需回滚）
       for (const dir of createdDirs) {
         try {
           await this.fs.rmdir(dir);

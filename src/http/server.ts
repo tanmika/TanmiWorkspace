@@ -99,7 +99,9 @@ export async function createServer(): Promise<FastifyInstance> {
       try {
         reply.raw.write(`: heartbeat\n\n`);
       } catch {
+        // 心跳失败，清理 interval 和客户端
         clearInterval(heartbeat);
+        eventService.removeClient(clientId);
       }
     }, 30000);
 
@@ -134,18 +136,13 @@ export async function createServer(): Promise<FastifyInstance> {
       // 广播事件（仅本地广播，不再转发，避免循环）
       const event = request.body;
       if (event && event.type && event.workspaceId) {
-        const data = JSON.stringify(event);
-        const message = `data: ${data}\n\n`;
-
-        // 直接写入所有客户端，不调用 broadcast() 避免再次转发
-        const clients = (eventService as unknown as { clients: Map<string, unknown> }).clients;
-        for (const [, clientReply] of clients) {
-          try {
-            (clientReply as { raw: { write: (msg: string) => void } }).raw.write(message);
-          } catch {
-            // 忽略写入失败
-          }
-        }
+        // 使用 localBroadcast 方法，避免触发远程转发导致循环
+        eventService.localBroadcast({
+          type: event.type as import("../services/EventService.js").EventType,
+          workspaceId: event.workspaceId,
+          nodeId: event.nodeId,
+          timestamp: event.timestamp,
+        });
 
         server.log.info(`[内部事件] 收到并广播: ${event.type} (${event.workspaceId})`);
         return { success: true };

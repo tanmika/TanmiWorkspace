@@ -8,6 +8,7 @@ import type { WorkspaceIndex, WorkspaceConfig, WorkspaceEntry } from "../types/w
 import type { NodeGraph } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { generateWorkspaceDirName, generateNodeDirName, extractShortId } from "../utils/id.js";
+import { devLog } from "../utils/devLog.js";
 
 /**
  * JSON 存储封装
@@ -393,6 +394,8 @@ export class JsonStorage {
       if (shortId.length >= 6) {
         for (const entry of entries) {
           if (entry.includes(shortId)) {
+            // 警告：使用了兜底的 includes 匹配，可能存在误匹配风险
+            devLog.warn(`[migration] 使用兜底匹配查找目录: shortId=${shortId} → ${entry}`);
             return entry;
           }
         }

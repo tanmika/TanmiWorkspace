@@ -20,7 +20,8 @@ export interface SSEEvent {
 }
 
 // 内部事件令牌（用于验证跨进程调用）
-const INTERNAL_EVENT_TOKEN = process.env.TANMI_INTERNAL_TOKEN || "tanmi-internal-event-token";
+// 使用 PID + 启动时间戳生成，每次进程启动唯一，配合 IP 白名单验证确保安全
+const INTERNAL_EVENT_TOKEN = process.env.TANMI_INTERNAL_TOKEN || `tanmi-${process.pid}-${Date.now()}`;
 
 class EventService {
   private clients: Map<string, FastifyReply> = new Map();
@@ -111,10 +112,22 @@ class EventService {
    * 向所有客户端推送事件（本地 + 远程）
    */
   broadcast(event: SSEEvent): void {
+    this.localBroadcast(event);
+
+    // 远程转发（异步，不阻塞）
+    if (this.remoteHttpPort) {
+      this.forwardToRemote(event);
+    }
+  }
+
+  /**
+   * 仅向本地客户端推送事件（不触发远程转发）
+   * 用于内部事件接收端点，避免循环转发
+   */
+  localBroadcast(event: SSEEvent): void {
     const data = JSON.stringify(event);
     const message = `data: ${data}\n\n`;
 
-    // 本地广播
     for (const [clientId, reply] of this.clients) {
       try {
         reply.raw.write(message);
@@ -122,11 +135,6 @@ class EventService {
         // 写入失败，移除客户端
         this.clients.delete(clientId);
       }
-    }
-
-    // 远程转发（异步，不阻塞）
-    if (this.remoteHttpPort) {
-      this.forwardToRemote(event);
     }
   }
 
