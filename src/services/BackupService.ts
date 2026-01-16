@@ -102,7 +102,9 @@ export class BackupService {
       }
       const content = await this.fs.readFile(metaPath);
       return JSON.parse(content) as BackupMeta[];
-    } catch {
+    } catch (error) {
+      // 元数据解析失败：用户层面无感知，但可能导致备份列表丢失
+      devLog.warn("[BackupService] 备份元数据解析失败，返回空列表", { metaPath, error: error instanceof Error ? error.message : String(error) });
       return [];
     }
   }
@@ -178,9 +180,11 @@ export class BackupService {
     try {
       await spawnTar(["-tzf", backupPath]);
       verified = true;
-    } catch {
-      // 验证失败，记录但不阻止
-      console.error(`[backup] 备份验证失败: ${backupPath}`);
+    } catch (error) {
+      // 验证失败，记录但不阻止（双重打印：console 供用户快速排查，devLog 供后台日志）
+      const errMsg = `[backup] 备份验证失败: ${backupPath}`;
+      console.error(errMsg);
+      devLog.warn(errMsg, { error: error instanceof Error ? error.message : String(error) });
     }
 
     // 获取文件大小
@@ -235,9 +239,10 @@ export class BackupService {
       const filePath = path.join(backupDir, meta.name);
       try {
         await fs.unlink(filePath);
-        console.log(`[backup] 轮转删除: ${meta.name}`);
-      } catch {
-        // 删除失败不阻止
+        devLog.debug("[BackupService] 轮转删除成功", { backupName: meta.name });
+      } catch (error) {
+        // 删除失败不阻止，但记录日志
+        devLog.warn("[BackupService] 轮转删除失败", { backupName: meta.name, filePath, error: error instanceof Error ? error.message : String(error) });
       }
     }
 

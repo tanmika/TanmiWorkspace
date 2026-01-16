@@ -165,8 +165,9 @@ export class NodeService {
           }
         }
       }
-    } catch {
-      // 读取目录失败，返回原始值
+    } catch (error) {
+      // 读取目录失败，记录日志后返回原始值
+      devLog.warn("[NodeService] 读取节点目录失败，使用原始 dirName", { nodeId, dirName, nodesDir, error: error instanceof Error ? error.message : String(error) });
     }
 
     // 未找到匹配目录，返回原始值（后续可能会抛出文件不存在错误）
