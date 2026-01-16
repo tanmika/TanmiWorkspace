@@ -274,9 +274,10 @@ async function confirm(message: string): Promise<boolean> {
   });
 
   return new Promise((resolve) => {
-    rl.question(`${message} (Y/n) `, (answer) => {
+    rl.question(`${message} (y/N) `, (answer) => {
       rl.close();
-      resolve(answer.toLowerCase() !== "n");
+      const trimmed = answer.trim().toLowerCase();
+      resolve(trimmed === "y" || trimmed === "yes");
     });
   });
 }
