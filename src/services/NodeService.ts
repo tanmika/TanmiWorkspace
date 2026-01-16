@@ -998,6 +998,10 @@ export class NodeService {
     graph.nodes[nodeId].updatedAt = currentTime;
     if (conclusion !== undefined) {
       graph.nodes[nodeId].conclusion = conclusion || null;
+      // 清除 stale 标志：用户已确认读取了子节点结论并更新了本节点结论
+      if (nodeMeta.conclusionStale) {
+        delete graph.nodes[nodeId].conclusionStale;
+      }
     }
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
