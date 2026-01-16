@@ -448,6 +448,7 @@ status: planning
 
   /**
    * 通过 shortId 查找目录
+   * 只匹配标准格式 `名称_shortId`，避免误匹配
    */
   private async findDirByShortId(parentDir: string, id: string): Promise<string | null> {
     const shortId = this.extractShortId(id);
@@ -455,19 +456,13 @@ status: planning
     try {
       const items = await this.fs.readdir(parentDir);
 
-      // 优先匹配 _shortId 后缀
+      // 匹配 _shortId 后缀（标准命名格式）
       for (const item of items) {
         if (item.endsWith(`_${shortId}`)) {
           return item;
         }
       }
-
-      // 兜底：包含 shortId
-      for (const item of items) {
-        if (item.includes(shortId)) {
-          return item;
-        }
-      }
+      // 不再使用宽松的 includes 匹配，避免误匹配
     } catch {
       // ignore
     }

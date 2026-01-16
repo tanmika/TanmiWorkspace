@@ -12,6 +12,7 @@ import type {
   ContentSearchMatch,
 } from "../types/search.js";
 import { TanmiError } from "../types/errors.js";
+import { devLog } from "../utils/devLog.js";
 
 /**
  * 搜索服务
@@ -73,8 +74,8 @@ export class SearchService {
             matchedIn,
           });
         }
-      } catch {
-        // 读取失败，跳过
+      } catch (err) {
+        devLog.debug(`[search] 工作区搜索读取失败: ${ws.id}`, { error: err instanceof Error ? err.message : String(err) });
       }
 
       if (matches.length >= limit + 1) break;
@@ -173,8 +174,8 @@ export class SearchService {
               });
             }
           }
-        } catch {
-          // 读取失败，跳过
+        } catch (err) {
+          devLog.debug(`[search] 节点内容读取失败: ${nodeId}`, { error: err instanceof Error ? err.message : String(err) });
         }
       }
     }
@@ -256,8 +257,8 @@ export class SearchService {
                 snippet: match.snippet,
               });
             }
-          } catch {
-            // 读取失败，跳过
+          } catch (err) {
+            devLog.debug(`[search] MEMO内容读取失败: ${memoId}`, { error: err instanceof Error ? err.message : String(err) });
           }
         }
       }

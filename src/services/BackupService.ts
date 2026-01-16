@@ -2,8 +2,7 @@
 
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { createRequire } from "module";
@@ -23,7 +22,22 @@ import type {
 import { TanmiError } from "../types/errors.js";
 import { devLog } from "../utils/devLog.js";
 
-const execAsync = promisify(exec);
+/**
+ * 安全执行 tar 命令（避免命令注入）
+ * 使用 spawn 而非 exec，路径作为参数传递而非字符串拼接
+ */
+function spawnTar(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("tar", args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr?.on("data", (data) => { stderr += data.toString(); });
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr || `tar exited with code ${code}`));
+    });
+    child.on("error", reject);
+  });
+}
 
 /**
  * 备份服务
@@ -151,9 +165,7 @@ export class BackupService {
 
     // 创建压缩备份（排除 .backups 目录）
     try {
-      await execAsync(
-        `tar -czf "${backupPath}" --exclude='.backups' -C "${workspacePath}" .`
-      );
+      await spawnTar(["-czf", backupPath, "--exclude=.backups", "-C", workspacePath, "."]);
     } catch (e) {
       throw new TanmiError(
         "INVALID_PARAMS",
@@ -164,7 +176,7 @@ export class BackupService {
     // 验证备份
     let verified = false;
     try {
-      await execAsync(`tar -tzf "${backupPath}" > /dev/null`);
+      await spawnTar(["-tzf", backupPath]);
       verified = true;
     } catch {
       // 验证失败，记录但不阻止
@@ -290,7 +302,7 @@ export class BackupService {
 
     // 解压恢复
     try {
-      await execAsync(`tar -xzf "${backupPath}" -C "${workspacePath}"`);
+      await spawnTar(["-xzf", backupPath, "-C", workspacePath]);
     } catch (e) {
       throw new TanmiError(
         "INVALID_PARAMS",
