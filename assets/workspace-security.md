@@ -5,11 +5,12 @@
 ## 目录
 
 - [一、数据保护机制](#一数据保护机制)
-- [二、备份系统](#二备份系统)
-- [三、健康监控](#三健康监控)
-- [四、恢复工具](#四恢复工具)
-- [五、错误处理](#五错误处理)
-- [六、最佳实践](#六最佳实践)
+- [二、输入验证](#二输入验证)
+- [三、备份系统](#三备份系统)
+- [四、健康监控](#四健康监控)
+- [五、恢复工具](#五恢复工具)
+- [六、错误处理](#六错误处理)
+- [七、最佳实践](#七最佳实践)
 
 ---
 
@@ -117,11 +118,129 @@ MCP 服务启动时自动检测所有工作区：
 
 ---
 
-## 二、备份系统
+## 二、输入验证
 
-TanmiWorkspace 提供两级备份系统：全局索引备份和工作区备份。
+TanmiWorkspace 提供多层输入验证机制，防止无效数据和安全问题。
 
-### 2.1 全局索引备份
+### 2.1 MCP 工具参数验证
+
+**文件**: `src/utils/paramValidator.ts`
+
+MCP 工具参数验证与自动纠错，使用 Levenshtein 编辑距离计算相似度。
+
+**验证行为**：
+
+| 相似度 | 行为 |
+|--------|------|
+| >= 0.8 | 自动纠正 + 警告 |
+| >= 0.5 | 报错 + 建议（"是否想使用 xxx？"） |
+| < 0.5 | 报错 + 列出支持参数 |
+
+**验证结果**：
+
+```typescript
+interface ParamValidationResult {
+  correctedArgs: Record<string, unknown>;  // 纠正后的参数
+  warnings: string[];   // 自动纠正的警告
+  errors: string[];     // 无法纠正的错误
+}
+```
+
+**必填字段检查**：
+
+- 完全缺失：报错
+- 空字符串/纯空白：报错（可配置白名单）
+- 空数组：报错（可配置白名单）
+
+### 2.2 内容验证
+
+**文件**: `src/utils/contentValidation.ts`
+
+Markdown 内容格式验证，防止破坏文件解析。
+
+**验证规则**：
+
+| 函数 | 说明 | 抛出错误 |
+|------|------|----------|
+| `validateMultilineContent` | 禁止 `## ` 二级标题（破坏 section 解析） | `INVALID_CONTENT` |
+| `validateSingleLineContent` | 禁止换行符（Frontmatter/列表项） | `INVALID_CONTENT` |
+| `validateRules` | 验证规则列表（非空、单行） | `INVALID_CONTENT` |
+
+**表格转义**：
+
+```typescript
+// 写入时转义
+escapeTableCell(content)
+// - 换行符 → <br>
+// - 管道符 | → 全角 ｜
+
+// 读取时还原
+unescapeTableCell(content)
+```
+
+### 2.3 路径验证
+
+**文件**: `src/utils/validation.ts`
+
+路径安全验证，防止路径穿越攻击。
+
+**验证流程**：
+
+1. 检查输入非空
+2. **检测路径穿越模式**：禁止 `/../`、`../`、`/..`、`..`
+3. 解析为绝对路径
+4. **验证路径范围**：必须在用户主目录或基准目录下
+5. 验证目录存在
+6. 验证是目录而非文件
+
+**名称验证**：
+
+| 函数 | 禁止字符 |
+|------|----------|
+| `validateWorkspaceName` | `/` `\` `:` `*` `?` `"` `<` `>` `\|` |
+| `validateNodeTitle` | 同上 |
+
+### 2.4 API 路由安全
+
+**文件**: `src/http/routes/backup.ts`
+
+HTTP API 输入验证。
+
+**备份文件名验证**：
+
+```typescript
+function sanitizeBackupName(name: string): string | null {
+  // 只允许 .twbak 后缀
+  if (!name.endsWith(".twbak")) return null;
+  // 提取基础文件名（去除路径）
+  const baseName = path.basename(name);
+  // 检查路径遍历字符
+  if (baseName !== name || name.includes("..") || name.includes("/") || name.includes("\\")) {
+    return null;
+  }
+  return baseName;
+}
+```
+
+**JSON Schema 验证**：
+
+```typescript
+// 白名单：只允许字母、数字、点、短横线、下划线
+name: {
+  type: "string",
+  minLength: 1,
+  maxLength: 200,
+  pattern: "^[a-zA-Z0-9._-]+\\.twbak$"
+}
+```
+
+---
+
+## 三、备份系统
+
+TanmiWorkspace 提供三级备份系统：全局索引备份、全局备份和工作区备份。
+
+### 3.1 全局索引备份
 
 **位置**：`~/.tanmi-workspace[-dev]/backups/`
 
@@ -142,7 +261,63 @@ tanmi-workspace rebuild --list
 tanmi-workspace rebuild --restore index.2024-12-27T10-30-00.json
 ```
 
-### 2.2 工作区备份
+### 3.2 全局备份（.twbak）
+
+**位置**：`~/.tanmi-workspace[-dev]/backups/`
+
+**格式**：`.twbak`（实际为 zip 格式）
+
+**触发类型**：
+
+| 类型 | 说明 |
+|------|------|
+| `beta_update` | Beta 版本更新前自动创建 |
+| `manual` | 手动创建 |
+| `pre_restore` | 恢复前自动创建 |
+
+**备份内容**：
+
+| 文件 | 说明 |
+|------|------|
+| `manifest.json` | 备份清单（格式版本、校验和等） |
+| `index.json` | 全局工作区索引 |
+| `config.json` | 全局配置 |
+| `installation-meta.json` | 安装元信息 |
+
+**Manifest 结构**：
+
+```typescript
+interface GlobalBackupManifest {
+  format: "twbak";           // 固定值
+  version: "1.0";            // 格式版本
+  createdAt: string;         // ISO 8601
+  codeVersion: string;       // tanmi-workspace 版本
+  trigger: GlobalBackupTrigger;
+  checksum: string;          // SHA256 校验和
+  contents: {
+    workspaceCount: number;  // 工作区数量
+  };
+}
+```
+
+**安全机制**：
+
+- **校验和验证**：恢复时验证 SHA256 checksum，防止篡改
+- **恢复前备份**：恢复操作前自动创建 `pre_restore` 备份
+- **命令注入防护**：使用 `spawn` 替代 `exec`，参数作为数组传递
+
+**HTTP API**：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/backup/global` | 列出全局备份 |
+| POST | `/api/backup/global` | 创建全局备份 |
+| POST | `/api/backup/global/:name/restore` | 恢复全局备份 |
+| DELETE | `/api/backup/global/:name` | 删除全局备份 |
+| GET | `/api/backup/global/:name/download` | 下载备份 |
+| POST | `/api/backup/global/import` | 导入备份 |
+
+### 3.3 工作区备份
 
 **位置**：`{workspace}/.backups/`
 
@@ -193,9 +368,9 @@ tanmi-workspace rebuild --restore-workspace <workspaceId> <backupName>
 
 ---
 
-## 三、健康监控
+## 四、健康监控
 
-### 3.1 workspace_health 工具
+### 4.1 workspace_health 工具
 
 MCP 工具，用于执行完整健康检测。
 
@@ -241,7 +416,7 @@ interface HealthReport {
 | `node_corrupt` | 节点损坏（目录缺失为 error，Info.md 缺失为 warning） | error/warning |
 | `index_corrupt` | 索引损坏 | error |
 
-### 3.2 警告机制
+### 4.2 警告机制
 
 **警告标记**：
 
@@ -263,9 +438,9 @@ interface WorkspaceEntry {
 
 ---
 
-## 四、恢复工具
+## 五、恢复工具
 
-### 4.1 CLI 命令一览
+### 5.1 CLI 命令一览
 
 ```bash
 # 索引管理
@@ -280,7 +455,7 @@ tanmi-workspace rebuild --list-ws-backups <id>           # 列出工作区备份
 tanmi-workspace rebuild --restore-workspace <id> <name>  # 恢复工作区备份（别名 -rw）
 ```
 
-### 4.2 恢复流程
+### 5.2 恢复流程
 
 #### 恢复索引
 
@@ -311,7 +486,7 @@ tanmi-workspace rebuild --restore-workspace ws-abc123 backup_2026-01-02T16-41-47
 tanmi-workspace rebuild --scan ~/projects
 ```
 
-### 4.3 诊断指南
+### 5.3 诊断指南
 
 诊断指南位于 `plugin/docs/diagnostic-guide.md`，包含：
 
@@ -321,9 +496,9 @@ tanmi-workspace rebuild --scan ~/projects
 
 ---
 
-## 五、错误处理
+## 六、错误处理
 
-### 5.1 错误状态管理
+### 6.1 错误状态管理
 
 工作区有以下状态：
 
@@ -345,11 +520,11 @@ await workspaceService.markAsError(workspaceId, "dir_missing", "工作区目录�
 await workspaceService.clearError(workspaceId);
 ```
 
-### 5.2 错误日志
+### 6.2 错误日志
 
 错误日志位于工作区的 `error.log` 文件和全局 `~/.tanmi-workspace[-dev]/logs/` 目录。
 
-### 5.3 错误码
+### 6.3 错误码
 
 | 错误码 | 说明 |
 |--------|------|
@@ -361,28 +536,28 @@ await workspaceService.clearError(workspaceId);
 
 ---
 
-## 六、最佳实践
+## 七、最佳实践
 
-### 6.1 日常使用
+### 7.1 日常使用
 
 1. **保持版本一致**：所有客户端使用相同版本的 tanmi-workspace
 2. **定期健康检查**：运行 `workspace_health` 检测潜在问题
 3. **避免手动修改**：不要直接编辑 `.tanmi-workspace` 目录下的 JSON 文件
 
-### 6.2 升级前
+### 7.2 升级前
 
 1. 手动备份重要工作区
 2. 检查 CHANGELOG 了解破坏性变更
 3. 在测试环境验证后再升级生产环境
 
-### 6.3 问题排查
+### 7.3 问题排查
 
 1. 运行 `--diagnose` 查看索引状态
 2. 运行 `workspace_health` 查看详细问题
 3. 根据诊断指南选择修复方案
 4. 如果无法修复，从备份恢复
 
-### 6.4 数据迁移
+### 7.4 数据迁移
 
 多台机器共享数据时：
 
@@ -416,7 +591,7 @@ interface HealthIssue {
   suggestion: string;   // 修复建议
 }
 
-// 备份元数据
+// 工作区备份元数据
 interface BackupMeta {
   name: string;
   workspaceId: string;
@@ -426,5 +601,38 @@ interface BackupMeta {
   codeVersion: string;
   size: number;
   verified: boolean;
+}
+
+// 全局备份触发类型
+type GlobalBackupTrigger = "beta_update" | "manual" | "pre_restore";
+
+// 全局备份清单
+interface GlobalBackupManifest {
+  format: "twbak";
+  version: "1.0";
+  createdAt: string;
+  codeVersion: string;
+  trigger: GlobalBackupTrigger;
+  checksum: string;
+  contents: {
+    workspaceCount: number;
+  };
+}
+
+// 全局备份列表项
+interface GlobalBackupItem {
+  name: string;
+  path: string;
+  createdAt: string;
+  codeVersion: string;
+  trigger: GlobalBackupTrigger;
+  size: number;
+}
+
+// 参数验证结果
+interface ParamValidationResult {
+  correctedArgs: Record<string, unknown>;
+  warnings: string[];
+  errors: string[];
 }
 ```

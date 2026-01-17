@@ -70,6 +70,10 @@ plugin_path()                                  // 获取插件目录路径
 config_get()                                   // 获取配置
 config_set(defaultDispatchMode?)               // 设置配置
 
+// 搜索系统
+workspace_search(query, limit?)                // 跨工作区搜索
+content_search(workspaceId, query, id?, target?, limit?, context?)  // 工作区内搜索
+
 // 帮助系统
 tanmi_help(topic)
 tanmi_prompt(template, params?)
@@ -437,10 +441,23 @@ workspace_init({
 | `parentId` | string | ✅ | 父节点 ID（必须是规划节点） |
 | `type` | string | ✅ | 节点类型：`planning` 或 `execution` |
 | `title` | string | ✅ | 节点标题 |
-| `requirement` | string | ✅ | 需求描述 |
+| `requirement` | string | - | 需求描述 |
 | `rulesHash` | string | - | 规则哈希（工作区有规则时必填） |
-| `role` | string | - | 节点角色：`info_collection`、`validation`、`summary` |
+| `role` | string | - | 节点角色（见下表） |
 | `docs` | DocRef[] | - | 派发给子节点的文档引用 |
+| `acceptanceCriteria` | object[] | - | 验收标准列表（动态键值对格式） |
+| `isNeedTest` | boolean | - | 是否需要测试（仅执行节点有效） |
+| `testRequirement` | string | - | 测试验收标准（isNeedTest=true 时使用） |
+
+**节点角色 (NodeRole)**
+
+| 角色 | 说明 |
+|------|------|
+| `info_collection` | 信息收集：调研、分析，完成时自动归档 |
+| `info_summary` | 信息总结：从已有信息中提取结构化内容 |
+| `dispatch_exec` | 派发执行：派发母节点自动创建的执行子节点 |
+| `dispatch_spec` | 派发规格审查：验证执行结果是否符合需求规格 |
+| `dispatch_quality` | 派发质量审查：检查代码质量、最佳实践 |
 
 **节点类型选择指南**
 
@@ -560,20 +577,27 @@ node_create({
 
 ```typescript
 {
-  node: {
+  meta: {
     id: string;
-    title: string;
+    dirName: string;
     type: "planning" | "execution";
     status: string;
-    requirement: string;
-    conclusion: string | null;
-    note: string;
     role: string | null;
     parentId: string | null;
-    createdAt: number;
-    updatedAt: number;
+    children: string[];
+    isolate: boolean;
+    references: string[];
+    conclusion: string | null;
+    conclusionStale: boolean;
+    dispatch?: NodeDispatchInfo;
+    dispatchParent?: NodeDispatchParent;
+    createdAt: string;
+    updatedAt: string;
   };
-  markdown: string;    // 节点 Markdown 文件内容
+  infoMd: string;       // Info.md 文件内容
+  logMd: string;        // Log.md 文件内容
+  problemMd: string;    // Problem.md 文件内容
+  nodeHash: string;     // 节点内容哈希（用于 node_update 先读后写校验）
 }
 ```
 
@@ -611,7 +635,7 @@ interface NodeTreeItem {
 
 ### node_update
 
-更新节点信息。
+更新节点信息。支持两种模式：整体替换和精确替换。
 
 **参数**
 
@@ -619,17 +643,27 @@ interface NodeTreeItem {
 |------|------|:----:|------|
 | `workspaceId` | string | ✅ | 工作区 ID |
 | `nodeId` | string | ✅ | 节点 ID |
+| `nodeHash` | string | ✅ | 节点内容哈希（从 node_get 获取，用于先读后写校验） |
 | `title` | string | - | 新标题 |
-| `requirement` | string | - | 新需求描述 |
-| `note` | string | - | 新备注 |
-| `conclusion` | string | - | 新结论（用于修正已完成节点的结论） |
+| `requirement` | string | - | 新需求描述（整体替换） |
+| `note` | string | - | 新备注（整体替换） |
+| `conclusion` | string | - | 新结论（整体替换） |
+| `field` | string | - | 精确替换的目标字段：`requirement`、`note`、`conclusion` |
+| `old_str` | string | - | 要替换的原文本（与 field 配合使用） |
+| `new_str` | string | - | 替换后的文本（与 field 配合使用） |
+| `conclusionsHash` | string | - | 结论哈希（stale=true 时更新 conclusion 必填） |
+
+**更新模式**
+
+1. **整体替换**：直接提供 `requirement`/`note`/`conclusion` 字段值
+2. **精确替换**：提供 `field` + `old_str` + `new_str` 进行字符串替换
 
 **返回值**
 
 ```typescript
 {
   success: boolean;
-  hint: string;
+  updatedAt: string;
 }
 ```
 
@@ -1421,6 +1455,8 @@ interface ChildConclusion {
 |------|------|:----:|------|
 | `workspaceId` | string | ✅ | 工作区 ID |
 | `memoId` | string | ✅ | 备忘 ID |
+| `lineOffset` | number | - | 起始行（从 1 开始，默认 1） |
+| `lineLimit` | number | - | 返回行数（默认 500） |
 
 **返回值**
 
@@ -1430,11 +1466,15 @@ interface ChildConclusion {
     id: string;
     title: string;
     summary: string;
-    content: string;
+    content: string;      // 可能被截取
     tags: string[];
-    createdAt: number;
-    updatedAt: number;
+    createdAt: string;
+    updatedAt: string;
   };
+  totalLines: number;       // 总行数
+  contentTruncated?: boolean; // content 是否被截取
+  contentHash: string;      // 内容 MD5 hash（用于 memo_update 先读后写校验）
+  hint?: string;            // 继续读取提示（截取时返回）
 }
 ```
 
@@ -1442,7 +1482,7 @@ interface ChildConclusion {
 
 ### memo_update
 
-更新备忘。
+更新备忘。支持两种模式：全量替换和精确替换。
 
 **参数**
 
@@ -1450,25 +1490,33 @@ interface ChildConclusion {
 |------|------|:----:|------|
 | `workspaceId` | string | ✅ | 工作区 ID |
 | `memoId` | string | ✅ | 备忘 ID |
+| `contentHash` | string | ✅ | 内容哈希（从 memo_get 获取，用于先读后写校验） |
 | `title` | string | - | 新标题 |
-| `summary` | string | - | 新摘要 |
-| `content` | string | - | 新内容（替换全部，与 `appendContent` 互斥） |
-| `appendContent` | string | - | 追加内容（追加到末尾，与 `content` 互斥） |
+| `summary` | string | - | 新摘要（全量替换） |
+| `content` | string | - | 新内容（全量替换） |
+| `field` | string | - | 精确替换的目标字段：`content`、`summary` |
+| `old_str` | string | - | 要替换的原文本（与 field 配合使用） |
+| `new_str` | string | - | 替换后的文本（与 field 配合使用） |
 | `tags` | string[] | - | 新标签列表（完全替换现有标签） |
+
+**更新模式**
+
+1. **全量替换**：直接提供 `content`/`summary` 字段值
+2. **精确替换**：提供 `field` + `old_str` + `new_str` 进行字符串替换
 
 **返回值**
 
 ```typescript
 {
   success: boolean;
-  hint: string;
+  updatedAt: string;
 }
 ```
 
 **说明**
 
 - 只更新提供的字段，保留其他字段不变
-- `content` 和 `appendContent` 互斥，不能同时使用
+- 必须先 `memo_get` 获取 `contentHash`，防止并发冲突
 
 ---
 
@@ -1593,6 +1641,76 @@ interface ChildConclusion {
 
 - 当需要读取插件资源（如 Skill、Agent 模板）但找不到时使用
 - 返回的路径可用于后续文件操作
+
+---
+
+## 搜索系统
+
+### workspace_search
+
+跨工作区搜索。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `query` | string | ✅ | 搜索关键词 |
+| `limit` | number | - | 返回结果数量限制（默认 20） |
+
+**返回值**
+
+```typescript
+{
+  results: Array<{
+    workspaceId: string;
+    workspaceName: string;
+    matches: Array<{
+      type: "workspace" | "node" | "memo";
+      id: string;
+      title: string;
+      snippet: string;  // 匹配片段
+      score: number;    // 相关度分数
+    }>;
+  }>;
+  totalMatches: number;
+}
+```
+
+---
+
+### content_search
+
+工作区内内容搜索。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `workspaceId` | string | ✅ | 工作区 ID |
+| `query` | string | ✅ | 搜索关键词 |
+| `id` | string | - | 指定节点/备忘 ID（限制搜索范围） |
+| `target` | string | - | 搜索目标：`all`、`node`、`memo`（默认 `all`） |
+| `limit` | number | - | 返回结果数量限制（默认 20） |
+| `context` | number | - | 上下文行数（默认 2） |
+
+**返回值**
+
+```typescript
+{
+  results: Array<{
+    type: "node" | "memo";
+    id: string;
+    title: string;
+    matches: Array<{
+      field: string;      // 匹配的字段名
+      lineNumber: number; // 行号
+      content: string;    // 匹配行内容
+      context: string[];  // 上下文行
+    }>;
+  }>;
+  totalMatches: number;
+}
+```
 
 ---
 

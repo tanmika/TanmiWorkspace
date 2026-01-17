@@ -30,15 +30,15 @@ Skill 通过 `actionRequired.type = "invoke_skill"` 强制触发，AI 必须立�
 
 与 CapabilityId 一一对应，capability_select 创建能力节点时触发。
 
-| CapabilityId | Skill |
-|--------------|-------|
-| intent_alignment | aligning-intent |
-| context_discovery | discovering-context |
-| tech_research | researching-tech |
-| diagnosis | diagnosing-issues |
-| measurement_analysis | analyzing-measurements |
-| solution_design | designing-solutions |
-| verification_strategy | planning-verification |
+| CapabilityId | Skill | 说明 |
+|--------------|-------|------|
+| intent_alignment | aligning-intent | 意图对齐 |
+| context_discovery | discovering-context | 上下文探索 |
+| tech_research | researching-tech | 技术调研 |
+| diagnosis | diagnosing-issues | 诊断分析 |
+| measurement_analysis | analyzing-measurements | 度量分析 |
+| solution_design | designing-solutions | 方案设计 |
+| verification_strategy | planning-verification | 验证策略 |
 
 **映射定义**: `src/services/CapabilityService.ts:19-27` CAPABILITY_TO_SKILL_DIR
 
@@ -56,6 +56,25 @@ Skill 通过 `actionRequired.type = "invoke_skill"` 强制触发，AI 必须立�
 | reviewing-quality | dispatch_quality |
 
 **角色定义**: `src/types/node.ts` DispatchRole
+
+### 工具辅助类（1 个）
+
+辅助特定工具使用的 SOP 指导。
+
+| Skill | 触发场景 |
+|-------|----------|
+| memo-create | 创建 MEMO 时指导格式和内容规范 |
+
+## Skill 完整列表
+
+共 15 个 Skills：
+
+| 类别 | Skills |
+|------|--------|
+| 流程引导 | bootstrapping-workspace, dispatching-parent, starting-info-flow |
+| 能力执行 | aligning-intent, discovering-context, researching-tech, diagnosing-issues, analyzing-measurements, designing-solutions, planning-verification |
+| 派发角色 | preparing-dispatch, executing-task, reviewing-spec, reviewing-quality |
+| 工具辅助 | memo-create |
 
 ## 文件结构
 
@@ -146,6 +165,7 @@ cp -r plugin/skills/* ~/.config/opencode/skill/
 |------|--------|
 | 流程引导 | bootstrapping-workspace, starting-info-flow |
 | 能力执行 | aligning-intent, discovering-context, researching-tech, diagnosing-issues, analyzing-measurements, designing-solutions, planning-verification |
+| 工具辅助 | memo-create |
 
 ## 相关文档
 
