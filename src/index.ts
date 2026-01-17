@@ -728,6 +728,8 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
             field: args?.field as 'content' | 'summary' | undefined,
             old_str: args?.old_str as string | undefined,
             new_str: args?.new_str as string | undefined,
+            insertAtLine: args?.insertAtLine as number | undefined,
+            insertText: args?.insertText as string | undefined,
             tags: args?.tags as string[] | undefined,
           });
           break;
@@ -905,6 +907,7 @@ Read(file_path: <skillsPath>/<skill-name>/SKILL.md)
         case "workspace_search": {
           result = await services.search.workspaceSearch({
             query: args?.query as string,
+            regex: args?.regex as boolean | undefined,
             limit: args?.limit as number | undefined,
           });
           break;
@@ -914,6 +917,7 @@ Read(file_path: <skillsPath>/<skill-name>/SKILL.md)
           result = await services.search.contentSearch({
             workspaceId: args?.workspaceId as string,
             query: args?.query as string,
+            regex: args?.regex as boolean | undefined,
             id: args?.id as string | undefined,
             target: args?.target as "all" | "node" | "memo" | undefined,
             limit: args?.limit as number | undefined,

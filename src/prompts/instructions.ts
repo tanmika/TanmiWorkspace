@@ -398,6 +398,12 @@ export const TOOLS_QUICK_REFERENCE = `
 | memo_update | 更新备忘录（需 contentHash） | workspaceId, memoId, **contentHash**, ... |
 | memo_delete | 删除备忘录 | workspaceId, memoId |
 
+**★ memo_get 截断处理**：
+
+当 \`memo_get\` 返回 \`contentTruncated: true\` 时，说明内容超过 500 行被截断。处理方式：
+1. **优先使用搜索**：\`content_search({ workspaceId, id: memoId, query: "关键词" })\` 定位目标内容
+2. **按需分页**：仅在需要全文时使用 \`pagination.nextCommand\` 继续读取
+
 **★ memo_update 先读后写机制（重要！）**：
 
 更新备忘录前**必须**先调用 \`memo_get\` 获取 \`contentHash\`，然后在 \`memo_update\` 中提供该 hash。这是乐观锁机制，防止并发覆盖。

@@ -77,10 +77,16 @@ export const memoGetTool: Tool = {
 - totalLines: 总行数
 - contentHash: 用于 memo_update 校验
 - contentTruncated: 是否被截取
+- pagination: 分页导航信息（截断时提供）
+
+**截断处理建议**:
+当 contentTruncated=true 时，优先使用 content_search 定位目标内容，避免逐页滚动浏览。
+仅在需要全文时才使用 pagination.nextCommand 继续读取。
 
 **使用示例**:
 - 读取: memo_get({ workspaceId, memoId })
-- 继续: memo_get({ workspaceId, memoId, lineOffset: 501 })`,
+- 搜索定位: content_search({ workspaceId, id: memoId, query: "关键词" })
+- 分页读取: memo_get({ workspaceId, memoId, lineOffset: 501 })`,
   inputSchema: {
     type: "object",
     properties: {
@@ -110,7 +116,19 @@ export const memoGetTool: Tool = {
  */
 export const memoUpdateTool: Tool = {
   name: "memo_update",
-  description: "更新备忘。支持两种编辑模式：1) 全量替换：直接提供 content/summary/title/tags 替换整个字段；2) 精确替换：指定 field + old_str + new_str 进行字符串替换。更新前需提供 contentHash（从 memo_get 获取）进行校验。",
+  description: `更新备忘。支持三种编辑模式：
+
+**编辑模式**:
+1. **全量替换**：直接提供 content/summary/title/tags 替换整个字段
+2. **精确替换**：指定 field + old_str + new_str 进行字符串替换
+3. **行号插入**：指定 insertAtLine + insertText 在指定行后插入内容
+
+**行号插入说明**:
+- insertAtLine=0：在内容开头插入
+- insertAtLine=N：在第 N 行后插入
+- 配合 content_search 返回的行号使用
+
+更新前需提供 contentHash（从 memo_get 获取）进行校验。`,
   inputSchema: {
     type: "object",
     properties: {
@@ -150,6 +168,14 @@ export const memoUpdateTool: Tool = {
       new_str: {
         type: "string",
         description: "替换后的文本",
+      },
+      insertAtLine: {
+        type: "number",
+        description: "在指定行后插入（0=开头，N=第N行后）",
+      },
+      insertText: {
+        type: "string",
+        description: "要插入的文本（与 insertAtLine 配合使用）",
       },
       tags: {
         type: "array",

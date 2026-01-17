@@ -223,9 +223,22 @@ export class MemoService {
     const result: MemoGetResult = { memo, totalLines, contentHash };
     if (contentTruncated) {
       result.contentTruncated = true;
-      // 生成继续读取提示
-      if (endLine < totalLines) {
-        result.hint = `已返回第 ${startLine}-${endLine} 行（共 ${totalLines} 行）。继续读取：memo_get({ lineOffset: ${endLine + 1} })`;
+      const hasMore = endLine < totalLines;
+
+      // 添加分页导航信息
+      result.pagination = {
+        currentRange: `${startLine}-${endLine}`,
+        totalLines,
+        hasMore,
+        nextOffset: hasMore ? endLine + 1 : undefined,
+        nextCommand: hasMore
+          ? `memo_get({ workspaceId: "${workspaceId}", memoId: "${memoId}", lineOffset: ${endLine + 1} })`
+          : undefined,
+      };
+
+      // 生成截断处理提示
+      if (hasMore) {
+        result.hint = `内容已截断（${startLine}-${endLine}/${totalLines} 行）。建议使用 content_search 搜索定位，或用 pagination.nextCommand 分页读取。`;
       }
     }
 
@@ -236,7 +249,7 @@ export class MemoService {
    * 更新备忘
    */
   async update(params: MemoUpdateParams): Promise<MemoUpdateResult> {
-    const { workspaceId, memoId, contentHash, title, summary, content, field, old_str, new_str, tags } = params;
+    const { workspaceId, memoId, contentHash, title, summary, content, field, old_str, new_str, insertAtLine, insertText, tags } = params;
 
     // 0. 校验 contentHash 必填
     if (!contentHash) {
@@ -291,7 +304,29 @@ export class MemoService {
       }
     }
 
-    // 6.2 全量替换模式
+    // 6.2 行号插入模式
+    if (insertAtLine !== undefined && insertText !== undefined) {
+      const lines = existingContent.split("\n");
+      const totalLines = lines.length;
+
+      // 校验行号范围
+      if (insertAtLine < 0 || insertAtLine > totalLines) {
+        throw new TanmiError("INVALID_PARAMS", `行号超出范围（0-${totalLines}）`);
+      }
+
+      // 在指定行后插入
+      if (insertAtLine === 0) {
+        // 在开头插入
+        finalContent = insertText + "\n" + existingContent;
+      } else {
+        // 在第 N 行后插入
+        const before = lines.slice(0, insertAtLine);
+        const after = lines.slice(insertAtLine);
+        finalContent = [...before, insertText, ...after].join("\n");
+      }
+    }
+
+    // 6.3 全量替换模式
     if (content !== undefined) {
       finalContent = content;
     }

@@ -14,6 +14,10 @@ export const workspaceSearchTool: Tool = {
 - 工作区目标
 - 工作区规则
 
+**搜索模式**:
+- 默认：子字符串匹配（大小写不敏感）
+- regex=true：正则表达式匹配
+
 **返回**:
 - workspaces: 匹配的工作区列表（id, name, goal, matchedIn）
 - hasMore: 是否有更多结果`,
@@ -22,7 +26,11 @@ export const workspaceSearchTool: Tool = {
     properties: {
       query: {
         type: "string",
-        description: "搜索关键词",
+        description: "搜索关键词（或正则表达式）",
+      },
+      regex: {
+        type: "boolean",
+        description: "是否启用正则模式（默认 false）",
       },
       limit: {
         type: "number",
@@ -43,11 +51,16 @@ export const contentSearchTool: Tool = {
 **参数**:
 - workspaceId: 工作区 ID（必填）
 - query: 搜索关键词（必填）
+- regex: 是否启用正则模式（默认 false）
 - id: 限定范围（可选）
   - 节点 ID: 仅搜索该节点子树
   - memo ID: 仅搜索该 memo
 - target: 搜索目标 all/node/memo（默认 all）
 - context: 上下文行数（默认 1）
+
+**搜索模式**:
+- 默认：子字符串匹配（大小写不敏感）
+- regex=true：正则表达式匹配，如 "API_\\d+_\\d+"、"^## .*优化"
 
 **返回**:
 - matches: 匹配列表
@@ -66,7 +79,11 @@ export const contentSearchTool: Tool = {
       },
       query: {
         type: "string",
-        description: "搜索关键词",
+        description: "搜索关键词（或正则表达式）",
+      },
+      regex: {
+        type: "boolean",
+        description: "是否启用正则模式（默认 false）",
       },
       id: {
         type: "string",

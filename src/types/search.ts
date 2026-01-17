@@ -11,6 +11,7 @@
  */
 export interface WorkspaceSearchParams {
   query: string;                    // 搜索关键词
+  regex?: boolean;                  // 是否启用正则模式（默认 false）
   limit?: number;                   // 最大结果数（默认 10）
 }
 
@@ -40,6 +41,7 @@ export interface WorkspaceSearchResult {
 export interface ContentSearchParams {
   workspaceId: string;              // 工作区 ID
   query: string;                    // 搜索关键词
+  regex?: boolean;                  // 是否启用正则模式（默认 false）
   id?: string;                      // 限定范围：节点 ID（搜索子树）或 memo ID（搜索该 memo）
   target?: "all" | "node" | "memo"; // 搜索目标（默认 all）
   limit?: number;                   // 最大结果数（默认 20）
