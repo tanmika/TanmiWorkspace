@@ -133,6 +133,33 @@ export type PlanningAction =
 export type TransitionAction = ExecutionAction | PlanningAction;
 
 /**
+ * 工作流阶段
+ */
+export type WorkflowPhase = 'info' | 'design' | 'impl';
+
+/**
+ * 工作流状态
+ */
+export interface WorkflowState {
+  phase: WorkflowPhase;
+  phaseSkillInvoked: boolean;
+}
+
+/**
+ * 工作区运行时配置（存储在 graph.json）
+ * 注意：与 workspace.ts 中的 WorkspaceConfig 不同，这是运行时配置
+ */
+export interface GraphConfig {
+  impl_continue_mode?: 'auto_continue' | 'ask_each';  // 任务完成后行为
+  paused_task?: {                                      // 暂停点记录
+    phase: WorkflowPhase;
+    focusNodeId: string;
+    activeNodes: string[];
+    pausedAt: string;
+  };
+}
+
+/**
  * 节点图 - 存储在 .tanmi-workspace/[workspace-id]/graph.json
  */
 export interface NodeGraph {
@@ -140,6 +167,8 @@ export interface NodeGraph {
   currentFocus: string | null;      // 当前聚焦的节点 ID
   nodes: Record<string, NodeMeta>;
   memos?: Record<string, import("./memo.js").MemoListItem>;  // 备忘索引（可选）
+  workflow?: WorkflowState;         // 工作流状态（可选，兼容旧工作区）
+  config?: GraphConfig;             // 运行时配置（可选）
   lastWriteCodeVersion?: string;    // 最后写入时的代码版本 (package.json 版本)
 }
 

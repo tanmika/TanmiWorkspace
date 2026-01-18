@@ -91,6 +91,20 @@ session_bind(workspaceId: "${matchedWorkspaces[0].id}")
 }
 
 /**
+ * 获取阶段对应的 Skill 名称
+ * @param {string} phase - 工作流阶段
+ * @returns {string} Skill 名称
+ */
+function getSkillForPhase(phase) {
+  const mapping = {
+    'info': 'flow-info',
+    'design': 'flow-design',
+    'impl': 'flow-impl'
+  };
+  return mapping[phase] || 'flow-info';
+}
+
+/**
  * 处理 SessionStart 事件
  * 始终注入 sessionId，如果已绑定则同时注入工作区上下文
  * 如果未绑定但检测到匹配工作区，则提示绑定建议
@@ -100,9 +114,48 @@ function handleSessionStart(sessionId, binding, input) {
   let logDetails = {};
 
   if (binding) {
-    // 已绑定：注入工作区上下文
+    // 已绑定：检测工作流状态
+    const graph = getNodeGraph(binding.workspaceId);
+    const workflow = graph?.workflow || { phase: 'info', phaseSkillInvoked: false };
+
+    if (!workflow.phaseSkillInvoked) {
+      // 需要引导调用阶段 Skill
+      const skillName = getSkillForPhase(workflow.phase);
+      context = getFullWorkspaceContext(binding);
+
+      const actionRequired = {
+        type: 'invoke_skill',
+        message: `请调用 ${skillName} 开始当前阶段工作`,
+        data: { skill: skillName, phase: workflow.phase }
+      };
+
+      logDetails = {
+        bound: true,
+        workspaceId: binding.workspaceId,
+        workflow: { phase: workflow.phase, phaseSkillInvoked: false },
+        actionRequired: true
+      };
+
+      logHookOutput(sessionId, 'SessionStart', 'output', logDetails, context);
+
+      const response = {
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: context,
+          actionRequired: actionRequired
+        }
+      };
+      console.log(JSON.stringify(response));
+      return;
+    }
+
+    // phaseSkillInvoked=true：正常注入工作区上下文
     context = getFullWorkspaceContext(binding);
-    logDetails = { bound: true, workspaceId: binding.workspaceId };
+    logDetails = {
+      bound: true,
+      workspaceId: binding.workspaceId,
+      workflow: { phase: workflow.phase, phaseSkillInvoked: true }
+    };
   } else {
     // 未绑定：检查是否有匹配的工作区
     const cwd = input?.cwd || process.cwd();
@@ -395,6 +448,169 @@ function handleTodoWriteToolUse(sessionId, binding, tool_input, tool_response) {
 }
 
 /**
+ * 处理 PreToolUse 事件
+ * 根据工作流阶段约束检查是否允许工具调用
+ */
+function handlePreToolUse(sessionId, binding, input) {
+  const { tool_name, tool_input } = input;
+
+  // 未绑定工作区，放行
+  if (!binding?.workspaceId) {
+    logHookOutput(sessionId, 'PreToolUse', 'allow', {
+      tool: tool_name,
+      reason: 'not_bound'
+    });
+    console.log(JSON.stringify({ permissionDecision: 'allow' }));
+    return;
+  }
+
+  // 读取 workflow 状态
+  const graph = getNodeGraph(binding.workspaceId);
+  const phase = graph?.workflow?.phase || 'info';
+
+  // Signal 工具阶段转换预检查（双重保障，主验证在 MCP 层）
+  if (tool_name?.includes('signal')) {
+    const validation = validateSignalPreCheck(graph, phase, tool_input);
+    if (!validation.allowed) {
+      logHookOutput(sessionId, 'PreToolUse', 'deny', {
+        tool: tool_name,
+        phase: phase,
+        reason: 'phase_transition_blocked',
+        detail: validation.reason
+      });
+
+      console.log(JSON.stringify({
+        permissionDecision: 'deny',
+        message: validation.reason
+      }));
+      return;
+    }
+  }
+
+  // 阶段约束（硬编码，后续迁移到配置文件）
+  const disallowedTools = {
+    'info': ['Write', 'Edit', 'MultiEdit'],
+    'design': ['Write', 'Edit', 'MultiEdit'],
+    'impl': []
+  };
+
+  const blocked = disallowedTools[phase] || [];
+  if (blocked.includes(tool_name)) {
+    const phaseLabels = { 'info': '信息收集', 'design': '方案设计', 'impl': '实现' };
+
+    logHookOutput(sessionId, 'PreToolUse', 'deny', {
+      tool: tool_name,
+      phase: phase,
+      reason: 'phase_constraint'
+    });
+
+    console.log(JSON.stringify({
+      permissionDecision: 'deny',
+      message: `当前处于「${phaseLabels[phase]}」阶段，不允许使用 ${tool_name}。请调用 flow-impl 切换到实现阶段。`
+    }));
+    return;
+  }
+
+  logHookOutput(sessionId, 'PreToolUse', 'allow', {
+    tool: tool_name,
+    phase: phase
+  });
+  console.log(JSON.stringify({ permissionDecision: 'allow' }));
+}
+
+/**
+ * Signal 阶段转换预检查（简化版，完整验证在 MCP 层）
+ * @param {object} graph - 节点图
+ * @param {string} currentPhase - 当前阶段
+ * @param {object} toolInput - 工具输入参数
+ * @returns {{ allowed: boolean, reason?: string }}
+ */
+function validateSignalPreCheck(graph, currentPhase, toolInput) {
+  // 解析目标阶段
+  const SIGNAL_CODES = {
+    'aW5mbw': 'info',
+    'VzaWdu': 'design',
+    'aW1wbA': 'impl'
+  };
+  const targetPhase = SIGNAL_CODES[toolInput?.code];
+  if (!targetPhase) {
+    return { allowed: true }; // 无效 code 由 MCP 层处理
+  }
+
+  // 同阶段转换：允许
+  if (currentPhase === targetPhase) {
+    return { allowed: true };
+  }
+
+  const nodes = graph?.nodes ? Object.values(graph.nodes) : [];
+
+  // impl 转出：检查 execution 节点是否静止态
+  if (currentPhase === 'impl' && (targetPhase === 'info' || targetPhase === 'design')) {
+    const nonStaticExec = nodes.filter(n =>
+      n.type === 'execution' &&
+      (n.status === 'implementing' || n.status === 'validating')
+    );
+    if (nonStaticExec.length > 0) {
+      const nodeNames = nonStaticExec.slice(0, 3).map(n => n.dirName || n.id).join(', ');
+      return {
+        allowed: false,
+        reason: `阶段转换被阻止：有 ${nonStaticExec.length} 个执行任务正在进行中（${nodeNames}${nonStaticExec.length > 3 ? '...' : ''}）。请先完成或暂停这些任务。`
+      };
+    }
+  }
+
+  // design → impl：检查 planning 节点状态
+  if (currentPhase === 'design' && targetPhase === 'impl') {
+    const invalidPlanning = nodes.filter(n =>
+      n.type === 'planning' &&
+      n.id !== 'root' &&
+      (n.status === 'pending' || n.status === 'planning')
+    );
+    if (invalidPlanning.length > 0) {
+      const nodeNames = invalidPlanning.slice(0, 3).map(n => n.dirName || n.id).join(', ');
+      return {
+        allowed: false,
+        reason: `阶段转换被阻止：有 ${invalidPlanning.length} 个规划节点未完成（${nodeNames}${invalidPlanning.length > 3 ? '...' : ''}）。请先完成规划。`
+      };
+    }
+
+    // 检查是否有执行节点
+    const hasExecution = nodes.some(n => n.type === 'execution');
+    if (!hasExecution) {
+      return {
+        allowed: false,
+        reason: '阶段转换被阻止：请先创建至少一个执行节点。'
+      };
+    }
+  }
+
+  // info → design：检查信息节点完成状态
+  if (currentPhase === 'info' && targetPhase === 'design') {
+    const incompleteInfo = nodes.filter(n =>
+      (n.role === 'info_collection' || n.role === 'info_summary') &&
+      n.status !== 'completed'
+    );
+    if (incompleteInfo.length > 0) {
+      const nodeNames = incompleteInfo.slice(0, 3).map(n => n.dirName || n.id).join(', ');
+      return {
+        allowed: false,
+        reason: `阶段转换被阻止：有 ${incompleteInfo.length} 个信息收集节点未完成（${nodeNames}${incompleteInfo.length > 3 ? '...' : ''}）。请先完成信息收集。`
+      };
+    }
+  }
+
+  // info → impl：不允许直接跳转
+  if (currentPhase === 'info' && targetPhase === 'impl') {
+    return {
+      allowed: false,
+      reason: '不允许从信息收集阶段直接跳转到实现阶段。请先进入设计阶段。'
+    };
+  }
+
+  return { allowed: true };
+}
+
+/**
  * 处理 Stop 事件
  * 分析 AI 响应中是否遇到错误/阻碍，提醒记录问题
  */
@@ -645,6 +861,10 @@ async function main() {
 
     case 'PostToolUse':
       handlePostToolUse(sessionId, binding, input);
+      break;
+
+    case 'PreToolUse':
+      handlePreToolUse(sessionId, binding, input);
       break;
 
     case 'Stop':

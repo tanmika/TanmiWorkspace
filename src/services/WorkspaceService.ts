@@ -38,7 +38,7 @@ import type {
 } from "../types/workspace.js";
 import type { HealthIssue } from "../types/health.js";
 import { logError } from "../utils/errorLogger.js";
-import type { NodeGraph, NodeMeta } from "../types/node.js";
+import type { NodeGraph, NodeMeta, WorkflowPhase } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { generateWorkspaceId, generateWorkspaceDirName, generateNodeDirName, extractShortId } from "../utils/id.js";
 import { now } from "../utils/time.js";
@@ -55,6 +55,34 @@ function getHttpPort(): number {
   const isDev = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
   const defaultPort = isDev ? "19541" : "19540";
   return parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? defaultPort, 10);
+}
+
+/**
+ * Signal Code 到 WorkflowPhase 的硬编码映射
+ * 生成方式：Buffer.from('sw_xxx').toString('base64').replace(/[+=]/g, '').slice(-6)
+ */
+const SIGNAL_CODES: Record<string, WorkflowPhase> = {
+  "aW5mbw": "info",    // from 'sw_info'
+  "VzaWdu": "design",  // from 'sw_design'
+  "aW1wbA": "impl",    // from 'sw_impl'
+};
+
+/**
+ * 阶段转换验证结果
+ */
+interface PhaseTransitionValidation {
+  allowed: boolean;
+  reason?: string;
+  issues?: Array<{ nodeId: string; title: string; status: string; type: string }>;
+}
+
+/**
+ * 任务边界
+ */
+interface TaskBoundary {
+  focusPath: Set<string>;
+  directChildren: Set<string>;
+  allRelevantNodes: Set<string>;
 }
 
 /**
@@ -171,11 +199,15 @@ export class WorkspaceService {
       updatedAt: currentTime,
     };
     const graph: NodeGraph = {
-      version: "4.0",  // 新版本支持 dirName
+      version: "5.0",  // 新版本支持 workflow
       currentFocus: rootNodeId,
       nodes: {
         [rootNodeId]: rootNode,
       },
+      workflow: {
+        phase: 'info',
+        phaseSkillInvoked: false
+      }
     };
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
@@ -280,6 +312,7 @@ ${scenarioGuidance}
 - MUST 调用 Skill(bootstrapping-workspace)
 - NEVER 直接 node_create
 - NEVER 跳过 capability_list → capability_select 流程
+- 若要跳过流程，MUST 先告知用户并获取同意（禁止自行判断跳过）
 
 **如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
 \`\`\`
@@ -2182,6 +2215,375 @@ Read(file_path: <返回的路径>/SKILL.md)
         // 清理失败不影响主流程
       }
     }
+  }
+
+  // ========== 工作流状态同步 ==========
+
+  /**
+   * 获取当前任务边界
+   * 基于 currentFocus 确定验证范围
+   */
+  private getTaskBoundary(graph: NodeGraph): TaskBoundary {
+    const focusId = graph.currentFocus;
+    const focusPath = new Set<string>();
+    const directChildren = new Set<string>();
+
+    if (focusId) {
+      let currentId: string | null = focusId;
+      while (currentId) {
+        focusPath.add(currentId);
+        const node: NodeMeta | undefined = graph.nodes[currentId];
+        if (!node) break;
+        node.children?.forEach((childId: string) => directChildren.add(childId));
+        if (currentId === "root" || !node.parentId) break;
+        currentId = node.parentId;
+      }
+    } else {
+      // 无聚焦节点，所有节点都在边界内
+      Object.keys(graph.nodes).forEach(id => focusPath.add(id));
+    }
+
+    return {
+      focusPath,
+      directChildren,
+      allRelevantNodes: new Set([...focusPath, ...directChildren]),
+    };
+  }
+
+  /**
+   * 验证阶段转换
+   */
+  private validatePhaseTransition(
+    graph: NodeGraph,
+    currentPhase: WorkflowPhase,
+    targetPhase: WorkflowPhase
+  ): PhaseTransitionValidation {
+    // 同阶段转换：no-op，静默成功
+    if (currentPhase === targetPhase) {
+      return { allowed: true };
+    }
+
+    const boundary = this.getTaskBoundary(graph);
+    const nodesInBoundary = Object.values(graph.nodes).filter(
+      node => boundary.allRelevantNodes.has(node.id)
+    );
+
+    const transitionKey = `${currentPhase}_to_${targetPhase}`;
+    switch (transitionKey) {
+      case "info_to_design":
+        return this.validateInfoToDesign(nodesInBoundary);
+      case "design_to_impl":
+        return this.validateDesignToImpl(nodesInBoundary);
+      case "impl_to_info":
+        return this.validateImplToInfo(nodesInBoundary);
+      case "impl_to_design":
+        return this.validateImplToDesign(nodesInBoundary);
+      case "design_to_info":
+        return this.validateDesignToInfo(nodesInBoundary);
+      case "info_to_impl":
+        return { allowed: false, reason: "不允许从 info 直接跳转到 impl，请先进入 design 阶段" };
+      default:
+        return { allowed: false, reason: `不支持的阶段转换: ${currentPhase} → ${targetPhase}` };
+    }
+  }
+
+  /**
+   * 验证 info → design
+   * 条件：信息节点需 completed（空集视为满足条件）
+   */
+  private validateInfoToDesign(nodes: NodeMeta[]): PhaseTransitionValidation {
+    const infoNodes = nodes.filter(
+      n => n.role === "info_collection" || n.role === "info_summary"
+    );
+    const incompleteInfoNodes = infoNodes.filter(n => n.status !== "completed");
+
+    if (incompleteInfoNodes.length > 0) {
+      return {
+        allowed: false,
+        reason: `请先完成所有信息收集节点（${incompleteInfoNodes.length} 个未完成）`,
+        issues: incompleteInfoNodes.map(n => ({
+          nodeId: n.id,
+          title: n.dirName,
+          status: n.status,
+          type: n.type,
+        })),
+      };
+    }
+    return { allowed: true };
+  }
+
+  /**
+   * 验证 design → impl
+   * 条件：planning 需 monitoring/completed/cancelled，且至少存在一个 execution 节点
+   */
+  private validateDesignToImpl(nodes: NodeMeta[]): PhaseTransitionValidation {
+    const planningNodes = nodes.filter(n => n.type === "planning" && n.id !== "root");
+    const executionNodes = nodes.filter(n => n.type === "execution");
+
+    // 检查 planning 节点状态
+    const invalidPlanningNodes = planningNodes.filter(
+      n => n.status === "pending" || n.status === "planning"
+    );
+    if (invalidPlanningNodes.length > 0) {
+      return {
+        allowed: false,
+        reason: `请先完成规划节点（${invalidPlanningNodes.length} 个未完成规划）`,
+        issues: invalidPlanningNodes.map(n => ({
+          nodeId: n.id,
+          title: n.dirName,
+          status: n.status,
+          type: n.type,
+        })),
+      };
+    }
+
+    // 检查是否有执行节点
+    if (executionNodes.length === 0) {
+      return {
+        allowed: false,
+        reason: "请先创建至少一个执行节点",
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  /**
+   * 验证 impl → info
+   * 条件：execution 节点需静止态
+   */
+  private validateImplToInfo(nodes: NodeMeta[]): PhaseTransitionValidation {
+    const executionNodes = nodes.filter(n => n.type === "execution");
+    const nonStaticExecNodes = executionNodes.filter(
+      n => n.status === "implementing" || n.status === "validating"
+    );
+
+    if (nonStaticExecNodes.length > 0) {
+      return {
+        allowed: false,
+        reason: `请先完成或暂停进行中的执行任务（${nonStaticExecNodes.length} 个进行中）`,
+        issues: nonStaticExecNodes.map(n => ({
+          nodeId: n.id,
+          title: n.dirName,
+          status: n.status,
+          type: n.type,
+        })),
+      };
+    }
+    return { allowed: true };
+  }
+
+  /**
+   * 验证 impl → design
+   * 条件：execution 节点需静止态
+   */
+  private validateImplToDesign(nodes: NodeMeta[]): PhaseTransitionValidation {
+    // 与 impl → info 规则相同
+    return this.validateImplToInfo(nodes);
+  }
+
+  /**
+   * 验证 design → info
+   * 条件：允许（可暂停规划）
+   */
+  private validateDesignToInfo(_nodes: NodeMeta[]): PhaseTransitionValidation {
+    return { allowed: true };
+  }
+
+  /**
+   * 处理 signal 工具调用
+   * 用于切换工作流阶段，不暴露当前 phase
+   *
+   * @param workspaceId 工作区 ID
+   * @param code 操作码（硬编码映射到 WorkflowPhase）
+   * @returns 状态同步结果
+   */
+  async signal(workspaceId: string, code: string): Promise<{ success: boolean; message?: string; error?: string; issues?: Array<{ nodeId: string; title: string; status: string; type: string }> }> {
+    // 1. 验证 code 是否有效
+    const targetPhase = SIGNAL_CODES[code];
+    if (!targetPhase) {
+      devLog.debug("signal: 无效的操作码", { workspaceId, code });
+      return {
+        success: false,
+        error: "信号无效，请根据相关指引操作：tanmi_help",
+      };
+    }
+
+    // 2. 获取工作区位置信息
+    const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
+
+    // 3. 读取 graph.json
+    const graph = await this.json.readGraph(projectRoot, dirName);
+    const currentPhase = graph.workflow?.phase || "info";
+
+    // 4. 验证阶段转换
+    const validation = this.validatePhaseTransition(graph, currentPhase, targetPhase);
+    if (!validation.allowed) {
+      devLog.debug("signal: 阶段转换被阻止", { workspaceId, from: currentPhase, to: targetPhase, reason: validation.reason });
+      return {
+        success: false,
+        error: validation.reason,
+        issues: validation.issues,
+      };
+    }
+
+    // 5. 更新 workflow 状态
+    if (currentPhase === targetPhase) {
+      // 相同阶段，只更新 phaseSkillInvoked
+      graph.workflow = {
+        ...graph.workflow,
+        phase: currentPhase,
+        phaseSkillInvoked: true,
+      };
+      devLog.debug("signal: 相同阶段，更新 phaseSkillInvoked", { workspaceId, phase: currentPhase });
+    } else {
+      // 切换阶段
+      graph.workflow = {
+        phase: targetPhase,
+        phaseSkillInvoked: true,
+      };
+      devLog.debug("signal: 切换阶段", { workspaceId, from: currentPhase, to: targetPhase });
+    }
+
+    // 6. 写入 graph.json
+    await this.json.writeGraph(projectRoot, dirName, graph);
+
+    // 7. 发送事件通知
+    eventService.emitWorkspaceUpdate(workspaceId);
+
+    return {
+      success: true,
+      message: "状态已同步",
+    };
+  }
+
+  // ========== 工作区配置 ==========
+
+  /**
+   * 获取工作区配置项
+   * @param workspaceId 工作区 ID
+   * @param key 配置键（可选，不传则返回整个配置对象）
+   */
+  async getWorkspaceConfig(
+    workspaceId: string,
+    key?: string
+  ): Promise<{ value: unknown; config: import("../types/node.js").GraphConfig }> {
+    const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
+    const graph = await this.json.readGraph(projectRoot, dirName);
+    const config = graph.config || {};
+
+    if (key) {
+      return { value: config[key as keyof typeof config], config };
+    }
+    return { value: config, config };
+  }
+
+  /**
+   * 设置工作区配置项
+   * @param workspaceId 工作区 ID
+   * @param key 配置键
+   * @param value 配置值（null 表示删除）
+   */
+  async setWorkspaceConfig(
+    workspaceId: string,
+    key: string,
+    value: unknown
+  ): Promise<{ success: boolean; config: import("../types/node.js").GraphConfig }> {
+    const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
+    const graph = await this.json.readGraph(projectRoot, dirName);
+
+    if (!graph.config) {
+      graph.config = {};
+    }
+
+    if (value === null || value === undefined) {
+      delete graph.config[key as keyof typeof graph.config];
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (graph.config as any)[key] = value;
+    }
+
+    await this.json.writeGraph(projectRoot, dirName, graph);
+    eventService.emitWorkspaceUpdate(workspaceId);
+
+    return { success: true, config: graph.config };
+  }
+
+  // ========== 阶段约束检查 ==========
+
+  /**
+   * 检查 createNode 的阶段约束
+   *
+   * @param workspaceId 工作区 ID
+   * @param type 节点类型
+   * @param role 节点角色
+   * @returns null 表示通过，error 对象表示约束违规
+   */
+  async checkCreateNodeConstraint(
+    workspaceId: string,
+    type: "planning" | "execution",
+    role?: string
+  ): Promise<{ error: { code: string; message: string } } | null> {
+    const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
+    const graph = await this.json.readGraph(projectRoot, dirName);
+    const phase = graph.workflow?.phase || "info";
+
+    // 规则1: impl 阶段禁止创建 planning 节点
+    if (phase === "impl" && type === "planning") {
+      return {
+        error: {
+          code: "PHASE_CONSTRAINT",
+          message: "当前处于实现阶段，不允许创建规划节点。如需调整计划，请先调用 flow-design 切换到设计阶段。",
+        },
+      };
+    }
+
+    // 规则3: info 阶段禁止创建重复信息节点
+    if (phase === "info" && (role === "info_collection" || role === "info_summary")) {
+      const hasActiveInfoNode = Object.values(graph.nodes).some(
+        (node) =>
+          (node.role === "info_collection" || node.role === "info_summary") &&
+          node.status !== "completed" &&
+          node.status !== "failed" &&
+          node.status !== "cancelled"
+      );
+      if (hasActiveInfoNode) {
+        return {
+          error: {
+            code: "PHASE_CONSTRAINT",
+            message: "已有进行中的信息收集流程，请先完成当前流程。",
+          },
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 检查 dispatchNode 的阶段约束
+   *
+   * @param workspaceId 工作区 ID
+   * @returns null 表示通过，error 对象表示约束违规
+   */
+  async checkDispatchNodeConstraint(
+    workspaceId: string
+  ): Promise<{ error: { code: string; message: string } } | null> {
+    const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
+    const graph = await this.json.readGraph(projectRoot, dirName);
+    const phase = graph.workflow?.phase || "info";
+
+    // 规则2: info/design 阶段禁止 dispatch_node
+    if (phase === "info" || phase === "design") {
+      return {
+        error: {
+          code: "PHASE_CONSTRAINT",
+          message: "只有实现阶段才能派发任务。请先调用 flow-impl 进入实现阶段。",
+        },
+      };
+    }
+
+    return null;
   }
 }
 

@@ -1,0 +1,46 @@
+# Workflow Phases Configuration
+# 工作流阶段配置文件
+#
+# 用户可以在 ~/.tanmi-workspace/config/workflow-phases.yaml 覆盖此配置
+
+enabled: true
+
+phases:
+  info:
+    label: 信息收集阶段
+    skill: flow-info
+    constraints:
+      disallow_tools:
+        - Write
+        - Edit
+        - MultiEdit
+      disallow_node_types: []
+    exit:
+      requires_user_confirm: false
+
+  design:
+    label: 方案设计阶段
+    skill: flow-design
+    constraints:
+      disallow_tools:
+        - Write
+        - Edit
+        - MultiEdit
+      disallow_node_types: []
+    exit:
+      requires_user_confirm: true
+
+  impl:
+    label: 实现执行阶段
+    skill: flow-impl
+    constraints:
+      disallow_tools: []
+      disallow_node_types:
+        - planning
+    exit:
+      requires_user_confirm: false
+
+flow:
+  - info
+  - design
+  - impl
