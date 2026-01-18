@@ -5,7 +5,7 @@ import { dirname, join } from "path";
 import { createRequire } from "module";
 import type { FileSystemAdapter } from "./FileSystemAdapter.js";
 import type { WorkspaceIndex, WorkspaceConfig, WorkspaceEntry } from "../types/workspace.js";
-import type { NodeGraph } from "../types/node.js";
+import type { NodeGraph, NodeMeta, WorkflowPhase } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { generateWorkspaceDirName, generateNodeDirName, extractShortId } from "../utils/id.js";
 
@@ -595,14 +595,24 @@ export class JsonStorage {
 
     // 兜底迁移：理论上 migrateAll 已处理，这里防止遗漏
     // 场景：用户手动添加工作区到 index.json，绕过了 migrateAll 流程
+    let needsSave = false;
     if (graph.version !== JsonStorage.STORAGE_VERSION) {
       // 先修复节点目录名映射（扫描文件系统查找实际目录名）
       await this.migrateNodeDirs(projectRoot, wsDirName, graph, isArchived);
       // 再执行数据结构迁移
       this.migrateGraphData(graph);
-      if (!isArchived) {
-        await this.writeGraph(projectRoot, wsDirName, graph);
-      }
+      needsSave = true;
+    }
+
+    // 懒迁移：为旧工作区填充 workflow 字段
+    // 场景：旧版本工作区升级后缺少 workflow，或特殊情况下 workflow 丢失
+    if (this.migrateWorkflow(graph)) {
+      needsSave = true;
+    }
+
+    // 保存迁移后的数据（只在非归档状态下保存）
+    if (needsSave && !isArchived) {
+      await this.writeGraph(projectRoot, wsDirName, graph);
     }
 
     // 代码版本检测（lastWriteCodeVersion）
@@ -673,6 +683,71 @@ export class JsonStorage {
 
     // 更新版本号
     graph.version = JsonStorage.STORAGE_VERSION;
+  }
+
+  /**
+   * 推断旧工作区的工作流阶段
+   * 按优先级检测节点特征来推断当前应处于的阶段
+   *
+   * @param nodes 节点映射
+   * @returns 推断的工作流阶段
+   */
+  private inferWorkflowPhase(nodes: Record<string, NodeMeta>): WorkflowPhase {
+    const nodeList = Object.values(nodes);
+
+    // 优先级1：有 dispatchParent 配对节点 → impl（无论状态）
+    // dispatchParent.children 存在且有内容表示这是派发母节点
+    const hasDispatchParent = nodeList.some(node =>
+      node.dispatchParent &&
+      node.dispatchParent.children &&
+      (node.dispatchParent.children.execId || node.dispatchParent.children.specId)
+    );
+    if (hasDispatchParent) {
+      return 'impl';
+    }
+
+    // 优先级2：有未完成的 planning 类型节点 → design
+    // 注意：检测 type === 'planning'，不是 role
+    const hasIncompletePlanning = nodeList.some(node =>
+      node.type === 'planning' &&
+      node.status !== 'completed' &&
+      node.parentId !== null  // 排除根节点
+    );
+    if (hasIncompletePlanning) {
+      return 'design';
+    }
+
+    // 优先级3：有未完成的 info_collection/info_summary 角色节点 → info
+    const hasIncompleteInfo = nodeList.some(node =>
+      (node.role === 'info_collection' || node.role === 'info_summary') &&
+      node.status !== 'completed'
+    );
+    if (hasIncompleteInfo) {
+      return 'info';
+    }
+
+    // 优先级4/5：默认 → info
+    return 'info';
+  }
+
+  /**
+   * 懒迁移：为旧工作区填充 workflow 字段
+   * 当 graph 缺少 workflow 时，根据节点特征推断阶段并填充
+   *
+   * @param graph 节点图
+   * @returns 是否进行了迁移
+   */
+  private migrateWorkflow(graph: NodeGraph): boolean {
+    if (graph.workflow) {
+      return false;  // 已有 workflow，无需迁移
+    }
+
+    const inferredPhase = this.inferWorkflowPhase(graph.nodes);
+    graph.workflow = {
+      phase: inferredPhase,
+      phaseSkillInvoked: false
+    };
+    return true;
   }
 
   /**

@@ -39,7 +39,12 @@ export const workspaceInitTool: Tool = {
       scenario: {
         type: "string",
         enum: ["feature", "summary", "optimize", "debug", "misc"],
-        description: "任务场景类型（必填）：feature(新功能开发)、summary(总结分析)、optimize(优化重构)、debug(查错修复)、misc(其他)",
+        description: `任务场景类型（必填）：
+- feature: 新功能开发、新想法探索、可行性调研（涉及设计或实现新东西）
+- summary: 整理已有内容（文档梳理、代码总结、知识归纳，不涉及新设计）
+- optimize: 优化重构（性能优化、代码重构、架构改进）
+- debug: 查错修复（Bug定位、问题诊断、错误修复）
+- misc: 其他（不确定类型、灵活探索、讨论性任务）`,
       },
     },
     required: ["name", "goal", "scenario"],
@@ -236,6 +241,28 @@ export const workspaceHealthTool: Tool = {
 };
 
 /**
+ * signal 工具定义
+ */
+export const signalTool: Tool = {
+  name: "signal",
+  description: "内部状态同步工具",
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+      code: {
+        type: "string",
+        description: "操作码",
+      },
+    },
+    required: ["workspaceId", "code"],
+  },
+};
+
+/**
  * 所有工作区工具
  */
 export const workspaceTools: Tool[] = [
@@ -247,4 +274,5 @@ export const workspaceTools: Tool[] = [
   workspaceArchiveTool,
   workspaceRestoreTool,
   workspaceHealthTool,
+  signalTool,
 ];

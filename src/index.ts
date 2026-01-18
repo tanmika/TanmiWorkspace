@@ -342,6 +342,13 @@ function createMcpServer(services: Services): Server {
           break;
         }
 
+        case "signal":
+          result = await services.workspace.signal(
+            args?.workspaceId as string,
+            args?.code as string
+          );
+          break;
+
         // Node 工具
         case "node_create": {
           const nodeRole = args?.role as "info_collection" | "info_summary" | "dispatch_exec" | "dispatch_spec" | "dispatch_quality" | undefined;
@@ -377,10 +384,22 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
             break;
           }
 
+          // 阶段约束检查
+          const nodeType = args?.type as "planning" | "execution";
+          const createConstraint = await services.workspace.checkCreateNodeConstraint(
+            args?.workspaceId as string,
+            nodeType,
+            nodeRole
+          );
+          if (createConstraint) {
+            result = createConstraint;
+            break;
+          }
+
           result = await services.node.create({
             workspaceId: args?.workspaceId as string,
             parentId: args?.parentId as string,
-            type: args?.type as "planning" | "execution",
+            type: nodeType,
             title: args?.title as string,
             requirement: args?.requirement as string | undefined,
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,
@@ -637,6 +656,14 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
         case "dispatch_node": {
           const workspaceId = args?.workspaceId as string;
           const nodeId = args?.nodeId as string;
+
+          // 阶段约束检查：info/design 阶段禁止派发
+          const dispatchConstraint = await services.workspace.checkDispatchNodeConstraint(workspaceId);
+          if (dispatchConstraint) {
+            result = dispatchConstraint;
+            break;
+          }
+
           const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
           result = await services.dispatch.upgradeToDispatchParent(workspaceId, projectRoot, nodeId);
           break;
