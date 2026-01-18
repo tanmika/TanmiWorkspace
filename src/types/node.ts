@@ -407,3 +407,48 @@ export interface ExecutionFailure {
   detail: string;
   suggestion?: string;      // 给父规划节点的建议
 }
+
+// ========== 工具拆分 API 类型 ==========
+
+/**
+ * node_replace 输入 - 全量替换节点字段
+ */
+export interface NodeReplaceParams {
+  workspaceId: string;
+  nodeId: string;
+  contentHash?: string;
+  requirement?: string;
+  conclusion?: string;
+  notes?: string;
+}
+
+/**
+ * node_edit 输入 - 精确字符串替换或行范围替换
+ *
+ * 替换模式：
+ * - mode='string': 字符串精确替换，需提供 old_str + new_str
+ * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + new_str
+ *
+ * 约束：
+ * - old_str 和 lineStart/lineEnd 不能同时存在
+ * - 行号从 1 开始
+ */
+export interface NodeEditParams {
+  workspaceId: string;
+  nodeId: string;
+  contentHash?: string;
+  field: 'requirement' | 'conclusion' | 'notes';
+
+  /** 替换模式：字符串精确替换或行范围替换 */
+  mode?: 'string' | 'line_range';
+
+  /** 要替换的原文本（mode='string' 时必填） */
+  old_str?: string;
+  /** 替换后的文本 */
+  new_str: string;
+
+  /** 起始行号（mode='line_range' 时必填，从 1 开始） */
+  lineStart?: number;
+  /** 结束行号（mode='line_range' 时必填，包含该行） */
+  lineEnd?: number;
+}

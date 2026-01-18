@@ -18,6 +18,8 @@ import type {
   NodeUpdateResult,
   NodeMoveParams,
   NodeMoveResult,
+  NodeReplaceParams,
+  NodeEditParams,
   NodeMeta,
   NodeTreeItem,
   NodeInfoData,
@@ -1170,5 +1172,234 @@ export class NodeService {
 
     // 6. 保存图结构
     await this.json.writeGraph(projectRoot, wsDirName, graph);
+  }
+
+  // ========== 工具拆分: replace/edit 方法 ==========
+
+  /**
+   * 全量替换节点字段
+   * 直接替换 requirement/conclusion/notes 字段内容
+   */
+  async replace(params: NodeReplaceParams): Promise<{ success: boolean; error?: string }> {
+    const { workspaceId, nodeId, contentHash, requirement, conclusion, notes } = params;
+
+    // 1. 获取 projectRoot 和 wsDirName
+    const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
+
+    // 2. 验证节点存在
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
+    if (!graph.nodes[nodeId]) {
+      return { success: false, error: `节点 "${nodeId}" 不存在` };
+    }
+
+    const nodeDirName = graph.nodes[nodeId].dirName || nodeId;
+
+    // 3. 读取现有 Info.md
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+
+    // 4. 如果修改 notes 字段，验证 contentHash 匹配
+    if (notes !== undefined && contentHash) {
+      const currentHash = computeNodeHash({
+        title: nodeInfo.title,
+        requirement: nodeInfo.requirement,
+        note: nodeInfo.notes,
+        conclusion: nodeInfo.conclusion,
+      });
+      if (currentHash !== contentHash) {
+        return { success: false, error: "内容已变更，请重新获取节点信息" };
+      }
+    }
+
+    const currentTime = now();
+    const updates: string[] = [];
+
+    // 5. 执行替换
+    if (requirement !== undefined && requirement !== nodeInfo.requirement) {
+      nodeInfo.requirement = requirement;
+      updates.push("requirement");
+    }
+    if (conclusion !== undefined && conclusion !== nodeInfo.conclusion) {
+      nodeInfo.conclusion = conclusion;
+      updates.push("conclusion");
+    }
+    if (notes !== undefined && notes !== nodeInfo.notes) {
+      nodeInfo.notes = notes;
+      updates.push("notes");
+    }
+
+    // 如果没有任何更新，直接返回成功
+    if (updates.length === 0) {
+      return { success: true };
+    }
+
+    // 6. 更新时间戳
+    nodeInfo.updatedAt = currentTime;
+
+    // 7. 写入 Info.md
+    await this.md.writeNodeInfo(projectRoot, wsDirName, nodeDirName, nodeInfo);
+
+    // 8. 更新 graph.json
+    graph.nodes[nodeId].updatedAt = currentTime;
+    if (conclusion !== undefined) {
+      graph.nodes[nodeId].conclusion = conclusion || null;
+    }
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
+
+    // 9. 追加日志
+    await this.md.appendLog(projectRoot, wsDirName, {
+      time: currentTime,
+      operator: "AI",
+      event: `替换节点字段: ${updates.join(", ")}`,
+    }, nodeDirName);
+
+    // 10. 推送 SSE 事件
+    eventService.emitNodeUpdate(workspaceId, nodeId);
+
+    return { success: true };
+  }
+
+  /**
+   * 精确替换节点字段中的特定字符串或行范围
+   *
+   * 替换模式：
+   * - mode='string': 字符串精确替换，需提供 old_str + new_str
+   * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + new_str
+   */
+  async edit(params: NodeEditParams): Promise<{ success: boolean; error?: string }> {
+    const { workspaceId, nodeId, contentHash, field, old_str, new_str, lineStart, lineEnd } = params;
+
+    // 1. 验证 mode 参数（默认 'string'）
+    const mode = params.mode ?? "string";
+
+    // 2. 参数校验
+    if (mode === "string") {
+      if (!old_str) {
+        return { success: false, error: "mode=string 时 old_str 必填" };
+      }
+      if (lineStart !== undefined || lineEnd !== undefined) {
+        return { success: false, error: "mode=string 时不能指定 lineStart/lineEnd" };
+      }
+    } else if (mode === "line_range") {
+      if (lineStart === undefined || lineEnd === undefined) {
+        return { success: false, error: "mode=line_range 时 lineStart 和 lineEnd 必填" };
+      }
+      if (old_str !== undefined) {
+        return { success: false, error: "mode=line_range 时不能指定 old_str" };
+      }
+      // 行号基本校验
+      if (lineStart < 1) {
+        return { success: false, error: "lineStart 必须 >= 1" };
+      }
+      if (lineStart > lineEnd) {
+        return { success: false, error: "lineStart 不能大于 lineEnd" };
+      }
+    } else {
+      return { success: false, error: `无效的 mode: ${mode}，支持 'string' 或 'line_range'` };
+    }
+
+    // 3. 获取 projectRoot 和 wsDirName
+    const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
+
+    // 4. 验证节点存在
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
+    if (!graph.nodes[nodeId]) {
+      return { success: false, error: `节点 "${nodeId}" 不存在` };
+    }
+
+    const nodeDirName = graph.nodes[nodeId].dirName || nodeId;
+
+    // 5. 读取现有 Info.md
+    const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+
+    // 6. 如果修改 notes 字段，验证 contentHash 匹配
+    if (field === "notes" && contentHash) {
+      const currentHash = computeNodeHash({
+        title: nodeInfo.title,
+        requirement: nodeInfo.requirement,
+        note: nodeInfo.notes,
+        conclusion: nodeInfo.conclusion,
+      });
+      if (currentHash !== contentHash) {
+        return { success: false, error: "内容已变更，请重新获取节点信息" };
+      }
+    }
+
+    // 7. 获取目标字段内容
+    const fieldKey = field === "notes" ? "notes" : field;
+    const targetContent = nodeInfo[fieldKey] || "";
+
+    let newContent: string;
+    const currentTime = now();
+
+    if (mode === "string") {
+      // 8a. 字符串模式：检查 old_str 存在性和唯一性
+      const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(escapeRegExp(old_str!), "g");
+      const matches = targetContent.match(regex);
+      const count = matches ? matches.length : 0;
+
+      if (count === 0) {
+        return { success: false, error: "old_str 未找到" };
+      }
+      if (count > 1) {
+        return { success: false, error: "old_str 出现多次，请提供更精确的匹配" };
+      }
+
+      // 执行替换
+      newContent = targetContent.replace(old_str!, new_str);
+    } else {
+      // 8b. 行范围模式：按行替换
+      const lines = targetContent.split("\n");
+      const totalLines = lines.length;
+
+      // 验证行号范围
+      if (lineEnd! > totalLines) {
+        return { success: false, error: `lineEnd (${lineEnd}) 超出总行数 (${totalLines})` };
+      }
+
+      // 执行行范围替换：
+      // - 删除 lineStart 到 lineEnd 的行（闭区间）
+      // - 在 lineStart 位置插入 new_str（可能是多行或空字符串）
+      const beforeLines = lines.slice(0, lineStart! - 1);
+      const afterLines = lines.slice(lineEnd!);
+
+      if (new_str === "") {
+        // 空字符串：删除指定行
+        newContent = [...beforeLines, ...afterLines].join("\n");
+      } else {
+        // 非空：替换为新内容（可能是多行）
+        const newLines = new_str.split("\n");
+        newContent = [...beforeLines, ...newLines, ...afterLines].join("\n");
+      }
+    }
+
+    // 9. 更新内容和元数据
+    nodeInfo[fieldKey] = newContent;
+    nodeInfo.updatedAt = currentTime;
+
+    // 10. 写入 Info.md
+    await this.md.writeNodeInfo(projectRoot, wsDirName, nodeDirName, nodeInfo);
+
+    // 11. 更新 graph.json
+    graph.nodes[nodeId].updatedAt = currentTime;
+    if (field === "conclusion") {
+      graph.nodes[nodeId].conclusion = newContent || null;
+    }
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
+
+    // 12. 追加日志
+    const logEvent = mode === "string"
+      ? `精确替换 ${field} 字段`
+      : `行范围替换 ${field} 字段 (行 ${lineStart}-${lineEnd})`;
+    await this.md.appendLog(projectRoot, wsDirName, {
+      time: currentTime,
+      operator: "AI",
+      event: logEvent,
+    }, nodeDirName);
+
+    // 13. 推送 SSE 事件
+    eventService.emitNodeUpdate(workspaceId, nodeId);
+
+    return { success: true };
   }
 }

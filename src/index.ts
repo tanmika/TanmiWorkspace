@@ -44,7 +44,7 @@ import { logMcpStart, logMcpEnd, logMcpError } from "./utils/sessionLogger.js";
 import { formatManualChangeReminder } from "./utils/manualChangeFormatter.js";
 import { devLog } from "./utils/devLog.js";
 import { INTERNAL_RULES_HASH } from "./services/NodeService.js";
-import { aiAdapter } from "./adapters/OutputAdapter.js";
+import { aiAdapter, addLineNumbers } from "./adapters/OutputAdapter.js";
 
 // ============================================================================
 // 配置
@@ -418,25 +418,35 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
           });
           break;
 
-        // Phase 3: 节点更新
-        case "node_update": {
-          // MCP 调用必须提供 nodeHash
-          const nodeHashParam = args?.nodeHash as string | undefined;
-          if (!nodeHashParam) {
-            throw new TanmiError("INVALID_PARAMS", "请先 node_get 获取 nodeHash");
-          }
-          result = await services.node.update({
+        // Phase 3: 节点更新（拆分为 replace/edit）
+        case "node_replace": {
+          devLog.debug("[node_replace] 开始执行", { workspaceId: args?.workspaceId, nodeId: args?.nodeId });
+          result = await services.node.replace({
             workspaceId: args?.workspaceId as string,
             nodeId: args?.nodeId as string,
-            nodeHash: nodeHashParam,
-            title: args?.title as string | undefined,
+            contentHash: args?.contentHash as string | undefined,
             requirement: args?.requirement as string | undefined,
-            note: args?.note as string | undefined,
             conclusion: args?.conclusion as string | undefined,
-            field: args?.field as import("./types/node.js").NodeUpdateField | undefined,
-            old_str: args?.old_str as string | undefined,
-            new_str: args?.new_str as string | undefined,
+            notes: args?.notes as string | undefined,
           });
+          devLog.debug("[node_replace] 执行成功", { workspaceId: args?.workspaceId, nodeId: args?.nodeId });
+          break;
+        }
+
+        case "node_edit": {
+          devLog.debug("[node_edit] 开始执行", { workspaceId: args?.workspaceId, nodeId: args?.nodeId, field: args?.field });
+          result = await services.node.edit({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+            contentHash: args?.contentHash as string | undefined,
+            field: args?.field as "requirement" | "conclusion" | "notes",
+            mode: args?.mode as "string" | "line_range" | undefined,
+            old_str: args?.old_str as string | undefined,
+            new_str: args?.new_str as string,
+            lineStart: args?.lineStart as number | undefined,
+            lineEnd: args?.lineEnd as number | undefined,
+          });
+          devLog.debug("[node_edit] 执行成功", { workspaceId: args?.workspaceId, nodeId: args?.nodeId });
           break;
         }
 
@@ -708,30 +718,66 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
         }
 
         case "memo_get": {
-          result = await services.memo.get({
+          const lineOffset = (args?.lineOffset as number | undefined) ?? 1;
+          const memoResult = await services.memo.get({
             workspaceId: args?.workspaceId as string,
             memoId: args?.memoId as string,
-            lineOffset: args?.lineOffset as number | undefined,
+            lineOffset,
             lineLimit: args?.lineLimit as number | undefined,
           });
+          // AI 适配器：添加行号前缀
+          result = {
+            ...memoResult,
+            memo: {
+              ...memoResult.memo,
+              content: addLineNumbers(memoResult.memo.content, lineOffset),
+            },
+          };
           break;
         }
 
-        case "memo_update": {
-          result = await services.memo.update({
+        case "memo_replace": {
+          devLog.debug("[memo_replace] 开始执行", { workspaceId: args?.workspaceId, memoId: args?.memoId });
+          result = await services.memo.replace({
             workspaceId: args?.workspaceId as string,
             memoId: args?.memoId as string,
             contentHash: args?.contentHash as string,
+            content: args?.content as string,
             title: args?.title as string | undefined,
             summary: args?.summary as string | undefined,
-            content: args?.content as string | undefined,
-            field: args?.field as 'content' | 'summary' | undefined,
-            old_str: args?.old_str as string | undefined,
-            new_str: args?.new_str as string | undefined,
-            insertAtLine: args?.insertAtLine as number | undefined,
-            insertText: args?.insertText as string | undefined,
             tags: args?.tags as string[] | undefined,
           });
+          devLog.debug("[memo_replace] 执行成功", { workspaceId: args?.workspaceId, memoId: args?.memoId });
+          break;
+        }
+
+        case "memo_edit": {
+          devLog.debug("[memo_edit] 开始执行", { workspaceId: args?.workspaceId, memoId: args?.memoId, field: args?.field });
+          result = await services.memo.edit({
+            workspaceId: args?.workspaceId as string,
+            memoId: args?.memoId as string,
+            contentHash: args?.contentHash as string,
+            field: args?.field as "content" | "title" | "summary",
+            mode: args?.mode as "string" | "line_range" | undefined,
+            old_str: args?.old_str as string | undefined,
+            new_str: args?.new_str as string,
+            lineStart: args?.lineStart as number | undefined,
+            lineEnd: args?.lineEnd as number | undefined,
+          });
+          devLog.debug("[memo_edit] 执行成功", { workspaceId: args?.workspaceId, memoId: args?.memoId });
+          break;
+        }
+
+        case "memo_insert": {
+          devLog.debug("[memo_insert] 开始执行", { workspaceId: args?.workspaceId, memoId: args?.memoId, line: args?.line });
+          result = await services.memo.insert({
+            workspaceId: args?.workspaceId as string,
+            memoId: args?.memoId as string,
+            contentHash: args?.contentHash as string,
+            line: args?.line as number,
+            text: args?.text as string,
+          });
+          devLog.debug("[memo_insert] 执行成功", { workspaceId: args?.workspaceId, memoId: args?.memoId });
           break;
         }
 
