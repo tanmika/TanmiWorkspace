@@ -573,7 +573,7 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
 
         // Help 工具
         case "tanmi_help":
-          result = await services.help.getHelp(args?.topic as HelpTopic);
+          result = await services.help.getHelp(args?.topic as string | undefined);
           break;
 
         case "tanmi_prompt":

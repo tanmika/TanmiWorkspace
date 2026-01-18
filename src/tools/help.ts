@@ -14,25 +14,15 @@ export const helpTools: Tool[] = [
     name: "tanmi_help",
     description: `获取 TanmiWorkspace 的使用指南和场景化指导。
 
-**首次使用时**：调用 tanmi_help(topic="overview") 获取系统概述。
+**三种调用方式**：
+1. **无参数**：返回所有主题列表，用于了解有哪些帮助可用
+2. **模糊搜索**：传入关键词，搜索匹配的主题（搜索主题ID和标题）
+3. **精确获取**：传入精确的主题ID，获取完整帮助内容
 
-**可用主题**：
-- overview: 系统概述，了解 TanmiWorkspace 是什么
-- workflow: 核心工作流程，状态流转规则
-- tools: 工具速查表，所有工具的快速参考
-- start: 如何开始新任务
-- resume: 如何继续之前的任务
-- session_restore: 会话恢复（从摘要恢复时验证 ID）
-- blocked: 任务遇到问题时怎么办
-- split: 何时以及如何分解任务
-- complete: 如何完成任务
-- progress: 如何查看和报告进度
-- guide: 如何引导不熟悉的用户
-- docs: 文档引用管理（派发、查找、生命周期）
-- dispatch: 派发模式（subagent 执行、自动验证、失败回滚）
-- status: 插件安装状态（查看各平台组件版本）
-- server: 服务器状态与自检（端口、CLI 命令、常见问题）
-- all: 获取完整指南
+**示例**：
+- tanmi_help() → 返回主题列表
+- tanmi_help({ topic: "派发" }) → 搜索含"派发"的主题
+- tanmi_help({ topic: "dispatch" }) → 获取派发模式完整指南
 
 **使用场景**：
 1. 不确定下一步该做什么时
@@ -43,11 +33,10 @@ export const helpTools: Tool[] = [
       properties: {
         topic: {
           type: "string",
-          description: "帮助主题：overview, workflow, tools, start, resume, session_restore, blocked, split, complete, progress, guide, docs, dispatch, status, server, all",
-          enum: ["overview", "workflow", "tools", "start", "resume", "session_restore", "blocked", "split", "complete", "progress", "guide", "docs", "dispatch", "status", "server", "all"]
+          description: "帮助主题ID或搜索关键词。不传则返回主题列表"
         }
       },
-      required: ["topic"]
+      required: []
     }
   },
   {
@@ -84,9 +73,25 @@ export const helpTools: Tool[] = [
 ];
 
 /**
- * 帮助主题类型
+ * 帮助主题类型（精确匹配时使用）
  */
 export type HelpTopic = "overview" | "workflow" | "tools" | "start" | "resume" | "session_restore" | "blocked" | "split" | "complete" | "progress" | "guide" | "docs" | "dispatch" | "status" | "server" | "all";
+
+/**
+ * 主题列表项
+ */
+export interface TopicListItem {
+  id: string;
+  title: string;
+}
+
+/**
+ * 帮助返回结果类型
+ */
+export type HelpResult =
+  | { type: "list"; topics: TopicListItem[] }
+  | { type: "matches"; matches: TopicListItem[]; hint: string }
+  | { type: "content"; topic: string; title: string; content: string };
 
 /**
  * 提示模板类型
@@ -107,39 +112,147 @@ export class HelpService {
   }
 
   /**
-   * 获取帮助内容
+   * 获取所有主题列表
    */
-  async getHelp(topic: HelpTopic): Promise<{ topic: string; title: string; content: string }> {
+  private getTopicList(): TopicListItem[] {
+    const topics: TopicListItem[] = Object.entries(HELP_TOPICS).map(([id, info]) => ({
+      id,
+      title: info.title
+    }));
+    // 添加动态主题
+    topics.push({ id: "status", title: "插件安装状态" });
+    topics.push({ id: "all", title: "完整指南" });
+    return topics;
+  }
+
+  /**
+   * 模糊搜索主题
+   * 优先级：ID 前缀匹配 > ID 包含 > 标题包含
+   */
+  private fuzzySearch(query: string): TopicListItem[] {
+    const topics = this.getTopicList();
+    const q = query.toLowerCase();
+
+    // 分组匹配结果
+    const prefixMatches: TopicListItem[] = [];
+    const idContains: TopicListItem[] = [];
+    const titleContains: TopicListItem[] = [];
+
+    for (const topic of topics) {
+      const idLower = topic.id.toLowerCase();
+      const titleLower = topic.title.toLowerCase();
+
+      if (idLower.startsWith(q)) {
+        prefixMatches.push(topic);
+      } else if (idLower.includes(q)) {
+        idContains.push(topic);
+      } else if (titleLower.includes(q)) {
+        titleContains.push(topic);
+      }
+    }
+
+    // 按优先级合并，去重
+    const seen = new Set<string>();
+    const result: TopicListItem[] = [];
+    for (const item of [...prefixMatches, ...idContains, ...titleContains]) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        result.push(item);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * 获取帮助内容
+   * - 无参数：返回主题列表
+   * - 模糊匹配：返回匹配的主题列表
+   * - 精确匹配：返回完整内容
+   */
+  async getHelp(topic?: string): Promise<HelpResult> {
+    // 无参数：返回主题列表
+    if (!topic) {
+      return {
+        type: "list",
+        topics: this.getTopicList()
+      };
+    }
+
+    // 精确匹配：all
     if (topic === "all") {
       return {
+        type: "content",
         topic: "all",
         title: "TanmiWorkspace 完整指南",
         content: getFullInstructions()
       };
     }
 
-    // 动态内容：插件安装状态
+    // 精确匹配：status（动态内容）
     if (topic === "status") {
       return {
+        type: "content",
         topic: "status",
         title: "插件安装状态",
         content: await this.generateStatusContent()
       };
     }
 
+    // 精确匹配：HELP_TOPICS 中的主题
     const helpTopic = HELP_TOPICS[topic];
-    if (!helpTopic) {
+    if (helpTopic) {
       return {
-        topic: "error",
-        title: "未知主题",
-        content: `未找到主题: ${topic}\n\n可用主题: ${Object.keys(HELP_TOPICS).join(", ")}, status, all`
+        type: "content",
+        topic,
+        title: helpTopic.title,
+        content: helpTopic.content
       };
     }
 
+    // 模糊搜索
+    const matches = this.fuzzySearch(topic);
+    if (matches.length === 0) {
+      return {
+        type: "matches",
+        matches: [],
+        hint: `未找到与 "${topic}" 相关的主题。使用 tanmi_help() 查看所有主题。`
+      };
+    }
+
+    // 如果只有一个匹配且是精确前缀，直接返回内容
+    if (matches.length === 1 && matches[0].id.toLowerCase().startsWith(topic.toLowerCase())) {
+      const matchedId = matches[0].id;
+      if (matchedId === "status") {
+        return {
+          type: "content",
+          topic: "status",
+          title: "插件安装状态",
+          content: await this.generateStatusContent()
+        };
+      }
+      if (matchedId === "all") {
+        return {
+          type: "content",
+          topic: "all",
+          title: "TanmiWorkspace 完整指南",
+          content: getFullInstructions()
+        };
+      }
+      const matched = HELP_TOPICS[matchedId];
+      if (matched) {
+        return {
+          type: "content",
+          topic: matchedId,
+          title: matched.title,
+          content: matched.content
+        };
+      }
+    }
+
     return {
-      topic,
-      title: helpTopic.title,
-      content: helpTopic.content
+      type: "matches",
+      matches,
+      hint: "请用精确的主题 ID 获取完整内容"
     };
   }
 
