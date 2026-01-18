@@ -389,7 +389,8 @@ Read(file_path: <skillsPath>/flow-info/SKILL.md)
           const createConstraint = await services.workspace.checkCreateNodeConstraint(
             args?.workspaceId as string,
             nodeType,
-            nodeRole
+            nodeRole,
+            rulesHash
           );
           if (createConstraint) {
             result = createConstraint;

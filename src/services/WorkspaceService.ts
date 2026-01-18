@@ -10,6 +10,7 @@ import { pipeline } from "node:stream/promises";
 import * as os from "node:os";
 import archiver from "archiver";
 import AdmZip from "adm-zip";
+import { INTERNAL_RULES_HASH } from "./NodeService.js";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
@@ -2517,23 +2518,46 @@ Read(file_path: <返回的路径>/SKILL.md)
    * @param workspaceId 工作区 ID
    * @param type 节点类型
    * @param role 节点角色
+   * @param rulesHash 规则哈希（内部调用使用 INTERNAL_RULES_HASH 绕过检查）
    * @returns null 表示通过，error 对象表示约束违规
    */
   async checkCreateNodeConstraint(
     workspaceId: string,
     type: "planning" | "execution",
-    role?: string
+    role?: string,
+    rulesHash?: string
   ): Promise<{ error: { code: string; message: string } } | null> {
+    // 内部调用（如 capability_select）绕过检查
+    if (rulesHash === INTERNAL_RULES_HASH) {
+      return null;
+    }
+
     const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
     const graph = await this.json.readGraph(projectRoot, dirName);
     const phase = graph.workflow?.phase || "info";
 
-    // 规则1: impl 阶段禁止创建 planning 节点
+    // 规则1: info 阶段禁止创建 planning/execution 节点（需先完成信息收集）
+    if (phase === "info" && (type === "planning" || type === "execution")) {
+      // 排除 info 角色节点（由其他拦截处理）
+      if (role !== "info_collection" && role !== "info_summary") {
+        return {
+          error: {
+            code: "PHASE_CONSTRAINT",
+            message: "当前处于信息阶段，需先完成信息收集。调用 Skill(flow-info) 进入信息收集流程，完成后再创建任务节点。",
+          },
+        };
+      }
+    }
+
+    // 规则2: impl 阶段禁止创建 planning 节点
     if (phase === "impl" && type === "planning") {
       return {
         error: {
           code: "PHASE_CONSTRAINT",
-          message: "当前处于实现阶段，不允许创建规划节点。如需调整计划，请先调用 flow-design 切换到设计阶段。",
+          message: `当前处于实现阶段，不允许创建规划节点。
+
+- 如需讨论新需求，调用 Skill(flow-info)
+- 如需调整现有计划，调用 Skill(flow-design)`,
         },
       };
     }
