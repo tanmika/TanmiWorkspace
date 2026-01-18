@@ -354,7 +354,7 @@ function createMcpServer(services: Services): Server {
           const nodeRole = args?.role as "info_collection" | "info_summary" | "dispatch_exec" | "dispatch_spec" | "dispatch_quality" | undefined;
           const rulesHash = args?.rulesHash as string | undefined;
 
-          // 检测 info 类节点：引导使用 starting-info-flow Skill
+          // 检测 info 类节点：引导使用 flow-info Skill
           // 仅对外部调用生效（rulesHash !== INTERNAL_RULES_HASH）
           if ((nodeRole === "info_collection" || nodeRole === "info_summary") && rulesHash !== INTERNAL_RULES_HASH) {
             const infoTypeName = nodeRole === "info_collection" ? "信息收集" : "信息总结";
@@ -363,7 +363,7 @@ function createMcpServer(services: Services): Server {
                 type: "invoke_skill",
                 message: `⚠️ 创建${infoTypeName}节点需要通过能力包流程。
 
-**MUST 调用 Skill(starting-info-flow)** 完成信息流程启动。
+**MUST 调用 Skill(flow-info)** 进入信息阶段。
 
 Skill 会引导你：
 1. capability_list() → 获取可用能力包
@@ -373,10 +373,10 @@ Skill 会引导你：
 **如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
 \`\`\`
 plugin_path() → 获取 skillsPath
-Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
+Read(file_path: <skillsPath>/flow-info/SKILL.md)
 \`\`\``,
                 data: {
-                  skill: "starting-info-flow",
+                  skill: "flow-info",
                   requestedRole: nodeRole,
                 },
               },

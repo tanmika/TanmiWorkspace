@@ -34,7 +34,7 @@ export const CRITICAL_PROTOCOLS = `
 - ❌ 创建完计划后未经用户确认就直接执行
 
 ## 5. 跳过流程必须获取用户同意
-若你认为某些流程步骤可以跳过（如 workspace_init 后的 bootstrapping 流程），**必须**：
+若你认为某些流程步骤可以跳过（如 workspace_init 后的信息阶段流程），**必须**：
 1. 明确告知用户你打算跳过什么
 2. 说明跳过的理由
 3. **获取用户同意后**才能跳过
@@ -1206,6 +1206,259 @@ ${outputs.map(o => `- ${o}`).join('\n')}
 };
 
 /**
+ * 工作流三阶段指南
+ */
+export const WORKFLOW_PHASES_GUIDE = `
+# 工作流三阶段
+
+## 总体流程
+
+\`\`\`
+info (信息收集) → design (方案设计) → impl (实现执行)
+      ↑                   ↓
+      └───────────────────┘  （可回退）
+\`\`\`
+
+## 三阶段定义
+
+| 阶段 | 用途 | 核心活动 |
+|------|------|----------|
+| **info** | 信息收集 | 调研项目、理解需求、准备设计方案 |
+| **design** | 方案设计 | 分解任务、制定计划、创建执行节点 |
+| **impl** | 实现执行 | 执行任务、修改代码、验证结果 |
+
+## 阶段转换条件
+
+| 转换 | 条件 | 失败原因 |
+|------|------|----------|
+| info → design | 所有信息节点 completed | 有未完成的信息节点 |
+| design → impl | planning 完成规划 + 有 execution 节点 | 规划未完成或无执行节点 |
+| impl → design/info | 所有 execution 节点静止态 | 有进行中的任务 |
+| design → info | 无条件允许 | - |
+| info → impl | **禁止** | 不允许跳过 design |
+
+## 静止态 vs 非静止态
+
+**静止态**（允许转换阶段）：
+- execution: pending, completed, failed
+- planning: pending, monitoring, completed, cancelled
+
+**非静止态**（禁止转换阶段）：
+- execution: implementing, validating
+
+**为什么需要静止态**：确保所有任务已报告或暂停，防止在任务进行中切换阶段。
+
+## 快速参考
+
+\`\`\`
+当前阶段 info:
+  ✅ 允许：Read, Search, Grep, Glob, 创建信息节点
+  ❌ 禁止：Write, Edit, MultiEdit
+  → 下一步：完成信息节点后进入 design
+
+当前阶段 design:
+  ✅ 允许：创建 planning/execution 节点
+  ❌ 禁止：Write, Edit, 派发执行
+  → 下一步：规划完成后进入 impl
+
+当前阶段 impl:
+  ✅ 允许：Write, Edit, 派发执行
+  ❌ 禁止：创建 planning 节点
+  → 下一步：完成所有任务或回退调整
+\`\`\`
+`;
+
+/**
+ * Signal 工具指南
+ */
+export const SIGNAL_GUIDE = `
+# Signal 工具与阶段转换
+
+## 什么是 Signal？
+
+signal 是**内部状态同步工具**，用于确认进入工作流阶段。
+它不会直接执行工作，只会检查状态并同步阶段。
+
+## 操作码映射
+
+| 目标阶段 | 操作码 | 触发方式 |
+|---------|--------|----------|
+| info | aW5mbw | Skill(flow-info) 自动调用 |
+| design | ZGVzaWdu | Skill(flow-design) 自动调用 |
+| impl | aW1wbA | Skill(flow-impl) 自动调用 |
+
+**重要**：用户无需手动调用 signal，由 Skill 自动处理。
+
+## 转换验证过程
+
+\`\`\`
+signal(code) 被调用
+    ↓
+验证操作码有效
+    ↓
+检查当前阶段和目标阶段
+    ↓
+运行转换验证规则
+    ↓
+验证通过 → 更新 graph.workflow.phase
+验证失败 → 返回 { success: false, error: "...", issues: [...] }
+\`\`\`
+
+## 双重验证机制
+
+Signal 有两层验证：
+1. **Hook 层** (hook-entry.cjs) - 前置拦截检查
+2. **代码层** (WorkspaceService) - 数据一致性检查
+
+两层都通过才允许转换。
+
+## 错误返回格式
+
+\`\`\`json
+{
+  "success": false,
+  "error": "阶段转换被阻止：有 2 个执行任务正在进行中",
+  "issues": [
+    { "nodeId": "node-xxx", "title": "任务A", "status": "implementing", "type": "execution" },
+    { "nodeId": "node-yyy", "title": "任务B", "status": "validating", "type": "execution" }
+  ]
+}
+\`\`\`
+`;
+
+/**
+ * 阶段约束指南
+ */
+export const WORKFLOW_CONSTRAINTS_GUIDE = `
+# 阶段约束与限制
+
+## 各阶段工具约束
+
+### 信息收集阶段 (info)
+
+| 类型 | 工具 | 原因 |
+|------|------|------|
+| ❌ 禁止 | Write, Edit, MultiEdit | 信息阶段目标是理解，不是改变 |
+| ✅ 允许 | Read, Search, Grep, Glob | 阅读和分析代码 |
+| ✅ 允许 | node_create (role: info_*) | 创建信息节点 |
+| ✅ 允许 | capability_select | 选择能力 |
+
+### 方案设计阶段 (design)
+
+| 类型 | 工具 | 原因 |
+|------|------|------|
+| ❌ 禁止 | Write, Edit, MultiEdit | 修改代码应在方案确认后 |
+| ❌ 禁止 | dispatch_node, dispatch_create | 派发是执行的一部分，属于 impl |
+| ✅ 允许 | node_create (type: planning/execution) | 创建规划和执行节点 |
+| ✅ 允许 | memo_create | 创建规划备忘录 |
+
+### 实现执行阶段 (impl)
+
+| 类型 | 工具 | 原因 |
+|------|------|------|
+| ❌ 禁止 | node_create (type: planning) | 规划应在 design 完成 |
+| ✅ 允许 | Write, Edit, MultiEdit | 执行阶段需要代码权限 |
+| ✅ 允许 | dispatch_node, dispatch_create | 派发任务 |
+| ✅ 允许 | node_create (type: execution) | 创建执行节点（发现遗漏时） |
+
+## 约束检查位置
+
+1. **Hook 层** (PreToolUse): 拦截禁止的工具调用
+2. **MCP 层** (signal): 验证阶段转换条件
+3. **服务层** (node_create): 检查节点类型约束
+
+## 约束错误示例
+
+\`\`\`
+[错误] 当前阶段(impl)禁止创建 planning 类型节点
+理由: planning 节点应在 design 阶段创建
+
+[正确做法]
+1. 返回 design 阶段（需先完成/暂停进行中的任务）
+2. 在 design 阶段创建规划节点
+3. 重新进入 impl 阶段
+\`\`\`
+`;
+
+/**
+ * 工作流错误排查指南
+ */
+export const WORKFLOW_ERRORS_GUIDE = `
+# 工作流常见错误排查
+
+## 1. 无法从 info 转到 design
+
+**错误**：
+\`\`\`
+阶段转换被阻止：有 2 个信息收集节点未完成
+- 项目信息收集 (pending)
+- 需求澄清 (planning)
+\`\`\`
+
+**解决步骤**：
+1. 查看未完成的信息节点：\`node_list({ workspaceId })\`
+2. 完成这些节点：\`node_transition({ action: "complete", conclusion: "..." })\`
+3. 确保所有 role 为 info_collection 或 info_summary 的节点都已 completed
+4. 重新进入 design 阶段
+
+## 2. 无法从 design 转到 impl
+
+**错误 A - 规划未完成**：
+\`\`\`
+阶段转换被阻止：有 1 个规划节点未完成规划
+- 模块设计 (planning)
+\`\`\`
+
+**解决**：完成规划节点（进入 monitoring 或 completed 状态）
+
+**错误 B - 无执行节点**：
+\`\`\`
+阶段转换被阻止：请先创建至少一个执行节点
+\`\`\`
+
+**解决**：在规划节点下创建 execution 类型的子节点
+
+## 3. 无法从 impl 转回 design/info
+
+**错误**：
+\`\`\`
+阶段转换被阻止：有 2 个执行任务正在进行中
+- 任务A (implementing)
+- 任务B (validating)
+\`\`\`
+
+**解决步骤**：
+1. 等待任务完成，或
+2. 将进行中的任务标记为 failed：
+   \`\`\`typescript
+   node_transition({
+     action: "fail",
+     conclusion: "暂停：需要回到设计阶段调整"
+   })
+   \`\`\`
+3. 所有 execution 节点处于静止态后，再转换阶段
+
+## 4. info 直接跳转 impl
+
+**错误**：
+\`\`\`
+不允许从信息收集阶段直接跳转到实现阶段。请先进入设计阶段。
+\`\`\`
+
+**解决**：必须按 info → design → impl 顺序，不能跳过 design
+
+## 通用排查流程
+
+\`\`\`
+1. 查看当前阶段：workspace_get({ workspaceId })
+2. 查看节点状态：node_list({ workspaceId })
+3. 识别阻塞节点：找出状态不满足转换条件的节点
+4. 处理阻塞：complete/fail/cancel 相关节点
+5. 重试转换：调用对应阶段的 Skill
+\`\`\`
+`;
+
+/**
  * 服务器状态与自检指南
  */
 export const SERVER_STATUS_GUIDE = `
@@ -1329,6 +1582,22 @@ export const HELP_TOPICS: Record<string, { title: string; content: string }> = {
   "server": {
     title: "服务器状态与自检",
     content: SERVER_STATUS_GUIDE
+  },
+  "phases": {
+    title: "工作流三阶段",
+    content: WORKFLOW_PHASES_GUIDE
+  },
+  "signal": {
+    title: "Signal 与阶段转换",
+    content: SIGNAL_GUIDE
+  },
+  "workflow_constraints": {
+    title: "阶段约束与限制",
+    content: WORKFLOW_CONSTRAINTS_GUIDE
+  },
+  "workflow_errors": {
+    title: "工作流错误排查",
+    content: WORKFLOW_ERRORS_GUIDE
   }
 };
 
@@ -1375,6 +1644,10 @@ export function getFullInstructions(): string {
 - guide: 用户引导话术
 - docs: 文档引用管理
 - reopen: 重开任务/追加需求
+- **phases**: ★ 工作流三阶段（info/design/impl）
+- **signal**: ★ Signal 与阶段转换机制
+- **workflow_constraints**: ★ 阶段约束与限制
+- **workflow_errors**: ★ 工作流错误排查
 `
   ].join('\n\n');
 }

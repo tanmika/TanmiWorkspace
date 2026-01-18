@@ -301,26 +301,26 @@ export class WorkspaceService {
       projectDocs,
     };
 
-    // 强制调用 bootstrapping-workspace skill
+    // 强制调用 flow-info skill 进入信息阶段
     result.actionRequired = {
       type: "invoke_skill",
-      message: `⚠️ MUST 调用 Skill(bootstrapping-workspace) 完成工作区启动流程。
+      message: `⚠️ MUST 调用 Skill(flow-info) 进入信息收集阶段。
 
 ${scenarioGuidance}
 
 **强制规则**：
-- MUST 调用 Skill(bootstrapping-workspace)
+- MUST 调用 Skill(flow-info)
 - NEVER 直接 node_create
 - NEVER 跳过 capability_list → capability_select 流程
 - 若要跳过流程，MUST 先告知用户并获取同意（禁止自行判断跳过）
 
 **如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
 \`\`\`
-plugin_path(type: "skill", name: "bootstrapping-workspace") → 获取路径
+plugin_path(type: "skill", name: "flow-info") → 获取路径
 Read(file_path: <返回的路径>/SKILL.md)
 \`\`\``,
       data: {
-        skill: "bootstrapping-workspace",
+        skill: "flow-info",
         scenario,
         workspaceId,
         webUrl: result.webUrl,

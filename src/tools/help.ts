@@ -32,19 +32,24 @@ export const helpTools: Tool[] = [
 - dispatch: 派发模式（subagent 执行、自动验证、失败回滚）
 - status: 插件安装状态（查看各平台组件版本）
 - server: 服务器状态与自检（端口、CLI 命令、常见问题）
+- phases: ★ 工作流三阶段（info/design/impl）
+- signal: ★ Signal 与阶段转换机制
+- workflow_constraints: ★ 阶段约束与限制
+- workflow_errors: ★ 工作流错误排查
 - all: 获取完整指南
 
 **使用场景**：
 1. 不确定下一步该做什么时
 2. 需要向用户解释概念时
-3. 遇到特定场景需要指导时`,
+3. 遇到特定场景需要指导时
+4. 阶段转换失败时查看 workflow_errors`,
     inputSchema: {
       type: "object" as const,
       properties: {
         topic: {
           type: "string",
-          description: "帮助主题：overview, workflow, tools, start, resume, session_restore, blocked, split, complete, progress, guide, docs, dispatch, status, server, all",
-          enum: ["overview", "workflow", "tools", "start", "resume", "session_restore", "blocked", "split", "complete", "progress", "guide", "docs", "dispatch", "status", "server", "all"]
+          description: "帮助主题：overview, workflow, tools, start, resume, session_restore, blocked, split, complete, progress, guide, docs, dispatch, status, server, phases, signal, workflow_constraints, workflow_errors, all",
+          enum: ["overview", "workflow", "tools", "start", "resume", "session_restore", "blocked", "split", "complete", "progress", "guide", "docs", "dispatch", "status", "server", "phases", "signal", "workflow_constraints", "workflow_errors", "all"]
         }
       },
       required: ["topic"]
@@ -86,7 +91,7 @@ export const helpTools: Tool[] = [
 /**
  * 帮助主题类型
  */
-export type HelpTopic = "overview" | "workflow" | "tools" | "start" | "resume" | "session_restore" | "blocked" | "split" | "complete" | "progress" | "guide" | "docs" | "dispatch" | "status" | "server" | "all";
+export type HelpTopic = "overview" | "workflow" | "tools" | "start" | "resume" | "session_restore" | "blocked" | "split" | "complete" | "progress" | "guide" | "docs" | "dispatch" | "status" | "server" | "phases" | "signal" | "workflow_constraints" | "workflow_errors" | "all";
 
 /**
  * 提示模板类型
