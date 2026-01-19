@@ -171,7 +171,7 @@ export function compressWorkspaceLog(logMd: string): string {
 
 /**
  * 为内容添加行号前缀（AI 用）
- * 格式：空格填充 + 行号 + → + 内容（与 Read 工具一致）
+ * 格式：空格填充 + 行号 + - + 内容
  *
  * @param content 原始内容
  * @param startLine 起始行号（默认 1）
@@ -186,7 +186,7 @@ export function addLineNumbers(content: string, startLine: number = 1): string {
     .map((line, idx) => {
       const lineNum = startLine + idx;
       const paddedLineNum = String(lineNum).padStart(lineNumWidth, " ");
-      return `${paddedLineNum}→${line}`;
+      return `${paddedLineNum}-${line}`;
     })
     .join("\n");
 }
