@@ -450,9 +450,15 @@ function installClaudeHooks(): void {
   success(`Hook 脚本已安装到 ${hookDest}`);
 }
 
-// 识别是否为 TanmiWorkspace 管理的 Hook（通过 command 路径）
+/** TanmiWorkspace Hook 脚本路径标记，用于识别我们管理的 Hook */
 const TANMI_HOOK_MARKER = ".tanmi-workspace/scripts/hook-entry.cjs";
 
+/**
+ * 检查 Hook 条目是否由 TanmiWorkspace 管理
+ * 通过检测 command 路径中是否包含 TanmiWorkspace 脚本标记来识别
+ * @param hookEntry Hook 配置条目
+ * @returns true 如果任意 hook 的 command 包含 TanmiWorkspace 标记
+ */
 function isTanmiHook(hookEntry: { hooks?: Array<{ command?: string }> }): boolean {
   return hookEntry.hooks?.some((h) => h.command?.includes(TANMI_HOOK_MARKER)) ?? false;
 }

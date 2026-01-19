@@ -385,23 +385,25 @@ Read(file_path: <skillsPath>/flow-info/SKILL.md)
             break;
           }
 
-          // 阶段约束检查
-          const nodeType = args?.type as "planning" | "execution";
-          const createConstraint = await services.workspace.checkCreateNodeConstraint(
-            args?.workspaceId as string,
-            nodeType,
-            nodeRole,
-            rulesHash
-          );
-          if (createConstraint) {
-            result = createConstraint;
-            break;
+          // 阶段约束检查（仅对 planning/execution 类型生效）
+          const nodeType = args?.type as string | undefined;
+          if (nodeType === "planning" || nodeType === "execution") {
+            const createConstraint = await services.workspace.checkCreateNodeConstraint(
+              args?.workspaceId as string,
+              nodeType,
+              nodeRole,
+              rulesHash
+            );
+            if (createConstraint) {
+              result = createConstraint;
+              break;
+            }
           }
 
           result = await services.node.create({
             workspaceId: args?.workspaceId as string,
             parentId: args?.parentId as string,
-            type: nodeType,
+            type: args?.type as "planning" | "execution",
             title: args?.title as string,
             requirement: args?.requirement as string | undefined,
             docs: args?.docs as Array<{ path: string; description: string }> | undefined,

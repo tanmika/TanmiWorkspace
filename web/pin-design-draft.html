@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>置顶功能设计稿 - TanmiWorkspace</title>
+  <style>
+    :root {
+      --bg-color: #F0F2F5;
+      --card-bg: #FFFFFF;
+      --border-color: #E0E0E0;
+      --border-heavy: #111111;
+      --text-main: #111111;
+      --text-secondary: #666666;
+      --text-muted: #999999;
+      --accent-red: #D92B2B;
+      --path-bg: #F5F5F5;
+      --path-border: #CCCCCC;
+      --card-footer: #FAFAFA;
+      --mono-font: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      background-image: radial-gradient(#CCC 1px, transparent 1px);
+      background-size: 20px 20px;
+      padding: 40px;
+      color: var(--text-main);
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    h2 {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 40px 0 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 2px solid var(--border-heavy);
+      padding-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 40px;
+    }
+
+    .design-section {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    /* 卡片网格 */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+
+    /* 基础卡片样式 */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--border-heavy);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .card:hover {
+      transform: translate(-4px, -4px);
+      box-shadow: 4px 4px 0px var(--border-heavy);
+      border-color: var(--border-heavy);
+    }
+
+    .card-header {
+      padding: 16px 16px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      flex: 1;
+      cursor: pointer;
+    }
+
+    .card-title:hover {
+      color: var(--accent-red);
+    }
+
+    .card-body {
+      padding: 0 16px 16px;
+    }
+
+    .path-box {
+      background: var(--path-bg);
+      padding: 8px 10px;
+      font-family: var(--mono-font);
+      font-size: 11px;
+      color: var(--text-secondary);
+      border-left: 2px solid var(--path-border);
+      margin-bottom: 10px;
+    }
+
+    .meta-info {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--mono-font);
+    }
+
+    .card-footer {
+      border-top: 1px solid var(--border-color);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-evenly;
+      gap: 12px;
+      background: var(--card-footer);
+    }
+
+    /* Badge */
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      letter-spacing: 0.5px;
+      background: var(--border-heavy);
+      color: #fff;
+    }
+
+    /* 按钮 */
+    .btn {
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      padding: 6px 12px;
+      background: transparent;
+      color: var(--text-secondary);
+    }
+
+    .btn:hover {
+      color: var(--text-main);
+    }
+
+    .btn-accent {
+      color: var(--accent-red);
+    }
+
+    .btn-danger:hover {
+      color: var(--accent-red);
+    }
+
+    /* 说明文字 */
+    .note {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 20px;
+      padding: 12px 14px;
+      background: var(--path-bg);
+      border-left: 3px solid var(--accent-red);
+    }
+
+    .note-title {
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .card-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    /* ========== PIN 徽派设计 ========== */
+
+    /* PIN 徽派 - 悬浮提示状态（黑底白字，>闪烁） */
+    .pin-badge-hint {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      letter-spacing: 0.5px;
+      background: var(--border-heavy);
+      color: #fff;
+      cursor: pointer;
+      position: relative;
+      display: none;
+    }
+
+    .pin-badge-hint::before {
+      content: '>';
+      margin-right: 2px;
+      animation: blink 0.8s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    /* 悬浮时显示 PIN 提示 */
+    .card:hover .pin-badge-hint {
+      display: inline-block;
+    }
+
+    /* PIN 徽派 - 已置顶状态（红底白字，常驻） */
+    .pin-badge-active {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      letter-spacing: 0.5px;
+      background: var(--accent-red);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .pin-badge-active:hover {
+      background: #b82424;
+    }
+
+    /* 置顶卡片样式 */
+    .card.pinned {
+      border-left-color: var(--accent-red);
+      border-top: 3px solid var(--accent-red);
+    }
+
+    /* 置顶卡片不显示 hint，显示 active */
+    .card.pinned .pin-badge-hint {
+      display: none !important;
+    }
+
+    /* 状态展示区 */
+    .state-demo {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding: 20px;
+      background: var(--path-bg);
+      border: 1px dashed var(--border-color);
+    }
+
+    .state-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .state-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      width: 120px;
+      flex-shrink: 0;
+    }
+
+    .state-badges {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .arrow {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* 交互演示卡片 */
+    .demo-card {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .demo-card.demo-pinned {
+      border-left-color: var(--accent-red);
+      border-top: 3px solid var(--accent-red);
+    }
+
+    .demo-card .pin-badge-hint {
+      display: none;
+    }
+
+    .demo-card:hover .pin-badge-hint {
+      display: inline-block;
+    }
+
+    .demo-card.demo-pinned .pin-badge-hint {
+      display: none !important;
+    }
+
+    .demo-card.demo-pinned .pin-badge-active {
+      display: inline-block;
+    }
+
+    .demo-card:not(.demo-pinned) .pin-badge-active {
+      display: none;
+    }
+
+    .demo-hint {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>置顶功能设计稿</h1>
+  <p class="subtitle">TanmiWorkspace · 构成主义风格 · 悬浮提示 + 徽派统一</p>
+
+  <h2>徽派状态说明</h2>
+  <div class="design-section">
+    <div class="state-demo">
+      <div class="state-row">
+        <span class="state-label">普通卡片</span>
+        <div class="state-badges">
+          <span class="badge">Active</span>
+        </div>
+        <span class="state-label" style="width: auto; margin-left: 24px;">（无 PIN 徽派）</span>
+      </div>
+      <div class="state-row">
+        <span class="state-label">悬浮时</span>
+        <div class="state-badges">
+          <span class="pin-badge-hint" style="display: inline-block;">PIN</span>
+          <span class="badge">Active</span>
+        </div>
+        <span class="arrow">←</span>
+        <span class="state-label" style="width: auto;">黑底白字，> 闪烁提示可点击</span>
+      </div>
+      <div class="state-row">
+        <span class="state-label">点击置顶后</span>
+        <div class="state-badges">
+          <span class="pin-badge-active">PIN</span>
+          <span class="badge">Active</span>
+        </div>
+        <span class="arrow">←</span>
+        <span class="state-label" style="width: auto;">红底白字，常驻显示</span>
+      </div>
+    </div>
+  </div>
+
+  <h2>卡片效果对比</h2>
+  <div class="design-section">
+    <div class="card-grid">
+      <div>
+        <div class="card-label">普通卡片（悬浮查看效果）</div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">普通工作区</h3>
+            <span class="pin-badge-hint">PIN</span>
+            <span class="badge">Active</span>
+          </div>
+          <div class="card-body">
+            <div class="path-box">.../TanmiWorkspace/tanmi-workspace</div>
+            <div class="meta-info">Updated: 01/15 14:30</div>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-accent">进入 ></button>
+            <button class="btn">归档</button>
+            <button class="btn btn-danger">删除</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card-label">置顶卡片（PIN 常驻）</div>
+        <div class="card pinned">
+          <div class="card-header">
+            <h3 class="card-title">置顶的工作区</h3>
+            <span class="pin-badge-active">PIN</span>
+            <span class="badge">Active</span>
+          </div>
+          <div class="card-body">
+            <div class="path-box">.../TanmiWorkspace/tanmi-workspace</div>
+            <div class="meta-info">Updated: 01/15 14:30</div>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-accent">进入 ></button>
+            <button class="btn">归档</button>
+            <button class="btn btn-danger">删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      <div class="note-title">交互逻辑</div>
+      <p>1. 普通卡片默认不显示 PIN</p>
+      <p>2. 悬浮时出现 <code>>PIN</code> 黑底白字徽派，> 闪烁</p>
+      <p>3. 点击后变为 <code>PIN</code> 红底白字徽派，常驻显示</p>
+      <p>4. 置顶卡片额外增加顶部红色边框 + 左侧红色状态线</p>
+      <p>5. 再次点击红色 PIN 可取消置顶</p>
+    </div>
+  </div>
+
+  <h2>交互演示</h2>
+  <div class="design-section">
+    <div class="card-grid">
+      <div>
+        <div class="card-label">点击 PIN 切换状态</div>
+        <div class="card demo-card" id="demo1">
+          <div class="card-header">
+            <h3 class="card-title">可交互演示</h3>
+            <span class="pin-badge-hint" onclick="togglePin('demo1')">PIN</span>
+            <span class="pin-badge-active" onclick="togglePin('demo1')">PIN</span>
+            <span class="badge">Active</span>
+          </div>
+          <div class="card-body">
+            <div class="path-box">.../TanmiWorkspace/tanmi-workspace</div>
+            <div class="meta-info">Updated: 01/15 14:30</div>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-accent">进入 ></button>
+            <button class="btn">归档</button>
+            <button class="btn btn-danger">删除</button>
+          </div>
+        </div>
+        <div class="demo-hint">悬浮显示 >PIN，点击切换置顶状态</div>
+      </div>
+
+      <div>
+        <div class="card-label">另一个演示卡片</div>
+        <div class="card demo-card" id="demo2">
+          <div class="card-header">
+            <h3 class="card-title">另一个工作区</h3>
+            <span class="pin-badge-hint" onclick="togglePin('demo2')">PIN</span>
+            <span class="pin-badge-active" onclick="togglePin('demo2')">PIN</span>
+            <span class="badge">Active</span>
+          </div>
+          <div class="card-body">
+            <div class="path-box">.../Projects/my-project</div>
+            <div class="meta-info">Updated: 01/15 10:00</div>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-accent">进入 ></button>
+            <button class="btn">归档</button>
+            <button class="btn btn-danger">删除</button>
+          </div>
+        </div>
+        <div class="demo-hint">悬浮显示 >PIN，点击切换置顶状态</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function togglePin(id) {
+      const card = document.getElementById(id);
+      card.classList.toggle('demo-pinned');
+    }
+  </script>
+</body>
+</html>
