@@ -10,8 +10,6 @@ import type {
   MemoListResult,
   MemoGetParams,
   MemoGetResult,
-  MemoUpdateParams,
-  MemoUpdateResult,
   MemoDeleteParams,
   MemoDeleteResult,
   MemoReplaceParams,
@@ -252,117 +250,6 @@ export class MemoService {
   }
 
   /**
-   * 更新备忘
-   */
-  async update(params: MemoUpdateParams): Promise<MemoUpdateResult> {
-    const { workspaceId, memoId, contentHash, title, summary, content, field, old_str, new_str, insertAtLine, insertText, tags } = params;
-
-    // 0. 校验 contentHash 必填
-    if (!contentHash) {
-      throw new TanmiError("INVALID_PARAMS", "请先 memo_get 获取 contentHash");
-    }
-
-    // 1. 获取工作区信息
-    const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
-
-    // 2. 读取 graph.json
-    const graph = await this.json.readGraph(projectRoot, wsDirName);
-
-    // 3. 检查备忘是否存在
-    const memosIndex = graph.memos || {};
-    const memoMeta = memosIndex[memoId];
-    if (!memoMeta) {
-      throw new TanmiError("MEMO_NOT_FOUND", `备忘 "${memoId}" 不存在`);
-    }
-
-    // 4. 获取目录名并读取当前内容
-    const memoDirName = memoMeta.dirName;
-    const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
-    const existingContent = await this.fs.readFile(contentPath);
-
-    // 5. 校验 contentHash
-    const currentHash = computeContentHash(existingContent);
-    if (currentHash !== contentHash) {
-      throw new TanmiError("CONTENT_CHANGED", "内容已变更，请重新 memo_get");
-    }
-
-    // 6. 处理内容更新
-    let finalContent: string | undefined;
-
-    // 6.1 精确替换模式
-    if (field && old_str !== undefined && new_str !== undefined) {
-      const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const targetContent = field === 'content' ? existingContent : memoMeta.summary;
-      const regex = new RegExp(escapeRegExp(old_str), 'g');
-      const matches = targetContent.match(regex);
-      const count = matches ? matches.length : 0;
-      if (count === 0) {
-        throw new TanmiError("NO_MATCH", "未找到匹配内容");
-      }
-      if (count > 1) {
-        throw new TanmiError("MULTI_MATCH", `找到 ${count} 处匹配，请提供更多上下文`);
-      }
-      // 执行替换
-      if (field === 'content') {
-        finalContent = targetContent.replace(old_str, new_str);
-      } else {
-        memoMeta.summary = targetContent.replace(old_str, new_str);
-      }
-    }
-
-    // 6.2 行号插入模式
-    if (insertAtLine !== undefined && insertText !== undefined) {
-      const lines = existingContent.split("\n");
-      const totalLines = lines.length;
-
-      // 校验行号范围
-      if (insertAtLine < 0 || insertAtLine > totalLines) {
-        throw new TanmiError("INVALID_PARAMS", `行号超出范围（0-${totalLines}）`);
-      }
-
-      // 在指定行后插入
-      if (insertAtLine === 0) {
-        // 在开头插入
-        finalContent = insertText + "\n" + existingContent;
-      } else {
-        // 在第 N 行后插入
-        const before = lines.slice(0, insertAtLine);
-        const after = lines.slice(insertAtLine);
-        finalContent = [...before, insertText, ...after].join("\n");
-      }
-    }
-
-    // 6.3 全量替换模式
-    if (content !== undefined) {
-      finalContent = content;
-    }
-
-    // 7. 更新备忘元数据
-    const timestamp = now();
-    if (title !== undefined) memoMeta.title = title;
-    if (summary !== undefined) memoMeta.summary = summary;
-    if (tags !== undefined) memoMeta.tags = tags;
-    if (finalContent !== undefined) memoMeta.contentLength = finalContent.length;
-    memoMeta.updatedAt = timestamp;
-
-    // 8. 写回 graph.json
-    await this.json.writeGraph(projectRoot, wsDirName, graph);
-
-    // 9. 更新 Content.md（如果有内容变更）
-    if (finalContent !== undefined) {
-      await this.fs.writeFile(contentPath, finalContent);
-    }
-
-    // 10. 发送事件通知
-    eventService.emitMemoUpdate(workspaceId, memoId);
-
-    return {
-      success: true,
-      updatedAt: timestamp,
-    };
-  }
-
-  /**
    * 全量替换 - 替换整个 memo 内容
    */
   async replace(params: MemoReplaceParams): Promise<{ success: boolean; error?: string }> {
@@ -576,15 +463,25 @@ export class MemoService {
     }
 
     // 5. 验证行号范围
+    const isEmptyContent = existingContent === "";
     const lines = existingContent.split("\n");
     const totalLines = lines.length;
-    if (line < 0 || line > totalLines) {
+
+    // 特殊处理：空内容只允许 line=0 插入
+    if (isEmptyContent) {
+      if (line !== 0) {
+        return { success: false, error: "内容为空，只能在 line=0（开头）处插入" };
+      }
+    } else if (line < 0 || line > totalLines) {
       return { success: false, error: `行号无效，有效范围 0-${totalLines}` };
     }
 
     // 6. 在指定行后插入
     let finalContent: string;
-    if (line === 0) {
+    if (isEmptyContent) {
+      // 空内容：直接使用插入的文本，不添加多余换行
+      finalContent = text;
+    } else if (line === 0) {
       // 在开头插入
       finalContent = text + "\n" + existingContent;
     } else {

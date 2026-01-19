@@ -111,45 +111,6 @@ export interface MemoGetResult {
 }
 
 /**
- * memo_update 输入
- *
- * 更新模式：
- * 1. 全量替换：直接提供 content/summary/title 字段
- * 2. 精确替换：提供 field + old_str + new_str 进行字符串替换
- * 3. 行号插入：提供 insertAtLine + insertText 在指定行后插入内容
- *
- * 安全机制：必须提供 contentHash（从 memo_get 获取）进行先读后写校验
- */
-export interface MemoUpdateParams {
-  workspaceId: string;
-  memoId: string;
-  /** 内容 hash，从 memo_get 返回值获取，用于校验内容未被其他操作修改 */
-  contentHash: string;
-  title?: string;
-  summary?: string;
-  content?: string;                 // 全量替换内容
-  /** 指定要精确替换的字段 */
-  field?: 'content' | 'summary';
-  /** 要替换的原文本（与 field 配合使用） */
-  old_str?: string;
-  /** 替换后的文本（与 field 配合使用） */
-  new_str?: string;
-  /** 在指定行后插入（1-based，0 表示在开头插入） */
-  insertAtLine?: number;
-  /** 要插入的文本（与 insertAtLine 配合使用） */
-  insertText?: string;
-  tags?: string[];                  // 会完全替换现有标签
-}
-
-/**
- * memo_update 输出
- */
-export interface MemoUpdateResult {
-  success: boolean;
-  updatedAt: string;
-}
-
-/**
  * memo_delete 输入
  */
 export interface MemoDeleteParams {

@@ -16,6 +16,7 @@ import { homedir } from "os";
 import { join, dirname, basename, resolve } from "path";
 import { fileURLToPath } from "url";
 import { createInterface } from "readline";
+import { extractShortId } from "../utils/id.js";
 
 // ES module 兼容
 const __filename = fileURLToPath(import.meta.url);
@@ -154,11 +155,6 @@ function readJson<T>(path: string): T | null {
 
 function writeJson(path: string, data: unknown): void {
   writeFileSync(path, JSON.stringify(data, null, 2));
-}
-
-function extractShortId(id: string): string {
-  const match = id.match(/^(?:ws-|node-|memo-)?([a-z0-9]+)-([a-z0-9]+)$/);
-  return match ? match[1] : id.slice(-8);
 }
 
 // 创建备份

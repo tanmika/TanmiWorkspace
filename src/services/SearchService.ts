@@ -13,6 +13,10 @@ import type {
 } from "../types/search.js";
 import { TanmiError } from "../types/errors.js";
 import { devLog } from "../utils/devLog.js";
+import safe from "safe-regex2";
+
+/** 正则表达式最大长度限制 */
+const MAX_REGEX_LENGTH = 200;
 
 /**
  * 搜索匹配器类型
@@ -29,6 +33,14 @@ type Matcher = {
  */
 function createMatcher(query: string, regex: boolean): Matcher | { error: string } {
   if (regex) {
+    // 第一道防线：长度限制
+    if (query.length > MAX_REGEX_LENGTH) {
+      return { error: `正则表达式过长，最大支持 ${MAX_REGEX_LENGTH} 字符` };
+    }
+    // 第二道防线：ReDoS 危险模式检测
+    if (!safe(query)) {
+      return { error: "正则表达式可能存在性能风险（ReDoS），请简化模式" };
+    }
     try {
       const re = new RegExp(query, "i");
       return { test: (text: string) => re.test(text) };

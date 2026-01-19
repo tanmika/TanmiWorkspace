@@ -74,8 +74,9 @@ export const helpTools: Tool[] = [
 
 /**
  * 帮助主题类型（精确匹配时使用）
+ * 包含 HELP_TOPICS 中的静态主题和动态主题（status, all）
  */
-export type HelpTopic = "overview" | "workflow" | "tools" | "start" | "resume" | "session_restore" | "blocked" | "split" | "complete" | "progress" | "guide" | "docs" | "dispatch" | "status" | "server" | "all";
+export type HelpTopic = "overview" | "workflow" | "tools" | "start" | "resume" | "session_restore" | "blocked" | "split" | "complete" | "progress" | "guide" | "docs" | "reopen" | "dispatch" | "server" | "status" | "all";
 
 /**
  * 主题列表项

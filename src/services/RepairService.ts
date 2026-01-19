@@ -12,6 +12,7 @@ import type {
   FixType,
 } from "../types/repair.js";
 import { TanmiError } from "../types/errors.js";
+import { extractShortId } from "../utils/id.js";
 
 // 当前存储版本
 const STORAGE_VERSION = "5.0";
@@ -439,19 +440,11 @@ status: planning
   }
 
   /**
-   * 提取 ID 的短标识
-   */
-  private extractShortId(id: string): string {
-    const match = id.match(/^(?:ws-|node-|memo-)?([a-z0-9]+)-([a-z0-9]+)$/);
-    return match ? match[1] : id.slice(-8);
-  }
-
-  /**
    * 通过 shortId 查找目录
    * 只匹配标准格式 `名称_shortId`，避免误匹配
    */
   private async findDirByShortId(parentDir: string, id: string): Promise<string | null> {
-    const shortId = this.extractShortId(id);
+    const shortId = extractShortId(id);
 
     try {
       const items = await this.fs.readdir(parentDir);

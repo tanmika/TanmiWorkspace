@@ -416,7 +416,8 @@ export interface ExecutionFailure {
 export interface NodeReplaceParams {
   workspaceId: string;
   nodeId: string;
-  contentHash?: string;
+  /** 内容 hash，从 node_get 返回值获取，用于校验内容未被其他操作修改 */
+  contentHash: string;
   requirement?: string;
   conclusion?: string;
   notes?: string;
@@ -436,7 +437,8 @@ export interface NodeReplaceParams {
 export interface NodeEditParams {
   workspaceId: string;
   nodeId: string;
-  contentHash?: string;
+  /** 内容 hash，从 node_get 返回值获取，用于校验内容未被其他操作修改 */
+  contentHash: string;
   field: 'requirement' | 'conclusion' | 'notes';
 
   /** 替换模式：字符串精确替换或行范围替换 */

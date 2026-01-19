@@ -1197,17 +1197,18 @@ export class NodeService {
     // 3. 读取现有 Info.md
     const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
-    // 4. 如果修改 notes 字段，验证 contentHash 匹配
-    if (notes !== undefined && contentHash) {
-      const currentHash = computeNodeHash({
-        title: nodeInfo.title,
-        requirement: nodeInfo.requirement,
-        note: nodeInfo.notes,
-        conclusion: nodeInfo.conclusion,
-      });
-      if (currentHash !== contentHash) {
-        return { success: false, error: "内容已变更，请重新获取节点信息" };
-      }
+    // 4. 验证 contentHash（防止并发覆盖）
+    if (!contentHash) {
+      return { success: false, error: "contentHash 必填，请先 node_get 获取" };
+    }
+    const currentHash = computeNodeHash({
+      title: nodeInfo.title,
+      requirement: nodeInfo.requirement,
+      note: nodeInfo.notes,
+      conclusion: nodeInfo.conclusion,
+    });
+    if (currentHash !== contentHash) {
+      return { success: false, error: "内容已变更，请重新 node_get" };
     }
 
     const currentTime = now();
@@ -1242,6 +1243,10 @@ export class NodeService {
     graph.nodes[nodeId].updatedAt = currentTime;
     if (conclusion !== undefined) {
       graph.nodes[nodeId].conclusion = conclusion || null;
+      // 清除 stale 标志：用户已确认读取了子节点结论并更新了本节点结论
+      if (graph.nodes[nodeId].conclusionStale) {
+        delete graph.nodes[nodeId].conclusionStale;
+      }
     }
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
@@ -1311,17 +1316,18 @@ export class NodeService {
     // 5. 读取现有 Info.md
     const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
-    // 6. 如果修改 notes 字段，验证 contentHash 匹配
-    if (field === "notes" && contentHash) {
-      const currentHash = computeNodeHash({
-        title: nodeInfo.title,
-        requirement: nodeInfo.requirement,
-        note: nodeInfo.notes,
-        conclusion: nodeInfo.conclusion,
-      });
-      if (currentHash !== contentHash) {
-        return { success: false, error: "内容已变更，请重新获取节点信息" };
-      }
+    // 6. 验证 contentHash（防止并发覆盖）
+    if (!contentHash) {
+      return { success: false, error: "contentHash 必填，请先 node_get 获取" };
+    }
+    const currentHash = computeNodeHash({
+      title: nodeInfo.title,
+      requirement: nodeInfo.requirement,
+      note: nodeInfo.notes,
+      conclusion: nodeInfo.conclusion,
+    });
+    if (currentHash !== contentHash) {
+      return { success: false, error: "内容已变更，请重新 node_get" };
     }
 
     // 7. 获取目标字段内容
@@ -1384,6 +1390,10 @@ export class NodeService {
     graph.nodes[nodeId].updatedAt = currentTime;
     if (field === "conclusion") {
       graph.nodes[nodeId].conclusion = newContent || null;
+      // 清除 stale 标志：用户已确认读取了子节点结论并更新了本节点结论
+      if (graph.nodes[nodeId].conclusionStale) {
+        delete graph.nodes[nodeId].conclusionStale;
+      }
     }
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 

@@ -424,7 +424,7 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
           result = await services.node.replace({
             workspaceId: args?.workspaceId as string,
             nodeId: args?.nodeId as string,
-            contentHash: args?.contentHash as string | undefined,
+            contentHash: args?.contentHash as string,
             requirement: args?.requirement as string | undefined,
             conclusion: args?.conclusion as string | undefined,
             notes: args?.notes as string | undefined,
@@ -438,7 +438,7 @@ Read(file_path: <skillsPath>/starting-info-flow/SKILL.md)
           result = await services.node.edit({
             workspaceId: args?.workspaceId as string,
             nodeId: args?.nodeId as string,
-            contentHash: args?.contentHash as string | undefined,
+            contentHash: args?.contentHash as string,
             field: args?.field as "requirement" | "conclusion" | "notes",
             mode: args?.mode as "string" | "line_range" | undefined,
             old_str: args?.old_str as string | undefined,

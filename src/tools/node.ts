@@ -251,7 +251,7 @@ export const nodeReorderTool: Tool = {
 export const nodeReplaceTool: Tool = {
   name: "node_replace",
   description:
-    "全量替换节点字段。⚠️ 慎用：会覆盖整个字段内容。推荐优先使用 node_edit。",
+    "全量替换节点字段。⚠️ 慎用：会覆盖整个字段内容。推荐优先使用 node_edit。使用前必须先 node_get 获取 contentHash。",
   inputSchema: {
     type: "object",
     properties: {
@@ -265,7 +265,7 @@ export const nodeReplaceTool: Tool = {
       },
       contentHash: {
         type: "string",
-        description: "备注的 hash（修改 notes 时需要）",
+        description: "内容 hash（从 node_get 获取，用于防止并发覆盖）",
       },
       requirement: {
         type: "string",
@@ -280,7 +280,7 @@ export const nodeReplaceTool: Tool = {
         description: "可选，新的备注内容",
       },
     },
-    required: ["workspaceId", "nodeId"],
+    required: ["workspaceId", "nodeId", "contentHash"],
   },
 };
 
@@ -289,7 +289,7 @@ export const nodeReplaceTool: Tool = {
  */
 export const nodeEditTool: Tool = {
   name: "node_edit",
-  description: `精确替换节点字段中的特定文本。推荐用于局部修改。使用前必须先 node_get 获取当前内容。
+  description: `精确替换节点字段中的特定文本。推荐用于局部修改。使用前必须先 node_get 获取 contentHash。
 
 **两种模式**:
 - string（默认）：按字符串匹配替换，需提供 old_str 和 new_str
@@ -311,7 +311,7 @@ export const nodeEditTool: Tool = {
       },
       contentHash: {
         type: "string",
-        description: "备注的 hash（修改 notes 时需要）",
+        description: "内容 hash（从 node_get 获取，用于防止并发覆盖）",
       },
       field: {
         type: "string",
@@ -340,7 +340,7 @@ export const nodeEditTool: Tool = {
         description: "结束行号（包含该行）。mode=line_range 时必填",
       },
     },
-    required: ["workspaceId", "nodeId", "field", "new_str"],
+    required: ["workspaceId", "nodeId", "contentHash", "field", "new_str"],
   },
 };
 
