@@ -1644,6 +1644,9 @@ export function getFullInstructions(): string {
 - guide: 用户引导话术
 - docs: 文档引用管理
 - reopen: 重开任务/追加需求
+- dispatch: 派发模式
+- status: 插件安装状态
+- server: 服务器状态与自检
 - **phases**: ★ 工作流三阶段（info/design/impl）
 - **signal**: ★ Signal 与阶段转换机制
 - **workflow_constraints**: ★ 阶段约束与限制

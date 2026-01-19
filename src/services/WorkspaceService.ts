@@ -11,6 +11,7 @@ import * as os from "node:os";
 import archiver from "archiver";
 import AdmZip from "adm-zip";
 import { INTERNAL_RULES_HASH } from "./NodeService.js";
+import { FLOW_SKILLS } from "../constants/skills.js";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
@@ -321,7 +322,7 @@ plugin_path(type: "skill", name: "flow-info") → 获取路径
 Read(file_path: <返回的路径>/SKILL.md)
 \`\`\``,
       data: {
-        skill: "flow-info",
+        skill: FLOW_SKILLS.INFO,
         scenario,
         workspaceId,
         webUrl: result.webUrl,

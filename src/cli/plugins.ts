@@ -24,6 +24,7 @@ import { join, dirname } from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
+import { DEPRECATED_SKILLS } from "../constants/skills.js";
 
 // ES module 兼容
 const __filename = fileURLToPath(import.meta.url);
@@ -600,9 +601,6 @@ function installDispatchAgents(): void {
   updateInstallationMeta("claudeCode", "agents", "update");
 }
 
-// 废弃的 Skill 黑名单（用于清理旧版用户的残留文件）
-const DEPRECATED_SKILLS = ["bootstrapping-workspace", "starting-info-flow"];
-
 function installSkills(): void {
   info("安装 Skills 模板...");
 
@@ -625,9 +623,14 @@ function installSkills(): void {
   ensureDir(skillsDestDir);
 
   // 获取当前版本
-  const require = createRequire(import.meta.url);
-  const pkg = require(join(PROJECT_ROOT, "package.json"));
-  const currentVersion = pkg.version as string;
+  let currentVersion = "unknown";
+  try {
+    const require = createRequire(import.meta.url);
+    const pkg = require(join(PROJECT_ROOT, "package.json"));
+    currentVersion = pkg.version || "unknown";
+  } catch {
+    warn("无法获取当前版本号，标记文件将使用 'unknown'");
+  }
 
   // 1. 清理废弃的 Skill（黑名单，解决旧版用户残留）
   for (const deprecated of DEPRECATED_SKILLS) {
@@ -672,16 +675,20 @@ function installSkills(): void {
       copyDir(skillSrcDir, skillDestDir);
 
       // 写入标记文件
-      const markerContent = JSON.stringify(
-        {
-          installedAt: new Date().toISOString(),
-          installedVersion: currentVersion,
-          source: "tanmi-workspace",
-        },
-        null,
-        2
-      );
-      writeFileSync(join(skillDestDir, ".tanmi-managed"), markerContent);
+      try {
+        const markerContent = JSON.stringify(
+          {
+            installedAt: new Date().toISOString(),
+            installedVersion: currentVersion,
+            source: "tanmi-workspace",
+          },
+          null,
+          2
+        );
+        writeFileSync(join(skillDestDir, ".tanmi-managed"), markerContent);
+      } catch (err) {
+        warn(`无法写入标记文件: ${err instanceof Error ? err.message : String(err)}`);
+      }
 
       info(`  - ${skillName}/`);
       count++;

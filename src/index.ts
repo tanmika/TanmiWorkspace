@@ -24,6 +24,7 @@ import { dirname, join } from "path";
 import { workspaceTools } from "./tools/workspace.js";
 import { nodeTools } from "./tools/node.js";
 import type { AcceptanceCriteria } from "./types/node.js";
+import { FLOW_SKILLS } from "./constants/skills.js";
 import { stateTools } from "./tools/state.js";
 import { contextTools } from "./tools/context.js";
 import { logTools } from "./tools/log.js";
@@ -376,7 +377,7 @@ plugin_path() → 获取 skillsPath
 Read(file_path: <skillsPath>/flow-info/SKILL.md)
 \`\`\``,
                 data: {
-                  skill: "flow-info",
+                  skill: FLOW_SKILLS.INFO,
                   requestedRole: nodeRole,
                 },
               },
