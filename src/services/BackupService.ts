@@ -2,8 +2,7 @@
 
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { createRequire } from "module";
@@ -23,7 +22,33 @@ import type {
 import { TanmiError } from "../types/errors.js";
 import { devLog } from "../utils/devLog.js";
 
-const execAsync = promisify(exec);
+/**
+ * 安全执行 tar 命令（使用 spawn 避免命令注入）
+ * @param args tar 命令参数数组
+ * @returns Promise<void>
+ */
+function execTar(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("tar", args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+
+    child.stderr?.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(stderr || `tar exited with code ${code}`));
+      }
+    });
+
+    child.on("error", (err) => {
+      reject(err);
+    });
+  });
+}
 
 /**
  * 备份服务
@@ -150,10 +175,9 @@ export class BackupService {
     const workspacePath = this.fs.getWorkspacePath(projectRoot, wsDirName);
 
     // 创建压缩备份（排除 .backups 目录）
+    // 使用 spawn 参数数组避免命令注入风险
     try {
-      await execAsync(
-        `tar -czf "${backupPath}" --exclude='.backups' -C "${workspacePath}" .`
-      );
+      await execTar(["-czf", backupPath, "--exclude=.backups", "-C", workspacePath, "."]);
     } catch (e) {
       throw new TanmiError(
         "INVALID_PARAMS",
@@ -164,7 +188,7 @@ export class BackupService {
     // 验证备份
     let verified = false;
     try {
-      await execAsync(`tar -tzf "${backupPath}" > /dev/null`);
+      await execTar(["-tzf", backupPath]);
       verified = true;
     } catch {
       // 验证失败，记录但不阻止
@@ -288,9 +312,9 @@ export class BackupService {
       await fs.rm(entryPath, { recursive: true, force: true });
     }
 
-    // 解压恢复
+    // 解压恢复（使用 spawn 参数数组避免命令注入风险）
     try {
-      await execAsync(`tar -xzf "${backupPath}" -C "${workspacePath}"`);
+      await execTar(["-xzf", backupPath, "-C", workspacePath]);
     } catch (e) {
       throw new TanmiError(
         "INVALID_PARAMS",

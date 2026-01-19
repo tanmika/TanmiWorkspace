@@ -63,6 +63,8 @@ function shouldLog(level: LogLevel): boolean {
 }
 
 // 模块加载时异步初始化配置（不阻塞）
+// 注意：配置加载是异步的，在配置就绪前（通常几毫秒内）的日志将使用默认级别 'info'
+// 这是故意的设计：避免同步 IO 阻塞模块加载，且影响范围极小
 loadLogLevelConfig();
 
 export interface LogEntry {

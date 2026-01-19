@@ -1358,10 +1358,7 @@ Read(file_path: <返回的路径>/SKILL.md)
         const nodeDirName = node.dirName || nodeId;
         const nodeIssues: HealthIssue[] = [];
 
-        // 跳过 root 节点（目录名固定为 "root"）
-        if (nodeId === "root") {
-          nodeDirName === "root"; // 确保 root 节点目录名正确
-        }
+        // 注：root 节点目录名固定为 "root"，由 node.dirName || nodeId 逻辑自动处理
 
         // 获取节点目录路径
         const nodesDir = isArchived

@@ -27,6 +27,16 @@ const {
 } = require('./shared/index.cjs');
 
 // ============================================================================
+// 节流时间常量（毫秒）
+// ============================================================================
+
+const THROTTLE_MS = {
+  FILE_CHANGED: 10000,  // 文件变更提醒：10秒
+  BASH_ERROR: 5000,     // Bash 错误提醒：5秒
+  STOP_ERROR: 30000,    // Stop 错误提醒：30秒
+};
+
+// ============================================================================
 // 工作流阶段验证
 // ============================================================================
 
@@ -316,7 +326,7 @@ function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_respo
   }
 
   // 节流检查：file_changed 类型，10秒内不重复提醒
-  if (shouldThrottle(binding, 'file_changed', 10000)) {
+  if (shouldThrottle(binding, 'file_changed', THROTTLE_MS.FILE_CHANGED)) {
     logHookOutput(sessionId, 'PostToolUse', 'throttled', {
       tool: tool_name,
       file: fileName,
@@ -389,7 +399,7 @@ function handleBashToolUse(sessionId, binding, tool_input, tool_response) {
   }
 
   // 节流检查：bash_error 类型，5秒内不重复提醒
-  if (shouldThrottle(binding, 'bash_error', 5000)) {
+  if (shouldThrottle(binding, 'bash_error', THROTTLE_MS.BASH_ERROR)) {
     logHookOutput(sessionId, 'PostToolUse', 'throttled', {
       tool: 'Bash',
       command: cmdPreview,
@@ -660,7 +670,7 @@ function handleStop(sessionId, binding, input) {
   }
 
   // 节流检查：stop_error 类型，30秒内不重复提醒
-  if (shouldThrottle(binding, 'stop_error', 30000)) {
+  if (shouldThrottle(binding, 'stop_error', THROTTLE_MS.STOP_ERROR)) {
     logHookOutput(sessionId, 'Stop', 'throttled', { reminderType: 'stop_error' });
     process.exit(0);
     return;
