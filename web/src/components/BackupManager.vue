@@ -189,9 +189,16 @@ function handleImportClick() {
 }
 
 // 导入备份 - 执行上传
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+
 async function importFile(file: File) {
   if (!file.name.endsWith('.twbak')) {
     toastStore.warning('仅支持 .twbak 格式的备份文件')
+    return
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    toastStore.warning(`文件过大 (${(file.size / 1024 / 1024).toFixed(1)}MB)，最大支持 10MB`)
     return
   }
 

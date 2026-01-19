@@ -12,6 +12,46 @@ import type {
   ContentSearchMatch,
 } from "../types/search.js";
 import { TanmiError } from "../types/errors.js";
+import { devLog } from "../utils/devLog.js";
+import safe from "safe-regex2";
+
+/** 正则表达式最大长度限制 */
+const MAX_REGEX_LENGTH = 200;
+
+/**
+ * 搜索匹配器类型
+ */
+type Matcher = {
+  test: (text: string) => boolean;
+};
+
+/**
+ * 创建匹配器
+ * @param query 搜索关键词
+ * @param regex 是否正则模式
+ * @returns 匹配器对象，如果正则语法错误返回 null
+ */
+function createMatcher(query: string, regex: boolean): Matcher | { error: string } {
+  if (regex) {
+    // 第一道防线：长度限制
+    if (query.length > MAX_REGEX_LENGTH) {
+      return { error: `正则表达式过长，最大支持 ${MAX_REGEX_LENGTH} 字符` };
+    }
+    // 第二道防线：ReDoS 危险模式检测
+    if (!safe(query)) {
+      return { error: "正则表达式可能存在性能风险（ReDoS），请简化模式" };
+    }
+    try {
+      const re = new RegExp(query, "i");
+      return { test: (text: string) => re.test(text) };
+    } catch (e) {
+      return { error: `正则语法错误: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  } else {
+    const lowerQuery = query.toLowerCase();
+    return { test: (text: string) => text.toLowerCase().includes(lowerQuery) };
+  }
+}
 
 /**
  * 搜索服务
@@ -27,8 +67,14 @@ export class SearchService {
    * 搜索工作区
    */
   async workspaceSearch(params: WorkspaceSearchParams): Promise<WorkspaceSearchResult> {
-    const { query, limit = 10 } = params;
-    const lowerQuery = query.toLowerCase();
+    const { query, regex = false, limit = 10 } = params;
+
+    // 创建匹配器
+    const matcherResult = createMatcher(query, regex);
+    if ("error" in matcherResult) {
+      throw new TanmiError("INVALID_PARAMS", matcherResult.error);
+    }
+    const matcher = matcherResult;
 
     const index = await this.json.readIndex();
     const matches: WorkspaceSearchMatch[] = [];
@@ -39,7 +85,7 @@ export class SearchService {
       const matchedIn: string[] = [];
 
       // 搜索名称
-      if (ws.name.toLowerCase().includes(lowerQuery)) {
+      if (matcher.test(ws.name)) {
         matchedIn.push("name");
       }
 
@@ -57,11 +103,11 @@ export class SearchService {
         const rootNodeInfo = await this.md.readNodeInfo(ws.projectRoot, wsDirName, rootNodeDirName);
         const goal = rootNodeInfo.requirement || "";
 
-        if (goal.toLowerCase().includes(lowerQuery)) {
+        if (matcher.test(goal)) {
           matchedIn.push("goal");
         }
 
-        if (workspaceMd.rules.some(rule => rule.toLowerCase().includes(lowerQuery))) {
+        if (workspaceMd.rules.some(rule => matcher.test(rule))) {
           matchedIn.push("rules");
         }
 
@@ -73,8 +119,8 @@ export class SearchService {
             matchedIn,
           });
         }
-      } catch {
-        // 读取失败，跳过
+      } catch (err) {
+        devLog.debug(`[search] 工作区搜索读取失败: ${ws.id}`, { error: err instanceof Error ? err.message : String(err) });
       }
 
       if (matches.length >= limit + 1) break;
@@ -91,8 +137,14 @@ export class SearchService {
    * 搜索工作区内容
    */
   async contentSearch(params: ContentSearchParams): Promise<ContentSearchResult> {
-    const { workspaceId, query, id, target = "all", limit = 20, context = 1 } = params;
-    const lowerQuery = query.toLowerCase();
+    const { workspaceId, query, regex = false, id, target = "all", limit = 20, context = 1 } = params;
+
+    // 创建匹配器
+    const matcherResult = createMatcher(query, regex);
+    if ("error" in matcherResult) {
+      throw new TanmiError("INVALID_PARAMS", matcherResult.error);
+    }
+    const matcher = matcherResult;
 
     // 获取工作区信息
     const index = await this.json.readIndex();
@@ -136,7 +188,7 @@ export class SearchService {
           const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName, isArchived);
 
           // 搜索标题
-          if (nodeInfo.title.toLowerCase().includes(lowerQuery)) {
+          if (matcher.test(nodeInfo.title)) {
             matches.push({
               type: "node",
               nodeId,
@@ -148,7 +200,7 @@ export class SearchService {
 
           // 搜索需求
           if (nodeInfo.requirement && matches.length < limit + 1) {
-            const reqMatch = this.findInText(nodeInfo.requirement, lowerQuery, context);
+            const reqMatch = this.findInTextWithMatcher(nodeInfo.requirement, matcher, context);
             if (reqMatch) {
               matches.push({
                 type: "node",
@@ -162,7 +214,7 @@ export class SearchService {
 
           // 搜索结论
           if (nodeInfo.conclusion && matches.length < limit + 1) {
-            const conMatch = this.findInText(nodeInfo.conclusion, lowerQuery, context);
+            const conMatch = this.findInTextWithMatcher(nodeInfo.conclusion, matcher, context);
             if (conMatch) {
               matches.push({
                 type: "node",
@@ -173,8 +225,8 @@ export class SearchService {
               });
             }
           }
-        } catch {
-          // 读取失败，跳过
+        } catch (err) {
+          devLog.debug(`[search] 节点内容读取失败: ${nodeId}`, { error: err instanceof Error ? err.message : String(err) });
         }
       }
     }
@@ -201,7 +253,7 @@ export class SearchService {
         const memoDirName = memoMeta.dirName;
 
         // 搜索标题
-        if (memoMeta.title.toLowerCase().includes(lowerQuery)) {
+        if (matcher.test(memoMeta.title)) {
           matches.push({
             type: "memo",
             memoId,
@@ -213,7 +265,7 @@ export class SearchService {
 
         // 搜索摘要
         if (memoMeta.summary && matches.length < limit + 1) {
-          if (memoMeta.summary.toLowerCase().includes(lowerQuery)) {
+          if (matcher.test(memoMeta.summary)) {
             matches.push({
               type: "memo",
               memoId,
@@ -226,7 +278,7 @@ export class SearchService {
 
         // 搜索标签
         if (memoMeta.tags && matches.length < limit + 1) {
-          const matchedTag = memoMeta.tags.find(tag => tag.toLowerCase().includes(lowerQuery));
+          const matchedTag = memoMeta.tags.find(tag => matcher.test(tag));
           if (matchedTag) {
             matches.push({
               type: "memo",
@@ -243,7 +295,7 @@ export class SearchService {
           try {
             const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
             const content = await this.fs.readFile(contentPath);
-            const contentMatches = this.findAllInText(content, lowerQuery, context);
+            const contentMatches = this.findAllInTextWithMatcher(content, matcher, context);
 
             for (const match of contentMatches) {
               if (matches.length >= limit + 1) break;
@@ -256,8 +308,8 @@ export class SearchService {
                 snippet: match.snippet,
               });
             }
-          } catch {
-            // 读取失败，跳过
+          } catch (err) {
+            devLog.debug(`[search] MEMO内容读取失败: ${memoId}`, { error: err instanceof Error ? err.message : String(err) });
           }
         }
       }
@@ -293,14 +345,13 @@ export class SearchService {
   }
 
   /**
-   * 在文本中查找关键词，返回第一个匹配的片段
+   * 在文本中使用匹配器查找，返回第一个匹配的片段
    */
-  private findInText(text: string, query: string, contextLines: number): { snippet: string } | null {
+  private findInTextWithMatcher(text: string, matcher: Matcher, contextLines: number): { snippet: string } | null {
     const lines = text.split("\n");
-    const lowerLines = lines.map(l => l.toLowerCase());
 
-    for (let i = 0; i < lowerLines.length; i++) {
-      if (lowerLines[i].includes(query)) {
+    for (let i = 0; i < lines.length; i++) {
+      if (matcher.test(lines[i])) {
         const start = Math.max(0, i - contextLines);
         const end = Math.min(lines.length, i + contextLines + 1);
         const snippet = lines.slice(start, end).join("\n");
@@ -312,15 +363,14 @@ export class SearchService {
   }
 
   /**
-   * 在文本中查找所有匹配，返回带行号的片段列表
+   * 在文本中使用匹配器查找所有匹配，返回带行号的片段列表
    */
-  private findAllInText(text: string, query: string, contextLines: number): Array<{ line: number; snippet: string }> {
+  private findAllInTextWithMatcher(text: string, matcher: Matcher, contextLines: number): Array<{ line: number; snippet: string }> {
     const lines = text.split("\n");
-    const lowerLines = lines.map(l => l.toLowerCase());
     const results: Array<{ line: number; snippet: string }> = [];
 
-    for (let i = 0; i < lowerLines.length; i++) {
-      if (lowerLines[i].includes(query)) {
+    for (let i = 0; i < lines.length; i++) {
+      if (matcher.test(lines[i])) {
         const start = Math.max(0, i - contextLines);
         const end = Math.min(lines.length, i + contextLines + 1);
         const snippet = lines.slice(start, end).join("\n");

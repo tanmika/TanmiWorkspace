@@ -167,6 +167,30 @@ export function compressWorkspaceLog(logMd: string): string {
   return lines.join("\n");
 }
 
+// ========== 行号添加 ==========
+
+/**
+ * 为内容添加行号前缀（AI 用）
+ * 格式：空格填充 + 行号 + - + 内容
+ *
+ * @param content 原始内容
+ * @param startLine 起始行号（默认 1）
+ * @returns 带行号前缀的内容
+ */
+export function addLineNumbers(content: string, startLine: number = 1): string {
+  const lines = content.split("\n");
+  const endLine = startLine + lines.length - 1;
+  const lineNumWidth = Math.max(5, String(endLine).length);
+
+  return lines
+    .map((line, idx) => {
+      const lineNum = startLine + idx;
+      const paddedLineNum = String(lineNum).padStart(lineNumWidth, " ");
+      return `${paddedLineNum}-${line}`;
+    })
+    .join("\n");
+}
+
 // ========== 适配器接口 ==========
 
 /**

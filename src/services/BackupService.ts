@@ -23,30 +23,19 @@ import { TanmiError } from "../types/errors.js";
 import { devLog } from "../utils/devLog.js";
 
 /**
- * 安全执行 tar 命令（使用 spawn 避免命令注入）
- * @param args tar 命令参数数组
- * @returns Promise<void>
+ * 安全执行 tar 命令（避免命令注入）
+ * 使用 spawn 而非 exec，路径作为参数传递而非字符串拼接
  */
-function execTar(args: string[]): Promise<void> {
+function spawnTar(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn("tar", args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
-
-    child.stderr?.on("data", (data) => {
-      stderr += data.toString();
-    });
-
+    child.stderr?.on("data", (data) => { stderr += data.toString(); });
     child.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(stderr || `tar exited with code ${code}`));
-      }
+      if (code === 0) resolve();
+      else reject(new Error(stderr || `tar exited with code ${code}`));
     });
-
-    child.on("error", (err) => {
-      reject(err);
-    });
+    child.on("error", reject);
   });
 }
 
@@ -113,7 +102,9 @@ export class BackupService {
       }
       const content = await this.fs.readFile(metaPath);
       return JSON.parse(content) as BackupMeta[];
-    } catch {
+    } catch (error) {
+      // 元数据解析失败：用户层面无感知，但可能导致备份列表丢失
+      devLog.warn("[BackupService] 备份元数据解析失败，返回空列表", { metaPath, error: error instanceof Error ? error.message : String(error) });
       return [];
     }
   }
@@ -177,7 +168,7 @@ export class BackupService {
     // 创建压缩备份（排除 .backups 目录）
     // 使用 spawn 参数数组避免命令注入风险
     try {
-      await execTar(["-czf", backupPath, "--exclude=.backups", "-C", workspacePath, "."]);
+      await spawnTar(["-czf", backupPath, "--exclude=.backups", "-C", workspacePath, "."]);
     } catch (e) {
       throw new TanmiError(
         "INVALID_PARAMS",
@@ -188,11 +179,13 @@ export class BackupService {
     // 验证备份
     let verified = false;
     try {
-      await execTar(["-tzf", backupPath]);
+      await spawnTar(["-tzf", backupPath]);
       verified = true;
-    } catch {
-      // 验证失败，记录但不阻止
-      console.error(`[backup] 备份验证失败: ${backupPath}`);
+    } catch (error) {
+      // 验证失败，记录但不阻止（双重打印：console 供用户快速排查，devLog 供后台日志）
+      const errMsg = `[backup] 备份验证失败: ${backupPath}`;
+      console.error(errMsg);
+      devLog.warn(errMsg, { error: error instanceof Error ? error.message : String(error) });
     }
 
     // 获取文件大小
@@ -247,9 +240,10 @@ export class BackupService {
       const filePath = path.join(backupDir, meta.name);
       try {
         await fs.unlink(filePath);
-        console.log(`[backup] 轮转删除: ${meta.name}`);
-      } catch {
-        // 删除失败不阻止
+        devLog.debug("[BackupService] 轮转删除成功", { backupName: meta.name });
+      } catch (error) {
+        // 删除失败不阻止，但记录日志
+        devLog.warn("[BackupService] 轮转删除失败", { backupName: meta.name, filePath, error: error instanceof Error ? error.message : String(error) });
       }
     }
 
@@ -314,7 +308,7 @@ export class BackupService {
 
     // 解压恢复（使用 spawn 参数数组避免命令注入风险）
     try {
-      await execTar(["-xzf", backupPath, "-C", workspacePath]);
+      await spawnTar(["-xzf", backupPath, "-C", workspacePath]);
     } catch (e) {
       throw new TanmiError(
         "INVALID_PARAMS",

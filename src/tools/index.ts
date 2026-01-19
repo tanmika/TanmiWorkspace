@@ -1,7 +1,7 @@
 // src/tools/index.ts
 
 export { workspaceTools, workspaceInitTool, workspaceListTool, workspaceGetTool, workspaceDeleteTool } from "./workspace.js";
-export { nodeTools, nodeCreateTool, nodeGetTool, nodeListTool, nodeDeleteTool, nodeUpdateTool } from "./node.js";
+export { nodeTools, nodeCreateTool, nodeGetTool, nodeListTool, nodeDeleteTool, nodeReplaceTool, nodeEditTool, nodeMoveTool, nodeReorderTool } from "./node.js";
 export { stateTools, nodeTransitionTool } from "./state.js";
 export { contextTools, contextGetTool, contextFocusTool, nodeIsolateTool, nodeReferenceTool } from "./context.js";
 export { logTools, logAppendTool, problemUpdateTool, problemClearTool } from "./log.js";
@@ -18,5 +18,5 @@ export {
   dispatchCreateTool,
 } from "./dispatch.js";
 export { configTools, configGetTool, configSetTool } from "./config.js";
-export { memoTools, memoCreateTool, memoListTool, memoGetTool, memoUpdateTool, memoDeleteTool } from "./memo.js";
+export { memoTools, memoCreateTool, memoListTool, memoGetTool, memoReplaceTool, memoEditTool, memoInsertTool, memoDeleteTool } from "./memo.js";
 export { capabilityTools, capabilityListTool, capabilitySelectTool } from "./capability.js";

@@ -86,6 +86,17 @@ export interface MemoGetParams {
 }
 
 /**
+ * memo_get 分页信息
+ */
+export interface MemoPagination {
+  currentRange: string;             // 当前显示范围，如 "1-500"
+  totalLines: number;               // 总行数
+  hasMore: boolean;                 // 是否还有更多内容
+  nextOffset?: number;              // 下一页起始行（hasMore=true 时提供）
+  nextCommand?: string;             // 下一页完整命令（hasMore=true 时提供）
+}
+
+/**
  * memo_get 输出
  */
 export interface MemoGetResult {
@@ -95,40 +106,8 @@ export interface MemoGetResult {
   /** 内容的 MD5 hash，用于先读后写校验 */
   contentHash: string;
   hint?: string;                    // 继续读取提示（截取时返回）
-}
-
-/**
- * memo_update 输入
- *
- * 更新模式：
- * 1. 全量替换：直接提供 content/summary/title 字段
- * 2. 精确替换：提供 field + old_str + new_str 进行字符串替换
- *
- * 安全机制：必须提供 contentHash（从 memo_get 获取）进行先读后写校验
- */
-export interface MemoUpdateParams {
-  workspaceId: string;
-  memoId: string;
-  /** 内容 hash，从 memo_get 返回值获取，用于校验内容未被其他操作修改 */
-  contentHash: string;
-  title?: string;
-  summary?: string;
-  content?: string;                 // 全量替换内容
-  /** 指定要精确替换的字段 */
-  field?: 'content' | 'summary';
-  /** 要替换的原文本（与 field 配合使用） */
-  old_str?: string;
-  /** 替换后的文本（与 field 配合使用） */
-  new_str?: string;
-  tags?: string[];                  // 会完全替换现有标签
-}
-
-/**
- * memo_update 输出
- */
-export interface MemoUpdateResult {
-  success: boolean;
-  updatedAt: string;
+  /** 分页导航信息（截断时提供） */
+  pagination?: MemoPagination;
 }
 
 /**
@@ -144,4 +123,61 @@ export interface MemoDeleteParams {
  */
 export interface MemoDeleteResult {
   success: boolean;
+}
+
+// ========== 工具拆分 API 类型 ==========
+
+/**
+ * memo_replace 输入 - 全量替换 Memo 内容
+ */
+export interface MemoReplaceParams {
+  workspaceId: string;
+  memoId: string;
+  contentHash: string;
+  content: string;
+  title?: string;
+  summary?: string;
+  tags?: string[];
+}
+
+/**
+ * memo_edit 输入 - 精确字符串替换或行范围替换
+ *
+ * 替换模式：
+ * - mode='string': 字符串精确替换，需提供 old_str + new_str
+ * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + new_str
+ *
+ * 约束：
+ * - old_str 和 lineStart/lineEnd 不能同时存在
+ * - 行号从 1 开始
+ */
+export interface MemoEditParams {
+  workspaceId: string;
+  memoId: string;
+  contentHash: string;
+  field: 'content' | 'title' | 'summary';
+
+  /** 替换模式：字符串精确替换或行范围替换 */
+  mode?: 'string' | 'line_range';
+
+  /** 要替换的原文本（mode='string' 时必填） */
+  old_str?: string;
+  /** 替换后的文本 */
+  new_str: string;
+
+  /** 起始行号（mode='line_range' 时必填，从 1 开始） */
+  lineStart?: number;
+  /** 结束行号（mode='line_range' 时必填，包含该行） */
+  lineEnd?: number;
+}
+
+/**
+ * memo_insert 输入 - 行号插入
+ */
+export interface MemoInsertParams {
+  workspaceId: string;
+  memoId: string;
+  contentHash: string;
+  line: number;
+  text: string;
 }

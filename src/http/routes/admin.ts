@@ -43,8 +43,10 @@ async function withIndexLock<T>(operation: () => T | Promise<T>): Promise<T> {
     return await operation();
   });
 
-  // 更新队列，但不让错误阻塞后续操作
-  indexOperationQueue = currentOperation.catch(() => {});
+  // 更新队列，错误时记录日志但不阻塞后续操作
+  indexOperationQueue = currentOperation.catch((err) => {
+    console.error("[admin] 索引操作失败:", err instanceof Error ? err.message : String(err));
+  });
 
   return currentOperation;
 }

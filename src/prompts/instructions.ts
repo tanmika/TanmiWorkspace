@@ -404,38 +404,69 @@ export const TOOLS_QUICK_REFERENCE = `
 | memo_create | 创建备忘录 | workspaceId, title, content, tags? |
 | memo_list | 列出备忘录 | workspaceId, tag? |
 | memo_get | 获取备忘录详情（返回 contentHash） | workspaceId, memoId |
-| memo_update | 更新备忘录（需 contentHash） | workspaceId, memoId, **contentHash**, ... |
+| memo_replace | 全量替换备忘录内容 | workspaceId, memoId, **contentHash**, content |
+| memo_edit | 精确替换备忘录字段 | workspaceId, memoId, **contentHash**, field, new_str, ... |
+| memo_insert | 在指定行后插入内容 | workspaceId, memoId, **contentHash**, line, text |
 | memo_delete | 删除备忘录 | workspaceId, memoId |
 
-**★ memo_update 先读后写机制（重要！）**：
+**★ memo_get 截断处理**：
 
-更新备忘录前**必须**先调用 \`memo_get\` 获取 \`contentHash\`，然后在 \`memo_update\` 中提供该 hash。这是乐观锁机制，防止并发覆盖。
+当 \`memo_get\` 返回 \`contentTruncated: true\` 时，说明内容超过 500 行被截断。处理方式：
+1. **优先使用搜索**：\`content_search({ workspaceId, id: memoId, query: "关键词" })\` 定位目标内容
+2. **按需分页**：仅在需要全文时使用 \`pagination.nextCommand\` 继续读取
 
-**两种编辑模式**：
-1. **全量替换**：直接提供新值覆盖整个字段
+**★ 先读后写机制（重要！）**：
+
+更新备忘录前**必须**先调用 \`memo_get\` 获取 \`contentHash\`，然后在更新工具中提供该 hash。这是乐观锁机制，防止并发覆盖。
+
+**三种编辑模式**：
+1. **全量替换** (memo_replace)：覆盖整个内容，适合完全重写
    \`\`\`typescript
-   memo_update({
+   memo_replace({
      workspaceId: "ws-xxx",
      memoId: "memo-xxx",
      contentHash: "def456",  // 从 memo_get 获取
-     title: "新标题",
-     content: "新内容"
+     content: "新的完整内容",
+     title: "新标题"  // 可选
    })
    \`\`\`
 
-2. **精确替换**：使用 \`field\` + \`old_str\` + \`new_str\` 只替换部分内容
+2. **精确替换** (memo_edit)：只替换部分内容，推荐用于局部修改
    \`\`\`typescript
-   memo_update({
+   // 字符串模式（默认）
+   memo_edit({
      workspaceId: "ws-xxx",
      memoId: "memo-xxx",
      contentHash: "def456",
-     field: "content",         // 目标字段
-     old_str: "旧的部分内容",   // 要替换的内容
-     new_str: "新的部分内容"    // 替换后的内容
+     field: "content",
+     old_str: "旧的部分内容",
+     new_str: "新的部分内容"
+   })
+   // 行范围模式
+   memo_edit({
+     workspaceId: "ws-xxx",
+     memoId: "memo-xxx",
+     contentHash: "def456",
+     field: "content",
+     mode: "line_range",
+     lineStart: 10,
+     lineEnd: 15,
+     new_str: "替换第10-15行的内容"
    })
    \`\`\`
 
-⚠️ **注意**：\`memo_update\` 成功后**不返回新 hash**，如需再次更新，必须重新调用 \`memo_get\` 获取最新 hash。
+3. **行号插入** (memo_insert)：在指定行后插入新内容
+   \`\`\`typescript
+   memo_insert({
+     workspaceId: "ws-xxx",
+     memoId: "memo-xxx",
+     contentHash: "def456",
+     line: 5,        // 在第5行后插入，0表示在开头插入
+     text: "插入的新内容"
+   })
+   \`\`\`
+
+⚠️ **注意**：更新成功后**不返回新 hash**，如需再次更新，必须重新调用 \`memo_get\` 获取最新 hash。
 
 ### 派发模式（可选）
 | 工具 | 用途 | 关键参数 |

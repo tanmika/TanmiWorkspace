@@ -13,7 +13,7 @@ import AdmZip from "adm-zip";
 import { INTERNAL_RULES_HASH } from "./NodeService.js";
 import { FLOW_SKILLS } from "../constants/skills.js";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
-import type { JsonStorage } from "../storage/JsonStorage.js";
+import { JsonStorage } from "../storage/JsonStorage.js";
 import type { MarkdownStorage } from "../storage/MarkdownStorage.js";
 import type {
   WorkspaceInitParams,
@@ -220,7 +220,7 @@ export class WorkspaceService {
       updatedAt: currentTime,
     };
     const graph: NodeGraph = {
-      version: "5.0",  // 新版本支持 workflow
+      version: JsonStorage.STORAGE_VERSION,
       currentFocus: rootNodeId,
       nodes: {
         [rootNodeId]: rootNode,
@@ -1355,10 +1355,13 @@ Read(file_path: <返回的路径>/SKILL.md)
     const results = await Promise.all(
       nodeIds.map(async (nodeId) => {
         const node = graph.nodes[nodeId];
-        const nodeDirName = node.dirName || nodeId;
+        let nodeDirName = node.dirName || nodeId;
         const nodeIssues: HealthIssue[] = [];
 
-        // 注：root 节点目录名固定为 "root"，由 node.dirName || nodeId 逻辑自动处理
+        // root 节点目录名固定为 "root"
+        if (nodeId === "root") {
+          nodeDirName = "root";
+        }
 
         // 获取节点目录路径
         const nodesDir = isArchived

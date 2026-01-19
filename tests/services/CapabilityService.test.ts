@@ -15,13 +15,13 @@ describe("CapabilityService", () => {
   describe("类型定义验证", () => {
     it("应该正确导出 CapabilityId 类型（7个能力ID）", () => {
       const expectedIds: CapabilityId[] = [
-        "requirement_clarify",
+        "intent_alignment",
+        "context_discovery",
+        "diagnosis",
         "tech_research",
-        "tech_design",
-        "test_design",
-        "doc_scan",
-        "error_analysis",
-        "perf_baseline",
+        "measurement_analysis",
+        "solution_design",
+        "verification_strategy",
       ];
 
       // 验证每个 ID 都能正确获取信息（类型检查）
@@ -35,8 +35,8 @@ describe("CapabilityService", () => {
     });
 
     it("应该正确返回 CapabilityInfo 接口", () => {
-      const info = service.getCapabilityInfo("requirement_clarify");
-      
+      const info = service.getCapabilityInfo("intent_alignment");
+
       expect(info).toHaveProperty("id");
       expect(info).toHaveProperty("name");
       expect(info).toHaveProperty("description");
@@ -49,12 +49,12 @@ describe("CapabilityService", () => {
 
     it("应该正确返回 CapabilityPackConfig 接口", () => {
       const result = service.getCapabilitiesForScenario("feature");
-      
+
       expect(result).toHaveProperty("basePack");
       expect(result).toHaveProperty("optionalPack");
       expect(Array.isArray(result.basePack)).toBe(true);
       expect(Array.isArray(result.optionalPack)).toBe(true);
-      
+
       // 验证数组元素类型
       result.basePack.forEach((info) => {
         expect(info).toHaveProperty("id");
@@ -68,7 +68,7 @@ describe("CapabilityService", () => {
   describe("服务方法验证", () => {
     it("loadScenarioCapabilities() 应该正确加载 JSON 配置", () => {
       const capabilities = service.loadScenarioCapabilities();
-      
+
       expect(capabilities).toBeDefined();
       expect(capabilities).toHaveProperty("feature");
       expect(capabilities).toHaveProperty("debug");
@@ -80,18 +80,18 @@ describe("CapabilityService", () => {
     it("loadScenarioCapabilities() 应该支持缓存", () => {
       const first = service.loadScenarioCapabilities();
       const second = service.loadScenarioCapabilities();
-      
+
       expect(first).toBe(second); // 应该是同一个对象引用
     });
 
     it("getCapabilitiesForScenario() 应该返回正确的 basePack/optionalPack", () => {
       const result = service.getCapabilitiesForScenario("feature");
-      
+
       expect(result.basePack).toBeDefined();
       expect(result.optionalPack).toBeDefined();
       expect(result.basePack.length).toBeGreaterThan(0);
       expect(result.optionalPack.length).toBeGreaterThan(0);
-      
+
       // 验证返回的是 CapabilityInfo 对象，而不是 ID 字符串
       expect(typeof result.basePack[0]).toBe("object");
       expect(result.basePack[0]).toHaveProperty("id");
@@ -99,11 +99,11 @@ describe("CapabilityService", () => {
     });
 
     it("getCapabilityInfo() 应该返回正确的能力信息", () => {
-      const info = service.getCapabilityInfo("requirement_clarify");
-      
-      expect(info.id).toBe("requirement_clarify");
-      expect(info.name).toBe("需求澄清");
-      expect(info.description).toBe("通过结构化提问澄清需求");
+      const info = service.getCapabilityInfo("intent_alignment");
+
+      expect(info.id).toBe("intent_alignment");
+      expect(info.name).toBe("意图对齐");
+      expect(info.description).toBe("通过结构化提问对齐用户意图");
       expect(info.type).toBe("collection");
     });
 
@@ -123,63 +123,58 @@ describe("CapabilityService", () => {
   describe("场景对齐验证", () => {
     it("feature 场景应该返回正确的能力包", () => {
       const result = service.getCapabilitiesForScenario("feature");
-      
+
       const basePackIds = result.basePack.map((info) => info.id);
       const optionalPackIds = result.optionalPack.map((info) => info.id);
-      
-      expect(basePackIds).toEqual(["requirement_clarify", "tech_design"]);
-      expect(optionalPackIds).toEqual(["test_design", "doc_scan"]);
+
+      expect(basePackIds).toEqual(["intent_alignment", "context_discovery"]);
+      expect(optionalPackIds).toEqual(["tech_research", "solution_design", "verification_strategy"]);
     });
 
     it("debug 场景应该返回正确的能力包", () => {
       const result = service.getCapabilitiesForScenario("debug");
-      
+
       const basePackIds = result.basePack.map((info) => info.id);
       const optionalPackIds = result.optionalPack.map((info) => info.id);
-      
-      expect(basePackIds).toEqual(["error_analysis"]);
-      expect(optionalPackIds).toEqual([
-        "tech_research",
-        "perf_baseline",
-        "test_design",
-      ]);
+
+      expect(basePackIds).toEqual(["intent_alignment", "context_discovery", "diagnosis"]);
+      expect(optionalPackIds).toEqual(["solution_design", "verification_strategy"]);
     });
 
     it("optimize 场景应该返回正确的能力包", () => {
       const result = service.getCapabilitiesForScenario("optimize");
-      
+
       const basePackIds = result.basePack.map((info) => info.id);
       const optionalPackIds = result.optionalPack.map((info) => info.id);
-      
-      expect(basePackIds).toEqual(["perf_baseline", "tech_research"]);
-      expect(optionalPackIds).toEqual(["tech_design", "test_design"]);
+
+      expect(basePackIds).toEqual(["intent_alignment", "context_discovery", "measurement_analysis"]);
+      expect(optionalPackIds).toEqual(["diagnosis", "solution_design", "verification_strategy"]);
     });
 
     it("summary 场景应该返回正确的能力包", () => {
       const result = service.getCapabilitiesForScenario("summary");
-      
+
       const basePackIds = result.basePack.map((info) => info.id);
       const optionalPackIds = result.optionalPack.map((info) => info.id);
-      
-      expect(basePackIds).toEqual(["doc_scan"]);
-      expect(optionalPackIds).toEqual(["requirement_clarify"]);
+
+      expect(basePackIds).toEqual(["intent_alignment", "context_discovery"]);
+      expect(optionalPackIds).toEqual([]);
     });
 
     it("misc 场景应该返回正确的能力包", () => {
       const result = service.getCapabilitiesForScenario("misc");
-      
+
       const basePackIds = result.basePack.map((info) => info.id);
       const optionalPackIds = result.optionalPack.map((info) => info.id);
-      
-      expect(basePackIds).toEqual([]);
+
+      expect(basePackIds).toEqual(["intent_alignment"]);
       expect(optionalPackIds).toEqual([
-        "requirement_clarify",
+        "context_discovery",
         "tech_research",
-        "tech_design",
-        "test_design",
-        "doc_scan",
-        "error_analysis",
-        "perf_baseline",
+        "measurement_analysis",
+        "diagnosis",
+        "solution_design",
+        "verification_strategy",
       ]);
     });
 
@@ -206,37 +201,37 @@ describe("CapabilityService", () => {
 
   describe("parseSkillFrontmatter 降级处理", () => {
     it("Skill 文件不存在时应该返回 null", () => {
-      const result = service.parseSkillFrontmatter("requirement_clarify");
-      
+      const result = service.parseSkillFrontmatter("intent_alignment");
+
       // 由于 Skill 文件尚未创建，应该返回 null
       expect(result).toBeNull();
     });
 
     it("getCapabilityInfo 应该在 Skill 文件不存在时降级到硬编码映射", () => {
-      const info = service.getCapabilityInfo("requirement_clarify");
-      
+      const info = service.getCapabilityInfo("intent_alignment");
+
       // 应该从硬编码映射获取信息
       expect(info).toBeDefined();
-      expect(info.id).toBe("requirement_clarify");
-      expect(info.name).toBe("需求澄清");
+      expect(info.id).toBe("intent_alignment");
+      expect(info.name).toBe("意图对齐");
     });
   });
 
   describe("所有能力ID的元信息验证", () => {
     it("所有7个能力ID都应该有完整的元信息", () => {
       const allCapabilityIds: CapabilityId[] = [
-        "requirement_clarify",
+        "intent_alignment",
+        "context_discovery",
+        "diagnosis",
         "tech_research",
-        "tech_design",
-        "test_design",
-        "doc_scan",
-        "error_analysis",
-        "perf_baseline",
+        "measurement_analysis",
+        "solution_design",
+        "verification_strategy",
       ];
 
       allCapabilityIds.forEach((id) => {
         const info = service.getCapabilityInfo(id);
-        
+
         expect(info.id).toBe(id);
         expect(info.name).toBeTruthy();
         expect(info.description).toBeTruthy();
@@ -246,16 +241,16 @@ describe("CapabilityService", () => {
 
     it("collection 类型和 summary 类型应该正确分类", () => {
       const collectionIds: CapabilityId[] = [
-        "requirement_clarify",
+        "intent_alignment",
         "tech_research",
-        "tech_design",
-        "test_design",
-        "perf_baseline",
+        "measurement_analysis",
+        "solution_design",
+        "verification_strategy",
       ];
-      
+
       const summaryIds: CapabilityId[] = [
-        "doc_scan",
-        "error_analysis",
+        "context_discovery",
+        "diagnosis",
       ];
 
       collectionIds.forEach((id) => {

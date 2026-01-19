@@ -10,10 +10,11 @@ import type {
   MemoListResult,
   MemoGetParams,
   MemoGetResult,
-  MemoUpdateParams,
-  MemoUpdateResult,
   MemoDeleteParams,
   MemoDeleteResult,
+  MemoReplaceParams,
+  MemoEditParams,
+  MemoInsertParams,
   Memo,
   MemoListItem,
 } from "../types/memo.js";
@@ -207,8 +208,11 @@ export class MemoService {
     const totalLines = lines.length;
     const startLine = Math.max(1, Math.min(lineOffset, totalLines));
     const endLine = Math.min(startLine + lineLimit - 1, totalLines);
-    const content = lines.slice(startLine - 1, endLine).join("\n");
+    const pagedLines = lines.slice(startLine - 1, endLine);
     const contentTruncated = startLine > 1 || endLine < totalLines;
+
+    // 5.1 返回原始内容（行号添加由 MCP 适配层处理）
+    const content = pagedLines.join("\n");
 
     // 6. 构造备忘对象
     const memo: Memo = {
@@ -223,9 +227,22 @@ export class MemoService {
     const result: MemoGetResult = { memo, totalLines, contentHash };
     if (contentTruncated) {
       result.contentTruncated = true;
-      // 生成继续读取提示
-      if (endLine < totalLines) {
-        result.hint = `已返回第 ${startLine}-${endLine} 行（共 ${totalLines} 行）。继续读取：memo_get({ lineOffset: ${endLine + 1} })`;
+      const hasMore = endLine < totalLines;
+
+      // 添加分页导航信息
+      result.pagination = {
+        currentRange: `${startLine}-${endLine}`,
+        totalLines,
+        hasMore,
+        nextOffset: hasMore ? endLine + 1 : undefined,
+        nextCommand: hasMore
+          ? `memo_get({ workspaceId: "${workspaceId}", memoId: "${memoId}", lineOffset: ${endLine + 1} })`
+          : undefined,
+      };
+
+      // 生成截断处理提示
+      if (hasMore) {
+        result.hint = `内容已截断（${startLine}-${endLine}/${totalLines} 行）。建议使用 content_search 搜索定位，或用 pagination.nextCommand 分页读取。`;
       }
     }
 
@@ -233,15 +250,10 @@ export class MemoService {
   }
 
   /**
-   * 更新备忘
+   * 全量替换 - 替换整个 memo 内容
    */
-  async update(params: MemoUpdateParams): Promise<MemoUpdateResult> {
-    const { workspaceId, memoId, contentHash, title, summary, content, field, old_str, new_str, tags } = params;
-
-    // 0. 校验 contentHash 必填
-    if (!contentHash) {
-      throw new TanmiError("INVALID_PARAMS", "请先 memo_get 获取 contentHash");
-    }
+  async replace(params: MemoReplaceParams): Promise<{ success: boolean; error?: string }> {
+    const { workspaceId, memoId, contentHash, content, title, summary, tags } = params;
 
     // 1. 获取工作区信息
     const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
@@ -253,72 +265,247 @@ export class MemoService {
     const memosIndex = graph.memos || {};
     const memoMeta = memosIndex[memoId];
     if (!memoMeta) {
-      throw new TanmiError("MEMO_NOT_FOUND", `备忘 "${memoId}" 不存在`);
+      return { success: false, error: `备忘 "${memoId}" 不存在` };
     }
 
-    // 4. 获取目录名并读取当前内容
+    // 4. 读取当前内容并校验 contentHash
     const memoDirName = memoMeta.dirName;
     const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
     const existingContent = await this.fs.readFile(contentPath);
-
-    // 5. 校验 contentHash
     const currentHash = computeContentHash(existingContent);
     if (currentHash !== contentHash) {
-      throw new TanmiError("CONTENT_CHANGED", "内容已变更，请重新 memo_get");
+      return { success: false, error: "内容已变更，请重新 memo_get" };
     }
 
-    // 6. 处理内容更新
-    let finalContent: string | undefined;
-
-    // 6.1 精确替换模式
-    if (field && old_str !== undefined && new_str !== undefined) {
-      const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const targetContent = field === 'content' ? existingContent : memoMeta.summary;
-      const regex = new RegExp(escapeRegExp(old_str), 'g');
-      const matches = targetContent.match(regex);
-      const count = matches ? matches.length : 0;
-      if (count === 0) {
-        throw new TanmiError("NO_MATCH", "未找到匹配内容");
-      }
-      if (count > 1) {
-        throw new TanmiError("MULTI_MATCH", `找到 ${count} 处匹配，请提供更多上下文`);
-      }
-      // 执行替换
-      if (field === 'content') {
-        finalContent = targetContent.replace(old_str, new_str);
-      } else {
-        memoMeta.summary = targetContent.replace(old_str, new_str);
-      }
-    }
-
-    // 6.2 全量替换模式
-    if (content !== undefined) {
-      finalContent = content;
-    }
-
-    // 7. 更新备忘元数据
+    // 5. 更新元数据
     const timestamp = now();
     if (title !== undefined) memoMeta.title = title;
     if (summary !== undefined) memoMeta.summary = summary;
     if (tags !== undefined) memoMeta.tags = tags;
-    if (finalContent !== undefined) memoMeta.contentLength = finalContent.length;
+    memoMeta.contentLength = content.length;
+    memoMeta.updatedAt = timestamp;
+
+    // 6. 写回 graph.json
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
+
+    // 7. 写入新内容
+    await this.fs.writeFile(contentPath, content);
+
+    // 8. 发送事件通知
+    eventService.emitMemoUpdate(workspaceId, memoId);
+
+    return { success: true };
+  }
+
+  /**
+   * 精确替换 - 替换指定字段中的特定字符串或行范围
+   *
+   * 替换模式：
+   * - mode='string': 字符串精确替换，需提供 old_str + new_str
+   * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + new_str
+   */
+  async edit(params: MemoEditParams): Promise<{ success: boolean; error?: string }> {
+    const { workspaceId, memoId, contentHash, field, old_str, new_str, lineStart, lineEnd } = params;
+
+    // 1. 验证 mode 参数（默认 'string'）
+    const mode = params.mode ?? "string";
+
+    // 2. 参数校验
+    if (mode === "string") {
+      if (!old_str) {
+        return { success: false, error: "mode=string 时 old_str 必填" };
+      }
+      if (lineStart !== undefined || lineEnd !== undefined) {
+        return { success: false, error: "mode=string 时不能指定 lineStart/lineEnd" };
+      }
+    } else if (mode === "line_range") {
+      if (lineStart === undefined || lineEnd === undefined) {
+        return { success: false, error: "mode=line_range 时 lineStart 和 lineEnd 必填" };
+      }
+      if (old_str !== undefined) {
+        return { success: false, error: "mode=line_range 时不能指定 old_str" };
+      }
+      // 行号基本校验
+      if (lineStart < 1) {
+        return { success: false, error: "lineStart 必须 >= 1" };
+      }
+      if (lineStart > lineEnd) {
+        return { success: false, error: "lineStart 不能大于 lineEnd" };
+      }
+    } else {
+      return { success: false, error: `无效的 mode: ${mode}，支持 'string' 或 'line_range'` };
+    }
+
+    // 3. 获取工作区信息
+    const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
+
+    // 4. 读取 graph.json
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
+
+    // 5. 检查备忘是否存在
+    const memosIndex = graph.memos || {};
+    const memoMeta = memosIndex[memoId];
+    if (!memoMeta) {
+      return { success: false, error: `备忘 "${memoId}" 不存在` };
+    }
+
+    // 6. 读取当前内容并校验 contentHash
+    const memoDirName = memoMeta.dirName;
+    const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
+    const existingContent = await this.fs.readFile(contentPath);
+    const currentHash = computeContentHash(existingContent);
+    if (currentHash !== contentHash) {
+      return { success: false, error: "内容已变更，请重新 memo_get" };
+    }
+
+    // 7. 获取目标字段内容
+    let targetContent: string;
+    if (field === "content") {
+      targetContent = existingContent;
+    } else if (field === "title") {
+      targetContent = memoMeta.title;
+    } else {
+      targetContent = memoMeta.summary;
+    }
+
+    let newContent: string;
+    const timestamp = now();
+
+    if (mode === "string") {
+      // 8a. 字符串模式：检查 old_str 存在性和唯一性
+      const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(escapeRegExp(old_str!), "g");
+      const matches = targetContent.match(regex);
+      const count = matches ? matches.length : 0;
+
+      if (count === 0) {
+        return { success: false, error: "old_str 未找到" };
+      }
+      if (count > 1) {
+        return { success: false, error: "old_str 出现多次，请提供更精确的匹配" };
+      }
+
+      // 执行替换
+      newContent = targetContent.replace(old_str!, new_str);
+    } else {
+      // 8b. 行范围模式：按行替换
+      const lines = targetContent.split("\n");
+      const totalLines = lines.length;
+
+      // 验证行号范围
+      if (lineEnd! > totalLines) {
+        return { success: false, error: `lineEnd (${lineEnd}) 超出总行数 (${totalLines})` };
+      }
+
+      // 执行行范围替换：
+      // - 删除 lineStart 到 lineEnd 的行（闭区间）
+      // - 在 lineStart 位置插入 new_str（可能是多行或空字符串）
+      const beforeLines = lines.slice(0, lineStart! - 1);
+      const afterLines = lines.slice(lineEnd!);
+
+      if (new_str === "") {
+        // 空字符串：删除指定行
+        newContent = [...beforeLines, ...afterLines].join("\n");
+      } else {
+        // 非空：替换为新内容（可能是多行）
+        const newLines = new_str.split("\n");
+        newContent = [...beforeLines, ...newLines, ...afterLines].join("\n");
+      }
+    }
+
+    // 9. 更新内容和元数据
+    if (field === "content") {
+      // 更新内容文件
+      await this.fs.writeFile(contentPath, newContent);
+      memoMeta.contentLength = newContent.length;
+    } else if (field === "title") {
+      memoMeta.title = newContent;
+    } else {
+      memoMeta.summary = newContent;
+    }
+    memoMeta.updatedAt = timestamp;
+
+    // 10. 写回 graph.json
+    await this.json.writeGraph(projectRoot, wsDirName, graph);
+
+    // 11. 发送事件通知
+    eventService.emitMemoUpdate(workspaceId, memoId);
+
+    return { success: true };
+  }
+
+  /**
+   * 行号插入 - 在指定行后插入文本
+   */
+  async insert(params: MemoInsertParams): Promise<{ success: boolean; error?: string }> {
+    const { workspaceId, memoId, contentHash, line, text } = params;
+
+    // 1. 获取工作区信息
+    const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
+
+    // 2. 读取 graph.json
+    const graph = await this.json.readGraph(projectRoot, wsDirName);
+
+    // 3. 检查备忘是否存在
+    const memosIndex = graph.memos || {};
+    const memoMeta = memosIndex[memoId];
+    if (!memoMeta) {
+      return { success: false, error: `备忘 "${memoId}" 不存在` };
+    }
+
+    // 4. 读取当前内容并校验 contentHash
+    const memoDirName = memoMeta.dirName;
+    const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
+    const existingContent = await this.fs.readFile(contentPath);
+    const currentHash = computeContentHash(existingContent);
+    if (currentHash !== contentHash) {
+      return { success: false, error: "内容已变更，请重新 memo_get" };
+    }
+
+    // 5. 验证行号范围
+    const isEmptyContent = existingContent === "";
+    const lines = existingContent.split("\n");
+    const totalLines = lines.length;
+
+    // 特殊处理：空内容只允许 line=0 插入
+    if (isEmptyContent) {
+      if (line !== 0) {
+        return { success: false, error: "内容为空，只能在 line=0（开头）处插入" };
+      }
+    } else if (line < 0 || line > totalLines) {
+      return { success: false, error: `行号无效，有效范围 0-${totalLines}` };
+    }
+
+    // 6. 在指定行后插入
+    let finalContent: string;
+    if (isEmptyContent) {
+      // 空内容：直接使用插入的文本，不添加多余换行
+      finalContent = text;
+    } else if (line === 0) {
+      // 在开头插入
+      finalContent = text + "\n" + existingContent;
+    } else {
+      // 在第 N 行后插入
+      const before = lines.slice(0, line);
+      const after = lines.slice(line);
+      finalContent = [...before, text, ...after].join("\n");
+    }
+
+    // 7. 更新元数据
+    const timestamp = now();
+    memoMeta.contentLength = finalContent.length;
     memoMeta.updatedAt = timestamp;
 
     // 8. 写回 graph.json
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 9. 更新 Content.md（如果有内容变更）
-    if (finalContent !== undefined) {
-      await this.fs.writeFile(contentPath, finalContent);
-    }
+    // 9. 写入新内容
+    await this.fs.writeFile(contentPath, finalContent);
 
     // 10. 发送事件通知
     eventService.emitMemoUpdate(workspaceId, memoId);
 
-    return {
-      success: true,
-      updatedAt: timestamp,
-    };
+    return { success: true };
   }
 
   /**

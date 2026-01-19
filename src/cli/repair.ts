@@ -16,6 +16,7 @@ import { homedir } from "os";
 import { join, dirname, basename, resolve } from "path";
 import { fileURLToPath } from "url";
 import { createInterface } from "readline";
+import { extractShortId } from "../utils/id.js";
 
 // ES module 兼容
 const __filename = fileURLToPath(import.meta.url);
@@ -154,11 +155,6 @@ function readJson<T>(path: string): T | null {
 
 function writeJson(path: string, data: unknown): void {
   writeFileSync(path, JSON.stringify(data, null, 2));
-}
-
-function extractShortId(id: string): string {
-  const match = id.match(/^(?:ws-|node-|memo-)?([a-z0-9]+)-([a-z0-9]+)$/);
-  return match ? match[1] : id.slice(-8);
 }
 
 // 创建备份
@@ -798,28 +794,21 @@ status: planning
   return issues;
 }
 
-// 通过 shortId 查找目录
+// 通过 shortId 查找目录（只匹配标准格式，避免误匹配）
 function findDirByShortId(parentDir: string, id: string): string | null {
   const shortId = extractShortId(id);
 
   try {
     const items = readdirSync(parentDir, { withFileTypes: true });
 
-    // 优先匹配 _shortId 后缀
+    // 匹配 _shortId 后缀（标准命名格式）
     for (const item of items) {
       if (!item.isDirectory()) continue;
       if (item.name.endsWith(`_${shortId}`)) {
         return item.name;
       }
     }
-
-    // 兜底：包含 shortId
-    for (const item of items) {
-      if (!item.isDirectory()) continue;
-      if (item.name.includes(shortId)) {
-        return item.name;
-      }
-    }
+    // 不再使用宽松的 includes 匹配，避免误匹配
   } catch {
     // ignore
   }

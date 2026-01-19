@@ -121,7 +121,7 @@ export const nodeCreateTool: Tool = {
  */
 export const nodeGetTool: Tool = {
   name: "node_get",
-  description: "获取节点详情，包含元数据和所有 Markdown 内容。返回的 nodeHash 用于后续 node_update 的乐观锁校验。",
+  description: "获取节点详情，包含元数据和所有 Markdown 内容。返回的 nodeHash/contentHash 用于 node_replace/node_edit 的乐观锁校验。",
   inputSchema: {
     type: "object",
     properties: {
@@ -186,85 +186,6 @@ export const nodeDeleteTool: Tool = {
   },
 };
 
-// ========== Phase 3: 节点更新 ==========
-
-/**
- * node_update 工具定义
- */
-export const nodeUpdateTool: Tool = {
-  name: "node_update",
-  description: `更新节点信息，支持两种编辑模式：
-
-**模式一：全量替换**
-直接传入 title/requirement/note/conclusion 的完整新值进行覆盖。
-
-**模式二：精确替换（推荐）**
-传入 field + old_str + new_str 进行字符串级别精确替换，避免并发冲突。
-
-**必填参数**：
-- nodeHash：从 node_get 获取，用于乐观锁校验，防止并发覆盖
-
-**使用建议**：
-- 更新 conclusion 时优先使用精确替换模式，保留历史信息
-- 小修改使用模式二（精确替换），减少冲突风险
-- 大范围重写使用模式一（全量替换）
-
-**过期结论处理**：
-- 当节点 conclusionStale=true 时，更新 conclusion 需要提供 conclusionsHash 参数
-- conclusionsHash 通过 context_get 获取，用于验证子节点结论未变化`,
-  inputSchema: {
-    type: "object",
-    properties: {
-      workspaceId: {
-        type: "string",
-        description: "工作区 ID",
-      },
-      nodeId: {
-        type: "string",
-        description: "节点 ID",
-      },
-      nodeHash: {
-        type: "string",
-        description: "节点 hash（必填，从 node_get 获取）",
-      },
-      title: {
-        type: "string",
-        description: "新标题（可选，全量替换模式）",
-      },
-      requirement: {
-        type: "string",
-        description: "新需求描述（可选，全量替换模式）",
-      },
-      note: {
-        type: "string",
-        description: "新备注（可选，全量替换模式）",
-      },
-      conclusion: {
-        type: "string",
-        description: "新结论（可选，全量替换模式，用于修正已完成节点的结论）",
-      },
-      field: {
-        type: "string",
-        enum: ["requirement", "note", "conclusion"],
-        description: "要精确替换的字段（精确替换模式）",
-      },
-      old_str: {
-        type: "string",
-        description: "要替换的原文本（精确替换模式）",
-      },
-      new_str: {
-        type: "string",
-        description: "替换后的文本（精确替换模式）",
-      },
-      conclusionsHash: {
-        type: "string",
-        description: "上下文 hash（stale=true 时更新 conclusion 必填，从 context_get 获取）",
-      },
-    },
-    required: ["workspaceId", "nodeId", "nodeHash"],
-  },
-};
-
 /**
  * node_move 工具定义
  */
@@ -325,6 +246,105 @@ export const nodeReorderTool: Tool = {
 };
 
 /**
+ * node_replace 工具定义
+ */
+export const nodeReplaceTool: Tool = {
+  name: "node_replace",
+  description:
+    "全量替换节点字段。⚠️ 慎用：会覆盖整个字段内容。推荐优先使用 node_edit。使用前必须先 node_get 获取 contentHash。",
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+      nodeId: {
+        type: "string",
+        description: "节点 ID",
+      },
+      contentHash: {
+        type: "string",
+        description: "内容 hash（从 node_get 获取，用于防止并发覆盖）",
+      },
+      requirement: {
+        type: "string",
+        description: "可选，新的需求内容",
+      },
+      conclusion: {
+        type: "string",
+        description: "可选，新的结论内容",
+      },
+      notes: {
+        type: "string",
+        description: "可选，新的备注内容",
+      },
+    },
+    required: ["workspaceId", "nodeId", "contentHash"],
+  },
+};
+
+/**
+ * node_edit 工具定义
+ */
+export const nodeEditTool: Tool = {
+  name: "node_edit",
+  description: `精确替换节点字段中的特定文本。推荐用于局部修改。使用前必须先 node_get 获取 contentHash。
+
+**两种模式**:
+- string（默认）：按字符串匹配替换，需提供 old_str 和 new_str
+- line_range：按行范围替换，需提供 lineStart、lineEnd 和 new_str
+
+**互斥规则**:
+- mode=string 时：old_str 必填，禁止使用 lineStart/lineEnd
+- mode=line_range 时：lineStart/lineEnd 必填，禁止使用 old_str`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+      nodeId: {
+        type: "string",
+        description: "节点 ID",
+      },
+      contentHash: {
+        type: "string",
+        description: "内容 hash（从 node_get 获取，用于防止并发覆盖）",
+      },
+      field: {
+        type: "string",
+        enum: ["requirement", "conclusion", "notes"],
+        description: "要编辑的字段",
+      },
+      mode: {
+        type: "string",
+        enum: ["string", "line_range"],
+        description: "替换模式。string=按字符串匹配替换，line_range=按行范围替换。默认 string",
+      },
+      old_str: {
+        type: "string",
+        description: "要替换的原文（必须存在且唯一）。mode=string 时必填",
+      },
+      new_str: {
+        type: "string",
+        description: "替换后的新文",
+      },
+      lineStart: {
+        type: "number",
+        description: "起始行号（从1开始）。mode=line_range 时必填",
+      },
+      lineEnd: {
+        type: "number",
+        description: "结束行号（包含该行）。mode=line_range 时必填",
+      },
+    },
+    required: ["workspaceId", "nodeId", "contentHash", "field", "new_str"],
+  },
+};
+
+/**
  * 所有节点工具
  */
 export const nodeTools: Tool[] = [
@@ -332,7 +352,8 @@ export const nodeTools: Tool[] = [
   nodeGetTool,
   nodeListTool,
   nodeDeleteTool,
-  nodeUpdateTool,
   nodeMoveTool,
   nodeReorderTool,
+  nodeReplaceTool,
+  nodeEditTool,
 ];

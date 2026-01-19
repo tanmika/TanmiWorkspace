@@ -4,6 +4,7 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { TanmiError, ErrorCode } from "../../types/errors.js";
 import { getServices } from "../services.js";
+import { devLog } from "../../utils/devLog.js";
 
 /**
  * 错误码到 HTTP 状态码的映射
@@ -92,8 +93,14 @@ export async function errorHandler(
     return;
   }
 
-  // 未知错误
-  console.error("Unhandled error:", error);
+  // 未知错误（双重打印：console 供用户快速排查，devLog 供后台日志追踪）
+  const errMsg = `[HTTP] 未处理错误: ${error.message || "未知错误"}`;
+  console.error(errMsg, error);
+  devLog.error(errMsg, error, {
+    url: _request.url,
+    method: _request.method,
+    stack: error.stack,
+  });
   reply.status(500).send({
     error: {
       code: "INTERNAL_ERROR",

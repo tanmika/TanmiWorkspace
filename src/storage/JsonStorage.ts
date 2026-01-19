@@ -8,6 +8,7 @@ import type { WorkspaceIndex, WorkspaceConfig, WorkspaceEntry } from "../types/w
 import type { NodeGraph, NodeMeta, WorkflowPhase } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { generateWorkspaceDirName, generateNodeDirName, extractShortId } from "../utils/id.js";
+import { devLog } from "../utils/devLog.js";
 
 /**
  * JSON 存储封装
@@ -75,10 +76,11 @@ export class JsonStorage {
     if (this.compareVersion(index.version, JsonStorage.STORAGE_VERSION) > 0) {
       // 备份高版本 index，创建新的空 index
       await this.backupAndResetIndex(indexPath, index.version);
-      console.error(
-        `[version] 检测到高版本数据 (${index.version} > ${JsonStorage.STORAGE_VERSION})，` +
-        `已备份原 index 并创建空索引。请升级 tanmi-workspace 以访问原有工作区。`
-      );
+      // 双重打印：console 供用户立即看到，devLog 供后台日志追踪
+      const versionMsg = `[version] 检测到高版本数据 (${index.version} > ${JsonStorage.STORAGE_VERSION})，` +
+        `已备份原 index 并创建空索引。请升级 tanmi-workspace 以访问原有工作区。`;
+      console.error(versionMsg);
+      devLog.warn(versionMsg, { dataVersion: index.version, codeVersion: JsonStorage.STORAGE_VERSION });
       return {
         version: JsonStorage.STORAGE_VERSION,
         workspaces: []
@@ -136,7 +138,9 @@ export class JsonStorage {
     const oldVersion = index.version;
     const errors: { workspaceId: string; error: string }[] = [];
 
-    console.error(`[migration] 开始全量迁移 (${oldVersion} → ${JsonStorage.STORAGE_VERSION})...`);
+    const migrationStartMsg = `[migration] 开始全量迁移 (${oldVersion} → ${JsonStorage.STORAGE_VERSION})...`;
+    console.error(migrationStartMsg);
+    devLog.debug(migrationStartMsg, { oldVersion, newVersion: JsonStorage.STORAGE_VERSION });
 
     // 1. 迁移所有工作区（目录重命名 + graph.json）
     for (const ws of index.workspaces) {
@@ -165,14 +169,20 @@ export class JsonStorage {
     try {
       await this.writeIndex(index);
     } catch (e) {
-      console.error("[migration] 保存 index.json 失败:", e);
+      const saveErrorMsg = "[migration] 保存 index.json 失败";
+      console.error(saveErrorMsg, e);
+      devLog.error(saveErrorMsg, e instanceof Error ? e : undefined, { error: String(e) });
     }
 
     // 4. 报告迁移结果
     const successCount = index.workspaces.length - errors.length;
-    console.error(`[migration] 迁移完成: ${successCount}/${index.workspaces.length} 工作区成功`);
+    const completionMsg = `[migration] 迁移完成: ${successCount}/${index.workspaces.length} 工作区成功`;
+    console.error(completionMsg);
+    devLog.debug(completionMsg, { successCount, totalCount: index.workspaces.length });
     if (errors.length > 0) {
-      console.error(`[migration] 失败的工作区:`, errors.map(e => e.workspaceId).join(", "));
+      const failedMsg = `[migration] 失败的工作区: ${errors.map(e => e.workspaceId).join(", ")}`;
+      console.error(failedMsg);
+      devLog.warn(failedMsg, { errors });
     }
   }
 
@@ -361,8 +371,10 @@ export class JsonStorage {
         return match[1].trim();
       }
       return "节点";  // 默认标题
-    } catch {
-      return "节点";  // 读取失败使用默认标题
+    } catch (error) {
+      // 读取失败记录日志，使用默认标题
+      devLog.warn("[JsonStorage] 读取节点标题失败，使用默认值", { infoPath, error: error instanceof Error ? error.message : String(error) });
+      return "节点";
     }
   }
 
@@ -393,6 +405,8 @@ export class JsonStorage {
       if (shortId.length >= 6) {
         for (const entry of entries) {
           if (entry.includes(shortId)) {
+            // 警告：使用了兜底的 includes 匹配，可能存在误匹配风险
+            devLog.warn(`[migration] 使用兜底匹配查找目录: shortId=${shortId} → ${entry}`);
             return entry;
           }
         }

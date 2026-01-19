@@ -1,6 +1,6 @@
 ---
 title: Web 前端层 (Frontend Layer)
-description: Vue 3 Web 界面，包含视图、组件库和状态管理三个模块
+description: Vue 3 Web 界面，包含视图、组件库、状态管理和实时更新四个模块
 category: frontend
 ---
 
@@ -8,18 +8,23 @@ category: frontend
 
 ## 概述
 
-前端层提供 TanmiWorkspace 的 Web 可视化界面，基于 Vue 3 + TypeScript + Element Plus 构建。
+前端层提供 TanmiWorkspace 的 Web 可视化界面，基于 Vue 3 + TypeScript 构建，使用自定义 UI 组件。
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      web/src/                                │
-├──────────────┬───────────────┬───────────────┬──────────────┤
-│   views/     │  components/  │    stores/    │     api/     │
-│   页面视图   │    组件库     │   状态管理    │   API 封装   │
-└──────────────┴───────────────┴───────────────┴──────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        web/src/                                  │
+├──────────────┬───────────────┬───────────────┬──────────────────┤
+│   views/     │  components/  │    stores/    │   composables/   │
+│   页面视图   │    组件库     │   状态管理    │    组合式函数    │
+├──────────────┴───────────────┴───────────────┴──────────────────┤
+│                       api/ (HTTP 客户端)                         │
+└─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
-                    HTTP Server (/api)
+                  ┌───────────────────────┐
+                  │   HTTP Server (/api)  │
+                  │   SSE (/api/events)   │
+                  └───────────────────────┘
 ```
 
 ## 技术栈
@@ -30,8 +35,8 @@ category: frontend
 | TypeScript | 类型安全 |
 | Pinia | 状态管理 |
 | Vue Router | 路由管理 |
-| Element Plus | UI 组件库 |
-| Vite | 构建工具 |
+| Vite 7 | 构建工具 |
+| 自定义 UI | Ws* 组件库（无 Element Plus 依赖） |
 
 ## 目录结构
 
@@ -41,30 +46,78 @@ web/src/
 ├── App.vue              # 根组件
 ├── router/
 │   └── index.ts         # 路由配置
-├── stores/
+├── stores/              # Pinia 状态管理
 │   ├── index.ts         # Store 导出
 │   ├── workspace.ts     # 工作区状态
-│   └── node.ts          # 节点状态
+│   ├── node.ts          # 节点状态
+│   ├── memo.ts          # 备忘状态
+│   ├── settings.ts      # 设置状态
+│   ├── toast.ts         # Toast 通知状态
+│   └── service.ts       # 服务状态
+├── composables/         # 组合式函数
+│   └── useSSE.ts        # SSE 实时事件
 ├── views/
 │   ├── HomeView.vue     # 首页（工作区列表）
 │   ├── WorkspaceView.vue # 工作区详情页
 │   └── NotFoundView.vue # 404 页面
 ├── components/
-│   ├── common/          # 通用组件
-│   │   ├── MarkdownContent.vue
-│   │   └── StatusIcon.vue
+│   ├── ui/              # 自定义 UI 组件库
+│   │   ├── WsButton.vue
+│   │   ├── WsInput.vue
+│   │   ├── WsModal.vue
+│   │   ├── WsSelect.vue
+│   │   ├── WsToast.vue
+│   │   ├── WsConfirmDialog.vue
+│   │   ├── WsPromptDialog.vue
+│   │   ├── WsBadge.vue
+│   │   ├── WsEmpty.vue
+│   │   ├── WsCollapse.vue
+│   │   └── index.ts
+│   ├── tree/            # 树形节点组件
+│   │   ├── TreeNodeItem.vue
+│   │   ├── TreeChildren.vue
+│   │   ├── NodeIcon.vue
+│   │   ├── RoleBadge.vue
+│   │   ├── DispatchBadge.vue
+│   │   └── FocusCrosshair.vue
 │   ├── node/            # 节点相关组件
 │   │   ├── NodeTree.vue
 │   │   ├── NodeTreeGraph.vue
 │   │   └── NodeDetail.vue
-│   └── log/
-│       └── LogTimeline.vue
+│   ├── memo/            # 备忘组件
+│   │   ├── MemoDetail.vue
+│   │   └── MemoDrawerDetail.vue
+│   ├── dispatch/        # 派发相关对话框
+│   │   ├── EnableDispatchDialog.vue
+│   │   ├── DisableDispatchDialog.vue
+│   │   └── SwitchDispatchModeDialog.vue
+│   ├── graph/           # 图形视图组件
+│   │   └── GraphNode.vue
+│   ├── common/          # 通用组件
+│   │   ├── MarkdownContent.vue
+│   │   ├── CompactMarkdown.vue
+│   │   └── StatusIcon.vue
+│   ├── log/
+│   │   └── LogTimeline.vue
+│   ├── BackupManager.vue
+│   ├── SettingsModal.vue
+│   ├── ServiceUnavailable.vue
+│   ├── VersionMismatchWarning.vue
+│   ├── VersionUpdateNotification.vue
+│   ├── ManualOperationToast.vue
+│   └── IndexManagementModalNew.vue
 ├── api/
 │   ├── client.ts        # HTTP 客户端
 │   ├── workspace.ts     # 工作区 API
 │   ├── node.ts          # 节点 API
 │   ├── context.ts       # 上下文 API
-│   └── log.ts           # 日志 API
+│   ├── log.ts           # 日志 API
+│   └── settings.ts      # 设置 API
+├── utils/
+│   ├── errorReporter.ts # 错误上报
+│   ├── mermaid.ts       # Mermaid 图表渲染
+│   ├── theme.ts         # 主题管理
+│   └── treeLayout.ts    # 树布局计算
 └── types/
     └── index.ts         # 类型定义
 ```
@@ -77,57 +130,103 @@ web/src/
 
 | 视图 | 路由 | 说明 |
 |------|------|------|
-| `HomeView` | `/` | 工作区列表，支持创建/删除 |
-| `WorkspaceView` | `/workspace/:id` | 工作区详情，节点树 + 节点详情 |
+| `HomeView` | `/` | 工作区列表，支持创建/删除/归档 |
+| `WorkspaceView` | `/workspace/:id` | 工作区详情，节点树 + 节点详情 + 备忘 |
 | `NotFoundView` | `/*` | 404 页面 |
 
 **WorkspaceView 布局**:
 
 ```
-┌──────────────────────────────────────────────────────┐
-│ Header: 返回 | 工作区名称 | 信息栏开关 | 刷新 | 新建 │
-├──────────────────────────────────────────────────────┤
-│ Info Bar: 目标 | 进度条                              │
-├─────────────────┬────────────────────────────────────┤
-│                 │                                    │
-│  Sidebar        │  Content                           │
-│  - 视图切换     │  - NodeDetail                      │
-│  - NodeTree     │  - 需求/结论/备注                  │
-│  - 可拖动调整   │  - 日志时间线                      │
-│                 │                                    │
-└─────────────────┴────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ Header: 返回 | 工作区名称 | 派发开关 | 设置 | 刷新            │
+├──────────────────────────────────────────────────────────────┤
+│ Info Bar: 目标 | 进度条 | 派发状态指示                       │
+├─────────────────┬────────────────────────────────────────────┤
+│                 │                                            │
+│  Sidebar        │  Content                                   │
+│  - 视图切换     │  - NodeDetail / MemoDetail                 │
+│  - NodeTree     │  - 需求/验收标准/结论/备注                 │
+│  - 备忘列表     │  - 日志时间线                              │
+│  - 可拖动调整   │                                            │
+│                 │                                            │
+└─────────────────┴────────────────────────────────────────────┘
 ```
 
 ### Components (组件库)
 
 **目录**: `web/src/components/`
 
+#### UI 组件库 (ui/)
+
+自定义 UI 组件，无外部依赖。
+
+| 组件 | 说明 |
+|------|------|
+| `WsButton` | 按钮组件（支持 loading、disabled） |
+| `WsInput` | 输入框组件 |
+| `WsModal` | 模态框组件 |
+| `WsSelect` | 选择器组件 |
+| `WsToast` | Toast 通知组件 |
+| `WsConfirmDialog` | 确认对话框 |
+| `WsPromptDialog` | 输入对话框 |
+| `WsBadge` | 徽章组件 |
+| `WsEmpty` | 空状态组件 |
+| `WsCollapse` | 折叠面板组件 |
+
+#### 树形组件 (tree/)
+
+| 组件 | 说明 |
+|------|------|
+| `TreeNodeItem` | 单个树节点项 |
+| `TreeChildren` | 子节点容器 |
+| `NodeIcon` | 节点状态图标 |
+| `RoleBadge` | 节点角色徽章 |
+| `DispatchBadge` | 派发状态徽章 |
+| `FocusCrosshair` | 焦点十字标记 |
+
 #### 节点组件 (node/)
 
 | 组件 | 说明 |
 |------|------|
-| `NodeTree` | 树形列表视图，基于 el-tree |
+| `NodeTree` | 树形列表视图 |
 | `NodeTreeGraph` | 图形视图（可视化节点关系） |
-| `NodeDetail` | 节点详情面板 |
+| `NodeDetail` | 节点详情面板（需求、验收标准、结论、备注） |
 
-**NodeTree 特性**:
-- 状态 emoji 图标显示
-- 当前焦点标记（◄）
-- 选中高亮
-- 展开/折叠控制
+#### 备忘组件 (memo/)
+
+| 组件 | 说明 |
+|------|------|
+| `MemoDetail` | 备忘详情页 |
+| `MemoDrawerDetail` | 备忘抽屉详情 |
+
+#### 派发组件 (dispatch/)
+
+| 组件 | 说明 |
+|------|------|
+| `EnableDispatchDialog` | 启用派发模式对话框 |
+| `DisableDispatchDialog` | 禁用派发模式对话框 |
+| `SwitchDispatchModeDialog` | 切换派发模式对话框 |
 
 #### 通用组件 (common/)
 
 | 组件 | 说明 |
 |------|------|
 | `MarkdownContent` | Markdown 渲染 |
+| `CompactMarkdown` | 紧凑 Markdown 渲染 |
 | `StatusIcon` | 状态图标 |
 
-#### 日志组件 (log/)
+#### 其他组件
 
 | 组件 | 说明 |
 |------|------|
-| `LogTimeline` | 日志时间线显示 |
+| `BackupManager` | 备份管理器 |
+| `SettingsModal` | 设置模态框 |
+| `ServiceUnavailable` | 服务不可用提示 |
+| `VersionMismatchWarning` | 版本不匹配警告 |
+| `VersionUpdateNotification` | 版本更新通知 |
+| `ManualOperationToast` | 手动操作提示 |
+| `IndexManagementModalNew` | 索引管理模态框 |
+| `LogTimeline` | 日志时间线 |
 
 ### Stores (状态管理)
 
@@ -142,24 +241,9 @@ web/src/
 | `workspaces` | `WorkspaceEntry[]` | 工作区列表 |
 | `currentWorkspace` | `WorkspaceConfig` | 当前工作区配置 |
 | `currentGraph` | `NodeGraph` | 当前节点图 |
-| `currentStatus` | `StatusSummary` | 状态摘要 |
+| `dispatchConfig` | `DispatchConfig` | 派发配置 |
 | `loading` | `boolean` | 加载状态 |
 | `error` | `string` | 错误信息 |
-
-| 方法 | 说明 |
-|------|------|
-| `fetchWorkspaces(status?)` | 获取工作区列表 |
-| `fetchWorkspace(id)` | 获取工作区详情 |
-| `fetchStatus(id)` | 获取状态摘要 |
-| `createWorkspace(params)` | 创建工作区 |
-| `deleteWorkspace(id, force?)` | 删除工作区 |
-| `clearCurrent()` | 清空当前状态 |
-
-| 计算属性 | 说明 |
-|---------|------|
-| `activeWorkspaces` | 活动工作区列表 |
-| `archivedWorkspaces` | 归档工作区列表 |
-| `currentFocus` | 当前焦点节点 ID |
 
 #### nodeStore
 
@@ -169,13 +253,68 @@ web/src/
 | `selectedNodeId` | `string` | 选中节点 ID |
 | `selectedNode` | `NodeGetResult` | 选中节点详情 |
 
+#### memoStore
+
+| 状态 | 类型 | 说明 |
+|------|------|------|
+| `memos` | `MemoListItem[]` | 备忘列表 |
+| `selectedMemoId` | `string` | 选中备忘 ID |
+| `selectedMemo` | `Memo` | 选中备忘详情 |
+
+#### settingsStore
+
+| 状态 | 类型 | 说明 |
+|------|------|------|
+| `settings` | `Settings` | 应用设置 |
+| `theme` | `string` | 主题（light/dark） |
+
+#### toastStore
+
 | 方法 | 说明 |
 |------|------|
-| `fetchNodeTree()` | 获取节点树 |
-| `selectNode(id)` | 选择节点 |
-| `createNode(params)` | 创建节点 |
-| `deleteNode(id)` | 删除节点 |
-| `clearAll()` | 清空状态 |
+| `show(message, type)` | 显示 Toast |
+| `success(message)` | 成功提示 |
+| `error(message)` | 错误提示 |
+| `warning(message)` | 警告提示 |
+
+#### serviceStore
+
+| 状态 | 类型 | 说明 |
+|------|------|------|
+| `connected` | `boolean` | 服务连接状态 |
+| `version` | `string` | 后端版本 |
+
+### Composables (组合式函数)
+
+**目录**: `web/src/composables/`
+
+#### useSSE
+
+SSE 实时事件订阅。
+
+```typescript
+const { connected, subscribe, unsubscribe } = useSSE()
+
+// 订阅工作区事件
+subscribe('workspace_updated', (data) => {
+  // 处理工作区更新
+})
+
+// 订阅节点事件
+subscribe('node_updated', (data) => {
+  // 处理节点更新
+})
+```
+
+**支持的事件类型**:
+
+| 事件 | 说明 |
+|------|------|
+| `workspace_updated` | 工作区更新 |
+| `node_updated` | 节点更新 |
+| `focus_changed` | 焦点切换 |
+| `graph_changed` | 节点图变更 |
+| `memo_updated` | 备忘更新 |
 
 ### API (接口封装)
 
@@ -190,6 +329,7 @@ web/src/
 | `node.ts` | 节点相关 API |
 | `context.ts` | 上下文相关 API |
 | `log.ts` | 日志相关 API |
+| `settings.ts` | 设置相关 API |
 
 ## 路由配置
 
@@ -221,11 +361,16 @@ const routes = [
 
 ```typescript
 const STATUS_CONFIG = {
+  // 执行节点状态
   pending: { emoji: '⚪', color: '#909399', label: '待执行' },
   implementing: { emoji: '🔵', color: '#409eff', label: '执行中' },
   validating: { emoji: '🟡', color: '#e6a23c', label: '验证中' },
   completed: { emoji: '🟢', color: '#67c23a', label: '已完成' },
   failed: { emoji: '🔴', color: '#f56c6c', label: '失败' },
+  // 规划节点状态
+  planning: { emoji: '📋', color: '#409eff', label: '规划中' },
+  monitoring: { emoji: '👁️', color: '#e6a23c', label: '监控中' },
+  cancelled: { emoji: '⚫', color: '#909399', label: '已取消' },
 }
 ```
 
@@ -239,8 +384,14 @@ const STATUS_CONFIG = {
 
 ### 视图切换
 
-- 列表视图（默认）：el-tree 树形展示
+- 列表视图（默认）：自定义树形展示
 - 图形视图：可视化节点关系图
+
+### 实时更新
+
+- 基于 SSE 的实时事件推送
+- 自动重连机制
+- 多标签页同步
 
 ### 本地存储
 
@@ -248,11 +399,12 @@ const STATUS_CONFIG = {
 |-----|------|
 | `tanmi-workspace-view-mode` | 视图模式 (list/graph) |
 | `tanmi-workspace-sidebar-width` | 侧边栏宽度 |
+| `tanmi-workspace-theme` | 主题设置 |
 
 ## 构建与部署
 
 ```bash
-# 开发
+# 开发（需要 Node.js 20.19+）
 cd web && npm run dev
 
 # 构建
@@ -268,14 +420,23 @@ web/dist/  # 由 HTTP Server 静态托管
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useWorkspaceStore, useNodeStore } from '@/stores'
+import { useSSE } from '@/composables/useSSE'
 
 const workspaceStore = useWorkspaceStore()
 const nodeStore = useNodeStore()
+const { subscribe } = useSSE()
 
 onMounted(async () => {
   // 加载工作区
   await workspaceStore.fetchWorkspace('ws-xxx')
   await nodeStore.fetchNodeTree()
+
+  // 订阅实时更新
+  subscribe('node_updated', (data) => {
+    if (data.workspaceId === workspaceStore.currentWorkspace?.id) {
+      nodeStore.fetchNodeTree()
+    }
+  })
 })
 
 // 选择节点
