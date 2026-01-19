@@ -575,6 +575,9 @@ function installDispatchAgents(): void {
   updateInstallationMeta("claudeCode", "agents", "update");
 }
 
+// 废弃的 Skill 黑名单（用于清理旧版用户的残留文件）
+const DEPRECATED_SKILLS = ["bootstrapping-workspace", "starting-info-flow"];
+
 function installSkills(): void {
   info("安装 Skills 模板...");
 
@@ -596,6 +599,39 @@ function installSkills(): void {
   const skillsDestDir = join(CLAUDE_HOME, "skills");
   ensureDir(skillsDestDir);
 
+  // 获取当前版本
+  const require = createRequire(import.meta.url);
+  const pkg = require(join(PROJECT_ROOT, "package.json"));
+  const currentVersion = pkg.version as string;
+
+  // 1. 清理废弃的 Skill（黑名单，解决旧版用户残留）
+  for (const deprecated of DEPRECATED_SKILLS) {
+    const deprecatedPath = join(skillsDestDir, deprecated);
+    if (existsSync(deprecatedPath)) {
+      removeDir(deprecatedPath);
+      info(`  - 已删除废弃 Skill: ${deprecated}`);
+    }
+  }
+
+  // 2. 清理有标记但源不存在的 Skill（自动检测废弃）
+  if (existsSync(skillsDestDir)) {
+    const installedSkills = readdirSync(skillsDestDir).filter((name) => {
+      const fullPath = join(skillsDestDir, name);
+      return statSync(fullPath).isDirectory();
+    });
+    for (const skill of installedSkills) {
+      const skillPath = join(skillsDestDir, skill);
+      const markerPath = join(skillPath, ".tanmi-managed");
+      const existsInSource = existsSync(join(PLUGIN_SKILLS, skill));
+
+      if (existsSync(markerPath) && !existsInSource) {
+        removeDir(skillPath);
+        info(`  - 已删除废弃 Skill: ${skill}`);
+      }
+    }
+  }
+
+  // 3. 安装 Skill 并添加标记文件
   let count = 0;
   for (const skillName of skillDirs) {
     const skillSrcDir = join(PLUGIN_SKILLS, skillName);
@@ -609,6 +645,19 @@ function installSkills(): void {
       }
 
       copyDir(skillSrcDir, skillDestDir);
+
+      // 写入标记文件
+      const markerContent = JSON.stringify(
+        {
+          installedAt: new Date().toISOString(),
+          installedVersion: currentVersion,
+          source: "tanmi-workspace",
+        },
+        null,
+        2
+      );
+      writeFileSync(join(skillDestDir, ".tanmi-managed"), markerContent);
+
       info(`  - ${skillName}/`);
       count++;
     }
