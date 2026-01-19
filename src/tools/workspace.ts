@@ -245,7 +245,7 @@ export const workspaceHealthTool: Tool = {
  */
 export const signalTool: Tool = {
   name: "signal",
-  description: "内部状态同步工具",
+  description: "内部状态同步工具（由 flow-info/flow-design/flow-impl Skill 指导调用，请勿直接使用）",
   inputSchema: {
     type: "object",
     properties: {
@@ -255,7 +255,7 @@ export const signalTool: Tool = {
       },
       code: {
         type: "string",
-        description: "操作码",
+        description: "操作码（由 Skill 提供，请勿手动填写）",
       },
     },
     required: ["workspaceId", "code"],

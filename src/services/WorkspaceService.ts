@@ -88,6 +88,25 @@ interface TaskBoundary {
 }
 
 /**
+ * 有效的工作流阶段值
+ */
+const VALID_WORKFLOW_PHASES: ReadonlySet<WorkflowPhase> = new Set(["info", "design", "impl"]);
+
+/**
+ * 规范化工作流阶段值
+ * 如果传入无效值，返回 "info" 作为默认值
+ */
+function normalizeWorkflowPhase(phase: string | undefined | null): WorkflowPhase {
+  if (phase && VALID_WORKFLOW_PHASES.has(phase as WorkflowPhase)) {
+    return phase as WorkflowPhase;
+  }
+  if (phase && phase !== "info") {
+    devLog.warn(`检测到无效的 workflow.phase: "${phase}"，已重置为 "info"`);
+  }
+  return "info";
+}
+
+/**
  * 工作区服务
  * 处理工作区相关的业务逻辑
  *
@@ -2228,17 +2247,31 @@ Read(file_path: <返回的路径>/SKILL.md)
   private getTaskBoundary(graph: NodeGraph): TaskBoundary {
     const focusId = graph.currentFocus;
     const focusPath = new Set<string>();
-    const directChildren = new Set<string>();
+    const allDescendants = new Set<string>();
 
     if (focusId) {
+      // 向上收集 focusPath（从 focus 到 root）
       let currentId: string | null = focusId;
       while (currentId) {
         focusPath.add(currentId);
         const node: NodeMeta | undefined = graph.nodes[currentId];
         if (!node) break;
-        node.children?.forEach((childId: string) => directChildren.add(childId));
         if (currentId === "root" || !node.parentId) break;
         currentId = node.parentId;
+      }
+
+      // 递归收集所有后代节点
+      const collectDescendants = (nodeId: string) => {
+        const node = graph.nodes[nodeId];
+        if (!node?.children) return;
+        for (const childId of node.children) {
+          allDescendants.add(childId);
+          collectDescendants(childId);
+        }
+      };
+      // 从 focusPath 中的每个节点开始收集后代
+      for (const pathNodeId of focusPath) {
+        collectDescendants(pathNodeId);
       }
     } else {
       // 无聚焦节点，所有节点都在边界内
@@ -2247,8 +2280,8 @@ Read(file_path: <返回的路径>/SKILL.md)
 
     return {
       focusPath,
-      directChildren,
-      allRelevantNodes: new Set([...focusPath, ...directChildren]),
+      directChildren: allDescendants, // 保持字段名兼容，但实际包含所有后代
+      allRelevantNodes: new Set([...focusPath, ...allDescendants]),
     };
   }
 
@@ -2291,13 +2324,17 @@ Read(file_path: <返回的路径>/SKILL.md)
 
   /**
    * 验证 info → design
-   * 条件：信息节点需 completed（空集视为满足条件）
+   * 条件：信息节点需 completed 或 cancelled（空集视为满足条件）
+   * 注：cancelled 表示用户主动放弃，应允许继续；failed 需要处理
    */
   private validateInfoToDesign(nodes: NodeMeta[]): PhaseTransitionValidation {
     const infoNodes = nodes.filter(
       n => n.role === "info_collection" || n.role === "info_summary"
     );
-    const incompleteInfoNodes = infoNodes.filter(n => n.status !== "completed");
+    // 允许 completed 和 cancelled 状态通过
+    const incompleteInfoNodes = infoNodes.filter(
+      n => n.status !== "completed" && n.status !== "cancelled"
+    );
 
     if (incompleteInfoNodes.length > 0) {
       return {
@@ -2416,7 +2453,7 @@ Read(file_path: <返回的路径>/SKILL.md)
 
     // 3. 读取 graph.json
     const graph = await this.json.readGraph(projectRoot, dirName);
-    const currentPhase = graph.workflow?.phase || "info";
+    const currentPhase = normalizeWorkflowPhase(graph.workflow?.phase);
 
     // 4. 验证阶段转换
     const validation = this.validatePhaseTransition(graph, currentPhase, targetPhase);
@@ -2535,7 +2572,7 @@ Read(file_path: <返回的路径>/SKILL.md)
 
     const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
     const graph = await this.json.readGraph(projectRoot, dirName);
-    const phase = graph.workflow?.phase || "info";
+    const phase = normalizeWorkflowPhase(graph.workflow?.phase);
 
     // 规则1: info 阶段禁止创建 planning/execution 节点（需先完成信息收集）
     if (phase === "info" && (type === "planning" || type === "execution")) {
@@ -2563,24 +2600,7 @@ Read(file_path: <返回的路径>/SKILL.md)
       };
     }
 
-    // 规则3: info 阶段禁止创建重复信息节点
-    if (phase === "info" && (role === "info_collection" || role === "info_summary")) {
-      const hasActiveInfoNode = Object.values(graph.nodes).some(
-        (node) =>
-          (node.role === "info_collection" || node.role === "info_summary") &&
-          node.status !== "completed" &&
-          node.status !== "failed" &&
-          node.status !== "cancelled"
-      );
-      if (hasActiveInfoNode) {
-        return {
-          error: {
-            code: "PHASE_CONSTRAINT",
-            message: "已有进行中的信息收集流程，请先完成当前流程。",
-          },
-        };
-      }
-    }
+    // 注：重复信息节点检查已移至 capability_select，此处不再检查
 
     return null;
   }
@@ -2596,14 +2616,28 @@ Read(file_path: <返回的路径>/SKILL.md)
   ): Promise<{ error: { code: string; message: string } } | null> {
     const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
     const graph = await this.json.readGraph(projectRoot, dirName);
-    const phase = graph.workflow?.phase || "info";
+    const phase = normalizeWorkflowPhase(graph.workflow?.phase);
 
-    // 规则2: info/design 阶段禁止 dispatch_node
-    if (phase === "info" || phase === "design") {
+    // 规则: info/design 阶段禁止 dispatch_node
+    if (phase === "info") {
       return {
         error: {
           code: "PHASE_CONSTRAINT",
-          message: "只有实现阶段才能派发任务。请先调用 flow-impl 进入实现阶段。",
+          message: `只有实现阶段才能派发任务。当前处于信息阶段。
+
+- 调用 Skill(flow-info) 完成信息收集
+- 然后 Skill(flow-design) 进行规划
+- 最后 Skill(flow-impl) 进入实现阶段`,
+        },
+      };
+    }
+    if (phase === "design") {
+      return {
+        error: {
+          code: "PHASE_CONSTRAINT",
+          message: `只有实现阶段才能派发任务。当前处于设计阶段。
+
+- 完成规划后，调用 Skill(flow-impl) 进入实现阶段`,
         },
       };
     }

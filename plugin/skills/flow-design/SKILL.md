@@ -18,7 +18,7 @@ Before executing this skill, you MUST announce to the user:
 调用以下命令确认进入规划阶段：
 
 ```typescript
-signal(workspaceId: "...", code: "ZGVzaWdu")
+signal(workspaceId: "...", code: "VzaWdu")
 ```
 
 ---

@@ -27,6 +27,29 @@ const {
 } = require('./shared/index.cjs');
 
 // ============================================================================
+// 工作流阶段验证
+// ============================================================================
+
+/**
+ * 有效的工作流阶段值
+ */
+const VALID_WORKFLOW_PHASES = new Set(['info', 'design', 'impl']);
+
+/**
+ * 规范化工作流阶段值
+ * 如果传入无效值，返回 'info' 作为默认值
+ * @param {string|undefined|null} phase - 原始阶段值
+ * @returns {'info'|'design'|'impl'} 规范化后的阶段值
+ */
+function normalizeWorkflowPhase(phase) {
+  if (phase && VALID_WORKFLOW_PHASES.has(phase)) {
+    return phase;
+  }
+  // 无效值不记录日志（Hook 层应静默处理，主日志在 MCP 层）
+  return 'info';
+}
+
+// ============================================================================
 // Claude Code 专用响应格式
 // ============================================================================
 
@@ -116,7 +139,11 @@ function handleSessionStart(sessionId, binding, input) {
   if (binding) {
     // 已绑定：检测工作流状态
     const graph = getNodeGraph(binding.workspaceId);
-    const workflow = graph?.workflow || { phase: 'info', phaseSkillInvoked: false };
+    const rawWorkflow = graph?.workflow || { phase: 'info', phaseSkillInvoked: false };
+    const workflow = {
+      phase: normalizeWorkflowPhase(rawWorkflow.phase),
+      phaseSkillInvoked: rawWorkflow.phaseSkillInvoked || false
+    };
 
     if (!workflow.phaseSkillInvoked) {
       // 需要引导调用阶段 Skill
@@ -466,7 +493,7 @@ function handlePreToolUse(sessionId, binding, input) {
 
   // 读取 workflow 状态
   const graph = getNodeGraph(binding.workspaceId);
-  const phase = graph?.workflow?.phase || 'info';
+  const phase = normalizeWorkflowPhase(graph?.workflow?.phase);
 
   // Signal 工具阶段转换预检查（双重保障，主验证在 MCP 层）
   if (tool_name?.includes('signal')) {
@@ -584,11 +611,12 @@ function validateSignalPreCheck(graph, currentPhase, toolInput) {
     }
   }
 
-  // info → design：检查信息节点完成状态
+  // info → design：检查信息节点完成状态（允许 completed 和 cancelled）
   if (currentPhase === 'info' && targetPhase === 'design') {
     const incompleteInfo = nodes.filter(n =>
       (n.role === 'info_collection' || n.role === 'info_summary') &&
-      n.status !== 'completed'
+      n.status !== 'completed' &&
+      n.status !== 'cancelled'
     );
     if (incompleteInfo.length > 0) {
       const nodeNames = incompleteInfo.slice(0, 3).map(n => n.dirName || n.id).join(', ');

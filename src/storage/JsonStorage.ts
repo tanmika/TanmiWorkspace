@@ -706,11 +706,12 @@ export class JsonStorage {
       return 'impl';
     }
 
-    // 优先级2：有未完成的 planning 类型节点 → design
-    // 注意：检测 type === 'planning'，不是 role
+    // 优先级2：有未完成规划的 planning 类型节点 → design
+    // 注意：只有 pending/planning 状态才算"未完成规划"
+    // monitoring/completed/cancelled/failed 都算"已完成规划"（与 validateDesignToImpl 一致）
     const hasIncompletePlanning = nodeList.some(node =>
       node.type === 'planning' &&
-      node.status !== 'completed' &&
+      (node.status === 'pending' || node.status === 'planning') &&
       node.parentId !== null  // 排除根节点
     );
     if (hasIncompletePlanning) {

@@ -1286,7 +1286,7 @@ signal 是**内部状态同步工具**，用于确认进入工作流阶段。
 | 目标阶段 | 操作码 | 触发方式 |
 |---------|--------|----------|
 | info | aW5mbw | Skill(flow-info) 自动调用 |
-| design | ZGVzaWdu | Skill(flow-design) 自动调用 |
+| design | VzaWdu | Skill(flow-design) 自动调用 |
 | impl | aW1wbA | Skill(flow-impl) 自动调用 |
 
 **重要**：用户无需手动调用 signal，由 Skill 自动处理。

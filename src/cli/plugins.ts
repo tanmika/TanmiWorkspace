@@ -13,6 +13,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  appendFileSync,
   mkdirSync,
   cpSync,
   rmSync,
@@ -90,6 +91,24 @@ function warn(msg: string) {
 
 function error(msg: string) {
   console.log(`${colors.red("[ERROR]")} ${msg}`);
+}
+
+// 插件日志文件路径
+const PLUGIN_LOG_PATH = join(TANMI_HOME, "plugin-install.log");
+
+/**
+ * 持久化日志记录
+ * @param action 操作类型
+ * @param details 详细信息
+ */
+function logToFile(action: string, details: string): void {
+  try {
+    const timestamp = new Date().toISOString();
+    const logLine = `[${timestamp}] [${action}] ${details}\n`;
+    appendFileSync(PLUGIN_LOG_PATH, logLine);
+  } catch {
+    // 静默失败
+  }
 }
 
 // ============================================================================
@@ -450,17 +469,28 @@ function installClaudeHooks(): void {
   success(`Hook 脚本已安装到 ${hookDest}`);
 }
 
-/** TanmiWorkspace Hook 脚本路径标记，用于识别我们管理的 Hook */
-const TANMI_HOOK_MARKER = ".tanmi-workspace/scripts/hook-entry.cjs";
+/**
+ * TanmiWorkspace Hook 脚本路径标记，用于识别我们管理的 Hook
+ * 支持正式模式和开发模式两种路径
+ */
+const TANMI_HOOK_MARKERS = [
+  ".tanmi-workspace/scripts/hook-entry.cjs",     // 正式模式
+  ".tanmi-workspace-dev/scripts/hook-entry.cjs", // 开发模式
+];
 
 /**
  * 检查 Hook 条目是否由 TanmiWorkspace 管理
  * 通过检测 command 路径中是否包含 TanmiWorkspace 脚本标记来识别
+ *
+ * 匹配策略：command 必须包含完整的标记路径之一
+ *
  * @param hookEntry Hook 配置条目
  * @returns true 如果任意 hook 的 command 包含 TanmiWorkspace 标记
  */
 function isTanmiHook(hookEntry: { hooks?: Array<{ command?: string }> }): boolean {
-  return hookEntry.hooks?.some((h) => h.command?.includes(TANMI_HOOK_MARKER)) ?? false;
+  return hookEntry.hooks?.some((h) =>
+    h.command && TANMI_HOOK_MARKERS.some((marker) => h.command!.includes(marker))
+  ) ?? false;
 }
 
 function configureClaudeHooks(): void {
@@ -644,6 +674,7 @@ function installSkills(): void {
     if (existsSync(deprecatedPath)) {
       removeDir(deprecatedPath);
       info(`  - 已删除废弃 Skill: ${deprecated}`);
+      logToFile("SKILL_CLEANUP", `删除废弃 Skill (黑名单): ${deprecated}`);
     }
   }
 
@@ -661,6 +692,7 @@ function installSkills(): void {
       if (existsSync(markerPath) && !existsInSource) {
         removeDir(skillPath);
         info(`  - 已删除废弃 Skill: ${skill}`);
+        logToFile("SKILL_CLEANUP", `删除废弃 Skill (源不存在): ${skill}`);
       }
     }
   }
@@ -707,6 +739,7 @@ function installSkills(): void {
   }
 
   success(`已安装 ${count} 个 Skill 模板到 ${skillsDestDir}/`);
+  logToFile("SKILL_INSTALL", `安装 ${count} 个 Skill (v${currentVersion})`);
   updateInstallationMeta("claudeCode", "skills", "update");
 }
 
