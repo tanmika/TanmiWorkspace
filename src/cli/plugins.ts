@@ -449,6 +449,13 @@ function installClaudeHooks(): void {
   success(`Hook 脚本已安装到 ${hookDest}`);
 }
 
+// 识别是否为 TanmiWorkspace 管理的 Hook（通过 command 路径）
+const TANMI_HOOK_MARKER = ".tanmi-workspace/scripts/hook-entry.cjs";
+
+function isTanmiHook(hookEntry: { hooks?: Array<{ command?: string }> }): boolean {
+  return hookEntry.hooks?.some((h) => h.command?.includes(TANMI_HOOK_MARKER)) ?? false;
+}
+
 function configureClaudeHooks(): void {
   info("配置 Claude Code Hooks...");
 
@@ -457,7 +464,8 @@ function configureClaudeHooks(): void {
   const settings = readJsonFile(CLAUDE_SETTINGS);
   const hookScript = join(TANMI_SCRIPTS, "hook-entry.cjs");
 
-  const hooksConfig = {
+  // TanmiWorkspace 的 Hook 配置
+  const tanmiHooksConfig: Record<string, Array<{ matcher?: string; hooks: Array<{ type: string; command: string; timeout: number }> }>> = {
     SessionStart: [
       {
         matcher: "startup|clear|compact",
@@ -535,7 +543,24 @@ function configureClaudeHooks(): void {
     ],
   };
 
-  settings.hooks = hooksConfig;
+  // 深度合并：保留用户自定义 Hook，只替换 TanmiWorkspace 的 Hook
+  const existingHooks = (settings.hooks || {}) as Record<string, Array<{ matcher?: string; hooks?: Array<{ command?: string }> }>>;
+  const mergedHooks: Record<string, unknown[]> = {};
+
+  // 1. 保留用户的 Hook（非 TanmiWorkspace 管理的）
+  for (const [eventName, matchers] of Object.entries(existingHooks)) {
+    const userMatchers = matchers.filter((m) => !isTanmiHook(m));
+    if (userMatchers.length > 0) {
+      mergedHooks[eventName] = userMatchers;
+    }
+  }
+
+  // 2. 添加/更新 TanmiWorkspace 的 Hook
+  for (const [eventName, matchers] of Object.entries(tanmiHooksConfig)) {
+    mergedHooks[eventName] = [...(mergedHooks[eventName] || []), ...matchers];
+  }
+
+  settings.hooks = mergedHooks;
   writeJsonFile(CLAUDE_SETTINGS, settings);
 
   success(`Hooks 已配置到 ${CLAUDE_SETTINGS}`);
