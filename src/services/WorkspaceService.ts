@@ -266,6 +266,7 @@ export class WorkspaceService {
     index.workspaces.push({
       id: workspaceId,
       name: params.name,
+      goal: params.goal,
       dirName: wsDirName,
       projectRoot,
       status: "active",

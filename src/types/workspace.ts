@@ -28,6 +28,7 @@ export interface WorkspaceIndex {
 export interface WorkspaceEntry {
   id: string;                       // 工作区唯一标识
   name: string;                     // 工作区名称
+  goal?: string;                    // 工作区目标（可选，兼容旧数据）
   dirName: string;                  // 目录名（可读格式：名称_短ID）
   projectRoot: string;              // 项目根目录绝对路径
   status: WorkspaceStatus;          // 状态
