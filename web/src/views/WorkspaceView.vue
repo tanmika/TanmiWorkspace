@@ -5,10 +5,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useWorkspaceStore, useNodeStore, useSettingsStore, useToastStore, useMemoStore } from '@/stores'
 import { adminApi } from '@/api/admin'
 import { workspaceApi } from '@/api/workspace'
+import { searchApi } from '@/api/search'
 import { getGlobalSSE } from '@/composables/useSSE'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
+import NodeIcon from '@/components/tree/NodeIcon.vue'
+import type { NodeTreeItem, NodeType, NodeStatus } from '@/types'
 import MemoDetail from '@/components/memo/MemoDetail.vue'
 import MemoDrawerDetail from '@/components/memo/MemoDrawerDetail.vue'
 import EnableDispatchDialog from '@/components/dispatch/EnableDispatchDialog.vue'
@@ -529,6 +532,197 @@ const isExporting = ref(false)
 const showExportWarningDialog = ref(false)
 const exportWarnings = ref<string[]>([])
 
+// 节点搜索
+const searchQuery = ref('')
+const isSearching = ref(false)
+const showSearchDropdown = ref(false)
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+// 合并后的搜索结果类型
+interface MergedSearchResult {
+  type: 'node' | 'memo'
+  id: string
+  title: string
+  snippet: string  // 匹配内容片段
+  source: string   // 匹配来源
+  // 格式化后的片段（预计算）
+  formattedSnippet?: {
+    prefix: string
+    match: string
+    suffix: string
+  }
+  // 节点额外信息
+  nodeType?: NodeType
+  nodeStatus?: NodeStatus
+}
+
+// 来源标签映射
+const SOURCE_LABELS: Record<string, string> = {
+  title: '标题',
+  requirement: '需求',
+  conclusion: '结论',
+  summary: '摘要',
+  content: '内容',
+  tags: '标签',
+}
+
+const mergedSearchResults = ref<MergedSearchResult[]>([])
+
+// 格式化 snippet：高亮关键字，长文本截断（以关键字为中心）
+function formatSnippet(snippet: string, query: string, maxLen: number = 40): { prefix: string; match: string; suffix: string } | null {
+  if (!query || !snippet) return null
+
+  const lowerSnippet = snippet.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const idx = lowerSnippet.indexOf(lowerQuery)
+
+  if (idx === -1) {
+    // 没找到关键字，直接截断显示
+    if (snippet.length > maxLen) {
+      return { prefix: '', match: '', suffix: snippet.slice(0, maxLen) + '...' }
+    }
+    return { prefix: '', match: '', suffix: snippet }
+  }
+
+  // 找到关键字位置
+  const matchText = snippet.slice(idx, idx + query.length)
+  const beforeMatch = snippet.slice(0, idx)
+  const afterMatch = snippet.slice(idx + query.length)
+
+  // 计算前后文本长度限制（中文字符按2计算宽度）
+  const contextLen = Math.floor((maxLen - query.length) / 2)
+
+  let prefix = beforeMatch
+  let suffix = afterMatch
+
+  // 截断前缀（保留末尾部分，靠近关键字）
+  if (prefix.length > contextLen - 3) {  // 预留 "..." 的空间
+    prefix = '...' + prefix.slice(-(contextLen - 3))
+  }
+
+  // 截断后缀（保留开头部分，靠近关键字）
+  if (suffix.length > contextLen - 3) {  // 预留 "..." 的空间
+    suffix = suffix.slice(0, contextLen - 3) + '...'
+  }
+
+  return { prefix, match: matchText, suffix }
+}
+
+// 从 nodeTree 中查找节点信息
+function findNodeInTree(nodeId: string, tree: NodeTreeItem | null): NodeTreeItem | null {
+  if (!tree) return null
+  if (tree.id === nodeId) return tree
+  for (const child of tree.children) {
+    const found = findNodeInTree(nodeId, child)
+    if (found) return found
+  }
+  return null
+}
+
+// 搜索处理
+function handleSearchInput() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+
+  const query = searchQuery.value.trim()
+  if (!query) {
+    mergedSearchResults.value = []
+    showSearchDropdown.value = false
+    return
+  }
+
+  searchDebounceTimer = setTimeout(async () => {
+    await performSearch(query)
+  }, 300)
+}
+
+async function performSearch(query: string) {
+  if (!workspaceId.value || !query) return
+
+  isSearching.value = true
+  showSearchDropdown.value = true
+
+  try {
+    // 检测是否是 nodeId/memoId 搜索
+    const isIdSearch = /^(root|[a-z]+-[a-z0-9]+-[a-z0-9]+|memo-[a-z0-9]+-[a-z0-9]+)$/i.test(query.trim())
+
+    const result = await searchApi.contentSearch(workspaceId.value, {
+      query: isIdSearch ? '' : query,  // ID 搜索时不用 query
+      id: isIdSearch ? query.trim() : undefined,  // ID 搜索时用 id 参数
+      target: 'all',
+      limit: 30,
+      context: 0,
+    })
+
+    // 按 id 去重，保留第一个匹配（后端已按相关度排序，第一个最相关）
+    const seenIds = new Set<string>()
+    const results: MergedSearchResult[] = []
+
+    for (const match of result.matches) {
+      const id = match.type === 'node' ? match.nodeId! : match.memoId!
+      if (seenIds.has(id)) continue
+      seenIds.add(id)
+
+      const title = match.type === 'node' ? match.nodeTitle! : match.memoTitle!
+      const merged: MergedSearchResult = {
+        type: match.type,
+        id,
+        title,
+        snippet: match.snippet,
+        source: match.source,
+      }
+
+      // 预计算格式化片段（使用当前 query）
+      if (match.source !== 'title') {
+        const formatted = formatSnippet(match.snippet, isIdSearch ? '' : query)
+        if (formatted) {
+          merged.formattedSnippet = formatted
+        }
+      }
+
+      // 查找节点额外信息
+      if (match.type === 'node') {
+        const nodeInfo = findNodeInTree(id, nodeStore.nodeTree)
+        if (nodeInfo) {
+          merged.nodeType = nodeInfo.type
+          merged.nodeStatus = nodeInfo.status
+        }
+      }
+
+      results.push(merged)
+      if (results.length >= 10) break
+    }
+
+    mergedSearchResults.value = results
+  } catch (e) {
+    console.error('Search failed:', e)
+    mergedSearchResults.value = []
+  } finally {
+    isSearching.value = false
+  }
+}
+
+function handleSearchResultClick(result: MergedSearchResult) {
+  if (result.type === 'node') {
+    handleNodeSelect(result.id)
+  } else {
+    handleMemoSelect(result.id)
+  }
+  // 关闭搜索
+  searchQuery.value = ''
+  mergedSearchResults.value = []
+  showSearchDropdown.value = false
+}
+
+function closeSearchDropdown() {
+  showSearchDropdown.value = false
+}
+
+function handleSearchBlur() {
+  setTimeout(() => closeSearchDropdown(), 150)
+}
+
 async function handleExport() {
   if (!workspaceId.value) return
 
@@ -679,19 +873,74 @@ function closeExportWarningDialog() {
       <aside class="layout-sidebar" :style="{ width: sidebarWidth + 'px' }">
         <div class="sidebar-header">
           <h3>Task Tree</h3>
-          <div class="view-toggle">
-            <button
-              class="ws-btn view-btn"
-              :class="{ active: viewMode === 'list' }"
-              @click="setViewMode('list')"
-              title="列表视图"
-            >☰</button>
-            <button
-              class="ws-btn view-btn"
-              :class="{ active: viewMode === 'graph' }"
-              @click="setViewMode('graph')"
-              title="图形视图"
-            >◇</button>
+          <div class="sidebar-header-right">
+            <div class="search-wrapper">
+              <input
+                type="text"
+                class="search-input"
+                v-model="searchQuery"
+                @input="handleSearchInput"
+                @focus="searchQuery && (showSearchDropdown = true)"
+                @blur="handleSearchBlur"
+                placeholder="搜索..."
+              />
+              <span class="search-icon">⌕</span>
+              <!-- 搜索结果下拉 -->
+              <div v-if="showSearchDropdown" class="search-dropdown">
+                <div v-if="isSearching" class="search-loading">搜索中...</div>
+                <div v-else-if="mergedSearchResults.length === 0 && searchQuery" class="search-empty">无结果</div>
+                <div v-else class="search-results">
+                  <div
+                    v-for="result in mergedSearchResults"
+                    :key="`${result.type}-${result.id}`"
+                    class="search-result-item"
+                    @mousedown.prevent="handleSearchResultClick(result)"
+                  >
+                    <NodeIcon
+                      v-if="result.type === 'node' && result.nodeType && result.nodeStatus"
+                      :type="result.nodeType"
+                      :status="result.nodeStatus"
+                      class="result-icon"
+                    />
+                    <NodeIcon
+                      v-else-if="result.type === 'memo'"
+                      type="execution"
+                      status="pending"
+                      :isMemo="true"
+                      class="result-icon"
+                    />
+                    <span v-else class="result-type" :class="result.type">{{ result.type === 'node' ? 'N' : 'M' }}</span>
+                    <div class="result-content">
+                      <div class="result-title">{{ result.title }}</div>
+                      <div class="result-snippet" v-if="result.source !== 'title'">
+                        <span class="snippet-source">{{ SOURCE_LABELS[result.source] || result.source }}</span>
+                        <span class="snippet-sep">·</span>
+                        <span class="snippet-text" v-if="result.formattedSnippet">
+                          <span class="snippet-prefix">{{ result.formattedSnippet.prefix }}</span>
+                          <span class="snippet-match">{{ result.formattedSnippet.match }}</span>
+                          <span class="snippet-suffix">{{ result.formattedSnippet.suffix }}</span>
+                        </span>
+                        <span class="snippet-text" v-else>{{ result.snippet }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="view-toggle">
+              <button
+                class="ws-btn view-btn"
+                :class="{ active: viewMode === 'list' }"
+                @click="setViewMode('list')"
+                title="列表视图"
+              >☰</button>
+              <button
+                class="ws-btn view-btn"
+                :class="{ active: viewMode === 'graph' }"
+                @click="setViewMode('graph')"
+                title="图形视图"
+              >◇</button>
+            </div>
           </div>
         </div>
         <div class="sidebar-content">
@@ -1304,10 +1553,180 @@ function closeExportWarningDialog() {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.sidebar-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* 搜索样式 */
+.search-wrapper {
+  position: relative;
+  flex: 1;
+  max-width: 160px;
+}
+
+.search-wrapper .search-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px 0 24px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s, width 0.2s;
+}
+
+.search-wrapper .search-input:focus {
+  border-color: var(--border-heavy);
+}
+
+.search-wrapper .search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-wrapper .search-icon {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-heavy);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  max-height: 300px;
+  overflow-y: auto;
+  min-width: 280px;
+}
+
+[data-theme="dark"] .search-dropdown {
+  box-shadow: 4px 4px 0 rgba(255, 255, 255, 0.05);
+}
+
+.search-loading,
+.search-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.search-result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.15s;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover {
+  background: var(--bg-color);
+}
+
+.result-type {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--mono-font);
+}
+
+.result-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.result-type.node {
+  background: #3498DB;
+  color: #fff;
+}
+
+.result-type.memo {
+  background: #9B59B6;
+  color: #fff;
+}
+
+.result-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.result-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-snippet {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.snippet-source {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.snippet-sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.snippet-text {
+  /* 手动截断，不用 CSS ellipsis */
+}
+
+.snippet-prefix,
+.snippet-suffix {
+  color: var(--text-muted);
+}
+
+.snippet-match {
+  color: var(--accent-color, #E74C3C);
+  font-weight: 600;
 }
 
 .view-toggle {
   display: inline-flex;
+  flex-shrink: 0;
 }
 
 .view-toggle .ws-btn.view-btn {

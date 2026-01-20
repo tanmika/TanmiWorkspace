@@ -76,6 +76,7 @@ export interface DocRefWithStatus extends DocRef {
 export interface WorkspaceEntry {
   id: string
   name: string
+  goal?: string
   projectRoot: string
   status: WorkspaceStatus
   createdAt: string
@@ -532,4 +533,40 @@ export interface MemoListResult {
   memos: MemoListItem[]
   allTags: string[]
   hint?: string
+}
+
+// ========== 搜索类型 ==========
+
+/**
+ * 内容搜索输入参数
+ */
+export interface ContentSearchParams {
+  query: string
+  regex?: boolean
+  id?: string
+  target?: 'all' | 'node' | 'memo'
+  limit?: number
+  context?: number
+}
+
+/**
+ * 内容搜索匹配项
+ */
+export interface ContentSearchMatch {
+  type: 'node' | 'memo'
+  nodeId?: string
+  nodeTitle?: string
+  memoId?: string
+  memoTitle?: string
+  source: string  // title/requirement/conclusion/summary/content/tags
+  line?: number
+  snippet: string
+}
+
+/**
+ * 内容搜索结果
+ */
+export interface ContentSearchResult {
+  matches: ContentSearchMatch[]
+  hasMore: boolean
 }

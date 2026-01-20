@@ -419,12 +419,14 @@ const filteredWorkspaces = computed(() => {
     list = [...workspaceStore.workspaces]
   }
 
-  // 2. 搜索过滤（名称或路径）
+  // 2. 搜索过滤（ID、名称、路径或目标）
   if (searchQuery.value.trim()) {
     const query = searchQuery.value.toLowerCase().trim()
     list = list.filter(ws =>
+      ws.id.toLowerCase().includes(query) ||
       ws.name.toLowerCase().includes(query) ||
-      ws.projectRoot.toLowerCase().includes(query)
+      ws.projectRoot.toLowerCase().includes(query) ||
+      (ws.goal && ws.goal.toLowerCase().includes(query))
     )
   }
 
@@ -553,7 +555,7 @@ async function handleTogglePin(id: string, event: Event) {
           <div class="tab" :class="{ active: statusFilter === 'archived' }" @click="statusFilter = 'archived'">已归档</div>
           <div class="tab" :class="{ active: statusFilter === 'error' }" @click="statusFilter = 'error'">错误</div>
         </div>
-        <input type="text" class="search-input" v-model="searchQuery" placeholder="搜索名称或路径...">
+        <input type="text" class="search-input" v-model="searchQuery" placeholder="搜索 ID、名称、路径或目标...">
       </div>
       <div class="filter-right">
         <div class="custom-select" :class="{ open: sortSelectOpen }">

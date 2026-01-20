@@ -43,13 +43,13 @@ function createMatcher(query: string, regex: boolean): Matcher | { error: string
     }
     try {
       const re = new RegExp(query, "i");
-      return { test: (text: string) => re.test(text) };
+      return { test: (text: string) => text ? re.test(text) : false };
     } catch (e) {
       return { error: `正则语法错误: ${e instanceof Error ? e.message : String(e)}` };
     }
   } else {
     const lowerQuery = query.toLowerCase();
-    return { test: (text: string) => text.toLowerCase().includes(lowerQuery) };
+    return { test: (text: string) => text ? text.toLowerCase().includes(lowerQuery) : false };
   }
 }
 
@@ -139,12 +139,18 @@ export class SearchService {
   async contentSearch(params: ContentSearchParams): Promise<ContentSearchResult> {
     const { workspaceId, query, regex = false, id, target = "all", limit = 20, context = 1 } = params;
 
-    // 创建匹配器
-    const matcherResult = createMatcher(query, regex);
-    if ("error" in matcherResult) {
-      throw new TanmiError("INVALID_PARAMS", matcherResult.error);
+    // 创建匹配器（如果有 query）；无 query 时使用全匹配器（用于 ID 搜索）
+    let matcher: Matcher;
+    if (query) {
+      const matcherResult = createMatcher(query, regex);
+      if ("error" in matcherResult) {
+        throw new TanmiError("INVALID_PARAMS", matcherResult.error);
+      }
+      matcher = matcherResult;
+    } else {
+      // 无 query 时匹配所有内容（用于 ID 定位搜索）
+      matcher = { test: () => true };
     }
-    const matcher = matcherResult;
 
     // 获取工作区信息
     const index = await this.json.readIndex();
@@ -156,6 +162,8 @@ export class SearchService {
     const wsDirName = wsEntry.dirName || wsEntry.id;
     const isArchived = wsEntry.status === "archived";
 
+    // 收集所有匹配（内部限制防止内存问题）
+    const MAX_INTERNAL = 200;
     const matches: ContentSearchMatch[] = [];
 
     // 判断 id 类型
@@ -177,7 +185,7 @@ export class SearchService {
       }
 
       for (const nodeId of nodeIds) {
-        if (matches.length >= limit + 1) break;
+        if (matches.length >= MAX_INTERNAL) break;
 
         const nodeMeta = graph.nodes[nodeId];
         if (!nodeMeta) continue;
@@ -199,7 +207,7 @@ export class SearchService {
           }
 
           // 搜索需求
-          if (nodeInfo.requirement && matches.length < limit + 1) {
+          if (nodeInfo.requirement && matches.length < MAX_INTERNAL) {
             const reqMatch = this.findInTextWithMatcher(nodeInfo.requirement, matcher, context);
             if (reqMatch) {
               matches.push({
@@ -213,7 +221,7 @@ export class SearchService {
           }
 
           // 搜索结论
-          if (nodeInfo.conclusion && matches.length < limit + 1) {
+          if (nodeInfo.conclusion && matches.length < MAX_INTERNAL) {
             const conMatch = this.findInTextWithMatcher(nodeInfo.conclusion, matcher, context);
             if (conMatch) {
               matches.push({
@@ -245,7 +253,7 @@ export class SearchService {
       }
 
       for (const memoId of memoIds) {
-        if (matches.length >= limit + 1) break;
+        if (matches.length >= MAX_INTERNAL) break;
 
         const memoMeta = memos[memoId];
         if (!memoMeta) continue;
@@ -264,7 +272,7 @@ export class SearchService {
         }
 
         // 搜索摘要
-        if (memoMeta.summary && matches.length < limit + 1) {
+        if (memoMeta.summary && matches.length < MAX_INTERNAL) {
           if (matcher.test(memoMeta.summary)) {
             matches.push({
               type: "memo",
@@ -277,7 +285,7 @@ export class SearchService {
         }
 
         // 搜索标签
-        if (memoMeta.tags && matches.length < limit + 1) {
+        if (memoMeta.tags && matches.length < MAX_INTERNAL) {
           const matchedTag = memoMeta.tags.find(tag => matcher.test(tag));
           if (matchedTag) {
             matches.push({
@@ -291,14 +299,14 @@ export class SearchService {
         }
 
         // 搜索内容（带行号）
-        if (matches.length < limit + 1) {
+        if (matches.length < MAX_INTERNAL) {
           try {
             const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
             const content = await this.fs.readFile(contentPath);
             const contentMatches = this.findAllInTextWithMatcher(content, matcher, context);
 
             for (const match of contentMatches) {
-              if (matches.length >= limit + 1) break;
+              if (matches.length >= MAX_INTERNAL) break;
               matches.push({
                 type: "memo",
                 memoId,
@@ -314,6 +322,22 @@ export class SearchService {
         }
       }
     }
+
+    // 按相关度排序：标题匹配优先
+    const SOURCE_PRIORITY: Record<string, number> = {
+      title: 0,      // 最高优先级
+      summary: 1,
+      requirement: 2,
+      tags: 3,
+      conclusion: 4,
+      content: 5,    // 最低优先级
+    };
+
+    matches.sort((a, b) => {
+      const aPriority = SOURCE_PRIORITY[a.source] ?? 99;
+      const bPriority = SOURCE_PRIORITY[b.source] ?? 99;
+      return aPriority - bPriority;
+    });
 
     const hasMore = matches.length > limit;
     return {
