@@ -716,8 +716,8 @@ export class NodeService {
       children: [],
     };
 
-    // 检查深度限制
-    if (maxDepth !== undefined && currentDepth >= maxDepth) {
+    // 检查深度限制：-1 或 undefined 表示无限深度
+    if (maxDepth !== undefined && maxDepth >= 0 && currentDepth >= maxDepth) {
       return item;
     }
 
