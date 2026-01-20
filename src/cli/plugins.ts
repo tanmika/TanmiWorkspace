@@ -501,13 +501,32 @@ function installHooksGenerated(): void {
  * TanmiWorkspace Hook 脚本路径标记，用于识别我们管理的 Hook
  * 支持正式模式和开发模式两种路径
  */
-const TANMI_HOOK_MARKERS = [
+export const TANMI_HOOK_MARKERS = [
   ".tanmi-workspace/scripts/hook-entry.cjs",     // 正式模式
   ".tanmi-workspace-dev/scripts/hook-entry.cjs", // 开发模式
 ];
 
 /**
- * 检查 Hook 条目是否由 TanmiWorkspace 管理
+ * Cursor 版本的 TanmiWorkspace Hook 脚本路径标记
+ */
+export const TANMI_CURSOR_HOOK_MARKERS = [
+  ".tanmi-workspace/scripts/cursor-hook-entry.cjs",     // 正式模式
+  ".tanmi-workspace-dev/scripts/cursor-hook-entry.cjs", // 开发模式
+];
+
+/** Claude Code Hook 条目类型 */
+export interface ClaudeHookEntry {
+  matcher?: string;
+  hooks?: Array<{ type?: string; command?: string; timeout?: number }>;
+}
+
+/** Cursor Hook 条目类型 */
+export interface CursorHookEntry {
+  command?: string;
+}
+
+/**
+ * 检查 Hook 条目是否由 TanmiWorkspace 管理（Claude Code 版本）
  * 通过检测 command 路径中是否包含 TanmiWorkspace 脚本标记来识别
  *
  * 匹配策略：command 必须包含完整的标记路径之一
@@ -515,10 +534,130 @@ const TANMI_HOOK_MARKERS = [
  * @param hookEntry Hook 配置条目
  * @returns true 如果任意 hook 的 command 包含 TanmiWorkspace 标记
  */
-function isTanmiHook(hookEntry: { hooks?: Array<{ command?: string }> }): boolean {
+export function isTanmiHook(hookEntry: ClaudeHookEntry): boolean {
   return hookEntry.hooks?.some((h) =>
     h.command && TANMI_HOOK_MARKERS.some((marker) => h.command!.includes(marker))
   ) ?? false;
+}
+
+/**
+ * 检查 Cursor Hook 条目是否由 TanmiWorkspace 管理
+ * Cursor 的 hook 结构是 { command: string }，没有嵌套的 hooks 数组
+ *
+ * @param hookEntry Cursor Hook 配置条目
+ * @returns true 如果 command 包含 TanmiWorkspace Cursor 脚本标记
+ */
+export function isTanmiCursorHook(hookEntry: CursorHookEntry): boolean {
+  return hookEntry.command
+    ? TANMI_CURSOR_HOOK_MARKERS.some((marker) => hookEntry.command!.includes(marker))
+    : false;
+}
+
+/**
+ * 合并 Claude Code hooks 配置
+ * 保留用户自定义的 hook，添加/更新 TanmiWorkspace 的 hook
+ *
+ * @param existingHooks 现有的 hooks 配置
+ * @param tanmiHooksConfig TanmiWorkspace 的 hooks 配置
+ * @returns 合并后的 hooks 配置
+ */
+export function mergeClaudeHooks(
+  existingHooks: Record<string, ClaudeHookEntry[]>,
+  tanmiHooksConfig: Record<string, ClaudeHookEntry[]>
+): Record<string, ClaudeHookEntry[]> {
+  const mergedHooks: Record<string, ClaudeHookEntry[]> = {};
+
+  // 1. 保留用户的 Hook（非 TanmiWorkspace 管理的）
+  for (const [eventName, matchers] of Object.entries(existingHooks)) {
+    const userMatchers = matchers.filter((m) => !isTanmiHook(m));
+    if (userMatchers.length > 0) {
+      mergedHooks[eventName] = userMatchers;
+    }
+  }
+
+  // 2. 添加/更新 TanmiWorkspace 的 Hook
+  for (const [eventName, matchers] of Object.entries(tanmiHooksConfig)) {
+    mergedHooks[eventName] = [...(mergedHooks[eventName] || []), ...matchers];
+  }
+
+  return mergedHooks;
+}
+
+/**
+ * 从 Claude Code hooks 配置中移除 TanmiWorkspace 的 hook
+ * 保留用户自定义的 hook
+ *
+ * @param existingHooks 现有的 hooks 配置
+ * @returns 过滤后的 hooks 配置（只保留用户自定义的）
+ */
+export function filterOutTanmiClaudeHooks(
+  existingHooks: Record<string, ClaudeHookEntry[]>
+): Record<string, ClaudeHookEntry[]> {
+  const filteredHooks: Record<string, ClaudeHookEntry[]> = {};
+
+  for (const [eventName, matchers] of Object.entries(existingHooks)) {
+    const userMatchers = matchers.filter((m) => !isTanmiHook(m));
+    if (userMatchers.length > 0) {
+      filteredHooks[eventName] = userMatchers;
+    }
+  }
+
+  return filteredHooks;
+}
+
+/**
+ * 合并 Cursor hooks 配置
+ * 保留用户自定义的 hook，添加 TanmiWorkspace 的 hook
+ *
+ * @param existingHooks 现有的 hooks 配置
+ * @param tanmiHookEntry TanmiWorkspace 的 hook 条目
+ * @param eventNames 需要配置的事件名称列表
+ * @returns 合并后的 hooks 配置
+ */
+export function mergeCursorHooks(
+  existingHooks: Record<string, CursorHookEntry[]>,
+  tanmiHookEntry: CursorHookEntry,
+  eventNames: string[]
+): Record<string, CursorHookEntry[]> {
+  const mergedHooks: Record<string, CursorHookEntry[]> = { ...existingHooks };
+
+  for (const eventName of eventNames) {
+    const existing = mergedHooks[eventName] || [];
+    // 过滤掉已有的 TanmiWorkspace hook，保留用户自定义的
+    const userHooks = existing.filter((h) => !isTanmiCursorHook(h));
+    // 添加 TanmiWorkspace hook
+    mergedHooks[eventName] = [...userHooks, tanmiHookEntry];
+  }
+
+  return mergedHooks;
+}
+
+/**
+ * 从 Cursor hooks 配置中移除 TanmiWorkspace 的 hook
+ * 保留用户自定义的 hook
+ *
+ * @param existingHooks 现有的 hooks 配置
+ * @param eventNames 需要处理的事件名称列表
+ * @returns 过滤后的 hooks 配置（只保留用户自定义的）
+ */
+export function filterOutTanmiCursorHooks(
+  existingHooks: Record<string, CursorHookEntry[]>,
+  eventNames: string[]
+): Record<string, CursorHookEntry[]> {
+  const filteredHooks: Record<string, CursorHookEntry[]> = { ...existingHooks };
+
+  for (const eventName of eventNames) {
+    const existing = filteredHooks[eventName] || [];
+    const userHooks = existing.filter((h) => !isTanmiCursorHook(h));
+
+    if (userHooks.length > 0) {
+      filteredHooks[eventName] = userHooks;
+    } else {
+      delete filteredHooks[eventName];
+    }
+  }
+
+  return filteredHooks;
 }
 
 function configureClaudeHooks(): void {
@@ -621,23 +760,8 @@ function configureClaudeHooks(): void {
   };
 
   // 深度合并：保留用户自定义 Hook，只替换 TanmiWorkspace 的 Hook
-  const existingHooks = (settings.hooks || {}) as Record<string, Array<{ matcher?: string; hooks?: Array<{ command?: string }> }>>;
-  const mergedHooks: Record<string, unknown[]> = {};
-
-  // 1. 保留用户的 Hook（非 TanmiWorkspace 管理的）
-  for (const [eventName, matchers] of Object.entries(existingHooks)) {
-    const userMatchers = matchers.filter((m) => !isTanmiHook(m));
-    if (userMatchers.length > 0) {
-      mergedHooks[eventName] = userMatchers;
-    }
-  }
-
-  // 2. 添加/更新 TanmiWorkspace 的 Hook
-  for (const [eventName, matchers] of Object.entries(tanmiHooksConfig)) {
-    mergedHooks[eventName] = [...(mergedHooks[eventName] || []), ...matchers];
-  }
-
-  settings.hooks = mergedHooks;
+  const existingHooks = (settings.hooks || {}) as Record<string, ClaudeHookEntry[]>;
+  settings.hooks = mergeClaudeHooks(existingHooks, tanmiHooksConfig);
   writeJsonFile(CLAUDE_SETTINGS, settings);
 
   success(`Hooks 已配置到 ${CLAUDE_SETTINGS}`);
@@ -791,11 +915,28 @@ function uninstallClaudeHooks(): void {
     success(`已删除 ${hookPath}`);
   }
 
+  // 清理 hooks/generated 目录
+  const generatedDir = join(TANMI_HOOKS, "generated");
+  if (removeDir(generatedDir)) {
+    success(`已删除 ${generatedDir}`);
+  }
+
   if (existsSync(CLAUDE_SETTINGS)) {
     const settings = readJsonFile(CLAUDE_SETTINGS);
-    delete settings.hooks;
-    writeJsonFile(CLAUDE_SETTINGS, settings);
-    success(`已从 ${CLAUDE_SETTINGS} 移除 hooks 配置`);
+    const existingHooks = (settings.hooks || {}) as Record<string, ClaudeHookEntry[]>;
+
+    // 只删除 TanmiWorkspace 的 Hook，保留用户自定义的
+    const filteredHooks = filterOutTanmiClaudeHooks(existingHooks);
+
+    if (Object.keys(filteredHooks).length > 0) {
+      settings.hooks = filteredHooks;
+      writeJsonFile(CLAUDE_SETTINGS, settings);
+      success(`已从 ${CLAUDE_SETTINGS} 移除 TanmiWorkspace hooks（保留用户自定义 hooks）`);
+    } else {
+      delete settings.hooks;
+      writeJsonFile(CLAUDE_SETTINGS, settings);
+      success(`已从 ${CLAUDE_SETTINGS} 移除 hooks 配置`);
+    }
   }
 
   updateInstallationMeta("claudeCode", "hooks", "remove");
@@ -892,6 +1033,9 @@ function installCursorHooks(): void {
   success(`Hook 脚本已安装到 ${hookDest}`);
 }
 
+/** Cursor TanmiWorkspace 需要配置的 hook 事件 */
+const CURSOR_TANMI_HOOK_EVENTS = ["beforeSubmitPrompt", "afterMCPExecution"];
+
 function configureCursorHooks(): void {
   info("配置 Cursor Hooks...");
 
@@ -909,10 +1053,10 @@ function configureCursorHooks(): void {
     cursorConfig.hooks = {};
   }
 
-  const hooks = cursorConfig.hooks as Record<string, unknown>;
-  hooks.beforeSubmitPrompt = [{ command: `node "${hookScript}"` }];
-  hooks.afterMCPExecution = [{ command: `node "${hookScript}"` }];
+  const existingHooks = cursorConfig.hooks as Record<string, CursorHookEntry[]>;
+  const tanmiHookEntry: CursorHookEntry = { command: `node "${hookScript}"` };
 
+  cursorConfig.hooks = mergeCursorHooks(existingHooks, tanmiHookEntry, CURSOR_TANMI_HOOK_EVENTS);
   writeJsonFile(CURSOR_HOOKS, cursorConfig);
 
   success(`Hooks 已配置到 ${CURSOR_HOOKS}`);
@@ -929,12 +1073,20 @@ function uninstallCursorHooks(): void {
 
   if (existsSync(CURSOR_HOOKS)) {
     const cursorConfig = readJsonFile(CURSOR_HOOKS);
-    const hooks = cursorConfig.hooks as Record<string, unknown> | undefined;
+    const hooks = cursorConfig.hooks as Record<string, CursorHookEntry[]> | undefined;
+
     if (hooks) {
-      delete hooks.beforeSubmitPrompt;
-      delete hooks.afterMCPExecution;
+      const filteredHooks = filterOutTanmiCursorHooks(hooks, CURSOR_TANMI_HOOK_EVENTS);
+      const hasUserHooks = CURSOR_TANMI_HOOK_EVENTS.some((e) => filteredHooks[e]?.length > 0);
+
+      cursorConfig.hooks = filteredHooks;
       writeJsonFile(CURSOR_HOOKS, cursorConfig);
-      success(`已从 ${CURSOR_HOOKS} 移除 hooks 配置`);
+
+      if (hasUserHooks) {
+        success(`已从 ${CURSOR_HOOKS} 移除 TanmiWorkspace hooks（保留用户自定义 hooks）`);
+      } else {
+        success(`已从 ${CURSOR_HOOKS} 移除 hooks 配置`);
+      }
     }
   }
 
