@@ -1,20 +1,30 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import { FileSystemAdapter } from "../../src/storage/FileSystemAdapter.js";
-import { JsonStorage } from "../../src/storage/JsonStorage.js";
-import { MarkdownStorage } from "../../src/storage/MarkdownStorage.js";
-import { WorkspaceService } from "../../src/services/WorkspaceService.js";
-import { NodeService } from "../../src/services/NodeService.js";
 import { TanmiError } from "../../src/types/errors.js";
 
-// TODO: 测试需要隔离的全局索引（os.homedir() 返回真实目录）
-// 1. 所有测试共享同一个全局索引，导致数据污染
-// 2. NodeService.create 需要指定 type 参数
-describe.skip("NodeService", () => {
-  const testBasePath = `.test-tanmi-workspace-node-${crypto.randomUUID()}`;
-  const originalHome = process.env.HOME;
+// 为每个测试文件生成唯一的测试目录
+const testBasePath = `.test-tanmi-workspace-node-${crypto.randomUUID()}`;
+const mockHomeDir = path.join(process.cwd(), testBasePath, "home");
+
+// Mock os 模块，使 homedir() 返回测试专用目录
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    homedir: () => mockHomeDir,
+  };
+});
+
+// 动态导入依赖 os.homedir 的模块（在 mock 生效后）
+const { FileSystemAdapter } = await import("../../src/storage/FileSystemAdapter.js");
+const { JsonStorage } = await import("../../src/storage/JsonStorage.js");
+const { MarkdownStorage } = await import("../../src/storage/MarkdownStorage.js");
+const { WorkspaceService } = await import("../../src/services/WorkspaceService.js");
+const { NodeService } = await import("../../src/services/NodeService.js");
+
+describe("NodeService", () => {
   let basePath: string;
   let homeDir: string;
   let projectRoot: string;
@@ -24,6 +34,7 @@ describe.skip("NodeService", () => {
   let workspaceService: WorkspaceService;
   let nodeService: NodeService;
   let workspaceId: string;
+  let wsDirName: string;
 
   beforeEach(async () => {
     // 清理测试目录
@@ -35,8 +46,7 @@ describe.skip("NodeService", () => {
 
     basePath = path.join(process.cwd(), testBasePath);
     projectRoot = path.join(basePath, "project");
-    homeDir = path.join(basePath, "home");
-    process.env.HOME = homeDir;
+    homeDir = mockHomeDir;
 
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
 
@@ -57,10 +67,12 @@ describe.skip("NodeService", () => {
     });
     workspaceId = result.workspaceId;
     projectRoot = result.projectRoot;
+    // 从 path 中提取 wsDirName（用于 readGraph）
+    wsDirName = path.basename(result.path);
   });
 
   afterEach(async () => {
-    process.env.HOME = originalHome;
+    vi.restoreAllMocks();
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -69,6 +81,7 @@ describe.skip("NodeService", () => {
       const result = await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "execution",
         title: "子节点1",
         requirement: "需求描述",
       });
@@ -76,7 +89,7 @@ describe.skip("NodeService", () => {
       expect(result.nodeId).toMatch(/^node-/);
 
       // 验证节点已添加到图中
-      const graph = await json.readGraph(projectRoot, workspaceId);
+      const graph = await json.readGraph(projectRoot, wsDirName);
       expect(graph.nodes[result.nodeId]).toBeDefined();
       expect(graph.nodes["root"].children).toContain(result.nodeId);
     });
@@ -85,16 +98,18 @@ describe.skip("NodeService", () => {
       const child1 = await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "planning",
         title: "一级节点",
       });
 
       const child2 = await nodeService.create({
         workspaceId,
         parentId: child1.nodeId,
+        type: "execution",
         title: "二级节点",
       });
 
-      const graph = await json.readGraph(projectRoot, workspaceId);
+      const graph = await json.readGraph(projectRoot, wsDirName);
       expect(graph.nodes[child1.nodeId].children).toContain(child2.nodeId);
       expect(graph.nodes[child2.nodeId].parentId).toBe(child1.nodeId);
     });
@@ -104,6 +119,7 @@ describe.skip("NodeService", () => {
         nodeService.create({
           workspaceId,
           parentId: "root",
+          type: "execution",
           title: "invalid:title",
         })
       ).rejects.toThrow(TanmiError);
@@ -114,6 +130,7 @@ describe.skip("NodeService", () => {
         nodeService.create({
           workspaceId,
           parentId: "nonexistent",
+          type: "execution",
           title: "test",
         })
       ).rejects.toThrow(TanmiError);
@@ -124,6 +141,7 @@ describe.skip("NodeService", () => {
         nodeService.create({
           workspaceId: "nonexistent",
           parentId: "root",
+          type: "execution",
           title: "test",
         })
       ).rejects.toThrow(TanmiError);
@@ -135,6 +153,7 @@ describe.skip("NodeService", () => {
       const createResult = await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "execution",
         title: "测试节点",
         requirement: "需求",
       });
@@ -173,12 +192,14 @@ describe.skip("NodeService", () => {
       await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "execution",
         title: "节点A",
       });
 
       await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "execution",
         title: "节点B",
       });
 
@@ -192,12 +213,14 @@ describe.skip("NodeService", () => {
       const child1 = await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "planning",
         title: "一级",
       });
 
       await nodeService.create({
         workspaceId,
         parentId: child1.nodeId,
+        type: "execution",
         title: "二级",
       });
 
@@ -214,12 +237,14 @@ describe.skip("NodeService", () => {
       const child1 = await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "planning",
         title: "一级",
       });
 
       await nodeService.create({
         workspaceId,
         parentId: child1.nodeId,
+        type: "execution",
         title: "二级",
       });
 
@@ -238,6 +263,7 @@ describe.skip("NodeService", () => {
       const createResult = await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "execution",
         title: "待删除",
       });
 
@@ -250,7 +276,7 @@ describe.skip("NodeService", () => {
       expect(result.deletedNodes).toContain(createResult.nodeId);
 
       // 验证节点已从图中移除
-      const graph = await json.readGraph(projectRoot, workspaceId);
+      const graph = await json.readGraph(projectRoot, wsDirName);
       expect(graph.nodes[createResult.nodeId]).toBeUndefined();
     });
 
@@ -258,12 +284,14 @@ describe.skip("NodeService", () => {
       const parent = await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "planning",
         title: "父节点",
       });
 
       const child = await nodeService.create({
         workspaceId,
         parentId: parent.nodeId,
+        type: "execution",
         title: "子节点",
       });
 
@@ -289,6 +317,7 @@ describe.skip("NodeService", () => {
       const child = await nodeService.create({
         workspaceId,
         parentId: "root",
+        type: "execution",
         title: "子节点",
       });
 
@@ -297,7 +326,7 @@ describe.skip("NodeService", () => {
         nodeId: child.nodeId,
       });
 
-      const graph = await json.readGraph(projectRoot, workspaceId);
+      const graph = await json.readGraph(projectRoot, wsDirName);
       expect(graph.nodes["root"].children).not.toContain(child.nodeId);
     });
   });

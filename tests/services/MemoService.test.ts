@@ -1,20 +1,30 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import { FileSystemAdapter } from "../../src/storage/FileSystemAdapter.js";
-import { JsonStorage } from "../../src/storage/JsonStorage.js";
-import { MarkdownStorage } from "../../src/storage/MarkdownStorage.js";
-import { WorkspaceService } from "../../src/services/WorkspaceService.js";
-import { MemoService } from "../../src/services/MemoService.js";
 import { TanmiError } from "../../src/types/errors.js";
 
-// TODO: 测试需要更新以匹配当前的业务逻辑
-// 1. MemoService.create 现在要求 tags ≥ 2
-// 2. 需要隔离的全局索引
-describe.skip("MemoService", () => {
-  const testBasePath = `.test-tanmi-workspace-memo-${crypto.randomUUID()}`;
-  const originalHome = process.env.HOME;
+// 为每个测试文件生成唯一的测试目录
+const testBasePath = `.test-tanmi-workspace-memo-${crypto.randomUUID()}`;
+const mockHomeDir = path.join(process.cwd(), testBasePath, "home");
+
+// Mock os 模块，使 homedir() 返回测试专用目录
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    homedir: () => mockHomeDir,
+  };
+});
+
+// 动态导入依赖 os.homedir 的模块（在 mock 生效后）
+const { FileSystemAdapter } = await import("../../src/storage/FileSystemAdapter.js");
+const { JsonStorage } = await import("../../src/storage/JsonStorage.js");
+const { MarkdownStorage } = await import("../../src/storage/MarkdownStorage.js");
+const { WorkspaceService } = await import("../../src/services/WorkspaceService.js");
+const { MemoService } = await import("../../src/services/MemoService.js");
+
+describe("MemoService", () => {
   let basePath: string;
   let homeDir: string;
   let projectRoot: string;
@@ -24,6 +34,7 @@ describe.skip("MemoService", () => {
   let workspaceService: WorkspaceService;
   let memoService: MemoService;
   let workspaceId: string;
+  let wsDirName: string;
 
   beforeEach(async () => {
     try {
@@ -32,11 +43,10 @@ describe.skip("MemoService", () => {
 
     basePath = path.join(process.cwd(), testBasePath);
     projectRoot = path.join(basePath, "project");
-    homeDir = path.join(basePath, "home");
-    process.env.HOME = homeDir;
+    homeDir = mockHomeDir;
 
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
-    
+
     // Create the project directory before calling init
     await fs.mkdir(projectRoot, { recursive: true });
 
@@ -53,10 +63,11 @@ describe.skip("MemoService", () => {
     });
     workspaceId = result.workspaceId;
     projectRoot = result.projectRoot;
+    wsDirName = path.basename(result.path);
   });
 
   afterEach(async () => {
-    process.env.HOME = originalHome;
+    vi.restoreAllMocks();
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -74,22 +85,33 @@ describe.skip("MemoService", () => {
       expect(result.path).toContain("memos/");
       expect(result.hint).toContain("memo://");
 
-      const graph = await json.readGraph(projectRoot, workspaceId);
+      const graph = await json.readGraph(projectRoot, wsDirName);
       expect(graph.memos).toBeDefined();
       expect(graph.memos![result.memoId]).toBeDefined();
       expect(graph.memos![result.memoId].title).toBe("Test Memo");
     });
 
-    it("should create memo without tags", async () => {
-      const result = await memoService.create({
-        workspaceId,
-        title: "No Tags",
-        summary: "No tags",
-        content: "Content",
-      });
+    it("should require at least 2 tags", async () => {
+      // 没有 tags 应该抛出错误
+      await expect(
+        memoService.create({
+          workspaceId,
+          title: "No Tags",
+          summary: "No tags",
+          content: "Content",
+        })
+      ).rejects.toThrow(TanmiError);
 
-      const graph = await json.readGraph(projectRoot, workspaceId);
-      expect(graph.memos![result.memoId].tags).toEqual([]);
+      // 只有 1 个 tag 也应该抛出错误
+      await expect(
+        memoService.create({
+          workspaceId,
+          title: "One Tag",
+          summary: "One tag only",
+          content: "Content",
+          tags: ["single"],
+        })
+      ).rejects.toThrow(TanmiError);
     });
 
     it("should throw error for nonexistent workspace", async () => {
@@ -99,6 +121,7 @@ describe.skip("MemoService", () => {
           title: "Test",
           summary: "Summary",
           content: "Content",
+          tags: ["test", "error"],
         })
       ).rejects.toThrow(TanmiError);
     });
@@ -111,7 +134,7 @@ describe.skip("MemoService", () => {
         title: "Memo1",
         summary: "Summary1",
         content: "Content1",
-        tags: ["tag1"],
+        tags: ["tag1", "list"],
       });
 
       await memoService.create({
@@ -119,7 +142,7 @@ describe.skip("MemoService", () => {
         title: "Memo2",
         summary: "Summary2",
         content: "Content2",
-        tags: ["tag2"],
+        tags: ["tag2", "list"],
       });
 
       const result = await memoService.list({ workspaceId });
@@ -143,7 +166,7 @@ describe.skip("MemoService", () => {
         title: "MemoB",
         summary: "SummaryB",
         content: "ContentB",
-        tags: ["beta"],
+        tags: ["beta", "common"],
       });
 
       const result = await memoService.list({
@@ -170,7 +193,7 @@ describe.skip("MemoService", () => {
         title: "Full Memo",
         summary: "Summary",
         content: "Full content here",
-        tags: ["full"],
+        tags: ["full", "get"],
       });
 
       const result = await memoService.get({
@@ -194,26 +217,33 @@ describe.skip("MemoService", () => {
     });
   });
 
-  describe("update", () => {
-    it("should update all fields", async () => {
+  describe("replace", () => {
+    it("should replace all fields with contentHash", async () => {
       const createResult = await memoService.create({
         workspaceId,
         title: "Old Title",
         summary: "Old Summary",
         content: "Old Content",
-        tags: ["old"],
+        tags: ["old", "update"],
       });
 
-      const updateResult = await memoService.update({
+      // 先获取 contentHash
+      const getBeforeResult = await memoService.get({
         workspaceId,
         memoId: createResult.memoId,
+      });
+
+      const replaceResult = await memoService.replace({
+        workspaceId,
+        memoId: createResult.memoId,
+        contentHash: getBeforeResult.contentHash,
         title: "New Title",
         summary: "New Summary",
         content: "New Content",
-        tags: ["new"],
+        tags: ["new", "updated"],
       });
 
-      expect(updateResult.success).toBe(true);
+      expect(replaceResult.success).toBe(true);
 
       const getResult = await memoService.get({
         workspaceId,
@@ -223,20 +253,29 @@ describe.skip("MemoService", () => {
       expect(getResult.memo.title).toBe("New Title");
       expect(getResult.memo.summary).toBe("New Summary");
       expect(getResult.memo.content).toBe("New Content");
-      expect(getResult.memo.tags).toEqual(["new"]);
+      expect(getResult.memo.tags).toEqual(["new", "updated"]);
     });
 
-    it("should support partial update", async () => {
+    it("should support partial replace (content required)", async () => {
       const createResult = await memoService.create({
         workspaceId,
         title: "Original",
         summary: "Original Summary",
         content: "Original Content",
+        tags: ["original", "partial"],
       });
 
-      await memoService.update({
+      const getBeforeResult = await memoService.get({
         workspaceId,
         memoId: createResult.memoId,
+      });
+
+      // replace 需要 content 参数，只更新 title
+      await memoService.replace({
+        workspaceId,
+        memoId: createResult.memoId,
+        contentHash: getBeforeResult.contentHash,
+        content: "Original Content",  // 保持原内容
         title: "Changed Title",
       });
 
@@ -249,14 +288,16 @@ describe.skip("MemoService", () => {
       expect(result.memo.summary).toBe("Original Summary");
     });
 
-    it("should throw error for nonexistent memo", async () => {
-      await expect(
-        memoService.update({
-          workspaceId,
-          memoId: "memo-nonexistent",
-          title: "New",
-        })
-      ).rejects.toThrow(TanmiError);
+    it("should return error for nonexistent memo", async () => {
+      const result = await memoService.replace({
+        workspaceId,
+        memoId: "memo-nonexistent",
+        contentHash: "dummy",
+        title: "New",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("不存在");
     });
   });
 
@@ -267,6 +308,7 @@ describe.skip("MemoService", () => {
         title: "To Delete",
         summary: "Will be deleted",
         content: "Content",
+        tags: ["delete", "test"],
       });
 
       const deleteResult = await memoService.delete({
@@ -276,7 +318,7 @@ describe.skip("MemoService", () => {
 
       expect(deleteResult.success).toBe(true);
 
-      const graph = await json.readGraph(projectRoot, workspaceId);
+      const graph = await json.readGraph(projectRoot, wsDirName);
       expect(graph.memos![createResult.memoId]).toBeUndefined();
 
       await expect(

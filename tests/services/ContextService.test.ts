@@ -1,20 +1,32 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import { FileSystemAdapter } from "../../src/storage/FileSystemAdapter.js";
-import { JsonStorage } from "../../src/storage/JsonStorage.js";
-import { MarkdownStorage } from "../../src/storage/MarkdownStorage.js";
-import { WorkspaceService } from "../../src/services/WorkspaceService.js";
-import { NodeService } from "../../src/services/NodeService.js";
-import { MemoService } from "../../src/services/MemoService.js";
-import { ContextService } from "../../src/services/ContextService.js";
-import { ReferenceService } from "../../src/services/ReferenceService.js";
 
-// TODO: 测试需要隔离的全局索引（os.homedir() 返回真实目录）
-describe.skip("ContextService - Memo References", () => {
-  const originalHome = process.env.HOME;
-  let testBasePath: string;
+// 为每个测试文件生成唯一的测试目录
+const testBasePath = `.test-tanmi-workspace-context-${crypto.randomUUID()}`;
+const mockHomeDir = path.join(process.cwd(), testBasePath, "home");
+
+// Mock os 模块，使 homedir() 返回测试专用目录
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    homedir: () => mockHomeDir,
+  };
+});
+
+// 动态导入依赖 os.homedir 的模块（在 mock 生效后）
+const { FileSystemAdapter } = await import("../../src/storage/FileSystemAdapter.js");
+const { JsonStorage } = await import("../../src/storage/JsonStorage.js");
+const { MarkdownStorage } = await import("../../src/storage/MarkdownStorage.js");
+const { WorkspaceService } = await import("../../src/services/WorkspaceService.js");
+const { NodeService } = await import("../../src/services/NodeService.js");
+const { MemoService } = await import("../../src/services/MemoService.js");
+const { ContextService } = await import("../../src/services/ContextService.js");
+const { ReferenceService } = await import("../../src/services/ReferenceService.js");
+
+describe("ContextService - Memo References", () => {
   let basePath: string;
   let homeDir: string;
   let projectRoot: string;
@@ -29,16 +41,13 @@ describe.skip("ContextService - Memo References", () => {
   let workspaceId: string;
 
   beforeEach(async () => {
-    testBasePath = `.test-tanmi-workspace-context-${crypto.randomUUID()}`;
-
     try {
       await fs.rm(testBasePath, { recursive: true, force: true });
     } catch {}
 
     basePath = path.join(process.cwd(), testBasePath);
     projectRoot = path.join(basePath, "project");
-    homeDir = path.join(basePath, "home");
-    process.env.HOME = homeDir;
+    homeDir = mockHomeDir;
 
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
     
@@ -65,10 +74,8 @@ describe.skip("ContextService - Memo References", () => {
   });
 
   afterEach(async () => {
-    process.env.HOME = originalHome;
-    if (basePath) {
-      await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
-    }
+    vi.restoreAllMocks();
+    await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
   });
 
   describe("context_get with memo references", () => {
@@ -148,7 +155,7 @@ describe.skip("ContextService - Memo References", () => {
         title: "Memo 1",
         summary: "First memo",
         content: "Content of first memo",
-        tags: ["tag1"],
+        tags: ["tag1", "multiple"],
       });
 
       const memo2Result = await memoService.create({
@@ -156,7 +163,7 @@ describe.skip("ContextService - Memo References", () => {
         title: "Memo 2",
         summary: "Second memo",
         content: "Content of second memo",
-        tags: ["tag2"],
+        tags: ["tag2", "multiple"],
       });
 
       await referenceService.reference({
@@ -236,7 +243,7 @@ describe.skip("ContextService - Memo References", () => {
         title: "Referenced Memo",
         summary: "A memo to be referenced",
         content: "Memo content",
-        tags: ["ref"],
+        tags: ["ref", "mixed"],
       });
 
       await referenceService.reference({

@@ -1,18 +1,29 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import { FileSystemAdapter } from "../../src/storage/FileSystemAdapter.js";
-import { JsonStorage } from "../../src/storage/JsonStorage.js";
-import { MarkdownStorage } from "../../src/storage/MarkdownStorage.js";
-import { WorkspaceService } from "../../src/services/WorkspaceService.js";
 import { TanmiError } from "../../src/types/errors.js";
 
-// TODO: 测试需要隔离的全局索引（os.homedir() 返回真实目录）
-// 所有测试共享同一个全局索引，导致数据污染
-describe.skip("WorkspaceService", () => {
-  const testBasePath = `.test-tanmi-workspace-ws-${crypto.randomUUID()}`;
-  const originalHome = process.env.HOME;
+// 为每个测试文件生成唯一的测试目录
+const testBasePath = `.test-tanmi-workspace-ws-${crypto.randomUUID()}`;
+const mockHomeDir = path.join(process.cwd(), testBasePath, "home");
+
+// Mock os 模块，使 homedir() 返回测试专用目录
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    homedir: () => mockHomeDir,
+  };
+});
+
+// 动态导入依赖 os.homedir 的模块（在 mock 生效后）
+const { FileSystemAdapter } = await import("../../src/storage/FileSystemAdapter.js");
+const { JsonStorage } = await import("../../src/storage/JsonStorage.js");
+const { MarkdownStorage } = await import("../../src/storage/MarkdownStorage.js");
+const { WorkspaceService } = await import("../../src/services/WorkspaceService.js");
+
+describe("WorkspaceService", () => {
   let basePath: string;
   let homeDir: string;
   let projectRoot: string;
@@ -31,8 +42,7 @@ describe.skip("WorkspaceService", () => {
 
     basePath = path.join(process.cwd(), testBasePath);
     projectRoot = path.join(basePath, "project");
-    homeDir = path.join(basePath, "home");
-    process.env.HOME = homeDir;
+    homeDir = mockHomeDir;
 
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
 
@@ -46,7 +56,7 @@ describe.skip("WorkspaceService", () => {
   });
 
   afterEach(async () => {
-    process.env.HOME = originalHome;
+    vi.restoreAllMocks();
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -93,9 +103,10 @@ describe.skip("WorkspaceService", () => {
         projectRoot,
       });
 
-      const wsData = await md.readWorkspaceMd(projectRoot, result.workspaceId);
-      expect(wsData.rules).toContain("规则1");
-      expect(wsData.docs).toHaveLength(1);
+      // 使用 service.get 验证（内部会正确解析 dirName）
+      const wsResult = await service.get({ workspaceId: result.workspaceId });
+      expect(wsResult.workspaceMd).toContain("规则1");
+      expect(wsResult.workspaceMd).toContain("/doc/readme.md");
     });
   });
 
@@ -125,7 +136,9 @@ describe.skip("WorkspaceService", () => {
       const result = await service.get({ workspaceId: initResult.workspaceId });
 
       expect(result.config.name).toBe("test");
-      expect(result.graph.nodes["root"]).toBeDefined();
+      // API 变更：现在返回 topology 而不是 graph.nodes
+      expect(result.topology).toBeDefined();
+      expect(result.topology.id).toBe("root");
       expect(result.workspaceMd).toContain("test");
     });
 

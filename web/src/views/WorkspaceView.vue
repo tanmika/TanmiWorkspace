@@ -127,6 +127,64 @@ const effectiveSelectedId = computed(() => {
   return selectedMemoId.value
 })
 
+// 同步选中状态到 URL（使用 replace 避免产生历史记录）
+function syncSelectionToUrl() {
+  const query: Record<string, string> = {}
+
+  if (selectedType.value === 'node' && nodeStore.selectedNodeId) {
+    query.node = nodeStore.selectedNodeId
+  } else if (selectedType.value === 'memo' && selectedMemoId.value) {
+    query.memo = selectedMemoId.value
+  } else if (selectedType.value === 'memo-drawer') {
+    query.memo = 'drawer'
+  }
+
+  // 只在 query 有变化时更新
+  const currentQuery = route.query
+  const needsUpdate =
+    (query.node !== currentQuery.node) ||
+    (query.memo !== currentQuery.memo)
+
+  if (needsUpdate) {
+    router.replace({ query: Object.keys(query).length ? query : undefined })
+  }
+}
+
+// 从 URL 恢复选中状态
+async function restoreSelectionFromUrl() {
+  const queryNode = route.query.node as string | undefined
+  const queryMemo = route.query.memo as string | undefined
+
+  if (queryNode) {
+    try {
+      selectedType.value = 'node'
+      selectedMemoId.value = null
+      await nodeStore.selectNode(queryNode)
+    } catch (e) {
+      // 节点不存在或加载失败，清除 URL 参数
+      toastStore.warning('节点不存在', '该节点可能已被删除')
+      router.replace({ query: undefined })
+    }
+  } else if (queryMemo) {
+    if (queryMemo === 'drawer') {
+      selectedType.value = 'memo-drawer'
+      selectedMemoId.value = null
+      nodeStore.clearSelection()
+    } else {
+      // 验证 memo 是否存在
+      const memoExists = memoStore.memos.some(m => m.id === queryMemo)
+      if (memoExists) {
+        selectedType.value = 'memo'
+        selectedMemoId.value = queryMemo
+        nodeStore.clearSelection()
+      } else {
+        toastStore.warning('草稿不存在', '该草稿可能已被删除')
+        router.replace({ query: undefined })
+      }
+    }
+  }
+}
+
 // 加载工作区数据
 async function loadWorkspace() {
   try {
@@ -250,8 +308,11 @@ async function handleFocusCurrent() {
 watch(workspaceId, loadWorkspace)
 
 // 初始加载
-onMounted(() => {
-  loadWorkspace()
+onMounted(async () => {
+  await loadWorkspace()
+
+  // 从 URL 恢复选中状态
+  await restoreSelectionFromUrl()
 
   // 连接 SSE 并监听更新事件
   const sse = getGlobalSSE()
@@ -340,6 +401,7 @@ function handleNodeSelect(nodeId: string) {
   selectedType.value = 'node'
   selectedMemoId.value = null
   nodeStore.selectNode(nodeId)
+  syncSelectionToUrl()
 }
 
 // 选择 memo
@@ -347,6 +409,7 @@ function handleMemoSelect(memoId: string) {
   selectedType.value = 'memo'
   selectedMemoId.value = memoId
   nodeStore.clearSelection()
+  syncSelectionToUrl()
 }
 
 // 统一处理树选择（区分节点、memo 和 memo-drawer）
@@ -369,6 +432,7 @@ function handleMemoDrawerClick() {
   selectedType.value = 'memo-drawer'
   selectedMemoId.value = null
   nodeStore.clearSelection()
+  syncSelectionToUrl()
 }
 
 // 从抽屉详情选择具体 memo
@@ -381,6 +445,7 @@ async function handleMemoDeleted() {
   // 清除选中状态，返回到抽屉视图
   selectedMemoId.value = null
   selectedType.value = 'memo-drawer'
+  syncSelectionToUrl()
   // 刷新 memo 列表
   if (workspaceStore.currentWorkspace?.id) {
     await memoStore.fetchMemos(workspaceStore.currentWorkspace.id)

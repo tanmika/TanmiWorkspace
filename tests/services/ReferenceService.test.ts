@@ -1,20 +1,32 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import { FileSystemAdapter } from "../../src/storage/FileSystemAdapter.js";
-import { JsonStorage } from "../../src/storage/JsonStorage.js";
-import { MarkdownStorage } from "../../src/storage/MarkdownStorage.js";
-import { WorkspaceService } from "../../src/services/WorkspaceService.js";
-import { NodeService } from "../../src/services/NodeService.js";
-import { MemoService } from "../../src/services/MemoService.js";
-import { ReferenceService } from "../../src/services/ReferenceService.js";
 import { TanmiError } from "../../src/types/errors.js";
 
-// TODO: 测试需要隔离的全局索引（os.homedir() 返回真实目录）
-describe.skip("ReferenceService - Memo Reference", () => {
-  let testBasePath: string;
-  const originalHome = process.env.HOME;
+// 为每个测试文件生成唯一的测试目录
+const testBasePath = `.test-tanmi-workspace-ref-${crypto.randomUUID()}`;
+const mockHomeDir = path.join(process.cwd(), testBasePath, "home");
+
+// Mock os 模块，使 homedir() 返回测试专用目录
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    homedir: () => mockHomeDir,
+  };
+});
+
+// 动态导入依赖 os.homedir 的模块（在 mock 生效后）
+const { FileSystemAdapter } = await import("../../src/storage/FileSystemAdapter.js");
+const { JsonStorage } = await import("../../src/storage/JsonStorage.js");
+const { MarkdownStorage } = await import("../../src/storage/MarkdownStorage.js");
+const { WorkspaceService } = await import("../../src/services/WorkspaceService.js");
+const { NodeService } = await import("../../src/services/NodeService.js");
+const { MemoService } = await import("../../src/services/MemoService.js");
+const { ReferenceService } = await import("../../src/services/ReferenceService.js");
+
+describe("ReferenceService - Memo Reference", () => {
   let basePath: string;
   let homeDir: string;
   let projectRoot: string;
@@ -30,12 +42,13 @@ describe.skip("ReferenceService - Memo Reference", () => {
   let testNodeId: string;
 
   beforeEach(async () => {
-    testBasePath = ".test-tanmi-workspace-ref-" + crypto.randomUUID();
-    
+    try {
+      await fs.rm(testBasePath, { recursive: true, force: true });
+    } catch {}
+
     basePath = path.join(process.cwd(), testBasePath);
     projectRoot = path.join(basePath, "project");
-    homeDir = path.join(basePath, "home");
-    process.env.HOME = homeDir;
+    homeDir = mockHomeDir;
 
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
     await fs.mkdir(projectRoot, { recursive: true });
@@ -72,7 +85,7 @@ describe.skip("ReferenceService - Memo Reference", () => {
   });
 
   afterEach(async () => {
-    process.env.HOME = originalHome;
+    vi.restoreAllMocks();
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -83,7 +96,7 @@ describe.skip("ReferenceService - Memo Reference", () => {
         title: "Test Memo",
         summary: "Test Summary",
         content: "Test Content",
-        tags: ["test"],
+        tags: ["test", "reference"],
       });
 
       const memoRef = "memo://" + memoResult.memoId;
@@ -102,7 +115,7 @@ describe.skip("ReferenceService - Memo Reference", () => {
       const addedRef = refResult.references.find(r => r.path === memoRef);
       expect(addedRef).toBeDefined();
       expect(addedRef?.description).toBe("Test memo reference");
-      expect(addedRef?.status).toBe("active");
+      // status 字段是可选的，新增引用时不设置
 
       const graph = await json.readGraph(projectRoot, wsDirName);
       expect(graph.nodes[testNodeId].references).toContain(memoRef);
@@ -114,6 +127,7 @@ describe.skip("ReferenceService - Memo Reference", () => {
         title: "Test Memo",
         summary: "Test Summary",
         content: "Test Content",
+        tags: ["test", "remove"],
       });
 
       const memoRef = "memo://" + memoResult.memoId;
@@ -154,45 +168,7 @@ describe.skip("ReferenceService - Memo Reference", () => {
       ).rejects.toThrow(TanmiError);
     });
 
-    it("should support expire and activate actions on memo references", async () => {
-      const memoResult = await memoService.create({
-        workspaceId,
-        title: "Test Memo",
-        summary: "Test Summary",
-        content: "Test Content",
-      });
-
-      const memoRef = "memo://" + memoResult.memoId;
-
-      await referenceService.reference({
-        workspaceId,
-        nodeId: testNodeId,
-        targetIdOrPath: memoRef,
-        action: "add",
-      });
-
-      const expireResult = await referenceService.reference({
-        workspaceId,
-        nodeId: testNodeId,
-        targetIdOrPath: memoRef,
-        action: "expire",
-      });
-
-      expect(expireResult.success).toBe(true);
-      const expiredRef = expireResult.references.find(r => r.path === memoRef);
-      expect(expiredRef?.status).toBe("expired");
-
-      const activateResult = await referenceService.reference({
-        workspaceId,
-        nodeId: testNodeId,
-        targetIdOrPath: memoRef,
-        action: "activate",
-      });
-
-      expect(activateResult.success).toBe(true);
-      const activeRef = activateResult.references.find(r => r.path === memoRef);
-      expect(activeRef?.status).toBe("active");
-    });
+    // Note: expire/activate actions 已从 API 中移除，仅支持 add/remove
 
     it("should handle multiple memo references", async () => {
       const memo1 = await memoService.create({
@@ -200,6 +176,7 @@ describe.skip("ReferenceService - Memo Reference", () => {
         title: "Memo 1",
         summary: "Summary 1",
         content: "Content 1",
+        tags: ["memo", "first"],
       });
 
       const memo2 = await memoService.create({
@@ -207,6 +184,7 @@ describe.skip("ReferenceService - Memo Reference", () => {
         title: "Memo 2",
         summary: "Summary 2",
         content: "Content 2",
+        tags: ["memo", "second"],
       });
 
       const memoRef1 = "memo://" + memo1.memoId;
@@ -242,6 +220,7 @@ describe.skip("ReferenceService - Memo Reference", () => {
         title: "Test Memo",
         summary: "Test Summary",
         content: "Test Content",
+        tags: ["test", "duplicate"],
       });
 
       const memoRef = "memo://" + memoResult.memoId;
