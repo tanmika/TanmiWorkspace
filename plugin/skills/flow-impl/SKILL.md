@@ -124,19 +124,46 @@ config_set({
 
 ## 第五步：执行任务
 
-### 5.1 直接执行流程
+### 5.1 执行节点完成条件
+
+exec 节点完成前必须满足：
+
+| 条件 | 说明 |
+|------|------|
+| 需求完成 | requirement 中描述的工作全部完成 |
+| 验收通过 | 所有 acceptanceCriteria 逐条验证通过 |
+| 无遗留 | 无 TODO/FIXME 标记 |
+| 测试通过 | 相关测试全部通过 |
+| conclusion 已填写 | 记录实际完成的工作和关键决策 |
+
+**无法完成时**：
+- 标记为 `failed`
+- 详尽记录 problem（失败原因、尝试过的方案、卡点）
+- 评估是否可解决，无法解决时必须与用户商讨核对需求
+
+### 5.2 操作记录要求
+
+执行过程中，对每个操作记录：
+- **修改位置**：文件路径、函数/类名
+- **修改目的**：为什么做这个修改
+- 记录到节点的 log 中
+
+### 5.3 直接执行流程
 
 ```
 node_transition(action="start")  → implementing
     ↓
 执行任务（Write/Edit/Bash）
+  - 每个操作记录修改位置和目的
     ↓
-验证结果（运行测试、检查）
+逐条核对 acceptanceCriteria
+  - 全部通过 → 继续
+  - 有未通过 → 修复或标记 failed
     ↓
 node_transition(action="complete", conclusion="...")  → completed
 ```
 
-### 5.2 派发执行流程
+### 5.4 派发执行流程
 
 ```
 dispatch_node(nodeId)  → 升级为派发母节点
@@ -152,7 +179,7 @@ Skill(dispatching-parent)  → 执行派发流程
 node_transition(action="complete")  → completed
 ```
 
-### 5.3 节点状态机（执行节点）
+### 5.5 节点状态机（执行节点）
 
 ```
 pending ─start→ implementing ─submit→ validating ─complete→ completed
@@ -166,6 +193,132 @@ pending ─start→ implementing ─submit→ validating ─complete→ complete
 
 **静止态**：`pending`, `completed`, `failed`
 **非静止态**：`implementing`, `validating`
+
+---
+
+## 场景执行指导
+
+根据任务场景类型，遵循对应的执行要点。
+
+**通用原则**：严格遵循需求计划。如果需求计划间出现矛盾或冲突，**立即停止并核查**，与用户确认后再继续。
+
+### Feature 场景
+
+**执行顺序**：测试定义 → 功能实现 → 集成验证
+
+1. **测试定义节点**
+   - 编写测试用例，定义接口输入输出
+   - 记录：测试文件位置、覆盖的接口列表
+   - 验收：测试可运行但失败（红灯状态）
+
+2. **功能实现节点**
+   - 严格按测试用例实现功能
+   - 每个修改记录位置和目的
+   - 添加足量日志便于后续追踪
+   - 验收：所有测试通过（绿灯状态）
+
+3. **集成验证节点**
+   - 运行所有现有测试
+   - 检查日志输出是否符合预期
+   - 核对实现是否符合规划目标
+   - 验收：无回归 + 计划核对通过
+
+### Debug 场景
+
+**执行顺序**：问题复现 → 根因定位 → 修复实现 → 回归验证
+
+1. **问题复现节点**
+   - 按记录的复现条件执行
+   - 确认问题确实存在且可稳定复现
+   - 记录：复现步骤、环境信息、错误现象
+   - 验收：问题可稳定复现
+
+2. **根因定位节点**
+   - 调试追踪，记录调试过程到 notes
+   - 记录：排查路径、排除的可能性、最终定位
+   - 验收：明确根因位置和原因
+
+3. **修复实现节点**
+   - 针对根因修复代码
+   - 记录修改位置和目的
+   - 验收：复现条件下问题不再出现
+
+4. **回归验证节点**
+   - 运行所有现有测试
+   - 确认修复没有引入新问题
+   - 验收：所有测试通过
+
+**特殊情况处理**：
+- 修复后问题仍存在 → 回到根因定位重新分析
+- 回归发现新问题 → 返回 design 阶段重新分析
+
+### Optimize 场景
+
+**执行顺序**：基准测量 → 优化实现 → 效果验证 → 回归验证
+
+1. **基准测量节点**
+   - 建立性能基准，记录当前指标
+   - 记录：测量方法、环境条件、具体数值/截图
+   - 验收：有明确可对比的基准数据
+
+2. **优化实现节点**
+   - 按优化方案实施修改
+   - 记录修改位置和目的
+   - 验收：代码修改完成
+
+3. **效果验证节点**
+   - 用相同方法和环境重新测量
+   - 对比优化前后数据
+   - 记录：优化效果、提升幅度
+   - 验收：达到预期优化目标
+
+4. **回归验证节点**
+   - 运行所有现有测试
+   - 确认优化没有影响功能
+   - 验收：所有测试通过
+
+**特殊情况处理**：
+- 效果未达标 → 返回 design 阶段重新分析瓶颈
+- 回归发现问题 → 返回 design 阶段
+
+### Summary 场景
+
+**执行顺序**：分主题执行 → 完整性验证
+
+1. **分主题执行节点**（每个主题）
+   - 收集该主题相关信息
+   - 整理归纳，形成结构化内容
+   - 记录：信息来源、整理方法
+   - **结论要求**：详尽记录，假设用户只看节点来获取信息
+   - 验收：主题内容完整且结构清晰
+
+2. **完整性验证节点**
+   - 核对所有主题是否覆盖要求
+   - 如需 MEMO，汇总生成最终报告
+   - 验收：覆盖所有要求 + 产出符合约定形式
+
+**特殊情况处理**：
+- 发现某主题规模过大 → 立即停止，向用户提出，同意后转换到 design 阶段分解
+- 禁止在执行阶段自行分解任务
+
+**结论详尽性要求**：
+- 每个节点的 conclusion 必须包含完整信息
+- 用户应能仅通过阅读节点 conclusion 理解全部内容
+- 不能依赖"见 MEMO"等引用，关键信息必须在 conclusion 中体现
+
+### Misc 场景
+
+**通用执行要点**：
+
+1. **按规划的任务结构执行**
+   - 严格按规划顺序执行各节点
+   - 每个节点记录修改位置和目的
+   - 结论详尽记录
+
+2. **异常处理**
+   - 遵循需求计划，发现矛盾立即停止核查
+   - 发现规模过大 → 转 design 阶段分解
+   - 发现问题 → 标记 failed 并记录 problem
 
 ---
 
@@ -290,11 +443,18 @@ node_transition({
 1. MUST call signal first - 确认进入执行阶段
 2. MUST show task list and ask user - 展示任务并询问执行模式
 3. MUST follow node state machine - 按状态机流转节点状态
-4. MUST stop on major issues - 发现重大问题立刻停止
-5. MUST ensure static state before phase change - 转换阶段前所有节点必须静止态
-6. MUST complete planning nodes manually - planning 节点需手动完成并填写结论
-7. NEVER create planning nodes - 执行阶段禁止创建规划节点
-8. NEVER force phase change with non-static nodes - 有非静止态节点时禁止转换阶段
+4. MUST verify all acceptanceCriteria - 完成前逐条核对验收标准
+5. MUST record operations - 每个操作记录修改位置和目的到 log
+6. MUST record user answers in notes - 用户的所有回答用 notes 记录（不是 log）
+7. MUST mark failed with detailed problem - 无法完成时标记 failed 并详尽记录 problem
+8. MUST discuss unsolvable issues with user - 无法解决的问题必须与用户商讨核对需求
+9. MUST stop on major issues - 发现重大问题立刻停止
+10. MUST ensure static state before phase change - 转换阶段前所有节点必须静止态
+11. MUST complete planning nodes manually - planning 节点需手动完成并填写结论
+12. NEVER create planning nodes - 执行阶段禁止创建规划节点
+13. NEVER force phase change with non-static nodes - 有非静止态节点时禁止转换阶段
+14. NEVER mark complete without all criteria passed - 验收标准未全部通过禁止标记完成
+15. MUST use node_reference for citations - 引用 MEMO 或文档必须使用 node_reference，禁止直接引用
 
 ---
 
@@ -303,10 +463,16 @@ node_transition({
 1. 跳过 signal 直接开始 → 阶段状态未同步
 2. 不展示任务直接执行 → 用户失去选择权
 3. 不询问执行模式 → 默认行为可能不符合用户期望
-4. 发现问题继续执行 → 可能造成更大问题
-5. 有非静止态节点时转换阶段 → 违反状态约束
-6. planning 节点无结论直接标记完成 → 丢失汇总信息
-7. 忽略失败任务直接结束 → 未处理的失败会累积
+4. 不记录操作位置和目的 → 无法追溯修改原因
+5. 验收标准未全部通过就标记完成 → 节点质量不达标
+6. failed 节点不记录详细 problem → 无法后续分析
+7. 无法解决的问题不与用户商讨 → 可能方向错误
+8. 发现问题继续执行 → 可能造成更大问题
+9. 有非静止态节点时转换阶段 → 违反状态约束
+10. planning 节点无结论直接标记完成 → 丢失汇总信息
+11. 忽略失败任务直接结束 → 未处理的失败会累积
+12. 用 log 记录用户回答 → 应使用 notes
+13. 直接引用 MEMO 或文档 → 必须使用 node_reference 建立引用关系
 
 ---
 

@@ -71,6 +71,7 @@ capability_list({ workspaceId: "ws-xxx" })
 - basePack：直接说「我将执行」，不问用户
 - optionalPack：用 abc 序号，方便用户输入
 - MUST 等待用户响应后再调用 capability_select
+- MUST 用 **notes** 记录用户回答（不是 log）
 
 ### 3.3 创建信息节点
 
@@ -205,7 +206,9 @@ Skill(flow-design)
 6. MUST call Skill before node start - 启动前必须调用能力 Skill
 7. MUST complete info node - 能力完成后必须完成信息节点
 8. MUST show design and ask user - 展示方案并获得用户允许才能转换阶段
-9. NEVER modify code - 信息阶段禁止 Write/Edit
+9. MUST record user answers in notes - 用户的所有回答必须用 notes 记录（不是 log）
+10. MUST use node_reference for citations - 引用 MEMO 或文档必须使用 node_reference，禁止直接引用
+11. NEVER modify code - 信息阶段禁止 Write/Edit
 
 ---
 
@@ -219,3 +222,5 @@ Skill(flow-design)
 6. 信息阶段时修改代码 → 违反职责边界
 7. 不展示方案直接进入下一阶段 → 用户失去确认权
 8. 用户要求补充时直接进入下一阶段 → 忽略用户需求
+9. 用 log 记录用户回答 → 应使用 notes（log 用于工作记录，notes 用于用户输入）
+10. 直接引用 MEMO 或文档 → 必须使用 node_reference 建立引用关系
