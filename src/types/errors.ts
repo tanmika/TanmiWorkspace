@@ -19,6 +19,7 @@ export const ErrorCodes = {
   PARENT_NOT_FOUND: "PARENT_NOT_FOUND",
   INVALID_TITLE: "INVALID_TITLE",
   INVALID_CONTENT: "INVALID_CONTENT",
+  INVALID_ACCEPTANCE_CRITERIA: "INVALID_ACCEPTANCE_CRITERIA",
   CANNOT_DELETE_ROOT: "CANNOT_DELETE_ROOT",
 
   // 状态转换错误
@@ -121,6 +122,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   PARENT_NOT_FOUND: "父节点不存在",
   INVALID_TITLE: "标题不合法，不能包含特殊字符: / \\ : * ? \" < > |",
   INVALID_CONTENT: "内容格式不合法，包含会破坏解析的字符",
+  INVALID_ACCEPTANCE_CRITERIA: "验收标准格式错误，应为对象数组而非字符串数组",
   CANNOT_DELETE_ROOT: "无法删除根节点",
   INVALID_TRANSITION: "非法状态转换",
   CONCLUSION_REQUIRED: "complete/fail 动作必须提供 conclusion",

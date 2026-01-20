@@ -1287,6 +1287,32 @@ ${isSpec ? "- ANY criterion fails → entire review FAILS" : "- Report specific 
     exec: { requirement: string; acceptanceCriteria: AcceptanceCriteria[] },
     includeQuality: boolean = true
   ): Promise<DispatchCreateResult> {
+    // 0. 校验 acceptanceCriteria 格式（必须是 { when, then } 对象数组）
+    if (exec.acceptanceCriteria && exec.acceptanceCriteria.length > 0) {
+      for (let i = 0; i < exec.acceptanceCriteria.length; i++) {
+        const ac = exec.acceptanceCriteria[i];
+        if (typeof ac === "string") {
+          throw new TanmiError(
+            "INVALID_ACCEPTANCE_CRITERIA",
+            `exec.acceptanceCriteria[${i}] 格式错误：收到字符串 "${ac}"，应为 { when: "条件", then: "结果" } 对象`
+          );
+        }
+        if (typeof ac !== "object" || ac === null) {
+          throw new TanmiError(
+            "INVALID_ACCEPTANCE_CRITERIA",
+            `exec.acceptanceCriteria[${i}] 格式错误：应为 { when: "条件", then: "结果" } 对象`
+          );
+        }
+        // 检查必须有 when 和 then 字段（MarkdownStorage 依赖这两个字段渲染表格）
+        if (typeof ac.when !== "string" || typeof ac.then !== "string") {
+          throw new TanmiError(
+            "INVALID_ACCEPTANCE_CRITERIA",
+            `exec.acceptanceCriteria[${i}] 缺少必填字段：需要 when(string) 和 then(string)，收到 ${JSON.stringify(ac)}`
+          );
+        }
+      }
+    }
+
     // 获取工作区目录名
     const location = await this.json.getWorkspaceLocation(workspaceId);
     const wsDirName = location?.dirName || workspaceId;

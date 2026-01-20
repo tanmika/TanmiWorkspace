@@ -182,6 +182,32 @@ export class NodeService {
   async create(params: NodeCreateParams): Promise<NodeCreateResult> {
     const { workspaceId, parentId, type, title, requirement = "", docs = [], role, acceptanceCriteria, isNeedTest, testRequirement } = params;
 
+    // 0. 校验 acceptanceCriteria 格式（必须是 { when, then } 对象数组）
+    if (acceptanceCriteria && acceptanceCriteria.length > 0) {
+      for (let i = 0; i < acceptanceCriteria.length; i++) {
+        const ac = acceptanceCriteria[i];
+        if (typeof ac === "string") {
+          throw new TanmiError(
+            "INVALID_ACCEPTANCE_CRITERIA",
+            `acceptanceCriteria[${i}] 格式错误：收到字符串 "${ac}"，应为 { when: "条件", then: "结果" } 对象`
+          );
+        }
+        if (typeof ac !== "object" || ac === null) {
+          throw new TanmiError(
+            "INVALID_ACCEPTANCE_CRITERIA",
+            `acceptanceCriteria[${i}] 格式错误：应为 { when: "条件", then: "结果" } 对象`
+          );
+        }
+        // 检查必须有 when 和 then 字段（MarkdownStorage 依赖这两个字段渲染表格）
+        if (typeof ac.when !== "string" || typeof ac.then !== "string") {
+          throw new TanmiError(
+            "INVALID_ACCEPTANCE_CRITERIA",
+            `acceptanceCriteria[${i}] 缺少必填字段：需要 when(string) 和 then(string)，收到 ${JSON.stringify(ac)}`
+          );
+        }
+      }
+    }
+
     // 1. 获取 projectRoot 和 wsDirName
     const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
 
