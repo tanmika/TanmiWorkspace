@@ -23,8 +23,12 @@ const {
   logHook,
   logHookOutput,
   getNodeGraph,
-  getWorkspacesByCwd
+  getWorkspacesByCwd,
+  getGlobalConfig
 } = require('./shared/index.cjs');
+
+// 导入生成的写操作工具列表
+const { WRITE_TOOLS, SPECIAL_ALLOW } = require('../hooks/generated/write-tools.cjs');
 
 // ============================================================================
 // 节流时间常量（毫秒）
@@ -491,8 +495,36 @@ function handleTodoWriteToolUse(sessionId, binding, tool_input, tool_response) {
 function handlePreToolUse(sessionId, binding, input) {
   const { tool_name, tool_input } = input;
 
-  // 未绑定工作区，放行
+  // 未绑定工作区时的写操作检查
   if (!binding?.workspaceId) {
+    // 特殊工具放行（如 session_bind、workspace_init 等）
+    if (SPECIAL_ALLOW.has(tool_name)) {
+      logHookOutput(sessionId, 'PreToolUse', 'allow', {
+        tool: tool_name,
+        reason: 'special_allow'
+      });
+      console.log(JSON.stringify({ permissionDecision: 'allow' }));
+      return;
+    }
+
+    // 检查是否为写操作工具
+    if (WRITE_TOOLS.has(tool_name)) {
+      const config = getGlobalConfig();
+      // 默认拒绝未绑定的写操作，除非配置明确允许
+      if (!config?.security?.allowUnboundWrite) {
+        logHookOutput(sessionId, 'PreToolUse', 'deny', {
+          tool: tool_name,
+          reason: 'unbound_write_restricted'
+        });
+        console.log(JSON.stringify({
+          permissionDecision: 'deny',
+          message: '❌ 写操作需要先绑定工作区\n💡 使用 tanmi_help 获取帮助'
+        }));
+        return;
+      }
+    }
+
+    // 读操作或配置允许，放行
     logHookOutput(sessionId, 'PreToolUse', 'allow', {
       tool: tool_name,
       reason: 'not_bound'

@@ -1,11 +1,11 @@
 // src/tools/context.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * context_get 工具定义
  */
-export const contextGetTool: Tool = {
+export const contextGetTool: TanmiTool = {
   name: "context_get",
   description: `获取节点的聚焦上下文，包含：
 - 工作区信息（目标、规则、活跃文档引用）
@@ -13,6 +13,7 @@ export const contextGetTool: Tool = {
 - 跨节点引用（显式引用的其他节点）
 - 子节点结论（已完成/失败的直接子节点结论冒泡）
 - conclusionsHash（子节点结论的哈希值，用于 node_transition/node_update 验证）`,
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -48,11 +49,12 @@ export const contextGetTool: Tool = {
 /**
  * context_focus 工具定义
  */
-export const contextFocusTool: Tool = {
+export const contextFocusTool: TanmiTool = {
   name: "context_focus",
   description: `设置当前聚焦节点，切换 AI 的工作上下文。
 
 **阻断机制**：当祖先链中存在 conclusionStale=true 的节点时，切换到该节点子树外会被阻断，需先更新过期结论。`,
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -72,11 +74,12 @@ export const contextFocusTool: Tool = {
 /**
  * node_isolate 工具定义
  */
-export const nodeIsolateTool: Tool = {
+export const nodeIsolateTool: TanmiTool = {
   name: "node_isolate",
   description: `设置节点的隔离状态。
 - isolate=true: 切断上下文继承，不从父节点获取信息
 - isolate=false: 恢复上下文继承`,
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -100,11 +103,12 @@ export const nodeIsolateTool: Tool = {
 /**
  * node_reference 工具定义
  */
-export const nodeReferenceTool: Tool = {
+export const nodeReferenceTool: TanmiTool = {
   name: "node_reference",
   description: `管理节点的文档/节点引用：
 - add: 添加新引用
 - remove: 删除引用`,
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -137,7 +141,7 @@ export const nodeReferenceTool: Tool = {
 /**
  * 所有上下文工具
  */
-export const contextTools: Tool[] = [
+export const contextTools: TanmiTool[] = [
   contextGetTool,
   contextFocusTool,
   nodeIsolateTool,

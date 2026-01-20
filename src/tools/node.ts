@@ -1,12 +1,13 @@
 // src/tools/node.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * node_create 工具定义
  */
-export const nodeCreateTool: Tool = {
+export const nodeCreateTool: TanmiTool = {
   name: "node_create",
+  readonly: false,
   description: `在指定父节点下创建新的子节点。
 
 **节点类型选择指南**（重要！）：
@@ -119,9 +120,10 @@ export const nodeCreateTool: Tool = {
 /**
  * node_get 工具定义
  */
-export const nodeGetTool: Tool = {
+export const nodeGetTool: TanmiTool = {
   name: "node_get",
   description: "获取节点详情，包含元数据和所有 Markdown 内容。返回的 nodeHash/contentHash 用于 node_replace/node_edit 的乐观锁校验。",
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -141,9 +143,10 @@ export const nodeGetTool: Tool = {
 /**
  * node_list 工具定义
  */
-export const nodeListTool: Tool = {
+export const nodeListTool: TanmiTool = {
   name: "node_list",
   description: "获取节点树结构，支持指定起始节点和深度。",
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -167,9 +170,10 @@ export const nodeListTool: Tool = {
 /**
  * node_delete 工具定义
  */
-export const nodeDeleteTool: Tool = {
+export const nodeDeleteTool: TanmiTool = {
   name: "node_delete",
   description: "删除节点及其所有子节点。根节点无法删除。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -189,13 +193,14 @@ export const nodeDeleteTool: Tool = {
 /**
  * node_move 工具定义
  */
-export const nodeMoveTool: Tool = {
+export const nodeMoveTool: TanmiTool = {
   name: "node_move",
   description: `移动节点到新的父节点下，用于重组节点层级结构。
 - 根节点无法移动
 - 不能将节点移动到其自身的子节点下（防止循环依赖）
 - 目标父节点必须是规划节点（执行节点不能有子节点）
 - 节点本身的数据（标题、需求、状态等）保持不变`,
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -219,11 +224,12 @@ export const nodeMoveTool: Tool = {
 /**
  * node_reorder 工具定义
  */
-export const nodeReorderTool: Tool = {
+export const nodeReorderTool: TanmiTool = {
   name: "node_reorder",
   description: `重新排序节点的子节点顺序。
 - 必须提供所有子节点的 ID，不能增减
 - 用于调整子节点的显示顺序`,
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -248,10 +254,11 @@ export const nodeReorderTool: Tool = {
 /**
  * node_replace 工具定义
  */
-export const nodeReplaceTool: Tool = {
+export const nodeReplaceTool: TanmiTool = {
   name: "node_replace",
   description:
     "全量替换节点字段。⚠️ 慎用：会覆盖整个字段内容。推荐优先使用 node_edit。使用前必须先 node_get 获取 contentHash。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -287,7 +294,7 @@ export const nodeReplaceTool: Tool = {
 /**
  * node_edit 工具定义
  */
-export const nodeEditTool: Tool = {
+export const nodeEditTool: TanmiTool = {
   name: "node_edit",
   description: `精确替换节点字段中的特定文本。推荐用于局部修改。使用前必须先 node_get 获取 contentHash。
 
@@ -298,6 +305,7 @@ export const nodeEditTool: Tool = {
 **互斥规则**:
 - mode=string 时：old_str 必填，禁止使用 lineStart/lineEnd
 - mode=line_range 时：lineStart/lineEnd 必填，禁止使用 old_str`,
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -347,7 +355,7 @@ export const nodeEditTool: Tool = {
 /**
  * 所有节点工具
  */
-export const nodeTools: Tool[] = [
+export const nodeTools: TanmiTool[] = [
   nodeCreateTool,
   nodeGetTool,
   nodeListTool,

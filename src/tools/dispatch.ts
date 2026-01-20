@@ -1,13 +1,14 @@
 // src/tools/dispatch.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * dispatch_node 工具定义
  * 升级执行节点为派发母节点
  */
-export const dispatchNodeTool: Tool = {
+export const dispatchNodeTool: TanmiTool = {
   name: "dispatch_node",
+  readonly: false,
   description: `升级执行节点为派发母节点。
 
 **使用场景**：将执行节点升级为派发母节点，准备创建子节点进行派发执行。
@@ -59,8 +60,9 @@ export const dispatchNodeTool: Tool = {
  * dispatch_complete 工具定义
  * 处理派发任务的执行结果
  */
-export const dispatchCompleteTool: Tool = {
+export const dispatchCompleteTool: TanmiTool = {
   name: "dispatch_complete",
+  readonly: false,
   description: `处理派发任务的执行结果。
 
 **使用场景**：subagent 执行完成后，调用此工具处理结果。
@@ -113,8 +115,9 @@ export const dispatchCompleteTool: Tool = {
  * dispatch_cleanup 工具定义
  * 清理派发相关的 git 分支
  */
-export const dispatchCleanupTool: Tool = {
+export const dispatchCleanupTool: TanmiTool = {
   name: "dispatch_cleanup",
+  readonly: true,
   description: `清理派发相关的 git 分支。
 
 **使用场景**：
@@ -155,8 +158,9 @@ export const dispatchCleanupTool: Tool = {
  * dispatch_enable 工具定义
  * 启用派发模式
  */
-export const dispatchEnableTool: Tool = {
+export const dispatchEnableTool: TanmiTool = {
   name: "dispatch_enable",
+  readonly: false,
   description: `启用工作区的派发模式。
 
 **派发模式说明**：
@@ -210,8 +214,9 @@ export const dispatchEnableTool: Tool = {
  * dispatch_disable 工具定义
  * 禁用派发模式（第一步：查询状态，返回选项）
  */
-export const dispatchDisableTool: Tool = {
+export const dispatchDisableTool: TanmiTool = {
   name: "dispatch_disable",
+  readonly: false,
   description: `禁用派发模式第一步：查询当前状态并返回合并选项。
 
 **⚠️ 重要：此工具返回的选项必须由用户决策，AI 禁止擅自选择！**
@@ -257,8 +262,9 @@ export const dispatchDisableTool: Tool = {
  * dispatch_disable_execute 工具定义
  * 执行禁用派发（第二步：根据用户选择执行）
  */
-export const dispatchDisableExecuteTool: Tool = {
+export const dispatchDisableExecuteTool: TanmiTool = {
   name: "dispatch_disable_execute",
+  readonly: false,
   description: `禁用派发模式第二步：执行用户选择的合并策略。
 
 **⚠️ 前置条件：必须先通过 AskUserQuestion 获取用户的明确选择！**
@@ -314,8 +320,9 @@ export const dispatchDisableExecuteTool: Tool = {
  * dispatch_create 工具定义
  * 在派发母节点下创建派发子节点
  */
-export const dispatchCreateTool: Tool = {
+export const dispatchCreateTool: TanmiTool = {
   name: "dispatch_create",
+  readonly: false,
   description: `在派发母节点下创建派发子节点。
 
 **使用场景**：dispatch_node 升级节点后，使用此工具创建子节点。
@@ -378,7 +385,7 @@ export const dispatchCreateTool: Tool = {
 /**
  * 所有派发工具
  */
-export const dispatchTools: Tool[] = [
+export const dispatchTools: TanmiTool[] = [
   dispatchNodeTool,
   dispatchCompleteTool,
   dispatchCleanupTool,

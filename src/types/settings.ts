@@ -11,6 +11,13 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export const VALID_LOG_LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
 
 /**
+ * 安全配置接口
+ */
+export interface SecurityConfig {
+  allowUnboundWrite?: boolean;  // 是否允许未绑定时写操作，默认 false
+}
+
+/**
  * 全局配置接口
  * 存储在 ~/.tanmi-workspace/config.json
  */
@@ -20,6 +27,7 @@ export interface GlobalConfig {
   logLevel?: LogLevel;  // 日志级别，默认 'info'
   tutorialCreated?: boolean;  // 教程工作区是否已创建（只创建一次）
   tutorialVersion?: string;   // 上次运行的系统版本，版本变更时创建更新工作区
+  security?: SecurityConfig;  // 安全配置，可选
 }
 
 /**
@@ -49,6 +57,7 @@ export interface ConfigGetResult {
 export interface ConfigSetParams {
   defaultDispatchMode?: "none" | "git" | "no-git";
   logLevel?: LogLevel;
+  security?: SecurityConfig;
 }
 
 /**

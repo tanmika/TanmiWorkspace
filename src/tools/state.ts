@@ -1,12 +1,13 @@
 // src/tools/state.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * node_transition 工具定义
  */
-export const nodeTransitionTool: Tool = {
+export const nodeTransitionTool: TanmiTool = {
   name: "node_transition",
+  readonly: false,
   description: `变更节点状态。根据节点类型支持不同的状态转换：
 
 **执行节点 (execution)**：
@@ -77,6 +78,6 @@ export const nodeTransitionTool: Tool = {
 /**
  * 所有状态工具
  */
-export const stateTools: Tool[] = [
+export const stateTools: TanmiTool[] = [
   nodeTransitionTool,
 ];

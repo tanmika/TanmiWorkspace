@@ -53,6 +53,45 @@ const WORKSPACE_KEYWORDS = [
   'tanmi', 'session_bind', 'workspace_'
 ];
 
+// 全局配置路径
+const CONFIG_PATH = path.join(TANMI_HOME, 'config.json');
+
+// 全局配置缓存（懒加载）
+let cachedGlobalConfig = null;
+let configMtime = null;
+
+/**
+ * 获取全局配置
+ * 懒加载：仅在需要时读取，失败时返回 null
+ * @returns {object|null} 全局配置对象或 null
+ */
+function getGlobalConfig() {
+  try {
+    // 检查文件是否存在
+    if (!fs.existsSync(CONFIG_PATH)) {
+      return null;
+    }
+
+    // 检查文件修改时间，如果未变化则使用缓存
+    const stat = fs.statSync(CONFIG_PATH);
+    const currentMtime = stat.mtimeMs;
+
+    if (cachedGlobalConfig && configMtime === currentMtime) {
+      return cachedGlobalConfig;
+    }
+
+    // 读取并解析配置
+    const content = fs.readFileSync(CONFIG_PATH, 'utf-8');
+    cachedGlobalConfig = JSON.parse(content);
+    configMtime = currentMtime;
+
+    return cachedGlobalConfig;
+  } catch {
+    // 任何错误都返回 null，使用默认行为
+    return null;
+  }
+}
+
 module.exports = {
   IS_DEV,
   DIR_SUFFIX,
@@ -61,5 +100,7 @@ module.exports = {
   INDEX_PATH,
   HTTP_PORT,
   MCP_URL,
-  WORKSPACE_KEYWORDS
+  WORKSPACE_KEYWORDS,
+  CONFIG_PATH,
+  getGlobalConfig
 };

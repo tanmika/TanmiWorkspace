@@ -27,6 +27,9 @@ export const useSettingsStore = defineStore('settings', () => {
   // 更新配置
   async function updateSettings(params: {
     defaultDispatchMode?: 'none' | 'git' | 'no-git'
+    security?: {
+      allowUnboundWrite?: boolean
+    }
   }) {
     loading.value = true
     try {

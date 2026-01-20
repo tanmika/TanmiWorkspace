@@ -724,7 +724,8 @@ Read(file_path: <skillsPath>/flow-info/SKILL.md)
 
         case "config_set": {
           const defaultDispatchMode = args?.defaultDispatchMode as "none" | "git" | "no-git" | undefined;
-          result = await services.config.set({ defaultDispatchMode });
+          const security = args?.security as { allowUnboundWrite?: boolean } | undefined;
+          result = await services.config.set({ defaultDispatchMode, security });
           break;
         }
 

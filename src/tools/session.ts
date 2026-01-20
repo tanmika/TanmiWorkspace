@@ -1,12 +1,13 @@
 // src/tools/session.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * session_bind 工具定义
  */
-export const sessionBindTool: Tool = {
+export const sessionBindTool: TanmiTool = {
   name: "session_bind",
+  readonly: false,
   description: `绑定当前会话到工作区。
 
 绑定后，Hook 会在每次对话时自动注入工作区上下文（目标、规则、聚焦节点等）。
@@ -38,8 +39,9 @@ export const sessionBindTool: Tool = {
 /**
  * session_unbind 工具定义
  */
-export const sessionUnbindTool: Tool = {
+export const sessionUnbindTool: TanmiTool = {
   name: "session_unbind",
+  readonly: false,
   description: `解除当前会话与工作区的绑定。
 
 解绑后，Hook 将不再注入工作区上下文。
@@ -63,7 +65,7 @@ export const sessionUnbindTool: Tool = {
 /**
  * session_status 工具定义
  */
-export const sessionStatusTool: Tool = {
+export const sessionStatusTool: TanmiTool = {
   name: "session_status",
   description: `查询当前会话的绑定状态。
 
@@ -75,6 +77,7 @@ export const sessionStatusTool: Tool = {
 - Hook 内部检查是否应该激活
 - AI 查询当前状态
 - 用户询问"现在在哪个工作区"`,
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -90,7 +93,7 @@ export const sessionStatusTool: Tool = {
 /**
  * get_pending_changes 工具定义
  */
-export const getPendingChangesTool: Tool = {
+export const getPendingChangesTool: TanmiTool = {
   name: "get_pending_changes",
   description: `获取工作区的待处理手动变更记录（供 Hook 脚本调用）。
 
@@ -106,6 +109,7 @@ export const getPendingChangesTool: Tool = {
 **注意**：
 - 此工具不会清除变更记录（由 context_get/workspace_get 负责清除）
 - 建议在 Hook 脚本中使用，不建议 AI 直接调用`,
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -125,7 +129,7 @@ export const getPendingChangesTool: Tool = {
 /**
  * 所有 session 工具
  */
-export const sessionTools: Tool[] = [
+export const sessionTools: TanmiTool[] = [
   sessionBindTool,
   sessionUnbindTool,
   sessionStatusTool,

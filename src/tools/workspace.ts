@@ -1,12 +1,13 @@
 // src/tools/workspace.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * workspace_init 工具定义
  */
-export const workspaceInitTool: Tool = {
+export const workspaceInitTool: TanmiTool = {
   name: "workspace_init",
+  readonly: false,
   description: "初始化新工作区。创建工作区目录结构和必要的配置文件。返回 webUrl 可在浏览器中查看。",
   inputSchema: {
     type: "object",
@@ -54,13 +55,14 @@ export const workspaceInitTool: Tool = {
 /**
  * workspace_list 工具定义
  */
-export const workspaceListTool: Tool = {
+export const workspaceListTool: TanmiTool = {
   name: "workspace_list",
   description: `列出所有工作区,支持按状态过滤。
 
 **排序规则**：
 - 如果提供了 cwd 参数，匹配当前路径的工作区优先显示
 - 同级别按更新时间降序排列`,
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -80,9 +82,10 @@ export const workspaceListTool: Tool = {
 /**
  * workspace_get 工具定义
  */
-export const workspaceGetTool: Tool = {
+export const workspaceGetTool: TanmiTool = {
   name: "workspace_get",
   description: "获取工作区详情，包含配置、节点图和 Workspace.md 内容。返回 webUrl 可在浏览器中查看。",
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -98,9 +101,10 @@ export const workspaceGetTool: Tool = {
 /**
  * workspace_delete 工具定义
  */
-export const workspaceDeleteTool: Tool = {
+export const workspaceDeleteTool: TanmiTool = {
   name: "workspace_delete",
   description: "删除工作区。活动状态的工作区需要 force=true 才能删除。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -120,7 +124,7 @@ export const workspaceDeleteTool: Tool = {
 /**
  * workspace_update_rules 工具定义
  */
-export const workspaceUpdateRulesTool: Tool = {
+export const workspaceUpdateRulesTool: TanmiTool = {
   name: "workspace_update_rules",
   description: `动态更新工作区规则。
 
@@ -132,6 +136,7 @@ export const workspaceUpdateRulesTool: Tool = {
 - 用户要求记录重要信息（如环境变量、路径配置）到规则中
 - 发现需要全局遵守的新约束
 - 清理过时的规则`,
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -161,7 +166,7 @@ export const workspaceUpdateRulesTool: Tool = {
 /**
  * workspace_archive 工具定义
  */
-export const workspaceArchiveTool: Tool = {
+export const workspaceArchiveTool: TanmiTool = {
   name: "workspace_archive",
   description: `归档工作区。将工作区移动到归档目录，标记为已完成。
 
@@ -170,6 +175,7 @@ export const workspaceArchiveTool: Tool = {
 - 目录移动到 .tanmi-workspace/archive/ 下
 - 仍可通过 workspace_get 查看
 - 可通过 workspace_restore 恢复`,
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -185,7 +191,7 @@ export const workspaceArchiveTool: Tool = {
 /**
  * workspace_restore 工具定义
  */
-export const workspaceRestoreTool: Tool = {
+export const workspaceRestoreTool: TanmiTool = {
   name: "workspace_restore",
   description: `恢复归档的工作区。将工作区从归档目录移回，重新激活。
 
@@ -193,6 +199,7 @@ export const workspaceRestoreTool: Tool = {
 - 工作区状态变为 active
 - 目录移回原位置
 - 可继续正常使用`,
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -208,7 +215,7 @@ export const workspaceRestoreTool: Tool = {
 /**
  * workspace_health 工具定义
  */
-export const workspaceHealthTool: Tool = {
+export const workspaceHealthTool: TanmiTool = {
   name: "workspace_health",
   description: `检测工作区健康状态。
 
@@ -224,6 +231,7 @@ export const workspaceHealthTool: Tool = {
 1. 首次调用返回诊断指南路径
 2. 阅读诊断指南获取 diagnosticToken
 3. 携带 token 再次调用执行检测`,
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -243,9 +251,10 @@ export const workspaceHealthTool: Tool = {
 /**
  * signal 工具定义
  */
-export const signalTool: Tool = {
+export const signalTool: TanmiTool = {
   name: "signal",
   description: "内部状态同步工具（由 flow-info/flow-design/flow-impl Skill 指导调用，请勿直接使用）",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -265,7 +274,7 @@ export const signalTool: Tool = {
 /**
  * 所有工作区工具
  */
-export const workspaceTools: Tool[] = [
+export const workspaceTools: TanmiTool[] = [
   workspaceInitTool,
   workspaceListTool,
   workspaceGetTool,

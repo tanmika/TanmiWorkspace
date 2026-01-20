@@ -1,7 +1,7 @@
 // src/tools/help.ts
 // TanmiWorkspace 帮助工具 - 为 AI 提供场景化指导
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 import { HELP_TOPICS, getFullInstructions, USER_PROMPTS } from "../prompts/instructions.js";
 import type { InstallationService } from "../services/InstallationService.js";
 import type { PlatformType } from "../types/settings.js";
@@ -9,9 +9,10 @@ import type { PlatformType } from "../types/settings.js";
 /**
  * 帮助工具定义
  */
-export const helpTools: Tool[] = [
+export const helpTools: TanmiTool[] = [
   {
     name: "tanmi_help",
+    readonly: true,
     description: `获取 TanmiWorkspace 的使用指南和场景化指导。
 
 **三种调用方式**：
@@ -43,6 +44,7 @@ export const helpTools: Tool[] = [
   },
   {
     name: "tanmi_prompt",
+    readonly: true,
     description: `获取用户引导话术模板，帮助 AI 更好地与用户沟通。
 
 **可用模板**：

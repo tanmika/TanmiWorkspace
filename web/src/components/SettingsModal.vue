@@ -94,6 +94,7 @@ const emit = defineEmits<{
 
 // 本地状态
 const localMode = ref<'none' | 'git' | 'no-git'>('none')
+const localAllowUnboundWrite = ref(false)
 
 // Git 模式警告弹窗
 const showGitWarning = ref(false)
@@ -103,6 +104,7 @@ watch(() => props.visible, async (isVisible) => {
   if (isVisible) {
     await settingsStore.loadSettings()
     localMode.value = settingsStore.settings.defaultDispatchMode
+    localAllowUnboundWrite.value = settingsStore.settings.security?.allowUnboundWrite ?? false
     // 并行加载版本信息和插件状态
     const [devInfoRes, installRes, versionRes] = await Promise.allSettled([
       workspaceApi.getDevInfo(),
@@ -216,6 +218,20 @@ async function doSaveDispatch() {
     localMode.value = tempMode.value
     toastStore.success('配置已保存')
     showDispatchConfig.value = false
+  } catch {
+    toastStore.error('保存失败')
+  }
+}
+
+// 切换未绑定写入限制
+async function toggleAllowUnboundWrite() {
+  const newValue = !localAllowUnboundWrite.value
+  try {
+    await settingsStore.updateSettings({
+      security: { allowUnboundWrite: newValue },
+    })
+    localAllowUnboundWrite.value = newValue
+    toastStore.success('安全设置已更新')
   } catch {
     toastStore.error('保存失败')
   }
@@ -345,6 +361,32 @@ async function handleGenerateTutorial() {
           </div>
           <div class="config-entry-value">{{ dispatchModeLabel }}</div>
           <WsButton variant="primary" @click="openDispatchConfig">配置</WsButton>
+        </div>
+      </div>
+
+      <!-- 安全设置 -->
+      <div class="setting-section security-section">
+        <div class="setting-section-title">安全设置</div>
+        <div class="setting-section-desc">
+          控制会话未绑定时的写操作权限
+        </div>
+
+        <div class="config-entry">
+          <div class="config-entry-info">
+            <div class="config-entry-title">允许未绑定写入</div>
+            <div class="config-entry-desc">
+              关闭时，未绑定工作区的会话无法执行写操作（创建节点、修改等）
+            </div>
+          </div>
+          <label class="toggle-switch">
+            <input
+              type="checkbox"
+              :checked="localAllowUnboundWrite"
+              @change="toggleAllowUnboundWrite"
+              :disabled="settingsStore.loading"
+            />
+            <span class="toggle-slider"></span>
+          </label>
         </div>
       </div>
 
@@ -746,6 +788,58 @@ async function handleGenerateTutorial() {
   padding: 4px 10px;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
+}
+
+/* 开关样式 */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border-color);
+  transition: 0.2s;
+  border-radius: 24px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--accent-color, #4a9eff);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
+.toggle-switch input:disabled + .toggle-slider {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* 派发配置弹窗 */

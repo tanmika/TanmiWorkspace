@@ -34,6 +34,9 @@ function loadComponentVersions(): ComponentVersionsConfig {
 // 请求类型定义
 interface ConfigUpdateBody {
   defaultDispatchMode?: "none" | "git" | "no-git";
+  security?: {
+    allowUnboundWrite?: boolean;
+  };
 }
 
 /**
@@ -74,6 +77,7 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
     async (request: FastifyRequest<{ Body: ConfigUpdateBody }>) => {
       const params: ConfigSetParams = {
         defaultDispatchMode: request.body.defaultDispatchMode,
+        security: request.body.security,
       };
       return services.config.set(params);
     }

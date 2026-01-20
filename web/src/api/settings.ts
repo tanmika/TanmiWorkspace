@@ -7,6 +7,9 @@ export interface GlobalSettings {
   version: '1.0'
   defaultDispatchMode: 'none' | 'git' | 'no-git'
   tutorialVersion?: string  // 已创建的教程版本
+  security?: {
+    allowUnboundWrite?: boolean  // 允许未绑定会话执行写操作
+  }
 }
 
 export interface SettingsGetResult {
@@ -69,6 +72,9 @@ export const settingsApi = {
    */
   async updateSettings(params: {
     defaultDispatchMode?: 'none' | 'git' | 'no-git'
+    security?: {
+      allowUnboundWrite?: boolean
+    }
   }): Promise<SettingsUpdateResult> {
     return client.put('/config', params)
   },

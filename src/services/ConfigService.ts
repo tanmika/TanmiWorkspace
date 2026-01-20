@@ -12,6 +12,10 @@ import type {
 } from "../types/settings.js";
 import { DEFAULT_CONFIG, VALID_LOG_LEVELS, DEFAULT_LOG_LEVEL } from "../types/settings.js";
 import { TanmiError } from "../types/errors.js";
+import { logger } from "../utils/logger.js";
+
+/** 期望的配置版本 */
+const EXPECTED_CONFIG_VERSION = "1.0";
 
 /**
  * 配置服务
@@ -35,9 +39,26 @@ export class ConfigService {
       const content = await fs.readFile(this.configPath, "utf-8");
       const config = JSON.parse(content) as GlobalConfig;
 
-      // 验证版本
-      if (config.version !== "1.0") {
-        throw new TanmiError("INVALID_CONFIG", `不支持的配置版本: ${config.version}`);
+      // 验证版本 - 版本不匹配时备份并重置
+      if (config.version !== EXPECTED_CONFIG_VERSION) {
+        const backupPath = this.configPath.replace(".json", ".backup.json");
+
+        logger.warn("ConfigService", {
+          event: "config_version_mismatch",
+          expected: EXPECTED_CONFIG_VERSION,
+          actual: config.version,
+          action: "backup_and_reset",
+          backupPath,
+        });
+
+        // 备份原配置
+        await fs.writeFile(backupPath, content, "utf-8");
+
+        // 重置为默认配置
+        const defaultConfig = { ...DEFAULT_CONFIG };
+        await this.writeConfig(defaultConfig);
+
+        return defaultConfig;
       }
 
       // 验证 defaultDispatchMode
@@ -91,6 +112,12 @@ export class ConfigService {
       }),
       ...(partial.logLevel !== undefined && {
         logLevel: partial.logLevel,
+      }),
+      ...(partial.security !== undefined && {
+        security: {
+          ...current.security,
+          ...partial.security,
+        },
       }),
     };
 

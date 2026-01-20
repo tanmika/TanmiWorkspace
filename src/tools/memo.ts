@@ -1,13 +1,14 @@
 // src/tools/memo.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * memo_create 工具定义
  */
-export const memoCreateTool: Tool = {
+export const memoCreateTool: TanmiTool = {
   name: "memo_create",
   description: "创建工作区备忘。备忘是独立于节点树的草稿区，用于记录灵感、讨论、调研结果。创建后可使用 node_reference 关联到节点。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -41,9 +42,10 @@ export const memoCreateTool: Tool = {
 /**
  * memo_list 工具定义
  */
-export const memoListTool: Tool = {
+export const memoListTool: TanmiTool = {
   name: "memo_list",
   description: "列出工作区的所有备忘（精简信息：title+summary+tags），支持按标签过滤。返回所有已使用的标签列表。",
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -64,8 +66,9 @@ export const memoListTool: Tool = {
 /**
  * memo_get 工具定义
  */
-export const memoGetTool: Tool = {
+export const memoGetTool: TanmiTool = {
   name: "memo_get",
+  readonly: true,
   description: `获取备忘内容（支持按行分页）。返回 contentHash 用于 memo_replace/memo_edit/memo_insert 校验。
 
 **分页参数**:
@@ -114,9 +117,10 @@ export const memoGetTool: Tool = {
 /**
  * memo_delete 工具定义
  */
-export const memoDeleteTool: Tool = {
+export const memoDeleteTool: TanmiTool = {
   name: "memo_delete",
   description: "删除备忘。会同时删除备忘文件和索引。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -136,10 +140,11 @@ export const memoDeleteTool: Tool = {
 /**
  * memo_replace 工具定义
  */
-export const memoReplaceTool: Tool = {
+export const memoReplaceTool: TanmiTool = {
   name: "memo_replace",
   description:
     "全量替换备忘内容。⚠️ 慎用：会覆盖整个内容。适用于完全重写场景。推荐优先使用 memo_edit 或 memo_insert。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -180,8 +185,9 @@ export const memoReplaceTool: Tool = {
 /**
  * memo_edit 工具定义
  */
-export const memoEditTool: Tool = {
+export const memoEditTool: TanmiTool = {
   name: "memo_edit",
+  readonly: false,
   description: `精确替换备忘中的特定文本。推荐用于局部修改。使用前必须先 memo_get 获取当前内容和 contentHash。
 
 **两种模式**:
@@ -240,10 +246,11 @@ export const memoEditTool: Tool = {
 /**
  * memo_insert 工具定义
  */
-export const memoInsertTool: Tool = {
+export const memoInsertTool: TanmiTool = {
   name: "memo_insert",
   description:
     "在备忘指定行后插入文本。推荐用于追加内容。line=0 表示在开头插入，line=n 表示在第 n 行后插入。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -275,7 +282,7 @@ export const memoInsertTool: Tool = {
 /**
  * 导出所有 memo 工具
  */
-export const memoTools: Tool[] = [
+export const memoTools: TanmiTool[] = [
   memoCreateTool,
   memoListTool,
   memoGetTool,

@@ -1,6 +1,6 @@
 // src/tools/import.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * workspace_import_guide 工具定义
@@ -8,8 +8,9 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
  * 提供导入引导，而非直接返回完整数据
  * AI 根据引导自行读取理解后调用导入脚本
  */
-export const workspaceImportGuideTool: Tool = {
+export const workspaceImportGuideTool: TanmiTool = {
   name: "workspace_import_guide",
+  readonly: true,
   description: `获取外部规范的导入引导信息。
 
 **设计理念**：
@@ -64,8 +65,9 @@ export const workspaceImportGuideTool: Tool = {
 /**
  * workspace_import_list 工具定义
  */
-export const workspaceImportListTool: Tool = {
+export const workspaceImportListTool: TanmiTool = {
   name: "workspace_import_list",
+  readonly: true,
   description: `列出可导入的变更列表。
 
 **用途**：
@@ -94,7 +96,7 @@ export const workspaceImportListTool: Tool = {
 /**
  * 所有导入相关工具
  */
-export const importTools: Tool[] = [
+export const importTools: TanmiTool[] = [
   workspaceImportGuideTool,
   workspaceImportListTool,
 ];

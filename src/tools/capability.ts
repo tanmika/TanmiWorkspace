@@ -1,13 +1,14 @@
 // src/tools/capability.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * capability_list 工具定义
  */
-export const capabilityListTool: Tool = {
+export const capabilityListTool: TanmiTool = {
   name: "capability_list",
   description: "获取指定场景的能力包列表。返回基础包（默认选中）和选装包（用户可选）供选择。如果已绑定工作区且未传入 scenario，会自动从工作区配置获取。",
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {
@@ -27,9 +28,10 @@ export const capabilityListTool: Tool = {
 /**
  * capability_select 工具定义
  */
-export const capabilitySelectTool: Tool = {
+export const capabilitySelectTool: TanmiTool = {
   name: "capability_select",
   description: "确认选择的能力包，创建对应节点并返回执行指南。首次调用创建 info 节点+子节点；追加调用在指定节点下追加子节点。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -59,9 +61,10 @@ export const capabilitySelectTool: Tool = {
 /**
  * plugin_path 工具定义
  */
-export const pluginPathTool: Tool = {
+export const pluginPathTool: TanmiTool = {
   name: "plugin_path",
   description: "获取 TanmiWorkspace 插件目录的绝对路径。当需要读取插件资源（如 Skill、Agent 模板）但找不到时使用。",
+  readonly: true,
   inputSchema: {
     type: "object",
     properties: {},
@@ -71,7 +74,7 @@ export const pluginPathTool: Tool = {
 /**
  * 所有能力包工具
  */
-export const capabilityTools: Tool[] = [
+export const capabilityTools: TanmiTool[] = [
   capabilityListTool,
   capabilitySelectTool,
   pluginPathTool,

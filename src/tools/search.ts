@@ -1,12 +1,13 @@
 // src/tools/search.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * workspace_search 工具定义
  */
-export const workspaceSearchTool: Tool = {
+export const workspaceSearchTool: TanmiTool = {
   name: "workspace_search",
+  readonly: true,
   description: `在所有工作区中搜索关键词，返回匹配的工作区列表。
 
 **搜索范围**:
@@ -44,8 +45,9 @@ export const workspaceSearchTool: Tool = {
 /**
  * content_search 工具定义
  */
-export const contentSearchTool: Tool = {
+export const contentSearchTool: TanmiTool = {
   name: "content_search",
+  readonly: true,
   description: `在指定工作区中搜索节点和 memo 内容。
 
 **参数**:
@@ -110,7 +112,7 @@ export const contentSearchTool: Tool = {
 /**
  * 搜索相关工具列表
  */
-export const searchTools: Tool[] = [
+export const searchTools: TanmiTool[] = [
   workspaceSearchTool,
   contentSearchTool,
 ];

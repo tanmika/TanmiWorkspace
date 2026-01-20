@@ -1,14 +1,15 @@
 // src/tools/log.ts
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { TanmiTool } from "../types/tool.js";
 
 /**
  * log_append 工具定义
  * nodeId 必填：AI 日志记录在具体节点上，工作区级日志由系统内部管理
  */
-export const logAppendTool: Tool = {
+export const logAppendTool: TanmiTool = {
   name: "log_append",
   description: "追加日志记录到节点。必须指定 nodeId，工作区级日志由系统自动管理。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -38,9 +39,10 @@ export const logAppendTool: Tool = {
  * problem_update 工具定义
  * nodeId 必填：问题记录在具体节点上，工作区级问题由系统内部管理
  */
-export const problemUpdateTool: Tool = {
+export const problemUpdateTool: TanmiTool = {
   name: "problem_update",
   description: "更新节点问题，记录遇到的阻碍和下一步计划。必须指定 nodeId。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -69,9 +71,10 @@ export const problemUpdateTool: Tool = {
  * problem_clear 工具定义
  * nodeId 必填：问题记录在具体节点上，工作区级问题由系统内部管理
  */
-export const problemClearTool: Tool = {
+export const problemClearTool: TanmiTool = {
   name: "problem_clear",
   description: "清空节点问题（问题已解决）。必须指定 nodeId。",
+  readonly: false,
   inputSchema: {
     type: "object",
     properties: {
@@ -91,7 +94,7 @@ export const problemClearTool: Tool = {
 /**
  * 所有日志工具
  */
-export const logTools: Tool[] = [
+export const logTools: TanmiTool[] = [
   logAppendTool,
   problemUpdateTool,
   problemClearTool,
