@@ -110,6 +110,35 @@ pytest tests/test_main.py
 
 **Output**: Coverage assessment
 
+### 3.3. API Contract Consistency Check (Feature 场景)
+
+**Goal**: Verify implementation follows API contract from test definition.
+
+**Applicable when**: Requirement contains "## API 契约" section.
+
+**Verification steps**:
+
+1. **Extract API contract** from requirement
+2. **For each function in contract**:
+   - Find the implementation in code
+   - Compare signature: parameter names, types, return type
+   - Check if signature matches EXACTLY
+3. **Record findings**:
+   ```markdown
+   | API | Contract | Implementation | Match |
+   |-----|----------|----------------|-------|
+   | findAllCodepacConfigs | (dir): {mainConfig, optionalConfigs} | (dir): {main, optional} | ❌ NO |
+   | selectOptionalConfigs | (configs: [{name,path}], opts) | (configs: string[], remembered) | ❌ NO |
+   ```
+
+**FAIL conditions**:
+- Parameter names differ
+- Parameter types differ
+- Return type structure differs
+- Function not found
+
+**Output**: API consistency verification (PASS if all match, FAIL if any mismatch)
+
 ### 3.5. Implementation Completeness Check
 
 **Goal**: Verify no shortcuts or deferred work.
@@ -161,6 +190,12 @@ pytest tests/test_main.py
 - [ ] All requirements addressed
 - [ ] No scope deviation
 - [ ] Implementation matches intent
+
+### API Contract (Feature 场景)
+- [ ] API 契约 section identified in requirement (if present)
+- [ ] Each function signature compared against implementation
+- [ ] API Consistency Table produced (if applicable)
+- [ ] All signatures match exactly (or FAIL)
 
 ### Completeness
 - [ ] No TODO/FIXME/HACK markers in changed code
@@ -256,6 +291,8 @@ pytest tests/test_main.py
 7. **Partial pass** - Passing when some criteria fail
 8. **Ignore incomplete markers** - Passing code with TODO/FIXME/HACK
 9. **Accept shortcuts** - Passing simplified implementations
+10. **Ignore API contract** - Not checking API signatures when "## API 契约" exists in requirement
+11. **Accept signature mismatch** - Passing when implementation signature differs from contract
 
 ## Mandatory Rules
 
@@ -268,6 +305,7 @@ pytest tests/test_main.py
 7. **NEVER be lenient** - Pass only when ALL criteria are met
 8. **MUST check for incomplete markers** - TODO/FIXME/HACK in code = automatic FAIL
 9. **MUST reject simplified implementations** - "暂时/临时/简化" workarounds = FAIL
+10. **MUST verify API contract** - If "## API 契约" exists in requirement, check ALL signatures match implementation
 
 ## Anti-Patterns
 

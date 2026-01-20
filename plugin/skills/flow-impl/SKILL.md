@@ -256,6 +256,23 @@ pending ─start→ implementing ─submit→ validating ─complete→ complete
    - 编写测试用例，定义接口输入输出
    - 记录：测试文件位置、覆盖的接口列表
    - 验收：测试可运行但失败（红灯状态）
+   - **完成时必须**：
+     1. 在 conclusion 中用固定格式列出 API 签名：
+        ```
+        ## API 契约
+        - functionName(param: Type): ReturnType
+        - anotherFunc(arg1, arg2): Result | null
+        ```
+     2. 用 `node_edit` 将 API 契约追加到**后续功能实现节点**的 requirement 中：
+        ```typescript
+        node_edit({
+          workspaceId: "...",
+          nodeId: "[功能实现节点ID]",
+          field: "requirement",
+          operation: "append",
+          content: "\n\n## API 契约（来自测试定义，必须遵循）\n- ..."
+        })
+        ```
 
 2. **功能实现节点**
    - 严格按测试用例实现功能
