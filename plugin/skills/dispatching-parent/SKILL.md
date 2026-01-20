@@ -17,11 +17,13 @@ This creates a commitment checkpoint. Proceed only after announcing.
 
 **YOU MUST COMPLETE THE ENTIRE DISPATCH FLOW:**
 1. Dispatch exec node → Wait for result
-2. **Dispatch spec node** → Wait for result (DO NOT SKIP!)
-3. (Optional) Dispatch quality node
-4. Complete parent node
+2. **IF exec succeeds** → Dispatch spec node → Wait for result (DO NOT SKIP!)
+3. **IF exec fails** → Retry with enriched context OR escalate to user (DO NOT dispatch spec!)
+4. (Optional) Dispatch quality node
+5. Complete parent node
 
-**NEVER stop after exec completes. ALWAYS dispatch spec for verification.**
+**NEVER stop after exec succeeds. ALWAYS dispatch spec for verification.**
+**NEVER dispatch spec if exec failed. FIX or escalate first.**
 
 ---
 
@@ -135,6 +137,7 @@ Task({
 - Proceed to dispatch spec node
 
 **On Failure**:
+- ⚠️ **DO NOT dispatch spec node** - Spec reviews completed work, not failures
 - Analyze the failure reason from conclusion
 - Categorize failure type:
   - `info_insufficient`: Missing information
@@ -370,14 +373,16 @@ When retrying after failure:
 2. **Skipping spec** - Completing without spec verification
 3. **Vague requirements** - Dispatching with unclear tasks
 4. **Lost context** - Not passing full prompt to Task tool
+5. **Premature spec dispatch** - Dispatching spec when exec has not succeeded
 
 ## Mandatory Rules
 
-1. **MUST complete full flow** - NEVER stop after exec, ALWAYS dispatch spec
+1. **MUST complete full flow** - NEVER stop after exec succeeds, ALWAYS dispatch spec
 2. **MUST pass complete prompt** - Modifying/simplifying prompt breaks context
 3. **MUST add context on retry** - Same params on retry = same failure
 4. **MUST limit retries to 3** - After 3 failures, escalate to user
 5. **NEVER skip spec verification** - Exec success alone is not enough
+6. **MUST NOT dispatch spec until exec succeeds** - Spec reviews "completed work", not "failed attempts"
 
 ## Anti-Patterns
 
@@ -387,6 +392,7 @@ When retrying after failure:
 | **Retry without learning** | Same params on retry | Add context based on failure |
 | **Trust exec blindly** | Skip spec on exec success | Always run spec verification |
 | **Infinite retry** | Keep retrying indefinitely | Max 3 attempts, then escalate |
+| **Premature spec dispatch** | Dispatch spec after exec failure | Retry/fix exec first, only dispatch spec on success |
 
 ## Common Rationalizations
 
@@ -397,3 +403,4 @@ When retrying after failure:
 | "Just one more retry" | Infinite retries waste resources | Max 3, then escalate |
 | "I'll simplify the prompt to be clearer" | Simplification loses critical context | Pass COMPLETE prompt |
 | "Spec review slows us down" | Skipping verification = shipping bugs | Verification is non-negotiable |
+| "Let spec check what went wrong" | Spec verifies completed work, not diagnoses failures | Retry/fix exec first, spec comes after success |
