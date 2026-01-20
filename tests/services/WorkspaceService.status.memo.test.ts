@@ -1,19 +1,29 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import { FileSystemAdapter } from "../../src/storage/FileSystemAdapter.js";
-import { JsonStorage } from "../../src/storage/JsonStorage.js";
-import { MarkdownStorage } from "../../src/storage/MarkdownStorage.js";
-import { WorkspaceService } from "../../src/services/WorkspaceService.js";
-import { MemoService } from "../../src/services/MemoService.js";
 
-// TODO: 测试需要更新以匹配当前的业务逻辑
-// 1. MemoService.create 现在要求 tags ≥ 2
-// 2. 需要隔离的全局索引（os.homedir() 返回真实目录）
-describe.skip("WorkspaceService - status with memos", () => {
-  const testBasePath = ".test-tanmi-workspace-status-memo-" + Date.now();
-  const originalHome = process.env.HOME;
+// 为每个测试文件生成唯一的测试目录
+const testBasePath = `.test-tanmi-workspace-status-memo-${crypto.randomUUID()}`;
+const mockHomeDir = path.join(process.cwd(), testBasePath, "home");
+
+// Mock os 模块，使 homedir() 返回测试专用目录
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    homedir: () => mockHomeDir,
+  };
+});
+
+// 动态导入依赖 os.homedir 的模块（在 mock 生效后）
+const { FileSystemAdapter } = await import("../../src/storage/FileSystemAdapter.js");
+const { JsonStorage } = await import("../../src/storage/JsonStorage.js");
+const { MarkdownStorage } = await import("../../src/storage/MarkdownStorage.js");
+const { WorkspaceService } = await import("../../src/services/WorkspaceService.js");
+const { MemoService } = await import("../../src/services/MemoService.js");
+
+describe("WorkspaceService - status with memos", () => {
   let basePath: string;
   let homeDir: string;
   let projectRoot: string;
@@ -27,11 +37,14 @@ describe.skip("WorkspaceService - status with memos", () => {
 
   beforeEach(async () => {
     testCounter++;
-    
+
+    try {
+      await fs.rm(testBasePath, { recursive: true, force: true });
+    } catch {}
+
     basePath = path.join(process.cwd(), testBasePath);
     projectRoot = path.join(basePath, "project");
-    homeDir = path.join(basePath, "home");
-    process.env.HOME = homeDir;
+    homeDir = mockHomeDir;
 
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
     
@@ -54,7 +67,7 @@ describe.skip("WorkspaceService - status with memos", () => {
   });
 
   afterEach(async () => {
-    process.env.HOME = originalHome;
+    vi.restoreAllMocks();
     await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -116,7 +129,7 @@ describe.skip("WorkspaceService - status with memos", () => {
       title: "First",
       summary: "First summary",
       content: "Content",
-      tags: [],
+      tags: ["sort", "first"],
     });
 
     // Wait a bit to ensure different timestamps
@@ -127,7 +140,7 @@ describe.skip("WorkspaceService - status with memos", () => {
       title: "Second",
       summary: "Second summary",
       content: "Content",
-      tags: [],
+      tags: ["sort", "second"],
     });
 
     const result = await workspaceService.status({
@@ -147,7 +160,7 @@ describe.skip("WorkspaceService - status with memos", () => {
       title: "Format Test",
       summary: "Testing format",
       content: "Content",
-      tags: ["format"],
+      tags: ["format", "test"],
     });
 
     const boxResult = await workspaceService.status({
@@ -166,12 +179,14 @@ describe.skip("WorkspaceService - status with memos", () => {
     expect(mdResult.memos!.totalCount).toBe(1);
   });
 
-  it("should handle memos with empty tags", async () => {
+  it("should handle memos with minimal tags (2 required)", async () => {
+    // MemoService.create 现在要求 tags >= 2
     await memoService.create({
       workspaceId,
-      title: "No Tags",
-      summary: "No tags here",
+      title: "Minimal Tags",
+      summary: "Has minimum tags",
       content: "Content",
+      tags: ["minimal", "required"],
     });
 
     const result = await workspaceService.status({
@@ -180,8 +195,9 @@ describe.skip("WorkspaceService - status with memos", () => {
     });
 
     expect(result.memos).toBeDefined();
-    expect(result.memos!.items[0].tags).toEqual([]);
-    expect(result.memos!.allTags).toEqual([]);
+    expect(result.memos!.items[0].tags).toEqual(["minimal", "required"]);
+    expect(result.memos!.allTags).toContain("minimal");
+    expect(result.memos!.allTags).toContain("required");
   });
 
   it("should deduplicate and sort tags", async () => {
