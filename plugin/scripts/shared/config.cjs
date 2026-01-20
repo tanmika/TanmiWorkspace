@@ -59,6 +59,7 @@ const CONFIG_PATH = path.join(TANMI_HOME, 'config.json');
 // 全局配置缓存（懒加载）
 let cachedGlobalConfig = null;
 let configMtime = null;
+let configSize = null;
 
 /**
  * 获取全局配置
@@ -72,11 +73,13 @@ function getGlobalConfig() {
       return null;
     }
 
-    // 检查文件修改时间，如果未变化则使用缓存
+    // 检查文件修改时间和大小，两者都未变化才使用缓存
+    // 同时检查 size 可以避免同一毫秒内修改导致的缓存失效问题
     const stat = fs.statSync(CONFIG_PATH);
     const currentMtime = stat.mtimeMs;
+    const currentSize = stat.size;
 
-    if (cachedGlobalConfig && configMtime === currentMtime) {
+    if (cachedGlobalConfig && configMtime === currentMtime && configSize === currentSize) {
       return cachedGlobalConfig;
     }
 
@@ -84,6 +87,7 @@ function getGlobalConfig() {
     const content = fs.readFileSync(CONFIG_PATH, 'utf-8');
     cachedGlobalConfig = JSON.parse(content);
     configMtime = currentMtime;
+    configSize = currentSize;
 
     return cachedGlobalConfig;
   } catch {

@@ -97,3 +97,52 @@ export function validateProjectRoot(inputPath: string, basePath: string = proces
 
   return resolvedPath;
 }
+
+/**
+ * 验收标准接口（与 workspace.ts 中保持一致）
+ */
+interface AcceptanceCriteria {
+  when: string;
+  then: string;
+  [key: string]: string;
+}
+
+/**
+ * 验证 acceptanceCriteria 格式
+ * 必须是 { when: string, then: string } 对象数组
+ * @param acceptanceCriteria 验收标准数组
+ * @param fieldPrefix 错误消息前缀（如 "acceptanceCriteria" 或 "exec.acceptanceCriteria"）
+ * @throws TanmiError 如果格式不合法
+ */
+export function validateAcceptanceCriteria(
+  acceptanceCriteria: unknown[] | undefined,
+  fieldPrefix: string = "acceptanceCriteria"
+): void {
+  if (!acceptanceCriteria || acceptanceCriteria.length === 0) {
+    return;
+  }
+
+  for (let i = 0; i < acceptanceCriteria.length; i++) {
+    const ac = acceptanceCriteria[i];
+    if (typeof ac === "string") {
+      throw new TanmiError(
+        "INVALID_ACCEPTANCE_CRITERIA",
+        `${fieldPrefix}[${i}] 格式错误：收到字符串 "${ac}"，应为 { when: "条件", then: "结果" } 对象`
+      );
+    }
+    if (typeof ac !== "object" || ac === null) {
+      throw new TanmiError(
+        "INVALID_ACCEPTANCE_CRITERIA",
+        `${fieldPrefix}[${i}] 格式错误：应为 { when: "条件", then: "结果" } 对象`
+      );
+    }
+    // 检查必须有 when 和 then 字段（MarkdownStorage 依赖这两个字段渲染表格）
+    const acObj = ac as Record<string, unknown>;
+    if (typeof acObj.when !== "string" || typeof acObj.then !== "string") {
+      throw new TanmiError(
+        "INVALID_ACCEPTANCE_CRITERIA",
+        `${fieldPrefix}[${i}] 缺少必填字段：需要 when(string) 和 then(string)，收到 ${JSON.stringify(ac)}`
+      );
+    }
+  }
+}

@@ -11,6 +11,7 @@ import type {
 import type { NodeMeta, NodeDispatchStatus, AcceptanceCriteria, NodeInfoData } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
+import { validateAcceptanceCriteria } from "../utils/validation.js";
 import { generateNodeId, generateNodeDirName } from "../utils/id.js";
 import type { ConfigService } from "./ConfigService.js";
 import { eventService } from "./EventService.js";
@@ -45,6 +46,14 @@ import {
  * 合并策略类型
  */
 export type MergeStrategy = "sequential" | "squash" | "cherry-pick" | "skip";
+
+/**
+ * 派发完成提示文字（便于测试和国际化）
+ */
+export const DISPATCH_HINT = {
+  SUCCESS: "执行完成",
+  FAILURE: "执行失败",
+} as const;
 
 /**
  * 节点完整性检查结果
@@ -673,8 +682,9 @@ export class DispatchService {
     if (!node) {
       throw new TanmiError("NODE_NOT_FOUND", `节点 ${nodeId} 不存在`);
     }
-    if (node.type !== "execution") {
-      throw new TanmiError("INVALID_NODE_TYPE", "只有执行节点可以升级为派发母节点");
+    // 允许 execution 节点，或没有子节点的 planning 节点
+    if (node.type === "planning" && node.children.length > 0) {
+      throw new TanmiError("INVALID_NODE_TYPE", "有子节点的规划节点不能升级为派发母节点");
     }
 
     // 2.1 验证节点不是派发子节点
@@ -861,7 +871,7 @@ Read(file_path: <返回的路径>/SKILL.md)
     return {
       success,
       endMarker,
-      hint: success ? "执行完成" : "执行失败",
+      hint: success ? DISPATCH_HINT.SUCCESS : DISPATCH_HINT.FAILURE,
     };
   }
 
@@ -1288,30 +1298,7 @@ ${isSpec ? "- ANY criterion fails → entire review FAILS" : "- Report specific 
     includeQuality: boolean = true
   ): Promise<DispatchCreateResult> {
     // 0. 校验 acceptanceCriteria 格式（必须是 { when, then } 对象数组）
-    if (exec.acceptanceCriteria && exec.acceptanceCriteria.length > 0) {
-      for (let i = 0; i < exec.acceptanceCriteria.length; i++) {
-        const ac = exec.acceptanceCriteria[i];
-        if (typeof ac === "string") {
-          throw new TanmiError(
-            "INVALID_ACCEPTANCE_CRITERIA",
-            `exec.acceptanceCriteria[${i}] 格式错误：收到字符串 "${ac}"，应为 { when: "条件", then: "结果" } 对象`
-          );
-        }
-        if (typeof ac !== "object" || ac === null) {
-          throw new TanmiError(
-            "INVALID_ACCEPTANCE_CRITERIA",
-            `exec.acceptanceCriteria[${i}] 格式错误：应为 { when: "条件", then: "结果" } 对象`
-          );
-        }
-        // 检查必须有 when 和 then 字段（MarkdownStorage 依赖这两个字段渲染表格）
-        if (typeof ac.when !== "string" || typeof ac.then !== "string") {
-          throw new TanmiError(
-            "INVALID_ACCEPTANCE_CRITERIA",
-            `exec.acceptanceCriteria[${i}] 缺少必填字段：需要 when(string) 和 then(string)，收到 ${JSON.stringify(ac)}`
-          );
-        }
-      }
-    }
+    validateAcceptanceCriteria(exec.acceptanceCriteria, "exec.acceptanceCriteria");
 
     // 获取工作区目录名
     const location = await this.json.getWorkspaceLocation(workspaceId);

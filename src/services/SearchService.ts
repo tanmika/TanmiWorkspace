@@ -69,6 +69,11 @@ export class SearchService {
   async workspaceSearch(params: WorkspaceSearchParams): Promise<WorkspaceSearchResult> {
     const { query, regex = false, limit = 10 } = params;
 
+    // 空 query 时不搜索，直接返回空结果
+    if (!query || query.trim() === "") {
+      return { workspaces: [], hasMore: false };
+    }
+
     // 创建匹配器
     const matcherResult = createMatcher(query, regex);
     if ("error" in matcherResult) {
@@ -139,16 +144,22 @@ export class SearchService {
   async contentSearch(params: ContentSearchParams): Promise<ContentSearchResult> {
     const { workspaceId, query, regex = false, id, target = "all", limit = 20, context = 1 } = params;
 
+    // 空 query 且无 id 时不搜索，直接返回空结果
+    const trimmedQuery = query?.trim() || "";
+    if (!trimmedQuery && !id) {
+      return { matches: [], hasMore: false };
+    }
+
     // 创建匹配器（如果有 query）；无 query 时使用全匹配器（用于 ID 搜索）
     let matcher: Matcher;
-    if (query) {
-      const matcherResult = createMatcher(query, regex);
+    if (trimmedQuery) {
+      const matcherResult = createMatcher(trimmedQuery, regex);
       if ("error" in matcherResult) {
         throw new TanmiError("INVALID_PARAMS", matcherResult.error);
       }
       matcher = matcherResult;
     } else {
-      // 无 query 时匹配所有内容（用于 ID 定位搜索）
+      // 无 query 但有 id 时匹配所有内容（用于 ID 定位搜索）
       matcher = { test: () => true };
     }
 

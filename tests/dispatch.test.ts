@@ -3,7 +3,7 @@
 // 覆盖 Bug 1-4 的所有修复场景
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { DispatchService } from "../src/services/DispatchService.js";
+import { DispatchService, DISPATCH_HINT } from "../src/services/DispatchService.js";
 import type { FileSystemAdapter } from "../src/storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../src/storage/JsonStorage.js";
 import type { MarkdownStorage } from "../src/storage/MarkdownStorage.js";
@@ -846,7 +846,7 @@ describe("DispatchService", () => {
 
         expect(result.success).toBe(true);
         // 新版本 completeDispatch 简化了 hint，不再包含父节点提醒
-        expect(result.hint).toBe("执行完成");
+        expect(result.hint).toBe(DISPATCH_HINT.SUCCESS);
       });
 
       it("还有其他子节点未完成时，hint 仍然是执行完成", async () => {
@@ -944,7 +944,7 @@ describe("DispatchService", () => {
 
         expect(result.success).toBe(true);
         // 新版本 completeDispatch 简化了 hint
-        expect(result.hint).toBe("执行完成");
+        expect(result.hint).toBe(DISPATCH_HINT.SUCCESS);
       });
     });
 
@@ -1158,6 +1158,209 @@ describe("DispatchService", () => {
         await expect(
           service.queryDisableDispatch("ws-test-001", "/project")
         ).rejects.toThrow(/正在派发执行中/);
+      });
+    });
+  });
+
+  // ========== dispatchNode 节点类型验证测试 ==========
+  describe("dispatchNode 节点类型验证", () => {
+
+    describe("允许的节点类型", () => {
+      it("execution 节点可以升级为派发母节点", async () => {
+        const graph: NodeGraph = {
+          version: "5.0",
+          currentFocus: null,
+          nodes: {
+            root: {
+              id: "root",
+              dirName: "root",
+              type: "planning",
+              parentId: null,
+              children: ["node-exec-001"],
+              status: "planning",
+              isolate: false,
+              references: [],
+              conclusion: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+            "node-exec-001": {
+              id: "node-exec-001",
+              dirName: "执行任务_exec001",
+              type: "execution",
+              parentId: "root",
+              children: [],
+              status: "pending",
+              isolate: false,
+              references: [],
+              conclusion: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        };
+
+        const config: WorkspaceConfig = {
+          id: "ws-test-001",
+          name: "Test Workspace",
+          dirName: "Test Workspace_test001",
+          status: "active",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          rootNodeId: "root",
+          dispatch: {
+            enabled: true,
+            useGit: false,
+            enabledAt: Date.now(),
+          },
+        };
+
+        mockFs = createMockFs();
+        mockJson = createMockJson({ config, graph });
+        mockMd = createMockMd();
+
+        service = new DispatchService(mockJson, mockMd, mockFs);
+
+        const result = await service.upgradeToDispatchParent("ws-test-001", "/project", "node-exec-001");
+
+        expect(result.success).toBe(true);
+        expect(result.upgraded).toBe(true);
+      });
+
+      it("没有子节点的 planning 节点可以升级为派发母节点", async () => {
+        const graph: NodeGraph = {
+          version: "5.0",
+          currentFocus: null,
+          nodes: {
+            root: {
+              id: "root",
+              dirName: "root",
+              type: "planning",
+              parentId: null,
+              children: ["node-plan-001"],
+              status: "planning",
+              isolate: false,
+              references: [],
+              conclusion: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+            "node-plan-001": {
+              id: "node-plan-001",
+              dirName: "规划节点_plan001",
+              type: "planning",
+              parentId: "root",
+              children: [],  // 没有子节点
+              status: "planning",
+              isolate: false,
+              references: [],
+              conclusion: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        };
+
+        const config: WorkspaceConfig = {
+          id: "ws-test-001",
+          name: "Test Workspace",
+          dirName: "Test Workspace_test001",
+          status: "active",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          rootNodeId: "root",
+          dispatch: {
+            enabled: true,
+            useGit: false,
+            enabledAt: Date.now(),
+          },
+        };
+
+        mockFs = createMockFs();
+        mockJson = createMockJson({ config, graph });
+        mockMd = createMockMd();
+
+        service = new DispatchService(mockJson, mockMd, mockFs);
+
+        const result = await service.upgradeToDispatchParent("ws-test-001", "/project", "node-plan-001");
+
+        expect(result.success).toBe(true);
+        expect(result.upgraded).toBe(true);
+      });
+    });
+
+    describe("不允许的节点类型", () => {
+      it("有子节点的 planning 节点不能升级为派发母节点", async () => {
+        const graph: NodeGraph = {
+          version: "5.0",
+          currentFocus: null,
+          nodes: {
+            root: {
+              id: "root",
+              dirName: "root",
+              type: "planning",
+              parentId: null,
+              children: ["node-plan-001"],
+              status: "planning",
+              isolate: false,
+              references: [],
+              conclusion: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+            "node-plan-001": {
+              id: "node-plan-001",
+              dirName: "规划节点_plan001",
+              type: "planning",
+              parentId: "root",
+              children: ["node-exec-001"],  // 有子节点
+              status: "planning",
+              isolate: false,
+              references: [],
+              conclusion: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+            "node-exec-001": {
+              id: "node-exec-001",
+              dirName: "执行任务_exec001",
+              type: "execution",
+              parentId: "node-plan-001",
+              children: [],
+              status: "pending",
+              isolate: false,
+              references: [],
+              conclusion: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        };
+
+        const config: WorkspaceConfig = {
+          id: "ws-test-001",
+          name: "Test Workspace",
+          dirName: "Test Workspace_test001",
+          status: "active",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          rootNodeId: "root",
+          dispatch: {
+            enabled: true,
+            useGit: false,
+            enabledAt: Date.now(),
+          },
+        };
+
+        mockFs = createMockFs();
+        mockJson = createMockJson({ config, graph });
+        mockMd = createMockMd();
+
+        service = new DispatchService(mockJson, mockMd, mockFs);
+
+        await expect(
+          service.upgradeToDispatchParent("ws-test-001", "/project", "node-plan-001")
+        ).rejects.toThrow(/有子节点的规划节点不能升级为派发母节点/);
       });
     });
   });

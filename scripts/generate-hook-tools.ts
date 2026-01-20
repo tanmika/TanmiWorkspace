@@ -38,21 +38,24 @@ interface ToolInfo {
 
 /**
  * 从 TypeScript 文件中提取工具定义
+ *
+ * ⚠️ 正则匹配约束（重要）：
+ * 1. 工具定义必须在单个 {} 块内完成（不支持跨多行的嵌套对象）
+ * 2. `name` 和 `readonly` 属性必须在同一个 {} 块内
+ * 3. 工具名称只支持小写字母和下划线 [a-z_]+
+ * 4. 变量名必须以 Tool 结尾（如 nodeCreateTool）
+ *
+ * 如果新增工具不符合以上格式，请同步更新此正则或手动维护 write-tools.cjs
  */
 function extractToolsFromFile(filePath: string): ToolInfo[] {
   const content = fs.readFileSync(filePath, "utf-8");
   const fileName = path.basename(filePath);
   const tools: ToolInfo[] = [];
 
-  // 匹配工具定义对象
-  // 支持两种格式：
-  // 1. export const xxxTool: TanmiTool = { name: "xxx", readonly: true/false, ... }
-  // 2. { name: "xxx", readonly: true, ... } 在数组中
-
-  // 正则匹配 name 和 readonly 属性
-  // 匹配模式: name: "tool_name" ... readonly: true/false
-  const toolPattern = /\bname:\s*["']([a-z_]+)["']/g;
-  const readonlyPattern = /\breadonly:\s*(true|false)/g;
+  // 正则匹配约束：
+  // - 仅匹配单层 {} 块（[^}]* 不含 } 字符）
+  // - name 必须是 "tool_name" 格式（小写+下划线）
+  // - readonly 必须是 true 或 false 字面量
 
   // 按工具定义块分割
   // 查找所有 export const xxxTool = { 或 { name: 开头的块

@@ -143,6 +143,46 @@ describe("SearchService", () => {
         })
       ).rejects.toThrow(TanmiError);
     });
+
+    // === 边缘情况测试 ===
+
+    it("should return empty for empty string query", async () => {
+      const result = await searchService.workspaceSearch({
+        query: "",
+      });
+
+      expect(result.workspaces).toHaveLength(0);
+      expect(result.hasMore).toBe(false);
+    });
+
+    it("should return empty for whitespace-only query", async () => {
+      const result = await searchService.workspaceSearch({
+        query: "   \t\n  ",
+      });
+
+      expect(result.workspaces).toHaveLength(0);
+      expect(result.hasMore).toBe(false);
+    });
+
+    it("should reject regex exceeding max length (200 chars)", async () => {
+      const longRegex = "a".repeat(201);
+      await expect(
+        searchService.workspaceSearch({
+          query: longRegex,
+          regex: true,
+        })
+      ).rejects.toThrow(TanmiError);
+    });
+
+    it("should accept regex at max length boundary (200 chars)", async () => {
+      const boundaryRegex = "a".repeat(200);
+      // 不应抛出错误
+      const result = await searchService.workspaceSearch({
+        query: boundaryRegex,
+        regex: true,
+      });
+      expect(result).toBeDefined();
+    });
   });
 
   describe("contentSearch", () => {
@@ -370,6 +410,49 @@ describe("SearchService", () => {
       });
 
       expect(result.matches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    // === 边缘情况测试 ===
+
+    it("should return empty for empty query without ID", async () => {
+      const result = await searchService.contentSearch({
+        workspaceId,
+        query: "",
+      });
+
+      expect(result.matches).toHaveLength(0);
+      expect(result.hasMore).toBe(false);
+    });
+
+    it("should return empty for whitespace-only query without ID", async () => {
+      const result = await searchService.contentSearch({
+        workspaceId,
+        query: "   \t\n  ",
+      });
+
+      expect(result.matches).toHaveLength(0);
+      expect(result.hasMore).toBe(false);
+    });
+
+    it("should reject regex exceeding max length in contentSearch", async () => {
+      const longRegex = "a".repeat(201);
+      await expect(
+        searchService.contentSearch({
+          workspaceId,
+          query: longRegex,
+          regex: true,
+        })
+      ).rejects.toThrow(TanmiError);
+    });
+
+    it("should handle undefined query parameter", async () => {
+      const result = await searchService.contentSearch({
+        workspaceId,
+        query: undefined as unknown as string,
+      });
+
+      expect(result.matches).toHaveLength(0);
+      expect(result.hasMore).toBe(false);
     });
   });
 });

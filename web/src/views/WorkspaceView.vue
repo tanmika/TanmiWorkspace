@@ -107,6 +107,11 @@ function stopResize() {
 onUnmounted(() => {
   document.removeEventListener('mousemove', handleResize)
   document.removeEventListener('mouseup', stopResize)
+  // 清理搜索防抖定时器
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
 })
 
 const route = useRoute()
@@ -314,8 +319,11 @@ watch(workspaceId, loadWorkspace)
 onMounted(async () => {
   await loadWorkspace()
 
-  // 从 URL 恢复选中状态
-  await restoreSelectionFromUrl()
+  // 仅在工作区加载成功后从 URL 恢复选中状态
+  // loadWorkspace 失败时会跳转到首页，此时不应恢复选中状态
+  if (workspaceStore.currentWorkspace) {
+    await restoreSelectionFromUrl()
+  }
 
   // 连接 SSE 并监听更新事件
   const sse = getGlobalSSE()
@@ -568,8 +576,58 @@ const SOURCE_LABELS: Record<string, string> = {
 
 const mergedSearchResults = ref<MergedSearchResult[]>([])
 
+// 计算字符串显示宽度（中文/全角字符按2计算，其他按1计算）
+function getDisplayWidth(str: string): number {
+  let width = 0
+  for (const char of str) {
+    // 中文及全角字符范围：CJK、全角标点、日韩等
+    const code = char.charCodeAt(0)
+    if (
+      (code >= 0x4e00 && code <= 0x9fff) ||  // CJK 基本
+      (code >= 0x3000 && code <= 0x303f) ||  // CJK 标点
+      (code >= 0xff00 && code <= 0xffef) ||  // 全角字符
+      (code >= 0x3040 && code <= 0x30ff)     // 日文假名
+    ) {
+      width += 2
+    } else {
+      width += 1
+    }
+  }
+  return width
+}
+
+// 按显示宽度截断字符串（从末尾保留指定宽度）
+function truncateFromStart(str: string, maxWidth: number): string {
+  let width = 0
+  let startIdx = str.length
+  for (let i = str.length - 1; i >= 0; i--) {
+    const char = str[i]
+    if (!char) break
+    const charWidth = getDisplayWidth(char)
+    if (width + charWidth > maxWidth) break
+    width += charWidth
+    startIdx = i
+  }
+  return str.slice(startIdx)
+}
+
+// 按显示宽度截断字符串（从开头保留指定宽度）
+function truncateFromEnd(str: string, maxWidth: number): string {
+  let width = 0
+  let endIdx = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i]
+    if (!char) break
+    const charWidth = getDisplayWidth(char)
+    if (width + charWidth > maxWidth) break
+    width += charWidth
+    endIdx = i + 1
+  }
+  return str.slice(0, endIdx)
+}
+
 // 格式化 snippet：高亮关键字，长文本截断（以关键字为中心）
-function formatSnippet(snippet: string, query: string, maxLen: number = 40): { prefix: string; match: string; suffix: string } | null {
+function formatSnippet(snippet: string, query: string, maxWidth: number = 40): { prefix: string; match: string; suffix: string } | null {
   if (!query || !snippet) return null
 
   const lowerSnippet = snippet.toLowerCase()
@@ -578,8 +636,9 @@ function formatSnippet(snippet: string, query: string, maxLen: number = 40): { p
 
   if (idx === -1) {
     // 没找到关键字，直接截断显示
-    if (snippet.length > maxLen) {
-      return { prefix: '', match: '', suffix: snippet.slice(0, maxLen) + '...' }
+    const displayWidth = getDisplayWidth(snippet)
+    if (displayWidth > maxWidth) {
+      return { prefix: '', match: '', suffix: truncateFromEnd(snippet, maxWidth - 3) + '...' }
     }
     return { prefix: '', match: '', suffix: snippet }
   }
@@ -589,20 +648,24 @@ function formatSnippet(snippet: string, query: string, maxLen: number = 40): { p
   const beforeMatch = snippet.slice(0, idx)
   const afterMatch = snippet.slice(idx + query.length)
 
-  // 计算前后文本长度限制（中文字符按2计算宽度）
-  const contextLen = Math.floor((maxLen - query.length) / 2)
+  // 计算前后文本宽度限制（预留关键字宽度和省略号）
+  const matchWidth = getDisplayWidth(matchText)
+  const contextWidth = Math.floor((maxWidth - matchWidth) / 2)
+  const ellipsisWidth = 3  // "..." 的宽度
 
   let prefix = beforeMatch
   let suffix = afterMatch
 
   // 截断前缀（保留末尾部分，靠近关键字）
-  if (prefix.length > contextLen - 3) {  // 预留 "..." 的空间
-    prefix = '...' + prefix.slice(-(contextLen - 3))
+  const prefixWidth = getDisplayWidth(prefix)
+  if (prefixWidth > contextWidth - ellipsisWidth) {
+    prefix = '...' + truncateFromStart(prefix, contextWidth - ellipsisWidth)
   }
 
   // 截断后缀（保留开头部分，靠近关键字）
-  if (suffix.length > contextLen - 3) {  // 预留 "..." 的空间
-    suffix = suffix.slice(0, contextLen - 3) + '...'
+  const suffixWidth = getDisplayWidth(suffix)
+  if (suffixWidth > contextWidth - ellipsisWidth) {
+    suffix = truncateFromEnd(suffix, contextWidth - ellipsisWidth) + '...'
   }
 
   return { prefix, match: matchText, suffix }
@@ -651,8 +714,7 @@ async function performSearch(query: string) {
       query: isIdSearch ? '' : query,  // ID 搜索时不用 query
       id: isIdSearch ? query.trim() : undefined,  // ID 搜索时用 id 参数
       target: 'all',
-      limit: 30,
-      context: 0,
+      // limit/context 使用后端默认值
     })
 
     // 按 id 去重，保留第一个匹配（后端已按相关度排序，第一个最相关）
@@ -719,8 +781,16 @@ function closeSearchDropdown() {
   showSearchDropdown.value = false
 }
 
-function handleSearchBlur() {
-  setTimeout(() => closeSearchDropdown(), 150)
+function handleSearchBlur(event: FocusEvent) {
+  // 使用 relatedTarget 检测焦点移动目标
+  // 如果目标在搜索下拉框内（如滚动条），不关闭下拉框
+  const relatedTarget = event.relatedTarget as HTMLElement | null
+  if (relatedTarget?.closest('.search-dropdown')) {
+    return
+  }
+  // 延迟关闭，确保 mousedown 事件有时间触发
+  // 注意：搜索结果使用 @mousedown.prevent 阻止 blur，所以这里的延迟主要是兜底
+  setTimeout(() => closeSearchDropdown(), 100)
 }
 
 async function handleExport() {
