@@ -18,6 +18,22 @@ import safe from "safe-regex2";
 /** 正则表达式最大长度限制 */
 const MAX_REGEX_LENGTH = 200;
 
+/** 内容搜索内部最大匹配数（防止内存问题） */
+const MAX_INTERNAL_MATCHES = 200;
+
+/**
+ * 搜索结果来源优先级（数字越小优先级越高）
+ * 用于按相关度排序：标题匹配优先于内容匹配
+ */
+const SOURCE_PRIORITY: Record<string, number> = {
+  title: 0,      // 最高优先级
+  summary: 1,
+  requirement: 2,
+  tags: 3,
+  conclusion: 4,
+  content: 5,    // 最低优先级
+};
+
 /**
  * 搜索匹配器类型
  */
@@ -173,8 +189,6 @@ export class SearchService {
     const wsDirName = wsEntry.dirName || wsEntry.id;
     const isArchived = wsEntry.status === "archived";
 
-    // 收集所有匹配（内部限制防止内存问题）
-    const MAX_INTERNAL = 200;
     const matches: ContentSearchMatch[] = [];
 
     // 判断 id 类型
@@ -196,7 +210,7 @@ export class SearchService {
       }
 
       for (const nodeId of nodeIds) {
-        if (matches.length >= MAX_INTERNAL) break;
+        if (matches.length >= MAX_INTERNAL_MATCHES) break;
 
         const nodeMeta = graph.nodes[nodeId];
         if (!nodeMeta) continue;
@@ -218,7 +232,7 @@ export class SearchService {
           }
 
           // 搜索需求
-          if (nodeInfo.requirement && matches.length < MAX_INTERNAL) {
+          if (nodeInfo.requirement && matches.length < MAX_INTERNAL_MATCHES) {
             const reqMatch = this.findInTextWithMatcher(nodeInfo.requirement, matcher, context);
             if (reqMatch) {
               matches.push({
@@ -232,7 +246,7 @@ export class SearchService {
           }
 
           // 搜索结论
-          if (nodeInfo.conclusion && matches.length < MAX_INTERNAL) {
+          if (nodeInfo.conclusion && matches.length < MAX_INTERNAL_MATCHES) {
             const conMatch = this.findInTextWithMatcher(nodeInfo.conclusion, matcher, context);
             if (conMatch) {
               matches.push({
@@ -264,7 +278,7 @@ export class SearchService {
       }
 
       for (const memoId of memoIds) {
-        if (matches.length >= MAX_INTERNAL) break;
+        if (matches.length >= MAX_INTERNAL_MATCHES) break;
 
         const memoMeta = memos[memoId];
         if (!memoMeta) continue;
@@ -283,7 +297,7 @@ export class SearchService {
         }
 
         // 搜索摘要
-        if (memoMeta.summary && matches.length < MAX_INTERNAL) {
+        if (memoMeta.summary && matches.length < MAX_INTERNAL_MATCHES) {
           if (matcher.test(memoMeta.summary)) {
             matches.push({
               type: "memo",
@@ -296,7 +310,7 @@ export class SearchService {
         }
 
         // 搜索标签
-        if (memoMeta.tags && matches.length < MAX_INTERNAL) {
+        if (memoMeta.tags && matches.length < MAX_INTERNAL_MATCHES) {
           const matchedTag = memoMeta.tags.find(tag => matcher.test(tag));
           if (matchedTag) {
             matches.push({
@@ -310,14 +324,14 @@ export class SearchService {
         }
 
         // 搜索内容（带行号）
-        if (matches.length < MAX_INTERNAL) {
+        if (matches.length < MAX_INTERNAL_MATCHES) {
           try {
             const contentPath = this.fs.getMemoContentPath(projectRoot, wsDirName, memoDirName);
             const content = await this.fs.readFile(contentPath);
             const contentMatches = this.findAllInTextWithMatcher(content, matcher, context);
 
             for (const match of contentMatches) {
-              if (matches.length >= MAX_INTERNAL) break;
+              if (matches.length >= MAX_INTERNAL_MATCHES) break;
               matches.push({
                 type: "memo",
                 memoId,
@@ -334,16 +348,7 @@ export class SearchService {
       }
     }
 
-    // 按相关度排序：标题匹配优先
-    const SOURCE_PRIORITY: Record<string, number> = {
-      title: 0,      // 最高优先级
-      summary: 1,
-      requirement: 2,
-      tags: 3,
-      conclusion: 4,
-      content: 5,    // 最低优先级
-    };
-
+    // 按相关度排序（使用模块级 SOURCE_PRIORITY 常量）
     matches.sort((a, b) => {
       const aPriority = SOURCE_PRIORITY[a.source] ?? 99;
       const bPriority = SOURCE_PRIORITY[b.source] ?? 99;

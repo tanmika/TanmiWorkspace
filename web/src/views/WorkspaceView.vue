@@ -671,17 +671,6 @@ function formatSnippet(snippet: string, query: string, maxWidth: number = 40): {
   return { prefix, match: matchText, suffix }
 }
 
-// 从 nodeTree 中查找节点信息
-function findNodeInTree(nodeId: string, tree: NodeTreeItem | null): NodeTreeItem | null {
-  if (!tree) return null
-  if (tree.id === nodeId) return tree
-  for (const child of tree.children) {
-    const found = findNodeInTree(nodeId, child)
-    if (found) return found
-  }
-  return null
-}
-
 // 搜索处理
 function handleSearchInput() {
   if (searchDebounceTimer) {
@@ -743,9 +732,9 @@ async function performSearch(query: string) {
         }
       }
 
-      // 查找节点额外信息
+      // 查找节点额外信息（O(1) Map 查找）
       if (match.type === 'node') {
-        const nodeInfo = findNodeInTree(id, nodeStore.nodeTree)
+        const nodeInfo = nodeStore.nodeMap.get(id)
         if (nodeInfo) {
           merged.nodeType = nodeInfo.type
           merged.nodeStatus = nodeInfo.status

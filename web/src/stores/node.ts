@@ -15,6 +15,7 @@ import type {
 export const useNodeStore = defineStore('node', () => {
   // 状态
   const nodeTree = ref<NodeTreeItem | null>(null)
+  const nodeMap = ref<Map<string, NodeTreeItem>>(new Map())  // nodeId -> NodeTreeItem 索引
   const selectedNodeId = ref<string | null>(null)
   const selectedNodeMeta = ref<NodeMeta | null>(null)
   const nodeContext = ref<ContextGetResult | null>(null)
@@ -22,6 +23,20 @@ export const useNodeStore = defineStore('node', () => {
   const error = ref<string | null>(null)
 
   const workspaceStore = useWorkspaceStore()
+
+  // 辅助函数：递归构建 nodeId -> NodeTreeItem 索引
+  function buildNodeMap(tree: NodeTreeItem | null): Map<string, NodeTreeItem> {
+    const map = new Map<string, NodeTreeItem>()
+    if (!tree) return map
+
+    const stack: NodeTreeItem[] = [tree]
+    while (stack.length > 0) {
+      const node = stack.pop()!
+      map.set(node.id, node)
+      stack.push(...node.children)
+    }
+    return map
+  }
 
   // 方法
   async function fetchNodeTree() {
@@ -33,6 +48,7 @@ export const useNodeStore = defineStore('node', () => {
     try {
       const result = await nodeApi.list(workspaceId)
       nodeTree.value = result.tree
+      nodeMap.value = buildNodeMap(result.tree)
     } catch (e) {
       error.value = e instanceof Error ? e.message : '获取节点树失败'
       throw e
@@ -174,12 +190,14 @@ export const useNodeStore = defineStore('node', () => {
 
   function clearAll() {
     nodeTree.value = null
+    nodeMap.value = new Map()
     clearSelection()
   }
 
   return {
     // 状态
     nodeTree,
+    nodeMap,
     selectedNodeId,
     selectedNodeMeta,
     nodeContext,
