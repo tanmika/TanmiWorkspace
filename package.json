@@ -48,6 +48,7 @@
     "test:run": "vitest run",
     "sync-versions": "npx tsx scripts/sync-versions.ts",
     "check-versions": "npx tsx scripts/sync-versions.ts --check",
+    "generate:hook-tools": "npx tsx scripts/generate-hook-tools.ts",
     "prepublishOnly": "npm run test:run && npm run build:all"
   },
   "keywords": [
