@@ -13,6 +13,23 @@ Before executing this skill, you MUST announce to the user:
 
 ---
 
+## 第零步：创建阶段进入 Todo（MANDATORY）
+
+进入 impl 阶段后，**必须首先**创建阶段进入追踪：
+
+```
+TodoWrite([
+  { content: "调用 signal 确认进入 impl 阶段", activeForm: "调用 signal 中", status: "pending" },
+  { content: "展示待执行任务列表", activeForm: "展示任务列表中", status: "pending" },
+  { content: "询问用户选择执行模式", activeForm: "询问执行模式中", status: "pending" },
+  { content: "确认 impl_continue_mode 配置", activeForm: "确认配置中", status: "pending" }
+])
+```
+
+完成每个步骤后**立即**更新 todo 状态。
+
+---
+
 ## 第一步：确认进入阶段
 
 调用以下命令确认进入执行阶段：
@@ -119,6 +136,35 @@ config_set({
   value: "auto_continue" // 或 "ask_each"
 })
 ```
+
+### 4.3 创建任务执行 Todo（MANDATORY）
+
+用户确认执行模式后，**一次性**创建所有待执行任务的 todo：
+
+**格式**：`[任务标题] (执行模式)`
+
+**执行模式标注**：
+- `直接` - 主 AI 直接执行
+- `派发` - 派发给 subagent
+
+**示例**：
+```
+TodoWrite([
+  { content: "实现用户注册 API (直接)", activeForm: "执行 实现用户注册 API 中", status: "pending" },
+  { content: "添加单元测试 (派发)", activeForm: "执行 添加单元测试 中", status: "pending" },
+  { content: "更新 API 文档 (直接)", activeForm: "执行 更新 API 文档 中", status: "pending" }
+])
+```
+
+**更新时机**：
+- 开始执行某任务 → 标记为 `in_progress`
+- 任务完成（节点 completed）→ 标记为 `completed`
+- 任务失败（节点 failed）→ 保持并在末尾追加 `[任务] 失败处理`
+
+**重要**：
+- Todo 仅用于进度展示
+- 节点的 transition、log、conclusion 操作**仍必须执行**
+- 禁止用 todo 替代工作台节点操作
 
 ---
 
@@ -382,6 +428,13 @@ Skill(flow-design)
 
 ## 第七步：完成执行阶段
 
+### 7.0 同步 Todo 状态
+
+确保 todo list 状态与节点状态一致。如有失败任务，追加：
+```
+{ content: "汇总失败任务并提供建议", activeForm: "汇总失败任务中", status: "pending" }
+```
+
 ### 7.1 检查所有任务状态
 
 ```typescript
@@ -455,6 +508,10 @@ node_transition({
 13. NEVER force phase change with non-static nodes - 有非静止态节点时禁止转换阶段
 14. NEVER mark complete without all criteria passed - 验收标准未全部通过禁止标记完成
 15. MUST use node_reference for citations - 引用 MEMO 或文档必须使用 node_reference，禁止直接引用
+16. MUST create phase-entry todo - 进入阶段必须创建阶段进入 todo
+17. MUST create all-tasks todo after mode confirmed - 确认执行模式后一次性创建所有任务 todo
+18. MUST sync todo status with node status - todo 状态必须与节点状态同步
+19. NEVER replace workspace operations with todo - 禁止用 todo 替代工作台节点操作（transition/log/conclusion 仍必须执行）
 
 ---
 
@@ -473,19 +530,26 @@ node_transition({
 11. 忽略失败任务直接结束 → 未处理的失败会累积
 12. 用 log 记录用户回答 → 应使用 notes
 13. 直接引用 MEMO 或文档 → 必须使用 node_reference 建立引用关系
+14. 不创建阶段进入 todo → 用户无法了解阶段进度
+15. 确认模式后不创建任务 todo → 用户无法了解任务进度
+16. todo 状态与节点状态不一致 → 进度展示失真
+17. 用 todo 替代节点操作 → 工作台记录缺失，无法追溯
 
 ---
 
 ## Checklist
 
 ### 阶段进入
+- [ ] 已创建阶段进入 todo
 - [ ] 已调用 signal 进入执行阶段
 - [ ] 已获取并展示待执行任务列表
 - [ ] 已分析最佳执行路径
 - [ ] 已询问用户执行模式
+- [ ] 已创建所有任务的执行 todo（标注执行模式）
 
 ### 执行过程
 - [ ] 按节点状态机流转状态
+- [ ] 同步更新 todo 状态（开始 → in_progress，完成 → completed）
 - [ ] 每个任务完成后按配置处理（自动继续/询问）
 - [ ] 发现问题立刻停止并汇报
 
@@ -496,6 +560,7 @@ node_transition({
 
 ### 执行完成
 - [ ] 所有 exec 节点处于 completed/failed
+- [ ] todo 状态与节点状态一致
 - [ ] 所有 plan 节点已手动完成并有结论
 - [ ] 已汇报执行结果
 - [ ] 失败任务有处理建议
