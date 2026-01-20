@@ -12,6 +12,39 @@ plugin/
 └── skills/          # 技能定义
 ```
 
+## 安装插件
+
+### 正式版
+
+```bash
+tanmi-workspace plugins install --claude   # 安装 Claude Code 插件
+tanmi-workspace plugins install --cursor   # 安装 Cursor 插件
+```
+
+### 开发版
+
+```bash
+# 1. 编译项目
+npx tsc
+
+# 2. 安装插件
+node dist/cli/check-node-version.js plugins install --claude
+```
+
+### 安装内容
+
+| 内容 | 安装位置 |
+|------|----------|
+| Hook 脚本 | `~/.tanmi-workspace/scripts/hook-entry.cjs` |
+| 共享模块 | `~/.tanmi-workspace/scripts/shared/` |
+| Hooks 配置 | `~/.claude/settings.json` |
+| Agent 模板 | `~/.claude/agents/` |
+| Skill 模板 | `~/.claude/skills/` |
+
+### 生效方式
+
+安装后需**重启 Claude Code** 使配置生效。
+
 ## Skills（技能）
 
 Skills 是指导 AI 执行特定任务的 SOP（标准操作流程）文档。系统根据流程自动触发相应的 Skill，**用户无需手动调用**。
@@ -95,6 +128,43 @@ AI 在执行特定功能时主动调用，获取最佳实践指导。
 | `cursor-hook-entry.cjs` | Cursor 钩子入口脚本 |
 | `openspec-import.cjs` | OpenSpec 导入脚本 |
 | `shared/` | 共享工具模块 |
+
+### Hook 输出格式规范
+
+**重要**：修改 Hook 脚本时必须遵循 Claude Code 官方格式。
+
+#### PreToolUse 响应格式
+
+```javascript
+// ✅ 正确格式
+{
+  hookSpecificOutput: {
+    hookEventName: 'PreToolUse',
+    permissionDecision: 'allow' | 'deny' | 'ask',
+    permissionDecisionReason: '拒绝原因'  // 仅在 deny/ask 时使用
+  }
+}
+
+// ❌ 错误格式（不会生效）
+{
+  hookSpecificOutput: { permissionDecision: 'deny' },
+  systemMessage: '...'  // systemMessage 无效
+}
+```
+
+#### 其他 Hook 响应格式
+
+```javascript
+// SessionStart / UserPromptSubmit / PostToolUse
+{
+  hookSpecificOutput: {
+    hookEventName: 'EventName',
+    additionalContext: '注入的上下文'
+  }
+}
+```
+
+参考：[Claude Code Hooks 官方文档](https://docs.anthropic.com/en/docs/claude-code/hooks)
 
 ## Skill 文件规范
 

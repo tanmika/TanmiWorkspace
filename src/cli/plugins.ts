@@ -61,8 +61,12 @@ const INSTALLATION_META_PATH = join(TANMI_HOME, "installation-meta.json");
 // 插件源目录
 const PLUGIN_ROOT = join(PROJECT_ROOT, "plugin");
 const PLUGIN_SCRIPTS = join(PLUGIN_ROOT, "scripts");
+const PLUGIN_HOOKS_GENERATED = join(PLUGIN_ROOT, "hooks", "generated");
 const PLUGIN_AGENTS = join(PLUGIN_ROOT, "agents");
 const PLUGIN_SKILLS = join(PLUGIN_ROOT, "skills");
+
+// 安装目标目录（hooks/generated）
+const TANMI_HOOKS = join(TANMI_HOME, "hooks");
 
 // ============================================================================
 // 颜色输出
@@ -456,6 +460,7 @@ function installClaudeHooks(): void {
 
   ensureDir(TANMI_SCRIPTS);
   installSharedScripts();
+  installHooksGenerated();
 
   const hookSrc = join(PLUGIN_SCRIPTS, "hook-entry.cjs");
   const hookDest = join(TANMI_SCRIPTS, "hook-entry.cjs");
@@ -467,6 +472,29 @@ function installClaudeHooks(): void {
 
   copyFile(hookSrc, hookDest);
   success(`Hook 脚本已安装到 ${hookDest}`);
+}
+
+/**
+ * 安装 hooks/generated 目录（包含 write-tools.cjs 等配置）
+ */
+function installHooksGenerated(): void {
+  const generatedDest = join(TANMI_HOOKS, "generated");
+  ensureDir(generatedDest);
+
+  if (!existsSync(PLUGIN_HOOKS_GENERATED)) {
+    warn(`hooks/generated 目录不存在: ${PLUGIN_HOOKS_GENERATED}`);
+    return;
+  }
+
+  const files = readdirSync(PLUGIN_HOOKS_GENERATED);
+  for (const file of files) {
+    // 跳过 CLAUDE.md 等非脚本文件
+    if (!file.endsWith(".cjs") && !file.endsWith(".js")) continue;
+    const src = join(PLUGIN_HOOKS_GENERATED, file);
+    const dest = join(generatedDest, file);
+    copyFile(src, dest);
+  }
+  success(`Hook 配置已安装到 ${generatedDest}/`);
 }
 
 /**
@@ -511,6 +539,18 @@ function configureClaudeHooks(): void {
             type: "command",
             command: `node "${hookScript}" SessionStart`,
             timeout: 10000,
+          },
+        ],
+      },
+    ],
+    PreToolUse: [
+      {
+        // 匹配所有工具，用于流程强制机制
+        hooks: [
+          {
+            type: "command",
+            command: `node "${hookScript}" PreToolUse`,
+            timeout: 3000,
           },
         ],
       },

@@ -49,6 +49,39 @@ const THROTTLE_MS = {
  */
 const VALID_WORKFLOW_PHASES = new Set(['info', 'design', 'impl']);
 
+// ============================================================================
+// 流程强制机制：phaseSkillInvoked=false 时的白名单
+// ============================================================================
+
+/**
+ * phaseSkillInvoked=false 时允许的工具白名单
+ * 绑定工作区后必须先调用 Skill 进入流程，此前只允许这些工具
+ */
+const SKILL_INIT_WHITELIST = new Set([
+  // Claude 内置工具
+  'Skill', 'Bash', 'Read',
+  // MCP 工具（简短名）
+  'session_unbind', 'session_status', 'tanmi_help', 'plugin_path'
+]);
+
+/**
+ * 检查工具是否在流程初始化白名单中
+ * 处理两种工具名格式：内置工具名 和 MCP 完整路径
+ * @param {string} toolName - 工具名
+ * @returns {boolean} 是否在白名单中
+ */
+function isWhitelistedForSkillInit(toolName) {
+  // 直接匹配内置工具
+  if (SKILL_INIT_WHITELIST.has(toolName)) return true;
+  // MCP 工具格式：mcp__tanmi-workspace__xxx 或 mcp__tanmi-workspace-dev1__xxx
+  if (toolName?.startsWith('mcp__tanmi-workspace')) {
+    const parts = toolName.split('__');
+    const shortName = parts[parts.length - 1];
+    return SKILL_INIT_WHITELIST.has(shortName);
+  }
+  return false;
+}
+
 /**
  * 规范化工作流阶段值
  * 如果传入无效值，返回 'info' 作为默认值
@@ -489,6 +522,24 @@ function handleTodoWriteToolUse(sessionId, binding, tool_input, tool_response) {
 }
 
 /**
+ * 输出 PreToolUse 响应（符合 Claude Code 官方格式）
+ * @param {string} decision - 'allow' | 'deny' | 'ask'
+ * @param {string} [reason] - 拒绝时的说明原因
+ */
+function outputPreToolUseResponse(decision, reason) {
+  const response = {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: decision
+    }
+  };
+  if (reason) {
+    response.hookSpecificOutput.permissionDecisionReason = reason;
+  }
+  console.log(JSON.stringify(response));
+}
+
+/**
  * 处理 PreToolUse 事件
  * 根据工作流阶段约束检查是否允许工具调用
  */
@@ -503,7 +554,7 @@ function handlePreToolUse(sessionId, binding, input) {
         tool: tool_name,
         reason: 'special_allow'
       });
-      console.log(JSON.stringify({ permissionDecision: 'allow' }));
+      outputPreToolUseResponse('allow');
       return;
     }
 
@@ -516,10 +567,7 @@ function handlePreToolUse(sessionId, binding, input) {
           tool: tool_name,
           reason: 'unbound_write_restricted'
         });
-        console.log(JSON.stringify({
-          permissionDecision: 'deny',
-          message: '❌ 写操作需要先绑定工作区\n💡 使用 tanmi_help 获取帮助'
-        }));
+        outputPreToolUseResponse('deny', '❌ 写操作需要先绑定工作区\n💡 使用 tanmi_help 获取帮助');
         return;
       }
     }
@@ -529,13 +577,26 @@ function handlePreToolUse(sessionId, binding, input) {
       tool: tool_name,
       reason: 'not_bound'
     });
-    console.log(JSON.stringify({ permissionDecision: 'allow' }));
+    outputPreToolUseResponse('allow');
     return;
   }
 
   // 读取 workflow 状态
   const graph = getNodeGraph(binding.workspaceId);
   const phase = normalizeWorkflowPhase(graph?.workflow?.phase);
+  const phaseSkillInvoked = graph?.workflow?.phaseSkillInvoked || false;
+
+  // === 流程强制机制：phaseSkillInvoked=false 时阻止非白名单工具 ===
+  if (!phaseSkillInvoked && !isWhitelistedForSkillInit(tool_name)) {
+    const skillName = getSkillForPhase(phase);
+    logHookOutput(sessionId, 'PreToolUse', 'deny', {
+      tool: tool_name,
+      phase: phase,
+      reason: 'skill_init_required'
+    });
+    outputPreToolUseResponse('deny', `已进入工作区模式，必须调用 Skill(${skillName}) 并遵循工作区流程`);
+    return;
+  }
 
   // Signal 工具阶段转换预检查（双重保障，主验证在 MCP 层）
   if (tool_name?.includes('signal')) {
@@ -547,11 +608,7 @@ function handlePreToolUse(sessionId, binding, input) {
         reason: 'phase_transition_blocked',
         detail: validation.reason
       });
-
-      console.log(JSON.stringify({
-        permissionDecision: 'deny',
-        message: validation.reason
-      }));
+      outputPreToolUseResponse('deny', validation.reason);
       return;
     }
   }
@@ -572,11 +629,7 @@ function handlePreToolUse(sessionId, binding, input) {
       phase: phase,
       reason: 'phase_constraint'
     });
-
-    console.log(JSON.stringify({
-      permissionDecision: 'deny',
-      message: `当前处于「${phaseLabels[phase]}」阶段，不允许使用 ${tool_name}。请调用 flow-impl 切换到实现阶段。`
-    }));
+    outputPreToolUseResponse('deny', `当前处于「${phaseLabels[phase]}」阶段，不允许使用 ${tool_name}。请调用 flow-impl 切换到实现阶段。`);
     return;
   }
 
@@ -584,7 +637,7 @@ function handlePreToolUse(sessionId, binding, input) {
     tool: tool_name,
     phase: phase
   });
-  console.log(JSON.stringify({ permissionDecision: 'allow' }));
+  outputPreToolUseResponse('allow');
 }
 
 /**
