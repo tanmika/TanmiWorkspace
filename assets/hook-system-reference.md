@@ -159,47 +159,60 @@ fi
 
 ## Cursor Hook 系统
 
-### 可用事件（12 种）
+> 更新时间：2026-01-20，基于 Cursor 官方文档 https://cursor.com/docs/agent/hooks
 
-**Agent Hooks**：
+### 可用事件（15 种）
+
+**Agent Hooks（13 种）**：
 
 | 事件 | 触发时机 | 用途 |
 |------|---------|------|
+| **sessionStart** | 会话创建时 | 环境初始化、上下文注入、阻止会话 |
+| **sessionEnd** | 会话结束时 | 审计、日志、清理 |
+| **beforeSubmitPrompt** | 用户提交消息前 | 验证、阻止提交 |
 | **beforeShellExecution** | Shell 命令执行前 | 权限控制、命令验证 |
 | **afterShellExecution** | Shell 命令执行后 | 日志记录、结果处理 |
 | **beforeMCPExecution** | MCP 工具调用前 | 权限控制、参数验证 |
 | **afterMCPExecution** | MCP 工具调用后 | 日志记录、结果处理 |
 | **beforeReadFile** | 读取文件前 | 权限控制、路径验证 |
 | **afterFileEdit** | 文件编辑后 | 格式化、验证 |
-| **beforeSubmitPrompt** | 用户提交消息前 | 上下文注入、验证 |
-| **stop** | Agent 完成响应 | 后续消息提交 |
+| **preCompact** | 上下文压缩前 | 通知用户、审计 |
+| **stop** | Agent 完成响应 | 后续消息提交（最多 5 次自动重试） |
 | **afterAgentResponse** | Agent 响应后 | 响应后处理 |
 | **afterAgentThought** | Agent 思考后 | 思考过程监控 |
 
-**Tab Hooks**：
+**Tab Hooks（2 种）**：
 
 | 事件 | 触发时机 | 用途 |
 |------|---------|------|
-| **beforeTabFileRead** | Tab 读取文件前 | 权限控制 |
+| **beforeTabFileRead** | Tab 读取文件前 | 权限控制、秘密脱敏 |
 | **afterTabFileEdit** | Tab 编辑文件后 | 格式化、验证 |
 
 ### 与 Claude Code 的差异
 
 | 特性 | Claude Code | Cursor |
 |------|------------|--------|
-| 事件数量 | 10 种 | 12 种 |
-| 会话标识 | `session_id` | `conversation_id` |
-| SessionStart | ✅ 支持 | ❌ 不支持 |
+| 事件数量 | 10 种 | 15 种 |
+| 会话标识 | `session_id` | `conversation_id`（`session_id` 等同） |
+| SessionStart | ✅ 支持 | ✅ **支持**（`sessionStart`） |
+| SessionEnd | ✅ 支持 | ✅ **支持**（`sessionEnd`） |
 | PreToolUse | ✅ 支持 | ✅ before* 系列 |
 | PostToolUse | ✅ 支持 | ✅ after* 系列 |
+| PreCompact | ✅ 支持 | ✅ **支持**（`preCompact`） |
 | Matcher | ✅ 正则匹配 | ❌ 不支持 |
 | 工具参数修改 | ✅ updatedInput | ❌ 不支持 |
+| 上下文注入 | ✅ additionalContext | ✅ `additional_context` / `agent_message` |
 | MCP 工具拦截 | ✅ 通过 matcher | ✅ beforeMCPExecution |
 | Shell 命令拦截 | ✅ matcher="Bash" | ✅ beforeShellExecution |
 
-### 配置位置
+### 配置位置（优先级从高到低）
 
-`~/.cursor/hooks.json`
+1. **企业级**（Enterprise-managed）：
+   - macOS: `/Library/Application Support/Cursor/hooks.json`
+   - Linux/WSL: `/etc/cursor/hooks.json`
+   - Windows: `C:\ProgramData\Cursor\hooks.json`
+2. **项目级**：`<project-root>/.cursor/hooks.json`
+3. **用户级**：`~/.cursor/hooks.json`
 
 ### 配置格式
 
@@ -207,20 +220,42 @@ fi
 {
   "version": 1,
   "hooks": {
+    "sessionStart": [
+      { "command": "./hooks/session-init.sh" }
+    ],
+    "sessionEnd": [
+      { "command": "./hooks/audit.sh" }
+    ],
     "beforeSubmitPrompt": [
-      {
-        "command": "./path/to/hook.sh"
-      }
+      { "command": "./hooks/validate-prompt.sh" }
     ],
     "beforeShellExecution": [
-      {
-        "command": "node /path/to/validator.js"
-      }
+      { "command": "./hooks/audit.sh" },
+      { "command": "./hooks/block-git.sh" }
+    ],
+    "afterShellExecution": [
+      { "command": "./hooks/audit.sh" }
+    ],
+    "beforeMCPExecution": [
+      { "command": "./hooks/audit.sh" }
+    ],
+    "afterMCPExecution": [
+      { "command": "./hooks/audit.sh" }
     ],
     "afterFileEdit": [
-      {
-        "command": "prettier --write"
-      }
+      { "command": "./hooks/format.sh" }
+    ],
+    "preCompact": [
+      { "command": "./hooks/audit.sh" }
+    ],
+    "stop": [
+      { "command": "./hooks/track-stop.sh" }
+    ],
+    "beforeTabFileRead": [
+      { "command": "./hooks/redact-secrets-tab.sh" }
+    ],
+    "afterTabFileEdit": [
+      { "command": "./hooks/format-tab.sh" }
     ]
   }
 }
@@ -228,67 +263,235 @@ fi
 
 ### 输入格式
 
-**通用字段**：
+**通用字段**（所有 Hook 都包含）：
 ```json
 {
-  "conversation_id": "abc123",
-  "hook_event_name": "beforeSubmitPrompt",
-  "prompt": "用户输入内容"
+  "conversation_id": "string",
+  "generation_id": "string",
+  "model": "string",
+  "hook_event_name": "string",
+  "cursor_version": "string",
+  "workspace_roots": ["<path>"],
+  "user_email": "string | null"
+}
+```
+
+**sessionStart**：
+```json
+{
+  "session_id": "<unique session identifier>",
+  "is_background_agent": true | false,
+  "composer_mode": "agent" | "ask" | "edit"
+}
+```
+
+**sessionEnd**：
+```json
+{
+  "session_id": "<unique session identifier>",
+  "reason": "completed" | "aborted" | "error" | "window_close" | "user_close",
+  "duration_ms": 45000,
+  "is_background_agent": true | false,
+  "final_status": "<status string>",
+  "error_message": "<error details if reason is 'error'>"
+}
+```
+
+**beforeSubmitPrompt**：
+```json
+{
+  "prompt": "<user prompt text>",
+  "attachments": [
+    { "type": "file" | "rule", "filePath": "<absolute path>" }
+  ]
 }
 ```
 
 **beforeShellExecution**：
 ```json
 {
-  "conversation_id": "abc123",
-  "hook_event_name": "beforeShellExecution",
-  "command": "npm install lodash"
+  "command": "<full terminal command>",
+  "cwd": "<current working directory>"
+}
+```
+
+**afterShellExecution**：
+```json
+{
+  "command": "<full terminal command>",
+  "output": "<full terminal output>",
+  "duration": 1234
 }
 ```
 
 **beforeMCPExecution**：
 ```json
 {
-  "conversation_id": "abc123",
-  "hook_event_name": "beforeMCPExecution",
-  "server_name": "tanmi-workspace",
-  "tool_name": "node_create",
-  "arguments": { "...": "..." }
+  "tool_name": "<tool name>",
+  "tool_input": "<json params>",
+  "url": "<server url>"  // 或 "command": "<command string>"
+}
+```
+
+**afterMCPExecution**：
+```json
+{
+  "tool_name": "<tool name>",
+  "tool_input": "<json params>",
+  "result_json": "<tool result json>",
+  "duration": 1234
 }
 ```
 
 **afterFileEdit**：
 ```json
 {
-  "conversation_id": "abc123",
-  "hook_event_name": "afterFileEdit",
-  "file_path": "/path/to/file.ts",
-  "content": "文件内容"
+  "file_path": "<absolute path>",
+  "edits": [
+    { "old_string": "<search>", "new_string": "<replace>" }
+  ]
+}
+```
+
+**preCompact**：
+```json
+{
+  "trigger": "auto" | "manual",
+  "context_usage_percent": 85,
+  "context_tokens": 120000,
+  "context_window_size": 128000,
+  "message_count": 45,
+  "messages_to_compact": 30,
+  "is_first_compaction": true | false
+}
+```
+
+**stop**：
+```json
+{
+  "status": "completed" | "aborted" | "error",
+  "loop_count": 0  // 已触发自动 follow-up 次数，最多 5 次
+}
+```
+
+**afterAgentResponse**：
+```json
+{
+  "text": "<assistant final text>"
+}
+```
+
+**afterAgentThought**：
+```json
+{
+  "text": "<fully aggregated thinking text>",
+  "duration_ms": 5000
+}
+```
+
+**beforeReadFile**：
+```json
+{
+  "file_path": "<absolute path>",
+  "attachments": [
+    { "type": "file" | "rule", "filePath": "<absolute path>" }
+  ]
+}
+```
+
+**beforeTabFileRead**：
+```json
+{
+  "file_path": "<absolute path>",
+  "content": "<file contents>"
+}
+```
+
+**afterTabFileEdit**：
+```json
+{
+  "file_path": "<absolute path>",
+  "edits": [
+    {
+      "old_string": "<search>",
+      "new_string": "<replace>",
+      "range": {
+        "start_line_number": 10,
+        "start_column": 5,
+        "end_line_number": 10,
+        "end_column": 20
+      },
+      "old_line": "<line before edit>",
+      "new_line": "<line after edit>"
+    }
+  ]
 }
 ```
 
 ### 输出格式
 
+**sessionStart 输出**：
+```json
+{
+  "env": { "<key>": "<value>" },
+  "additional_context": "<context to add to conversation>",
+  "continue": true | false,
+  "user_message": "<message shown if blocked>"
+}
+```
+
+**sessionEnd 输出**：
+```json
+// 无输出字段 - fire and forget
+```
+
 **权限决策**（before* 事件）：
 ```json
 {
-  "permission": "allow",
+  "permission": "allow" | "deny" | "ask",
   "user_message": "显示给用户的消息（可选）",
   "agent_message": "注入给 AI 的上下文（可选）"
 }
 ```
 
-`permission` 取值：
-- `allow` - 允许执行
-- `deny` - 拒绝执行
-- `ask` - 让用户决定
-
-**stop 事件后续消息**：
+**beforeSubmitPrompt 输出**：
 ```json
 {
-  "followup_message": "自动提交的后续消息"
+  "continue": true | false,
+  "user_message": "<message shown to user when blocked>"
 }
 ```
+
+**preCompact 输出**：
+```json
+{
+  "user_message": "<message to show when compaction occurs>"
+}
+```
+
+**stop 输出**：
+```json
+{
+  "followup_message": "<message text>"  // 自动提交的后续消息
+}
+```
+
+**beforeTabFileRead 输出**：
+```json
+{
+  "permission": "allow" | "deny"
+}
+```
+
+**afterTabFileEdit / afterAgentResponse / afterAgentThought 输出**：
+```json
+// 无输出字段
+```
+
+> **注意**：
+> - `loop_count` 表示已触发自动 follow-up 次数，最多 5 次以防止无限循环
+> - Tab Hooks 和 Agent Hooks 使用不同的事件，可以设置不同的策略
+> - `afterTabFileEdit` 比 `afterFileEdit` 提供更详细的编辑信息（range、old_line、new_line）
 
 ---
 
