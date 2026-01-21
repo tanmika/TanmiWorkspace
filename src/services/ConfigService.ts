@@ -101,8 +101,12 @@ export class ConfigService {
 
   /**
    * 更新全局配置（部分更新）
+   * 支持外部 API 参数和内部 tutorial 参数
    */
-  async updateConfig(partial: ConfigSetParams): Promise<GlobalConfig> {
+  async updateConfig(partial: ConfigSetParams & {
+    tutorialCreated?: boolean;
+    tutorialVersion?: string;
+  }): Promise<GlobalConfig> {
     const current = await this.readConfig();
 
     const updated: GlobalConfig = {
@@ -118,6 +122,12 @@ export class ConfigService {
           ...current.security,
           ...partial.security,
         },
+      }),
+      ...(partial.tutorialCreated !== undefined && {
+        tutorialCreated: partial.tutorialCreated,
+      }),
+      ...(partial.tutorialVersion !== undefined && {
+        tutorialVersion: partial.tutorialVersion,
       }),
     };
 

@@ -595,12 +595,9 @@ export class TutorialService {
       }
     }
 
-    // 3. 更新配置
+    // 3. 更新配置（使用 updateConfig 避免覆盖其他配置）
     if (needsConfigUpdate) {
-      await this.config.writeConfig({
-        ...currentConfig,
-        ...configUpdates,
-      });
+      await this.config.updateConfig(configUpdates);
     }
 
     return needsConfigUpdate;
@@ -634,10 +631,8 @@ export class TutorialService {
     await this.createTutorialWorkspace();
     await this.createVersionUpdateWorkspace(undefined, true);
 
-    // 更新配置
-    const currentConfig = await this.config.readConfig();
-    await this.config.writeConfig({
-      ...currentConfig,
+    // 更新配置（使用 updateConfig 避免覆盖其他配置）
+    await this.config.updateConfig({
       tutorialCreated: true,
       tutorialVersion: TUTORIAL_VERSION,
     });
