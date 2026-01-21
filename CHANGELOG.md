@@ -11,6 +11,21 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.11.0-beta.3] - 2026-01-21
+
+### Fixed
+
+- **未绑定写入检查逻辑修复**: 修复安全检查只检查 `sessionId` 参数导致 85% 的写工具（仅有 `workspaceId`）被错误拒绝的问题，现在支持通过 `workspaceId` 反查绑定会话
+- **设置持久化修复**: 修复 TutorialService 的 ensureTutorial/manualTriggerTutorial 使用 writeConfig 覆盖整个配置，导致 security 设置被旧配置覆盖的问题
+
+### Improved
+
+- **用户手册目录跟踪**: 滚动右侧内容时，左侧目录自动平滑滚动使当前高亮项居中显示
+
+### Docs
+
+- **用户手册增强**: 新增「与普通 AI 对话的区别」对比表、「为什么选择 TanmiWorkspace」章节、「最佳实践」章节、「跨仓库任务管理」场景说明
+
 ## [1.11.0-beta.2] - 2026-01-21
 
 ### Added

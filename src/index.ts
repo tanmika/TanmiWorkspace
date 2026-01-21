@@ -233,13 +233,19 @@ function createMcpServer(services: Services): Server {
           const allowUnboundWrite = config.security?.allowUnboundWrite ?? false;
 
           if (!allowUnboundWrite) {
-            // 检查参数中是否有 sessionId，以及会话是否已绑定
-            const sessionId = args?.sessionId as string | undefined;
+            // 检查绑定状态：优先使用 sessionId，其次使用 workspaceId 反查
             let isBound = false;
+            const sessionId = args?.sessionId as string | undefined;
+            const workspaceId = args?.workspaceId as string | undefined;
 
             if (sessionId) {
+              // 情况1：使用 sessionId 直接查询绑定
               const binding = await services.sessionStorage.getBinding(sessionId);
               isBound = binding !== null;
+            } else if (workspaceId) {
+              // 情况2：使用 workspaceId 反查是否有会话绑定到该工作区
+              const sessions = await services.sessionStorage.getSessionsByWorkspace(workspaceId);
+              isBound = sessions.length > 0;
             }
 
             if (!isBound) {

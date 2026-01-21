@@ -1,6 +1,6 @@
 {
   "name": "tanmi-workspace",
-  "version": "1.11.0-beta.2",
+  "version": "1.11.0-beta.3",
   "description": "TanmiWorkspace MCP Server - 面向 AI 编程助手的分形任务跟踪系统",
   "type": "module",
   "main": "dist/cli/check-node-version.js",
