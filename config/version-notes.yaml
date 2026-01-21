@@ -9,6 +9,15 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.11.0-beta.0
+    requirement: 工作流三阶段系统、Memo/Node 工具拆分、搜索增强、readonly 权限控制
+    conclusion: |-
+      - 工作流三阶段：flow-info → flow-design → flow-impl 替代旧 Skill
+      - 工具拆分：memo_replace/edit/insert、node_replace/edit 精细化编辑
+      - 搜索增强：支持正则表达式、ReDoS 防护、相关度排序
+      - readonly 权限：未绑定会话时拒绝写操作，提升安全性
+      - URL 持久化：节点选中状态可通过 URL 恢复
+    note: "Beta 版本，请谨慎使用"
   - version: 1.10.10
     requirement: 工作区置顶、全局备份管理、验收标准动态列
     conclusion: |-

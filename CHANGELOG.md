@@ -11,6 +11,41 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.11.0-beta.0] - 2026-01-20
+
+### Added
+
+- **工作流三阶段系统**: 新增 `flow-info` / `flow-design` / `flow-impl` 三阶段 Skill，替代原有的 `bootstrapping-workspace` / `starting-info-flow`
+- **Memo 工具拆分**: `memo_update` 拆分为 `memo_replace`（全量替换）、`memo_edit`（精确替换/行范围替换）、`memo_insert`（行后插入）
+- **Node 工具拆分**: 新增 `node_replace`（全量替换）、`node_edit`（精确替换/行范围替换）
+- **搜索功能增强**: 支持正则表达式搜索、ReDoS 防护、相关度排序（标题 > 摘要 > 需求 > 结论）
+- **工具 readonly 属性**: 新增 `TanmiTool` 类型，标识工具读写属性，未绑定会话时拒绝写操作
+- **节点选中状态 URL 持久化**: `?node=xxx` / `?memo=xxx` 参数，页面刷新自动恢复选中状态
+- **验收标准格式校验**: 新增 `validateAcceptanceCriteria()` 函数，防止 WebUI 渲染错误
+- **Skill 常量管理**: 新增 `src/constants/skills.ts`，集中定义 FLOW_SKILLS / DEPRECATED_SKILLS
+- **搜索 HTTP 路由**: 新增 `/workspaces/:wid/search` 端点
+
+### Improved
+
+- **tanmi_help 模糊搜索**: 支持无参调用返回主题列表，前缀匹配 > ID 包含 > 标题包含
+- **Hook 系统增强**: 配置深度合并保留用户自定义，自动生成 `write-tools.cjs` 工具分类
+- **派发流程引导**: 明确派发状态切换流程，exec 失败时禁止派发 spec 节点
+- **前端搜索集成**: WorkspaceView 搜索框 + 结果下拉 + 点击定位
+- **节点 Store 优化**: 新增 nodeMap 索引提高查找性能
+- **设置面板**: 新增安全配置开关 UI（allowUnboundWrite）
+
+### Fixed
+
+- **conclusionStale 标志**: 修复标志不会被清除的问题
+- **BackupService 安全**: spawn 替代 exec 防止命令注入
+- **Hook 安装机制**: 正确保留用户自定义 hook
+- **测试修复**: 修复 dispatch.test.ts 全部 15 个用例 + 6 个跳过的测试文件（56 用例）
+
+### Refactor
+
+- **代码审查修复**: 常量提取、搜索性能优化、日志系统健壮性、SSE 事件服务健壮性
+- **废弃 Skill 清理**: 插件安装时自动清理 bootstrapping-workspace / starting-info-flow
+
 ## [1.10.10] - 2026-01-15
 
 ### Added
