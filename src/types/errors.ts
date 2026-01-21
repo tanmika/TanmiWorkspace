@@ -86,6 +86,9 @@ export const ErrorCodes = {
   // 版本错误
   VERSION_TOO_HIGH: "VERSION_TOO_HIGH",
   VERSION_READONLY: "VERSION_READONLY",
+
+  // 安全错误
+  UNBOUND_WRITE_DENIED: "UNBOUND_WRITE_DENIED",
 } as const;
 
 /**
@@ -171,4 +174,5 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   INVALID_CONFIG: "配置文件无效",
   VERSION_TOO_HIGH: "数据版本过高，请升级 tanmi-workspace",
   VERSION_READONLY: "数据版本高于当前代码版本，禁止写入",
+  UNBOUND_WRITE_DENIED: "安全设置禁止未绑定会话执行写操作",
 };

@@ -219,6 +219,39 @@ function createMcpServer(services: Services): Server {
         paramWarnings = validation.warnings;
       }
 
+      // ========================================================================
+      // 未绑定写入安全检查
+      // ========================================================================
+      // 如果是写操作，检查会话绑定状态和 allowUnboundWrite 配置
+      const toolDef = toolMap.get(name) as import("./types/tool.js").TanmiTool | undefined;
+      if (toolDef && toolDef.readonly !== true) {
+        // 排除会话管理和工作区初始化工具（它们本身就是用于绑定或创建的）
+        const sessionExemptTools = ["session_bind", "session_unbind", "workspace_init", "config_set"];
+
+        if (!sessionExemptTools.includes(name)) {
+          const config = await services.config.readConfig();
+          const allowUnboundWrite = config.security?.allowUnboundWrite ?? false;
+
+          if (!allowUnboundWrite) {
+            // 检查参数中是否有 sessionId，以及会话是否已绑定
+            const sessionId = args?.sessionId as string | undefined;
+            let isBound = false;
+
+            if (sessionId) {
+              const binding = await services.sessionStorage.getBinding(sessionId);
+              isBound = binding !== null;
+            }
+
+            if (!isBound) {
+              throw new TanmiError(
+                "UNBOUND_WRITE_DENIED",
+                `安全设置禁止未绑定会话执行写操作 [${name}]。请先使用 session_bind 绑定会话到工作区，或在设置中启用"允许未绑定写入"。`
+              );
+            }
+          }
+        }
+      }
+
       let result: unknown;
 
       switch (name) {

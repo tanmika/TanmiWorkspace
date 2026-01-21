@@ -223,7 +223,7 @@ async function doSaveDispatch() {
   }
 }
 
-// 切换未绑定写入限制
+// 切换未绑定写入限制（UI 显示"禁止"，存储值为"允许"的反转）
 async function toggleAllowUnboundWrite() {
   const newValue = !localAllowUnboundWrite.value
   try {
@@ -231,7 +231,7 @@ async function toggleAllowUnboundWrite() {
       security: { allowUnboundWrite: newValue },
     })
     localAllowUnboundWrite.value = newValue
-    toastStore.success('安全设置已更新')
+    toastStore.success('偏好设置已更新')
   } catch {
     toastStore.error('保存失败')
   }
@@ -347,11 +347,11 @@ async function handleGenerateTutorial() {
         </div>
       </div>
 
-      <!-- 派发模式设置 -->
-      <div class="setting-section dispatch-section">
-        <div class="setting-section-title">派发行为配置</div>
+      <!-- 偏好设置 -->
+      <div class="setting-section preferences-section">
+        <div class="setting-section-title">偏好设置</div>
         <div class="setting-section-desc">
-          设置在工作区启用派发时的默认行为
+          派发行为与安全相关配置
         </div>
 
         <div class="config-entry">
@@ -362,26 +362,18 @@ async function handleGenerateTutorial() {
           <div class="config-entry-value">{{ dispatchModeLabel }}</div>
           <WsButton variant="primary" @click="openDispatchConfig">配置</WsButton>
         </div>
-      </div>
-
-      <!-- 安全设置 -->
-      <div class="setting-section security-section">
-        <div class="setting-section-title">安全设置</div>
-        <div class="setting-section-desc">
-          控制会话未绑定时的写操作权限
-        </div>
 
         <div class="config-entry">
           <div class="config-entry-info">
-            <div class="config-entry-title">允许未绑定写入</div>
+            <div class="config-entry-title">禁止未绑定写入</div>
             <div class="config-entry-desc">
-              关闭时，未绑定工作区的会话无法执行写操作（创建节点、修改等）
+              开启时，未绑定工作区的会话无法执行写操作
             </div>
           </div>
           <label class="toggle-switch">
             <input
               type="checkbox"
-              :checked="localAllowUnboundWrite"
+              :checked="!localAllowUnboundWrite"
               @change="toggleAllowUnboundWrite"
               :disabled="settingsStore.loading"
             />
@@ -790,11 +782,15 @@ async function handleGenerateTutorial() {
   border: 1px solid var(--border-color);
 }
 
-/* 开关样式 */
+.config-entry + .config-entry {
+  margin-top: 12px;
+}
+
+/* 开关样式 - 构成主义工业风格 */
 .toggle-switch {
   position: relative;
   display: inline-block;
-  width: 44px;
+  width: 48px;
   height: 24px;
   flex-shrink: 0;
 }
@@ -812,31 +808,37 @@ async function handleGenerateTutorial() {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--border-color);
-  transition: 0.2s;
-  border-radius: 24px;
+  background-color: var(--card-bg);
+  border: 2px solid var(--border-color);
+  transition: background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .toggle-slider:before {
   position: absolute;
   content: "";
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: 0.2s;
-  border-radius: 50%;
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: var(--border-color);
+  /* 段落感：快速启动 + 干脆到位 */
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+              background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* 开启状态 - 红色背景 */
 .toggle-switch input:checked + .toggle-slider {
-  background-color: var(--accent-color, #4a9eff);
+  background-color: var(--accent-red);
+  border-color: var(--accent-red);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
-  transform: translateX(20px);
+  transform: translateX(24px);
+  background-color: #fff;
 }
 
+/* 禁用状态 */
 .toggle-switch input:disabled + .toggle-slider {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1004,7 +1006,7 @@ async function handleGenerateTutorial() {
 }
 
 /* 派发配置区 */
-.dispatch-section {
+.preferences-section {
   border-top: 1px solid var(--border-color);
   padding-top: 20px;
 }
