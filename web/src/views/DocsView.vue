@@ -63,6 +63,9 @@ const activeId = ref('')
 // 内容区 ref
 const contentRef = ref<HTMLElement | null>(null)
 
+// 目录导航区 ref
+const tocNavRef = ref<HTMLElement | null>(null)
+
 // 点击目录项，平滑滚动到对应章节
 function scrollToSection(id: string) {
   const element = document.getElementById(id)
@@ -94,8 +97,29 @@ function handleScroll() {
     }
   }
 
-  if (currentId) {
+  if (currentId && currentId !== activeId.value) {
     activeId.value = currentId
+    // 让左侧菜单的当前项滚动到可视区域居中
+    scrollTocItemIntoView(currentId)
+  }
+}
+
+// 将目录项滚动到左侧导航的可视区域居中
+function scrollTocItemIntoView(id: string) {
+  if (!tocNavRef.value) return
+
+  const tocItem = tocNavRef.value.querySelector(`[data-toc-id="${id}"]`) as HTMLElement
+  if (tocItem) {
+    const navRect = tocNavRef.value.getBoundingClientRect()
+    const itemRect = tocItem.getBoundingClientRect()
+
+    // 计算目标滚动位置：让目录项在导航区中居中
+    const targetScrollTop = tocNavRef.value.scrollTop + (itemRect.top - navRect.top) - (navRect.height / 2) + (itemRect.height / 2)
+
+    tocNavRef.value.scrollTo({
+      top: targetScrollTop,
+      behavior: 'smooth'
+    })
   }
 }
 
@@ -178,11 +202,12 @@ onUnmounted(() => {
         <div class="sidebar-header">
           <h3>目录</h3>
         </div>
-        <nav class="toc-nav">
+        <nav ref="tocNavRef" class="toc-nav">
           <ul class="toc-list">
             <li
               v-for="item in tocItems"
               :key="item.id"
+              :data-toc-id="item.id"
               :class="['toc-item', `level-${item.level}`, { active: activeId === item.id }]"
               @click="scrollToSection(item.id)"
             >
