@@ -9,7 +9,7 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
-  - version: 1.11.0-beta.0
+  - version: 1.11.0-beta
     requirement: 工作流三阶段系统、Memo/Node 工具拆分、搜索增强、readonly 权限控制
     conclusion: |-
       - 工作流三阶段：flow-info → flow-design → flow-impl 替代旧 Skill

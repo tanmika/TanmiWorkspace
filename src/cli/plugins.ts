@@ -121,7 +121,10 @@ function logToFile(action: string, details: string): void {
 
 function getPackageVersion(): string {
   try {
-    const pkg = require(join(PROJECT_ROOT, "package.json"));
+    // 直接读取文件，避免 require 缓存导致 npm install 后仍返回旧版本
+    const pkgPath = join(PROJECT_ROOT, "package.json");
+    const pkgContent = readFileSync(pkgPath, "utf-8");
+    const pkg = JSON.parse(pkgContent);
     return pkg.version || "0.0.0";
   } catch {
     return "0.0.0";
