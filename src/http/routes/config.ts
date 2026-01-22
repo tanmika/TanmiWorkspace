@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getServices } from "../services.js";
 import type { ConfigSetParams } from "../../types/settings.js";
+import { isVersionLessThan } from "../../utils/version.js";
 
 // 组件最低版本配置类型
 interface ComponentVersionsConfig {
@@ -37,23 +38,6 @@ interface ConfigUpdateBody {
   security?: {
     allowUnboundWrite?: boolean;
   };
-}
-
-/**
- * 比较版本号，返回 true 如果 v1 < v2
- */
-function isVersionLessThan(v1: string | null, v2: string): boolean {
-  if (!v1) return true; // 无版本号视为最旧
-  const parse = (v: string) => v.split(".").map(n => parseInt(n, 10) || 0);
-  const p1 = parse(v1);
-  const p2 = parse(v2);
-  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
-    const a = p1[i] || 0;
-    const b = p2[i] || 0;
-    if (a < b) return true;
-    if (a > b) return false;
-  }
-  return false; // 相等不算 less than
 }
 
 export async function configRoutes(fastify: FastifyInstance): Promise<void> {
