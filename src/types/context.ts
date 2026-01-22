@@ -94,15 +94,26 @@ export interface ContextFocusParams {
 }
 
 /**
+ * 活跃节点信息（用于切出子树时的拦截提示）
+ */
+export interface ActiveNodeInfo {
+  nodeId: string;
+  title: string;
+  status: NodeStatus;
+  type: "planning" | "execution";
+}
+
+/**
  * context_focus 输出
  */
 export interface ContextFocusResult {
   success: boolean;
   previousFocus: string | null;
   currentFocus: string;
-  // 阻断信息（当 success=false 且有 stale 节点时）
-  error?: "CONCLUSION_STALE";
+  // 阻断信息（当 success=false 时）
+  error?: "CONCLUSION_STALE" | "ACTIVE_NODES_IN_SUBTREE";
   staleNodeId?: string;
+  activeNodes?: ActiveNodeInfo[];  // 子树中的活跃节点列表（error=ACTIVE_NODES_IN_SUBTREE 时返回）
   hint?: string;
 }
 

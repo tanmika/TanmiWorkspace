@@ -15,6 +15,7 @@ import type {
   TypedLogEntry,
   MemoReferenceItem,
   DocRef,
+  ActiveNodeInfo,
 } from "../types/context.js";
 import { TanmiError } from "../types/errors.js";
 import { now } from "../utils/time.js";
@@ -45,6 +46,17 @@ function truncateConclusion(conclusion: string): string {
 
   return `${head}\n\n...[已截取 ${omitted} 字符，完整内容请用 node_get 查看]...\n\n${tail}`;
 }
+
+// ========== 活跃状态定义 ==========
+/**
+ * 规划节点的活跃状态（非静止态）
+ */
+const PLANNING_ACTIVE_STATUSES = new Set(["planning", "monitoring"]);
+
+/**
+ * 执行节点的活跃状态（非静止态）
+ */
+const EXECUTION_ACTIVE_STATUSES = new Set(["implementing", "validating"]);
 
 
 /**
@@ -417,6 +429,46 @@ export class ContextService {
           }
         }
       }
+
+      // 3.2 检查活跃节点拦截（切出子树时）
+      // 判断是否是"切出子树"操作：
+      // - 如果目标在 previousFocus 的祖先链中 → 向上走，不拦截
+      // - 如果目标在 previousFocus 的子树中 → 向下走，不拦截
+      // - 否则是切到另一个分支 → 检查被离开的子树中是否有活跃节点
+      const prevAncestors = this.getAncestorSet(previousFocus, graph);
+      const targetIsAncestor = prevAncestors.has(nodeId);
+      const targetIsDescendant = this.isInSubtreeOf(nodeId, previousFocus, graph);
+
+      if (!targetIsAncestor && !targetIsDescendant) {
+        // 切到另一个分支，需要检查活跃节点
+        const lca = this.findLCA(previousFocus, nodeId, graph);
+
+        // 收集从 previousFocus 到 LCA（不含）这条路径上的活跃节点
+        const activeNodes = await this.collectActiveNodesOnPathUp(
+          previousFocus,
+          lca,
+          graph,
+          projectRoot,
+          wsDirName,
+          nodeId
+        );
+
+        if (activeNodes.length > 0) {
+          // 去重（同一个节点可能被多次添加）
+          const uniqueActiveNodes = Array.from(
+            new Map(activeNodes.map(n => [n.nodeId, n])).values()
+          );
+
+          return {
+            success: false,
+            previousFocus,
+            currentFocus: previousFocus, // 焦点不变
+            error: "ACTIVE_NODES_IN_SUBTREE",
+            activeNodes: uniqueActiveNodes,
+            hint: `当前分支有 ${uniqueActiveNodes.length} 个活跃节点，请先处理后再切换：${uniqueActiveNodes.map(n => `${n.nodeId}(${n.status})`).join(", ")}`,
+          };
+        }
+      }
     }
 
     // 4. 更新 currentFocus
@@ -599,5 +651,153 @@ export class ContextService {
     if (max <= 0) return [];
     if (logs.length <= max) return logs;
     return logs.slice(-max);
+  }
+
+  // ========== 子树切换拦截辅助方法 ==========
+
+  /**
+   * 获取节点的祖先集合（包含自身）
+   */
+  private getAncestorSet(nodeId: string, graph: NodeGraph): Set<string> {
+    const ancestors = new Set<string>();
+    let currentId: string | null = nodeId;
+    while (currentId) {
+      ancestors.add(currentId);
+      const meta: NodeMeta | undefined = graph.nodes[currentId];
+      if (!meta) break;
+      currentId = meta.parentId;
+    }
+    return ancestors;
+  }
+
+  /**
+   * 检查节点是否在目标节点的子树中（通过祖先链判断）
+   */
+  private isInSubtreeOf(nodeId: string, subtreeRootId: string, graph: NodeGraph): boolean {
+    const ancestors = this.getAncestorSet(nodeId, graph);
+    return ancestors.has(subtreeRootId);
+  }
+
+  /**
+   * 找到两个节点的最近公共祖先 (LCA)
+   */
+  private findLCA(nodeA: string, nodeB: string, graph: NodeGraph): string | null {
+    const ancestorsA = this.getAncestorSet(nodeA, graph);
+    let currentId: string | null = nodeB;
+    while (currentId) {
+      if (ancestorsA.has(currentId)) {
+        return currentId;
+      }
+      const meta: NodeMeta | undefined = graph.nodes[currentId];
+      if (!meta) break;
+      currentId = meta.parentId;
+    }
+    return null;
+  }
+
+  /**
+   * 收集子树中的所有活跃节点（DFS 遍历）
+   * @param subtreeRootId 子树根节点
+   * @param graph 节点图
+   * @param excludeBranch 排除某个分支（可选，用于排除目标节点所在分支）
+   */
+  private async collectActiveNodesInSubtree(
+    subtreeRootId: string,
+    graph: NodeGraph,
+    projectRoot: string,
+    wsDirName: string,
+    excludeBranch?: string
+  ): Promise<ActiveNodeInfo[]> {
+    const activeNodes: ActiveNodeInfo[] = [];
+
+    const dfs = async (nodeId: string) => {
+      // 如果是要排除的分支，跳过
+      if (nodeId === excludeBranch) return;
+
+      const meta: NodeMeta | undefined = graph.nodes[nodeId];
+      if (!meta) return;
+
+      // 检查是否是活跃状态
+      const isActive = meta.type === "planning"
+        ? PLANNING_ACTIVE_STATUSES.has(meta.status)
+        : EXECUTION_ACTIVE_STATUSES.has(meta.status);
+
+      if (isActive) {
+        // 读取节点标题
+        const nodeDirName = meta.dirName || nodeId;
+        const info = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+        activeNodes.push({
+          nodeId,
+          title: info.title,
+          status: meta.status as any,
+          type: meta.type,
+        });
+      }
+
+      // 递归检查子节点
+      for (const childId of meta.children) {
+        if (childId !== excludeBranch) {
+          await dfs(childId);
+        }
+      }
+    };
+
+    await dfs(subtreeRootId);
+    return activeNodes;
+  }
+
+  /**
+   * 从节点向上到祖先的路径上收集活跃节点
+   * @param fromNodeId 起始节点
+   * @param toAncestorId 终止祖先（不含）
+   * @param graph 节点图
+   * @param excludeDescendantOf 排除某个节点的后代分支（目标节点所在分支）
+   */
+  private async collectActiveNodesOnPathUp(
+    fromNodeId: string,
+    toAncestorId: string | null,
+    graph: NodeGraph,
+    projectRoot: string,
+    wsDirName: string,
+    excludeDescendantOf?: string
+  ): Promise<ActiveNodeInfo[]> {
+    const allActiveNodes: ActiveNodeInfo[] = [];
+    let currentId: string | null = fromNodeId;
+
+    // 找到目标节点到 LCA 的分支（需要排除）
+    let excludeBranchAtLCA: string | null = null;
+    if (excludeDescendantOf && toAncestorId) {
+      let tid: string | null = excludeDescendantOf;
+      while (tid) {
+        const tidMeta: NodeMeta | undefined = graph.nodes[tid];
+        if (!tidMeta) break;
+        if (tidMeta.parentId === toAncestorId) {
+          excludeBranchAtLCA = tid;
+          break;
+        }
+        tid = tidMeta.parentId;
+      }
+    }
+
+    while (currentId && currentId !== toAncestorId) {
+      const meta: NodeMeta | undefined = graph.nodes[currentId];
+      if (!meta) break;
+
+      // 收集当前节点子树中的活跃节点
+      // 如果当前节点就是 LCA 的直接子节点，排除目标所在分支
+      const excludeBranch = (meta.parentId === toAncestorId) ? excludeBranchAtLCA : undefined;
+      const activeInSubtree = await this.collectActiveNodesInSubtree(
+        currentId,
+        graph,
+        projectRoot,
+        wsDirName,
+        excludeBranch || undefined
+      );
+      allActiveNodes.push(...activeInSubtree);
+
+      currentId = meta.parentId;
+    }
+
+    return allActiveNodes;
   }
 }

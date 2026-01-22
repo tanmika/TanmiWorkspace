@@ -25,6 +25,7 @@ const { NodeService } = await import("../../src/services/NodeService.js");
 const { MemoService } = await import("../../src/services/MemoService.js");
 const { ContextService } = await import("../../src/services/ContextService.js");
 const { ReferenceService } = await import("../../src/services/ReferenceService.js");
+const { StateService } = await import("../../src/services/StateService.js");
 
 describe("ContextService - Memo References", () => {
   let basePath: string;
@@ -270,6 +271,420 @@ describe("ContextService - Memo References", () => {
       
       expect(context.memoReferences).toHaveLength(1);
       expect(context.memoReferences[0].memoId).toBe(memoResult.memoId);
+    });
+  });
+});
+
+describe("ContextService - Active Nodes Interception", () => {
+  let basePath: string;
+  let projectRoot: string;
+  let fsAdapter: InstanceType<typeof FileSystemAdapter>;
+  let json: InstanceType<typeof JsonStorage>;
+  let md: InstanceType<typeof MarkdownStorage>;
+  let workspaceService: InstanceType<typeof WorkspaceService>;
+  let nodeService: InstanceType<typeof NodeService>;
+  let contextService: InstanceType<typeof ContextService>;
+  let stateService: InstanceType<typeof StateService>;
+  let workspaceId: string;
+
+  beforeEach(async () => {
+    const testBasePath2 = `.test-tanmi-workspace-context-active-${crypto.randomUUID()}`;
+    basePath = path.join(process.cwd(), testBasePath2);
+    projectRoot = path.join(basePath, "project");
+
+    await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
+    await fs.mkdir(projectRoot, { recursive: true });
+
+    fsAdapter = new FileSystemAdapter();
+    json = new JsonStorage(fsAdapter);
+    md = new MarkdownStorage(fsAdapter);
+    workspaceService = new WorkspaceService(json, md, fsAdapter);
+    nodeService = new NodeService(json, md, fsAdapter);
+    contextService = new ContextService(json, md, fsAdapter);
+    stateService = new StateService(json, md, fsAdapter);
+
+    const result = await workspaceService.init({
+      name: "active-nodes-test",
+      goal: "Test active nodes interception",
+      projectRoot,
+    });
+    workspaceId = result.workspaceId;
+    projectRoot = result.projectRoot;
+  });
+
+  afterEach(async () => {
+    await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
+  });
+
+  describe("context_focus active nodes interception", () => {
+    it("should block switching to another branch when current branch has implementing node", async () => {
+      // Create two branches under root
+      const branch1 = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Branch 1 Task",
+        requirement: "Task in branch 1",
+      });
+
+      const branch2 = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Branch 2 Task",
+        requirement: "Task in branch 2",
+      });
+
+      // Start branch1 (implementing state)
+      await stateService.transition({
+        workspaceId,
+        nodeId: branch1.nodeId,
+        action: "start",
+      });
+
+      // Focus on branch1
+      await contextService.focus({
+        workspaceId,
+        nodeId: branch1.nodeId,
+      });
+
+      // Try to switch to branch2 - should be blocked
+      const result = await contextService.focus({
+        workspaceId,
+        nodeId: branch2.nodeId,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("ACTIVE_NODES_IN_SUBTREE");
+      expect(result.activeNodes).toBeDefined();
+      expect(result.activeNodes!.length).toBeGreaterThan(0);
+      expect(result.activeNodes![0].nodeId).toBe(branch1.nodeId);
+      expect(result.activeNodes![0].status).toBe("implementing");
+    });
+
+    it("should block switching when current branch has monitoring planning node", async () => {
+      // Create planning node with execution child
+      const planningNode = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "planning",
+        title: "Planning Node",
+        requirement: "Planning task",
+      });
+
+      const execNode = await nodeService.create({
+        workspaceId,
+        parentId: planningNode.nodeId,
+        type: "execution",
+        title: "Execution Task",
+        requirement: "Execution under planning",
+      });
+
+      // Create another branch
+      const otherBranch = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Other Branch",
+        requirement: "Another task",
+      });
+
+      // Start execution node - this will cascade planning to monitoring automatically
+      await stateService.transition({
+        workspaceId,
+        nodeId: execNode.nodeId,
+        action: "start",
+      });
+
+      // Focus on execution node
+      await contextService.focus({
+        workspaceId,
+        nodeId: execNode.nodeId,
+      });
+
+      // Try to switch to other branch - should be blocked
+      const result = await contextService.focus({
+        workspaceId,
+        nodeId: otherBranch.nodeId,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("ACTIVE_NODES_IN_SUBTREE");
+      expect(result.activeNodes).toBeDefined();
+      // Should include both monitoring planning node and implementing execution node
+      const statuses = result.activeNodes!.map(n => n.status);
+      expect(statuses).toContain("implementing");
+      expect(statuses).toContain("monitoring");
+    });
+
+    it("should allow switching up to ancestor node even with active nodes", async () => {
+      // Create planning node with execution child
+      const planningNode = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "planning",
+        title: "Planning Node",
+        requirement: "Planning task",
+      });
+
+      const execNode = await nodeService.create({
+        workspaceId,
+        parentId: planningNode.nodeId,
+        type: "execution",
+        title: "Execution Task",
+        requirement: "Execution under planning",
+      });
+
+      // Start execution node
+      await stateService.transition({
+        workspaceId,
+        nodeId: execNode.nodeId,
+        action: "start",
+      });
+
+      // Focus on execution node
+      await contextService.focus({
+        workspaceId,
+        nodeId: execNode.nodeId,
+      });
+
+      // Switch up to planning node - should be allowed
+      const result = await contextService.focus({
+        workspaceId,
+        nodeId: planningNode.nodeId,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.currentFocus).toBe(planningNode.nodeId);
+    });
+
+    it("should allow switching down to child node", async () => {
+      // Create planning node
+      const planningNode = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "planning",
+        title: "Planning Node",
+        requirement: "Planning task",
+      });
+
+      // Start planning node (enters planning state)
+      await stateService.transition({
+        workspaceId,
+        nodeId: planningNode.nodeId,
+        action: "start",
+      });
+
+      // Create execution child after planning node is started
+      const execNode = await nodeService.create({
+        workspaceId,
+        parentId: planningNode.nodeId,
+        type: "execution",
+        title: "Execution Task",
+        requirement: "Execution under planning",
+      });
+
+      // Focus on planning node
+      await contextService.focus({
+        workspaceId,
+        nodeId: planningNode.nodeId,
+      });
+
+      // Switch down to execution node - should be allowed
+      const result = await contextService.focus({
+        workspaceId,
+        nodeId: execNode.nodeId,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.currentFocus).toBe(execNode.nodeId);
+    });
+
+    it("should allow switching when all nodes in current branch are in terminal state", async () => {
+      // Create two branches
+      const branch1 = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Branch 1 Task",
+        requirement: "Task in branch 1",
+      });
+
+      const branch2 = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Branch 2 Task",
+        requirement: "Task in branch 2",
+      });
+
+      // Complete branch1
+      await stateService.transition({
+        workspaceId,
+        nodeId: branch1.nodeId,
+        action: "start",
+      });
+      await stateService.transition({
+        workspaceId,
+        nodeId: branch1.nodeId,
+        action: "complete",
+        conclusion: "Task completed",
+      });
+
+      // Focus on branch1
+      await contextService.focus({
+        workspaceId,
+        nodeId: branch1.nodeId,
+      });
+
+      // Switch to branch2 - should be allowed since branch1 is completed
+      const result = await contextService.focus({
+        workspaceId,
+        nodeId: branch2.nodeId,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.currentFocus).toBe(branch2.nodeId);
+    });
+
+    it("should return activeNodes list with correct information", async () => {
+      // Create branch with multiple active nodes
+      const planningNode = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "planning",
+        title: "Planning Task",
+        requirement: "Planning work",
+      });
+
+      const execNode = await nodeService.create({
+        workspaceId,
+        parentId: planningNode.nodeId,
+        type: "execution",
+        title: "Exec Task",
+        requirement: "Execution work",
+      });
+
+      const otherBranch = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Other",
+        requirement: "Other task",
+      });
+
+      // Start execution node - this will cascade planning to monitoring
+      await stateService.transition({
+        workspaceId,
+        nodeId: execNode.nodeId,
+        action: "start",
+      });
+
+      // Focus on exec node
+      await contextService.focus({
+        workspaceId,
+        nodeId: execNode.nodeId,
+      });
+
+      // Try to switch to other branch
+      const result = await contextService.focus({
+        workspaceId,
+        nodeId: otherBranch.nodeId,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.activeNodes).toBeDefined();
+
+      // Check activeNodes contains correct info
+      for (const node of result.activeNodes!) {
+        expect(node.nodeId).toBeDefined();
+        expect(node.title).toBeDefined();
+        expect(node.status).toBeDefined();
+        expect(node.type).toMatch(/^(planning|execution)$/);
+      }
+    });
+
+    it("should block switching from completed child to another branch when parent is monitoring", async () => {
+      // Scenario: root -> a(monitoring) -> c,d,e(all completed)
+      //           root -> b(pending)
+      // Switch from e to b: should be blocked because a is monitoring
+
+      // Create a (planning) and b (execution) under root
+      const a = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "planning",
+        title: "Node A",
+        requirement: "Planning A",
+      });
+
+      const b = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Node B",
+        requirement: "Task B",
+      });
+
+      // Create c, d, e under a
+      const c = await nodeService.create({
+        workspaceId,
+        parentId: a.nodeId,
+        type: "execution",
+        title: "Node C",
+        requirement: "Task C",
+      });
+
+      const d = await nodeService.create({
+        workspaceId,
+        parentId: a.nodeId,
+        type: "execution",
+        title: "Node D",
+        requirement: "Task D",
+      });
+
+      const e = await nodeService.create({
+        workspaceId,
+        parentId: a.nodeId,
+        type: "execution",
+        title: "Node E",
+        requirement: "Task E",
+      });
+
+      // Complete c, d, e (start -> complete)
+      // When first child starts, parent 'a' will cascade to 'monitoring'
+      for (const node of [c, d, e]) {
+        await stateService.transition({
+          workspaceId,
+          nodeId: node.nodeId,
+          action: "start",
+        });
+        await stateService.transition({
+          workspaceId,
+          nodeId: node.nodeId,
+          action: "complete",
+          conclusion: "Task completed",
+        });
+      }
+
+      // Focus on e (which is completed)
+      await contextService.focus({
+        workspaceId,
+        nodeId: e.nodeId,
+      });
+
+      // Try to switch to b - should be BLOCKED because a is still monitoring
+      const result = await contextService.focus({
+        workspaceId,
+        nodeId: b.nodeId,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("ACTIVE_NODES_IN_SUBTREE");
+      expect(result.activeNodes).toBeDefined();
+      expect(result.activeNodes!.length).toBe(1);
+      expect(result.activeNodes![0].nodeId).toBe(a.nodeId);
+      expect(result.activeNodes![0].status).toBe("monitoring");
     });
   });
 });
