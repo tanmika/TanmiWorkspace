@@ -1155,7 +1155,7 @@ Please address the issues from previous attempts.`);
 \`\`\`
 Skill(skill: "executing-task")
 \`\`\`
-This provides detailed SOP for task execution. If unavailable, use plugin_path to read SKILL.md.
+This provides detailed SOP for task execution. If unavailable, use plugin_path(type: "skill", name: "executing-task") to get the path, then Read it.
 
 ### Step 1: Start the node
 \`\`\`
@@ -1255,7 +1255,7 @@ For each criterion above, check if it has a **Verify** column (format: \`[cmd]\`
 \`\`\`
 Skill(skill: "${skillName}")
 \`\`\`
-This provides detailed SOP for ${taskType.toLowerCase()}. If unavailable, use plugin_path to read SKILL.md.
+This provides detailed SOP for ${taskType.toLowerCase()}. If unavailable, use plugin_path(type: "skill", name: "${skillName}") to get the path, then Read it.
 
 ### Step 1: Start the node
 \`\`\`

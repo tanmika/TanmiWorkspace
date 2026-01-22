@@ -17,7 +17,7 @@ export const GUIDANCE_CONFIGS: Record<GuidanceScenario, GuidanceConfig> = {
     scenario: "workspace_init",
     l0: "⚠️ MUST 调用 Skill(flow-info) 进入信息阶段，NEVER 直接 node_create。如 Skill 不可用，调用 plugin_path(type:skill, name:flow-info) 获取路径后 Read。",
     l1: `⚠️ 强制启动流程（MUST 遵循）：
-1. 调用 Skill(flow-info) 获取完整流程（如不可用，plugin_path 获取路径后 Read）
+1. 调用 Skill(flow-info) 获取完整流程（如不可用，plugin_path(type:"skill", name:"flow-info") 获取路径后 Read）
 2. 告知用户 webUrl
 3. capability_list → capability_select（NEVER 手动 node_create）
 4. 执行能力包任务`,
@@ -34,7 +34,7 @@ workspace_init → capability_list → capability_select → 执行任务
 3. **capability_select** - 选择 infoType 和能力包，自动创建节点
    - infoType="info_collection"：需主动调研（扫描项目、读文档）
    - infoType="info_summary"：整理已有信息（从对话提取）
-4. **执行能力包任务** - 读取 skills（找不到时调用 plugin_path 获取路径）
+4. **执行能力包任务** - 读取 skills（找不到时调用 plugin_path(type:"skill", name:"<skill-name>") 获取路径）
 
 ### 强制规则
 - NEVER 跳过 capability_list 直接创建节点
@@ -366,9 +366,9 @@ pending → planning → monitoring → completed
 
   node_create_execution: {
     scenario: "node_create_execution",
-    l0: "执行节点已创建。使用 Skill 执行任务（找不到时调用 plugin_path 获取路径），然后 start 开始执行。",
+    l0: "执行节点已创建。使用 Skill 执行任务（找不到时调用 plugin_path(type:\"skill\", name:\"executing-task\") 获取路径），然后 start 开始执行。",
     l1: `执行节点流程：
-1. 使用 Skill 执行任务（找不到时调用 plugin_path 获取路径）
+1. 使用 Skill 执行任务（找不到时调用 plugin_path(type:"skill", name:"executing-task") 获取路径）
 2. start → implementing 状态
 3. 按 Skill SOP 执行任务，用 log_append 记录
 4. 遇到问题用 problem_update 记录
@@ -384,7 +384,7 @@ pending → implementing → validating → completed
 \`\`\`
 
 ### 关键步骤
-1. **使用 Skill** 执行任务（找不到时调用 plugin_path 获取路径）
+1. **使用 Skill** 执行任务（找不到时调用 plugin_path(type:"skill", name:"executing-task") 获取路径）
 2. **start** 进入 implementing 状态
 3. **按 Skill SOP 执行** 遵循 Skill 的执行步骤和检查清单
 4. **记录过程** 边做边用 log_append 记录
@@ -615,7 +615,7 @@ node_transition({
 ### 类型说明
 | type | 你必须做什么 |
 |------|-------------|
-| invoke_skill | 调用 Skill(data.skill)，如不可用则 plugin_path 获取路径后 Read，NEVER 跳过 |
+| invoke_skill | 调用 Skill(data.skill)，如不可用则 plugin_path(type:"skill", name:data.skill) 获取路径后 Read，NEVER 跳过 |
 | ask_user | 询问用户指定问题 |
 | show_plan | 向用户展示当前计划，等待确认 |
 | check_docs | 确认引用的文档是否需要更新 |
