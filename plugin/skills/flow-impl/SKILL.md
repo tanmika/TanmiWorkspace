@@ -21,8 +21,7 @@ Before executing this skill, you MUST announce to the user:
 TodoWrite([
   { content: "调用 signal 确认进入 impl 阶段", activeForm: "调用 signal 中", status: "pending" },
   { content: "展示待执行任务列表", activeForm: "展示任务列表中", status: "pending" },
-  { content: "询问用户选择执行模式", activeForm: "询问执行模式中", status: "pending" },
-  { content: "确认 impl_continue_mode 配置", activeForm: "确认配置中", status: "pending" }
+  { content: "询问用户选择执行模式和完成后行为", activeForm: "询问执行配置中", status: "pending" }
 ])
 ```
 
@@ -118,28 +117,22 @@ c. **不派发** - 我直接执行所有任务
 - 派发任务：`dispatch_enable` → 派发执行 → `dispatch_disable`
 - 直接执行任务：确保派发已关闭后执行
 
-### 4.2 任务完成后行为（工作区配置）
+### 4.2 任务完成后行为（MANDATORY 询问）
 
-| 配置值 | 行为 |
-|--------|------|
-| `auto_continue` | 自动继续下一个任务 |
-| `ask_each` | 每个任务完成后询问用户 |
+在开始执行前，**必须询问用户**选择任务完成后的行为：
 
-配置读取：
-
-```typescript
-config_get({ workspaceId: "...", key: "impl_continue_mode" })
+```
+请选择任务完成后的行为：
+a. **自动继续** - 任务完成后自动执行下一个
+b. **逐个确认** - 每个任务完成后询问是否继续
 ```
 
-如未配置，询问用户并保存：
+| 选项 | 行为 |
+|------|------|
+| 自动继续 | 任务完成后直接开始下一个，无需确认 |
+| 逐个确认 | 每个任务完成后询问「是否继续下一个任务？」 |
 
-```typescript
-config_set({
-  workspaceId: "...",
-  key: "impl_continue_mode",
-  value: "auto_continue" // 或 "ask_each"
-})
-```
+**注意**：此选择仅对本次执行有效，不会持久化存储。
 
 ### 4.3 创建任务执行 Todo（MANDATORY）
 
@@ -565,13 +558,13 @@ node_transition({
 - [ ] 已调用 signal 进入执行阶段
 - [ ] 已获取并展示待执行任务列表
 - [ ] 已分析最佳执行路径
-- [ ] 已询问用户执行模式
+- [ ] 已询问用户执行模式和完成后行为
 - [ ] 已创建所有任务的执行 todo（标注执行模式）
 
 ### 执行过程
 - [ ] 按节点状态机流转状态
 - [ ] 同步更新 todo 状态（开始 → in_progress，完成 → completed）
-- [ ] 每个任务完成后按配置处理（自动继续/询问）
+- [ ] 每个任务完成后按用户选择处理（自动继续/逐个确认）
 - [ ] 发现问题立刻停止并汇报
 
 ### 问题处理

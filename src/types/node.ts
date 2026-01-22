@@ -150,7 +150,6 @@ export interface WorkflowState {
  * 注意：与 workspace.ts 中的 WorkspaceConfig 不同，这是运行时配置
  */
 export interface GraphConfig {
-  impl_continue_mode?: 'auto_continue' | 'ask_each';  // 任务完成后行为
   paused_task?: {                                      // 暂停点记录
     phase: WorkflowPhase;
     focusNodeId: string;
