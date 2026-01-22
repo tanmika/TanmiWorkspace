@@ -79,6 +79,10 @@ interface Environment {
     mcpConfigured: boolean;
     hookInstalled: boolean;
     hookNeedsUpdate?: boolean;
+    agentsInstalled: number;  // 已安装 Agent 数量
+    agentsNeedsUpdate?: boolean;
+    skillsInstalled: number;  // 已安装 Skill 数量
+    skillsNeedsUpdate?: boolean;
   };
 }
 
@@ -157,6 +161,10 @@ async function detectEnvironment(): Promise<Environment> {
       mcpConfigured: cursorMcpConfigured,
       hookInstalled: pluginStatus.cursor.hooks,
       hookNeedsUpdate: pluginStatus.cursor.hooksNeedsUpdate,
+      agentsInstalled: pluginStatus.cursor.agents.length,
+      agentsNeedsUpdate: pluginStatus.cursor.agentsNeedsUpdate,
+      skillsInstalled: pluginStatus.cursor.skills.length,
+      skillsNeedsUpdate: pluginStatus.cursor.skillsNeedsUpdate,
     },
   };
 }
@@ -191,9 +199,11 @@ function showStatus(env: Environment) {
   console.log("");
 
   console.log(colors.bold("Cursor:"));
-  console.log(`  目录:  ${env.cursor.installed ? colors.green("✓") : colors.red("✗")} ${CURSOR_HOME}`);
-  console.log(`  MCP:   ${env.cursor.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
-  console.log(`  Hooks: ${formatPluginStatus(env.cursor.hookInstalled, null, env.cursor.hookNeedsUpdate)}`);
+  console.log(`  目录:   ${env.cursor.installed ? colors.green("✓") : colors.red("✗")} ${CURSOR_HOME}`);
+  console.log(`  MCP:    ${env.cursor.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
+  console.log(`  Hooks:  ${formatPluginStatus(env.cursor.hookInstalled, null, env.cursor.hookNeedsUpdate)}`);
+  console.log(`  Agents: ${formatPluginStatus(env.cursor.agentsInstalled > 0, env.cursor.agentsInstalled, env.cursor.agentsNeedsUpdate)}`);
+  console.log(`  Skills: ${formatPluginStatus(env.cursor.skillsInstalled > 0, env.cursor.skillsInstalled, env.cursor.skillsNeedsUpdate)}`);
   console.log("");
 }
 
@@ -424,7 +434,7 @@ export default async function setup() {
     await configureCursorMcp();
 
     const installPluginsAnswer = await confirm({
-      message: "是否安装插件？(Hooks)",
+      message: "是否安装插件？(Hooks, Agents, Skills)",
       default: true,
     });
     if (installPluginsAnswer) {

@@ -54,6 +54,8 @@ const CLAUDE_SETTINGS = join(CLAUDE_HOME, "settings.json");
 // Cursor 配置
 const CURSOR_HOME = join(HOME, ".cursor");
 const CURSOR_HOOKS = join(CURSOR_HOME, "hooks.json");
+const CURSOR_AGENTS = join(CURSOR_HOME, "agents");
+const CURSOR_SKILLS = join(CURSOR_HOME, "skills");
 
 // 安装元信息
 const INSTALLATION_META_PATH = join(TANMI_HOME, "installation-meta.json");
@@ -296,6 +298,12 @@ interface PluginStatus {
     hooks: boolean;
     hooksVersion?: string;
     hooksNeedsUpdate?: boolean;
+    agents: string[]; // 已安装的 agent 文件名
+    agentsVersion?: string;
+    agentsNeedsUpdate?: boolean;
+    skills: string[]; // 已安装的 skill 目录名
+    skillsVersion?: string;
+    skillsNeedsUpdate?: boolean;
   };
 }
 
@@ -349,6 +357,35 @@ function getPluginStatus(): PluginStatus {
   const cursorHooksInstalled = existsSync(join(TANMI_SCRIPTS, "cursor-hook-entry.cjs"));
   const cursorHooksVersion = cursorPlatform?.components?.hooks?.version;
 
+  // Cursor agents - 动态检测已安装的 agent
+  const cursorAgentsDir = CURSOR_AGENTS;
+  const installedCursorAgents: string[] = [];
+  if (existsSync(cursorAgentsDir) && existsSync(PLUGIN_AGENTS)) {
+    const sourceAgents = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
+    for (const agent of sourceAgents) {
+      if (existsSync(join(cursorAgentsDir, agent))) {
+        installedCursorAgents.push(agent);
+      }
+    }
+  }
+  const cursorAgentsVersion = cursorPlatform?.components?.agents?.version;
+
+  // Cursor skills - 动态检测已安装的 skill
+  const cursorSkillsDir = CURSOR_SKILLS;
+  const installedCursorSkills: string[] = [];
+  if (existsSync(PLUGIN_SKILLS) && existsSync(cursorSkillsDir)) {
+    const sourceSkills = readdirSync(PLUGIN_SKILLS).filter((name) => {
+      const fullPath = join(PLUGIN_SKILLS, name);
+      return statSync(fullPath).isDirectory() && existsSync(join(fullPath, "SKILL.md"));
+    });
+    for (const skill of sourceSkills) {
+      if (existsSync(join(cursorSkillsDir, skill, "SKILL.md"))) {
+        installedCursorSkills.push(skill);
+      }
+    }
+  }
+  const cursorSkillsVersion = cursorPlatform?.components?.skills?.version;
+
   return {
     currentVersion,
     claude: {
@@ -366,6 +403,12 @@ function getPluginStatus(): PluginStatus {
       hooks: cursorHooksInstalled,
       hooksVersion: cursorHooksVersion,
       hooksNeedsUpdate: cursorHooksInstalled && needsVersionUpdate(cursorHooksVersion, currentVersion),
+      agents: installedCursorAgents,
+      agentsVersion: cursorAgentsVersion,
+      agentsNeedsUpdate: installedCursorAgents.length > 0 && needsVersionUpdate(cursorAgentsVersion, currentVersion),
+      skills: installedCursorSkills,
+      skillsVersion: cursorSkillsVersion,
+      skillsNeedsUpdate: installedCursorSkills.length > 0 && needsVersionUpdate(cursorSkillsVersion, currentVersion),
     },
   };
 }
@@ -421,13 +464,27 @@ function showStatus(): void {
   // Cursor
   console.log(colors.bold("Cursor:"));
   console.log(`  Hooks:  ${formatComponentStatus(status.cursor.hooks, null, status.cursor.hooksNeedsUpdate, status.cursor.hooksVersion)}`);
+  console.log(`  Agents: ${formatComponentStatus(status.cursor.agents.length > 0, status.cursor.agents.length, status.cursor.agentsNeedsUpdate, status.cursor.agentsVersion)}`);
+  if (status.cursor.agents.length > 0) {
+    for (const agent of status.cursor.agents) {
+      console.log(`          ${colors.gray("-")} ${agent}`);
+    }
+  }
+  console.log(`  Skills: ${formatComponentStatus(status.cursor.skills.length > 0, status.cursor.skills.length, status.cursor.skillsNeedsUpdate, status.cursor.skillsVersion)}`);
+  if (status.cursor.skills.length > 0) {
+    for (const skill of status.cursor.skills) {
+      console.log(`          ${colors.gray("-")} ${skill}`);
+    }
+  }
   console.log("");
 
   // 安装路径
   console.log(colors.gray("安装路径:"));
   console.log(colors.gray(`  Scripts: ${TANMI_SCRIPTS}`));
-  console.log(colors.gray(`  Agents:  ${join(CLAUDE_HOME, "agents")}`));
-  console.log(colors.gray(`  Skills:  ${join(CLAUDE_HOME, "skills")}`));
+  console.log(colors.gray(`  Claude Agents:  ${join(CLAUDE_HOME, "agents")}`));
+  console.log(colors.gray(`  Claude Skills:  ${join(CLAUDE_HOME, "skills")}`));
+  console.log(colors.gray(`  Cursor Agents:  ${CURSOR_AGENTS}`));
+  console.log(colors.gray(`  Cursor Skills:  ${CURSOR_SKILLS}`));
   console.log("");
 }
 
@@ -1096,6 +1153,197 @@ function uninstallCursorHooks(): void {
   updateInstallationMeta("cursor", "hooks", "remove");
 }
 
+function installCursorAgents(): void {
+  info("安装 Cursor Agent 模板...");
+
+  if (!existsSync(PLUGIN_AGENTS)) {
+    error(`Agent 模板目录不存在: ${PLUGIN_AGENTS}`);
+    return;
+  }
+
+  // 动态读取所有 .md 文件（排除 CLAUDE.md）
+  const agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
+
+  if (agentFiles.length === 0) {
+    warn("没有找到 Agent 模板文件");
+    return;
+  }
+
+  ensureDir(CURSOR_AGENTS);
+
+  for (const agentFile of agentFiles) {
+    const src = join(PLUGIN_AGENTS, agentFile);
+    const dest = join(CURSOR_AGENTS, agentFile);
+    copyFile(src, dest);
+  }
+
+  success(`Cursor Agent 已安装到 ${CURSOR_AGENTS}/`);
+  for (const agentFile of agentFiles) {
+    info(`  - ${agentFile}`);
+  }
+
+  updateInstallationMeta("cursor", "agents", "update");
+}
+
+function installCursorSkills(): void {
+  info("安装 Cursor Skills 模板...");
+
+  if (!existsSync(PLUGIN_SKILLS)) {
+    warn(`Skills 模板目录不存在: ${PLUGIN_SKILLS}`);
+    return;
+  }
+
+  const skillDirs = readdirSync(PLUGIN_SKILLS).filter((name) => {
+    const fullPath = join(PLUGIN_SKILLS, name);
+    return statSync(fullPath).isDirectory();
+  });
+
+  if (skillDirs.length === 0) {
+    warn("Skills 模板目录为空");
+    return;
+  }
+
+  ensureDir(CURSOR_SKILLS);
+
+  // 获取当前版本
+  let currentVersion = "unknown";
+  try {
+    const require = createRequire(import.meta.url);
+    const pkg = require(join(PROJECT_ROOT, "package.json"));
+    currentVersion = pkg.version || "unknown";
+  } catch {
+    warn("无法获取当前版本号，标记文件将使用 'unknown'");
+  }
+
+  // 1. 清理废弃的 Skill（黑名单）
+  for (const deprecated of DEPRECATED_SKILLS) {
+    const deprecatedPath = join(CURSOR_SKILLS, deprecated);
+    if (existsSync(deprecatedPath)) {
+      removeDir(deprecatedPath);
+      info(`  - 已删除废弃 Skill: ${deprecated}`);
+      logToFile("CURSOR_SKILL_CLEANUP", `删除废弃 Skill (黑名单): ${deprecated}`);
+    }
+  }
+
+  // 2. 清理有标记但源不存在的 Skill（自动检测废弃）
+  if (existsSync(CURSOR_SKILLS)) {
+    const installedSkills = readdirSync(CURSOR_SKILLS).filter((name) => {
+      const fullPath = join(CURSOR_SKILLS, name);
+      return statSync(fullPath).isDirectory();
+    });
+    for (const skill of installedSkills) {
+      const skillPath = join(CURSOR_SKILLS, skill);
+      const markerPath = join(skillPath, ".tanmi-managed");
+      const existsInSource = existsSync(join(PLUGIN_SKILLS, skill));
+
+      if (existsSync(markerPath) && !existsInSource) {
+        removeDir(skillPath);
+        info(`  - 已删除废弃 Skill: ${skill}`);
+        logToFile("CURSOR_SKILL_CLEANUP", `删除废弃 Skill (源不存在): ${skill}`);
+      }
+    }
+  }
+
+  // 3. 安装 Skill 并添加标记文件
+  let count = 0;
+  for (const skillName of skillDirs) {
+    const skillSrcDir = join(PLUGIN_SKILLS, skillName);
+    const skillMdPath = join(skillSrcDir, "SKILL.md");
+
+    if (existsSync(skillMdPath)) {
+      const skillDestDir = join(CURSOR_SKILLS, skillName);
+
+      if (existsSync(skillDestDir)) {
+        removeDir(skillDestDir);
+      }
+
+      copyDir(skillSrcDir, skillDestDir);
+
+      // 写入标记文件
+      try {
+        const markerContent = JSON.stringify(
+          {
+            installedAt: new Date().toISOString(),
+            installedVersion: currentVersion,
+            source: "tanmi-workspace",
+          },
+          null,
+          2
+        );
+        writeFileSync(join(skillDestDir, ".tanmi-managed"), markerContent);
+      } catch (err) {
+        warn(`无法写入标记文件: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      info(`  - ${skillName}/`);
+      count++;
+    }
+  }
+
+  if (count === 0) {
+    warn("未找到有效的 Skill 目录（需包含 SKILL.md）");
+    return;
+  }
+
+  success(`已安装 ${count} 个 Cursor Skill 模板到 ${CURSOR_SKILLS}/`);
+  logToFile("CURSOR_SKILL_INSTALL", `安装 ${count} 个 Skill (v${currentVersion})`);
+  updateInstallationMeta("cursor", "skills", "update");
+}
+
+function uninstallCursorAgents(): void {
+  info("卸载 Cursor Agent...");
+
+  // 动态获取要卸载的 agent 列表（排除 CLAUDE.md）
+  let agentFiles: string[] = [];
+  if (existsSync(PLUGIN_AGENTS)) {
+    agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
+  }
+
+  if (agentFiles.length === 0) {
+    warn("没有找到 Agent 模板文件");
+    return;
+  }
+
+  for (const file of agentFiles) {
+    const filePath = join(CURSOR_AGENTS, file);
+    if (removeFile(filePath)) {
+      success(`已删除 ${filePath}`);
+    }
+  }
+
+  if (isDirEmpty(CURSOR_AGENTS)) {
+    removeDir(CURSOR_AGENTS);
+  }
+
+  updateInstallationMeta("cursor", "agents", "remove");
+}
+
+function uninstallCursorSkills(): void {
+  info("卸载 Cursor Skills...");
+
+  if (!existsSync(PLUGIN_SKILLS) || !existsSync(CURSOR_SKILLS)) {
+    return;
+  }
+
+  const skillDirs = readdirSync(PLUGIN_SKILLS).filter((name) => {
+    const fullPath = join(PLUGIN_SKILLS, name);
+    return statSync(fullPath).isDirectory();
+  });
+
+  for (const skillName of skillDirs) {
+    const skillDestDir = join(CURSOR_SKILLS, skillName);
+    if (removeDir(skillDestDir)) {
+      success(`已删除 ${skillDestDir}/`);
+    }
+  }
+
+  if (isDirEmpty(CURSOR_SKILLS)) {
+    removeDir(CURSOR_SKILLS);
+  }
+
+  updateInstallationMeta("cursor", "skills", "remove");
+}
+
 // ============================================================================
 // 单独安装函数（导出供 setup.ts 使用）
 // ============================================================================
@@ -1111,6 +1359,14 @@ export function installClaudeAgentsExport(): void {
 
 export function installClaudeSkillsExport(): void {
   installSkills();
+}
+
+export function installCursorAgentsExport(): void {
+  installCursorAgents();
+}
+
+export function installCursorSkillsExport(): void {
+  installCursorSkills();
 }
 
 export { getPluginStatus };
@@ -1152,6 +1408,8 @@ export function installCursorAll(): void {
 
   installCursorHooks();
   configureCursorHooks();
+  installCursorAgents();
+  installCursorSkills();
 
   console.log("");
   success("Cursor 插件安装完成！");
@@ -1163,6 +1421,8 @@ export function uninstallCursorAll(): void {
   console.log("");
 
   uninstallCursorHooks();
+  uninstallCursorAgents();
+  uninstallCursorSkills();
   cleanupSharedIfUnused();
 
   console.log("");
@@ -1184,7 +1444,7 @@ ${colors.bold("用法:")}
 
 ${colors.bold("平台:")}
   --claude    Claude Code (Hooks, Agents, Skills)
-  --cursor    Cursor (Hooks)
+  --cursor    Cursor (Hooks, Agents, Skills)
 
 ${colors.bold("示例:")}
   tanmi-workspace plugins                    # 查看状态
