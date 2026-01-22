@@ -16,6 +16,8 @@ import type { ReferenceService } from "./ReferenceService.js";
 import type { DispatchService } from "./DispatchService.js";
 import type { ConfigService } from "./ConfigService.js";
 import type { MemoService } from "./MemoService.js";
+import { capabilityService } from "./CapabilityService.js";
+import type { CapabilityId } from "../types/capability.js";
 import { computeConclusionsHash } from "../utils/hash.js";
 import pkg from "../../package.json" with { type: "json" };
 
@@ -40,7 +42,7 @@ interface TutorialNode {
   type: "planning" | "execution";
   title: string;
   requirement: string;
-  role?: "info_collection";
+  role?: "info_collection" | "info_summary";
   targetStatus?: string;  // 目标状态
   conclusion?: string;    // 结论
   note?: string;          // 备注
@@ -62,6 +64,8 @@ interface TutorialNode {
     content: string;
     tags: string[];
   };
+  // 使用能力系统创建子节点（info_collection/info_summary 节点专用）
+  useCapabilities?: boolean;
 }
 
 /**
@@ -172,6 +176,109 @@ const TUTORIAL_CONTENT = {
 功能简介和版本更新工作区默认置顶，方便快速访问。`,
           targetStatus: "completed",
           conclusion: "置顶功能帮助快速访问重要工作区",
+        },
+      ],
+    },
+    // 流程阶段介绍
+    {
+      type: "planning" as const,
+      title: "流程阶段",
+      requirement: `TanmiWorkspace 采用三阶段工作流程，引导 AI 有条不紊地完成复杂任务。
+
+**阶段概览**
+1. **信息阶段 (flow-info)** - 选择能力、收集和整理信息
+2. **规划阶段 (flow-design)** - 分解方案为规划和执行节点
+3. **执行阶段 (flow-impl)** - 按规划执行，支持派发模式
+
+**阶段间的流转**
+- 每个阶段通过 signal 命令确认进入
+- 完成后展示成果并询问用户是否进入下一阶段
+- 用户可以要求补充或调整，灵活回退
+
+每个阶段都有对应的 Skill 引导 AI 行为，确保工作质量和一致性。`,
+      children: [
+        {
+          type: "execution" as const,
+          title: "信息阶段",
+          requirement: `**信息阶段 (flow-info)** - 选择能力、收集和整理信息
+
+**触发时机**
+- 工作区初始化后
+- 开始新的研究任务时
+- 需要补充信息时
+
+**核心流程**
+1. 调用 \`capability_list\` 获取场景推荐的能力包
+2. 展示能力并询问用户选择（必选 + 可选）
+3. 调用 \`capability_select\` 创建信息节点
+4. 依次执行各能力对应的 Skill
+5. 完成后展示方案设计，询问是否进入下一阶段
+
+**阶段约束**
+- ✅ 允许：Read/Search/Grep/Glob 探索代码
+- ✅ 允许：capability_list/capability_select 选择能力
+- ❌ 禁止：Write/Edit/MultiEdit 修改文件
+
+**典型产出**
+- 验收标准表、依赖关系图、技术方案对比表
+
+信息阶段确保 AI 在动手之前充分理解任务背景和约束。`,
+          targetStatus: "completed",
+          conclusion: "信息阶段完成后，输出方案设计，等待用户确认进入规划阶段",
+        },
+        {
+          type: "execution" as const,
+          title: "规划阶段",
+          requirement: `**规划阶段 (flow-design)** - 分解方案为规划和执行节点
+
+**核心职责**
+- 从信息阶段结论中提取设计方案
+- 按场景模板分解为任务树
+- 为每个节点定义详细需求和验收标准
+
+**场景化任务模板**
+- **Feature**：TDD 驱动（测试定义 → 功能实现 → 集成验证）
+- **Debug**：诊断驱动（问题复现 → 根因定位 → 修复实现 → 回归验证）
+- **Optimize**：基准驱动（基准测量 → 优化实现 → 效果验证）
+- **Summary**：任务分解驱动（规模评估 → 分主题执行 → 完整性验证）
+
+**质量要求**
+- 8/80 规则：每个执行节点工作量在 8-80 小时
+- 100% 规则：子任务之和 = 父任务全部工作
+- 需求描述 ≥3 行，验收标准 ≥2 条
+
+**阶段约束**
+- ✅ 允许：创建 planning/execution 节点
+- ❌ 禁止：Write/Edit 修改文件、派发执行
+
+完成后所有 planning 节点为 monitoring，execution 节点为 pending。`,
+          targetStatus: "implementing",
+        },
+        {
+          type: "execution" as const,
+          title: "执行阶段",
+          requirement: `**执行阶段 (flow-impl)** - 按规划执行，支持派发模式
+
+**执行模式选择**
+- **全部派发**：所有任务派发给 SubAgent 执行
+- **智能派发**：AI 推断哪些任务需人工核验
+- **不派发**：主 AI 直接执行所有任务
+
+**场景执行指导**
+- **Feature**：按测试用例实现，记录 API 契约
+- **Debug**：按诊断流程修复，详记调试过程
+- **Optimize**：对比基准数据，验证优化效果
+- **Summary**：结论详尽记录，确保覆盖所有主题
+
+**执行节点完成条件**
+- 需求完成 + 验收标准逐条通过
+- 无 TODO/FIXME + 测试通过
+- conclusion 已填写
+
+**状态流转**
+pending → implementing → validating → completed/failed
+
+执行阶段强调严格遵循需求计划，发现矛盾立即停止核查。`,
         },
       ],
     },
@@ -325,19 +432,37 @@ AI 会在执行时关注问题内容，本节点的问题区域有演示内容�
           problem: "这是一个演示用的问题内容，实际使用时会记录具体的障碍或待解决事项。",
         },
         {
-          type: "execution" as const,
-          title: "信息收集节点",
-          requirement: `这是一个特殊角色的执行节点：**信息收集 (info_collection)**
+          type: "planning" as const,
+          title: "信息收集",
+          requirement: `**信息收集 (info_collection)** 是一种特殊角色的规划节点。
 
-信息收集节点用于需求澄清、调研分析、方案评审等场景。
-在树视图中节点标签后显示 INFO 标牌，便于快速识别。
+用于在任务开始前**主动探索和收集**所需信息：
+- **意图对齐**：通过结构化提问消除歧义，确认验收标准
+- **上下文探索**：扫描项目结构、分析依赖关系、追踪数据流
+- **诊断分析**：追踪问题根因，建立因果链
+- **技术调研**：评估多个技术方案，给出选型建议
+- **度量分析**：建立性能基准，验证优化效果
+- **方案设计**：定义接口和数据结构，规划实现路径
+- **验证策略**：设计测试用例和验收步骤
 
-**MEMO 功能**
-本节点创建了一个 MEMO，用于记录长篇内容。点击「References」区域查看引用。`,
+**场景化能力推荐**
+系统会根据任务场景推荐不同的能力组合：
+- **新功能开发**：意图对齐 + 上下文探索 + 方案设计
+- **问题修复**：意图对齐 + 上下文探索 + 诊断分析
+- **性能优化**：意图对齐 + 上下文探索 + 度量分析
+- **技术调研**：意图对齐 + 技术调研 + 方案设计
+
+**使用流程**
+1. AI 调用 \`capability_list\` 获取场景推荐的能力包
+2. 向用户展示并确认选择
+3. 调用 \`capability_select\` 创建能力子节点
+4. 依次执行各能力对应的 Skill
+
+本节点展示了所有可用能力，实际使用时会根据场景智能推荐。`,
           role: "info_collection",
-          targetStatus: "completed",
-          conclusion: "信息收集节点适合需求澄清和调研分析",
-          note: "短内容用 Note，长内容用 MEMO",
+          useCapabilities: true,  // 使用能力系统创建子节点
+          // 不设置 targetStatus，保持 monitoring 状态（等待子节点完成）
+          note: "信息收集 = 主动探索（扫描项目、阅读文档、调研技术）",
           memo: {
             title: "MEMO 功能说明",
             summary: "演示 MEMO 的使用方式和适用场景",
@@ -373,6 +498,37 @@ MEMO 是节点级的长篇内容记录功能，适合存储：
 MEMO 支持导出为独立 Markdown 文件，点击详情页「下载」按钮即可导出。
 `,
           },
+        },
+        {
+          type: "execution" as const,
+          title: "信息总结",
+          requirement: `**信息总结 (info_summary)** 是另一种特殊角色的节点。
+
+除了信息收集之外，在**对话中已产生大量信息需要整理**的情况下，还可以使用信息总结来**主动整理已有信息**，从对话中提炼归纳，而非探索新内容。
+
+**典型使用场景**
+- 长对话后整理讨论要点
+- 从已有对话中提炼结构化内容
+- 快速形成共识和方案设计基础
+- 需求确认后归纳验收标准
+
+**收集 vs 总结对比**
+
+| 特性 | 信息收集 | 信息总结 |
+|------|----------|----------|
+| 信息来源 | 代码库、文档、外部资源 | 对话中已有信息 |
+| 活动方向 | 主动探索新内容 | 主动整理已有内容 |
+| 时机 | 任务开始前 | 任务进行中/完成后 |
+| 产出 | 新发现的信息 | 结构化的已有信息 |
+
+**可用能力**
+信息总结可以使用所有能力，与信息收集相同。区别仅在于执行时的信息来源：
+- 收集：扫描项目、阅读文档、调研技术
+- 总结：从对话中提炼、归纳总结`,
+          role: "info_summary",
+          targetStatus: "completed",
+          conclusion: "信息总结用于从对话已有信息中提炼结构化内容",
+          note: "收集=探索新内容，总结=整理已有内容",
         },
       ],
     },
@@ -1250,19 +1406,27 @@ tanmi-workspace plugins
 
       const nodeId = result.nodeId;
 
-      // 2. 递归创建子节点
+      // 2. 使用能力系统创建子节点（useCapabilities 标记）
+      let capabilityChildrenCreated = false;
+      if (nodeDef.useCapabilities) {
+        await this.createCapabilityChildren(workspaceId, nodeId, nodeDef.role);
+        capabilityChildrenCreated = true;
+      }
+
+      // 3. 递归创建静态定义的子节点
       if (nodeDef.children && nodeDef.children.length > 0) {
         const childFocusId = await this.createNodes(workspaceId, nodeId, nodeDef.children);
         if (childFocusId) focusNodeId = childFocusId;
       }
 
-      // 3. 设置目标状态
+      // 4. 设置目标状态
+      // 如果有能力子节点或静态子节点，hasChildren 为 true
       if (nodeDef.targetStatus) {
-        const hasChildren = nodeDef.children && nodeDef.children.length > 0;
+        const hasChildren = capabilityChildrenCreated || (nodeDef.children && nodeDef.children.length > 0);
         await this.transitionToStatus(workspaceId, nodeId, nodeDef.type, nodeDef.targetStatus, nodeDef.conclusion, hasChildren);
       }
 
-      // 4. 设置备注（状态转换后设置，避免被覆盖）
+      // 5. 设置备注（状态转换后设置，避免被覆盖）
       if (nodeDef.note) {
         await this.node.update({
           workspaceId,
@@ -1271,7 +1435,7 @@ tanmi-workspace plugins
         });
       }
 
-      // 5. 设置问题（状态转换后设置，避免被覆盖）
+      // 6. 设置问题（状态转换后设置，避免被覆盖）
       if (nodeDef.problem) {
         await this.log.updateProblem({
           workspaceId,
@@ -1280,7 +1444,7 @@ tanmi-workspace plugins
         });
       }
 
-      // 6. 添加日志
+      // 7. 添加日志
       if (nodeDef.logs) {
         for (const logEntry of nodeDef.logs) {
           await this.log.append({
@@ -1292,17 +1456,17 @@ tanmi-workspace plugins
         }
       }
 
-      // 7. 记录焦点节点（不立即设置）
+      // 8. 记录焦点节点（不立即设置）
       if (nodeDef.setFocus) {
         focusNodeId = nodeId;
       }
 
-      // 8. Hack: 直接写入派发信息
+      // 9. Hack: 直接写入派发信息
       if (nodeDef.dispatchInfo) {
         await this.hackSetDispatchInfo(workspaceId, nodeId, nodeDef.dispatchInfo);
       }
 
-      // 9. 创建 MEMO 并添加引用
+      // 10. 创建 MEMO 并添加引用
       if (nodeDef.memo) {
         const memoResult = await this.memo.create({
           workspaceId,
@@ -1323,6 +1487,222 @@ tanmi-workspace plugins
     }
 
     return focusNodeId;
+  }
+
+  /**
+   * 能力详细描述（用于教程展示）
+   */
+  private readonly CAPABILITY_DETAILS: Record<CapabilityId, { requirement: string; conclusion: string }> = {
+    intent_alignment: {
+      requirement: `**意图对齐** - 通过结构化提问消除歧义
+
+**核心流程**
+1. 快速扫描项目现状（结构、相关模块、近期变更）
+2. 识别歧义点（主观描述、隐藏假设、缺失信息）
+3. 结构化提问（一次一个问题，优先选择题）
+4. 确认验收标准（转化为 WHEN/THEN 格式）
+5. 置信度检查（>=85% 才能继续）
+
+**输出产物**
+- 需求摘要（用户故事）
+- 验收标准表（WHEN/THEN 格式）
+- 置信度评分
+
+**适用场景**：需求模糊、存在歧义、需要确认验收标准`,
+      conclusion: "通过结构化提问完成意图对齐，输出验收标准表",
+    },
+    context_discovery: {
+      requirement: `**上下文探索** - 系统性信息收集构建认知模型
+
+**核心流程**
+1. 定位入口点（README、docs、package.json）
+2. 依赖分析（模块依赖、外部依赖、数据依赖）
+3. 数据流追踪（输入→模块→输出，用 Mermaid 可视化）
+4. 输出知识快照
+
+**输出产物**
+- 关键文件表（入口、类型定义、配置）
+- 依赖关系图
+- 数据流图（Mermaid sequenceDiagram）
+
+**适用场景**：陌生代码库、需要理解架构、新领域调研`,
+      conclusion: "完成项目上下文探索，输出依赖关系和数据流图",
+    },
+    diagnosis: {
+      requirement: `**诊断分析** - 追踪问题根因，建立因果链
+
+**核心流程**
+1. 再现/定位问题（收集错误信息、确认复现步骤）
+2. 因果链分析（从入口追踪到问题点再回溯根源）
+3. 假设测试（构造假设→验证→记录）
+4. 根因确认（能解释所有症状、能稳定复现）
+
+**输出产物**
+- 复现路径（步骤列表）
+- 因果链（Entry → Func A → Problem）
+- 根因分析和修复建议
+
+**适用场景**：Bug 调试、性能问题定位、行为异常分析`,
+      conclusion: "完成问题诊断，定位根因并给出修复建议",
+    },
+    tech_research: {
+      requirement: `**技术调研** - 多维度评估技术方案
+
+**核心流程**
+1. 识别候选方案（至少 2 个选项）
+2. 约束兼容性检查
+3. 多维度对比（实现复杂度、性能、维护成本）
+4. 给出推荐和理由（至少 3 条）
+
+**输出产物**
+- 方案比较表
+- 推荐选项及理由
+- 风险记录
+
+**适用场景**：技术选型、框架对比、架构方案评估`,
+      conclusion: "完成技术方案调研，输出对比表和推荐建议",
+    },
+    measurement_analysis: {
+      requirement: `**度量分析** - 建立基准，验证优化效果
+
+**核心流程**
+1. 定义度量指标（FPS、RTT、CPU 等）
+2. 建立测试环境（硬件、软件、数据规模）
+3. 获取基线数据
+4. 优化后对比测量
+
+**输出产物**
+- 基线数据表
+- 优化前后对比（含改进率）
+- 分析结论（目标是否达成）
+
+**适用场景**：性能优化验证、容量规划、算法效率对比`,
+      conclusion: "完成度量分析，建立基线并对比优化效果",
+    },
+    solution_design: {
+      requirement: `**方案设计** - 在编码前完成系统性设计
+
+**核心流程**
+1. 定义变更范围
+2. 接口设计（参数、返回值、兼容性）
+3. 数据结构设计
+4. 实现步骤规划（YAGNI 检查）
+5. 测试和可观测性设计
+
+**输出产物**
+- 变更范围清单
+- 接口和数据结构定义
+- 分步实现计划
+- 风险识别
+
+**适用场景**：新功能开发、系统重构、API 设计`,
+      conclusion: "完成方案设计，输出接口定义和实现计划",
+    },
+    verification_strategy: {
+      requirement: `**验证策略** - 设计测试用例和验收步骤
+
+**核心流程**
+1. 识别验证点（功能点 + 非功能点）
+2. 设计测试用例（正常流、边界、错误处理）
+3. 确定验证方法（单元/集成/E2E/手动）
+4. 编写验收步骤（Given/When/Then）
+
+**输出产物**
+- 测试计划（用例编号、优先级）
+- 验收步骤清单
+- 预期结果说明
+
+**适用场景**：实现前规划测试、定义验收标准、质量保证`,
+      conclusion: "完成验证策略设计，输出测试计划和验收步骤",
+    },
+  };
+
+  /**
+   * 使用能力系统创建子节点
+   * 模拟 capability_select 的行为，为所有能力创建执行节点
+   */
+  private async createCapabilityChildren(
+    workspaceId: string,
+    parentId: string,
+    role?: "info_collection" | "info_summary"
+  ): Promise<void> {
+    // 获取所有能力 ID
+    const allCapabilities: CapabilityId[] = [
+      "intent_alignment",
+      "context_discovery",
+      "diagnosis",
+      "tech_research",
+      "measurement_analysis",
+      "solution_design",
+      "verification_strategy",
+    ];
+
+    // 根据 role 类型筛选能力
+    // info_collection: 使用所有能力
+    // info_summary: 只使用 summary 类型的能力（上下文探索、诊断分析）
+    const selectedCapabilities = role === "info_summary"
+      ? allCapabilities.filter(id => {
+          const info = capabilityService.getCapabilityInfo(id);
+          return info.type === "summary";
+        })
+      : allCapabilities;
+
+    // 定义各能力节点的目标状态（用于教程演示不同的执行阶段）
+    // - 前 3 个（意图对齐、上下文探索、诊断分析）：已完成
+    // - 第 4 个（技术调研）：执行中
+    // - 后 3 个（度量分析、方案设计、验证策略）：待执行
+    const capabilityTargetStatus: Record<CapabilityId, "completed" | "implementing" | "pending"> = {
+      intent_alignment: "completed",
+      context_discovery: "completed",
+      diagnosis: "completed",
+      tech_research: "implementing",
+      measurement_analysis: "pending",
+      solution_design: "pending",
+      verification_strategy: "pending",
+    };
+
+    // 为每个能力创建执行节点
+    for (const capabilityId of selectedCapabilities) {
+      const capInfo = capabilityService.getCapabilityInfo(capabilityId);
+      const acceptanceCriteria = capabilityService.getAcceptanceCriteria(capabilityId);
+      const details = this.CAPABILITY_DETAILS[capabilityId];
+      const targetStatus = capabilityTargetStatus[capabilityId];
+
+      const childResult = await this.node.create({
+        workspaceId,
+        parentId,
+        type: "execution",
+        title: capInfo.name,
+        requirement: details.requirement,
+        acceptanceCriteria,
+        rulesHash: INTERNAL_RULES_HASH,
+      });
+
+      // 根据目标状态设置节点状态
+      if (targetStatus === "completed") {
+        // 完成子节点
+        await this.state.transition({
+          workspaceId,
+          nodeId: childResult.nodeId,
+          action: "start",
+        });
+        await this.state.transition({
+          workspaceId,
+          nodeId: childResult.nodeId,
+          action: "complete",
+          conclusion: details.conclusion,
+        });
+      } else if (targetStatus === "implementing") {
+        // 执行中
+        await this.state.transition({
+          workspaceId,
+          nodeId: childResult.nodeId,
+          action: "start",
+        });
+        // 保持 implementing 状态，不调用 complete
+      }
+      // pending 状态不需要任何转换，创建后默认就是 pending
+    }
   }
 
   /**
@@ -1371,11 +1751,25 @@ tanmi-workspace plugins
   ): Promise<void> {
     const transitions = this.getTransitionPath(type, targetStatus, hasChildren);
     for (const action of transitions) {
+      let conclusionsHash: string | undefined;
+
+      // 规划节点 complete 时，如果有子节点需要计算 conclusionsHash
+      if (type === "planning" && action === "complete" && hasChildren) {
+        const nodeInfo = await this.node.get({ workspaceId, nodeId });
+        const childConclusions = [];
+        for (const childId of nodeInfo.meta.children) {
+          const childInfo = await this.node.get({ workspaceId, nodeId: childId });
+          childConclusions.push({ nodeId: childId, conclusion: childInfo.meta.conclusion || "" });
+        }
+        conclusionsHash = computeConclusionsHash(childConclusions);
+      }
+
       await this.state.transition({
         workspaceId,
         nodeId,
         action: action as any,
         conclusion: action === transitions[transitions.length - 1] ? conclusion : undefined,
+        conclusionsHash,
       });
     }
   }
