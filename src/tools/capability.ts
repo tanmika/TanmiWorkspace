@@ -63,11 +63,22 @@ export const capabilitySelectTool: TanmiTool = {
  */
 export const pluginPathTool: TanmiTool = {
   name: "plugin_path",
-  description: "获取 TanmiWorkspace 插件目录的绝对路径。当需要读取插件资源（如 Skill、Agent 模板）但找不到时使用。",
+  description:
+    "获取 TanmiWorkspace 插件资源的绝对路径。支持参数化查询特定资源，错误时返回可用选项列表。",
   readonly: true,
   inputSchema: {
     type: "object",
-    properties: {},
+    properties: {
+      type: {
+        type: "string",
+        enum: ["skill", "agent"],
+        description: "资源类型。不传则返回插件根目录。",
+      },
+      name: {
+        type: "string",
+        description: "资源名称（如 flow-info、tanmi-executor）。需配合 type 使用。",
+      },
+    },
   },
 };
 

@@ -21,6 +21,7 @@ import { eventService } from "./services/EventService.js";
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { resolvePluginPath } from "./utils/pluginPath.js";
 import { workspaceTools } from "./tools/workspace.js";
 import { nodeTools } from "./tools/node.js";
 import type { AcceptanceCriteria } from "./types/node.js";
@@ -1013,10 +1014,10 @@ Read(file_path: <skillsPath>/<skill-name>/SKILL.md)
           // 从 dist/index.js 往上两级到包根目录，再进入 plugin
           const pluginPath = join(dirname(currentFilePath), "..", "plugin");
 
-          result = {
-            path: pluginPath,
-            skillsPath: join(pluginPath, "skills"),
-          };
+          result = resolvePluginPath(pluginPath, {
+            type: args?.type as string | undefined,
+            name: args?.name as string | undefined,
+          });
           break;
         }
 
