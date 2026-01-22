@@ -64,7 +64,7 @@ memo_delete(workspaceId, memoId)               // 删除备忘
 // 能力包系统
 capability_list(scenario?, sessionId?)         // 获取能力包列表
 capability_select(workspaceId, selected, infoType?, nodeId?)  // 选择能力包
-plugin_path()                                  // 获取插件目录路径
+plugin_path(type?, name?)                      // 获取插件资源路径
 
 // 配置管理
 config_get()                                   // 获取配置
@@ -1623,24 +1623,67 @@ interface ChildConclusion {
 
 ### plugin_path
 
-获取 TanmiWorkspace 插件目录的绝对路径。
+获取 TanmiWorkspace 插件资源的绝对路径。支持参数化查询特定资源，错误时返回可用选项列表。
 
 **参数**
 
-无参数。
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| type | string | 否 | 资源类型：`skill` 或 `agent`。不传则返回插件根目录 |
+| name | string | 否 | 资源名称（如 `flow-info`、`tanmi-executor`）。需配合 type 使用 |
 
 **返回值**
 
 ```typescript
+// 无参数时
 {
-  path: string;  // 插件目录绝对路径
+  path: string;       // 插件根目录
+  skillsPath: string; // skills 目录
+  agentsPath: string; // agents 目录
 }
+
+// 只传 type 时
+{
+  path: string;       // 对应类型目录
+  available: string[]; // 可用资源列表
+}
+
+// 传 type + name 且存在时
+{
+  path: string;       // 资源文件路径
+}
+
+// 传 type + name 但不存在时
+{
+  error: string;      // 错误信息
+  available: string[]; // 可用资源列表
+}
+```
+
+**示例**
+
+```typescript
+// 获取根目录
+plugin_path()
+// → { path: "/path/plugin", skillsPath: "/path/plugin/skills", agentsPath: "/path/plugin/agents" }
+
+// 列出所有 skill
+plugin_path(type: "skill")
+// → { path: "/path/plugin/skills", available: ["flow-info", "flow-design", ...] }
+
+// 获取具体 skill 路径
+plugin_path(type: "skill", name: "flow-info")
+// → { path: "/path/plugin/skills/flow-info/SKILL.md" }
+
+// 资源不存在时
+plugin_path(type: "skill", name: "not-exist")
+// → { error: "skill 'not-exist' 不存在", available: ["flow-info", ...] }
 ```
 
 **说明**
 
 - 当需要读取插件资源（如 Skill、Agent 模板）但找不到时使用
-- 返回的路径可用于后续文件操作
+- 错误时返回可用选项列表，便于 AI 自动纠正
 
 ---
 

@@ -107,7 +107,7 @@ description: Use when [触发条件]. [能力说明]
 ## 加载机制
 
 1. AI 调用 `Skill(skill: "skill-name")` 获取完整内容
-2. 降级方案: `plugin_path()` → `Read(skillsPath + "/skill-name/SKILL.md")`
+2. 降级方案: `plugin_path(type: "skill", name: "skill-name")` → `Read(<返回的 path>)`
 
 **加载实现**: `src/services/CapabilityService.ts` parseSkillFrontmatter()
 

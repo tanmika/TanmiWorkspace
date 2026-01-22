@@ -413,8 +413,8 @@ Skill 会引导你：
 
 **如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
 \`\`\`
-plugin_path() → 获取 skillsPath
-Read(file_path: <skillsPath>/flow-info/SKILL.md)
+plugin_path(type: "skill", name: "flow-info") → 获取路径
+Read(file_path: <返回的 path>)
 \`\`\``,
                 data: {
                   skill: FLOW_SKILLS.INFO,
@@ -996,8 +996,8 @@ ${skillList}
 
 **如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
 \`\`\`
-plugin_path() → 获取 skillsPath
-Read(file_path: <skillsPath>/<skill-name>/SKILL.md)
+plugin_path(type: "skill", name: "<skill-name>") → 获取路径
+Read(file_path: <返回的 path>)
 \`\`\``,
               data: {
                 skills: skillsWithNodes,
