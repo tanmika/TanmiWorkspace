@@ -339,7 +339,7 @@ ${scenarioGuidance}
 **如果 Skill 不可用**，使用 plugin_path 获取路径后 Read：
 \`\`\`
 plugin_path(type: "skill", name: "flow-info") → 获取路径
-Read(file_path: <返回的路径>/SKILL.md)
+Read(file_path: <返回的 path>)
 \`\`\``,
       data: {
         skill: FLOW_SKILLS.INFO,

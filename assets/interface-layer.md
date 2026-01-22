@@ -298,7 +298,7 @@ const createWorkspaceSchema = {
 |------|------|
 | `capability_list` | 获取指定场景的能力包列表 |
 | `capability_select` | 确认选择的能力包 |
-| `plugin_path` | 获取插件目录绝对路径 |
+| `plugin_path` | 获取插件资源路径（支持参数化查询） |
 
 #### 搜索功能 (2 个)
 
