@@ -31,13 +31,24 @@ fi
 CURRENT_VERSION=$(node -p "require('./package.json').version")
 log_info "当前版本: $CURRENT_VERSION"
 
+# 分离基础版本和 prerelease 后缀
+BASE_VERSION=$(echo "$CURRENT_VERSION" | sed 's/-.*//')
+PRERELEASE=$(echo "$CURRENT_VERSION" | grep -o '\-.*' || echo "")
+
 # 计算新版本
-IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
-case $BUMP_TYPE in
-    major) NEW_VERSION="$((major + 1)).0.0" ;;
-    minor) NEW_VERSION="$major.$((minor + 1)).0" ;;
-    patch) NEW_VERSION="$major.$minor.$((patch + 1))" ;;
-esac
+if [ -n "$PRERELEASE" ]; then
+    # 当前是 prerelease 版本，去掉后缀变成正式版
+    NEW_VERSION="$BASE_VERSION"
+    log_info "prerelease → 正式版"
+else
+    # 当前是正式版，按原逻辑升级
+    IFS='.' read -r major minor patch <<< "$BASE_VERSION"
+    case $BUMP_TYPE in
+        major) NEW_VERSION="$((major + 1)).0.0" ;;
+        minor) NEW_VERSION="$major.$((minor + 1)).0" ;;
+        patch) NEW_VERSION="$major.$minor.$((patch + 1))" ;;
+    esac
+fi
 log_info "新版本: $NEW_VERSION"
 
 # Step 1: 更新版本号（所有 package.json）
