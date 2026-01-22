@@ -9,15 +9,21 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
-  - version: 1.11.0-beta
-    requirement: 工作流三阶段系统、Memo/Node 工具拆分、搜索增强、readonly 权限控制
+  - version: 1.11.0
+    requirement: 工作流三阶段系统、Cursor 插件支持、活跃节点拦截、工具拆分、搜索增强
     conclusion: |-
-      - 工作流三阶段：flow-info → flow-design → flow-impl 替代旧 Skill
-      - 工具拆分：memo_replace/edit/insert、node_replace/edit 精细化编辑
-      - 搜索增强：支持正则表达式、ReDoS 防护、相关度排序
-      - readonly 权限：未绑定会话时拒绝写操作，提升安全性
-      - URL 持久化：节点选中状态可通过 URL 恢复
-    note: "Beta 版本，请谨慎使用"
+      - 工作流三阶段：信息收集 → 方案规划 → 任务执行，引导更清晰
+      - Cursor IDE 支持：Cursor 用户现在也能使用 Agents 和 Skills
+      - 活跃节点拦截：切换任务分支时提醒未完成的工作，防止遗忘
+      - 工具拆分：Memo 和节点支持精确编辑、行范围替换、插入等操作
+      - 搜索增强：支持正则表达式，结果按相关度排序
+      - 安全增强：未绑定会话时拒绝写操作，保护工作区数据
+      - URL 状态保持：刷新页面后自动恢复选中的节点
+      - 教程工作区增强：新增流程阶段介绍和能力演示
+      - 用户手册优化：目录自动跟踪当前章节
+      - 设置页面整合：派发配置和安全设置合并为偏好设置
+      - 多项稳定性修复和测试覆盖补充
+    note: ""
   - version: 1.10.10
     requirement: 工作区置顶、全局备份管理、验收标准动态列
     conclusion: |-

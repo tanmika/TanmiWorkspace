@@ -11,67 +11,55 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
-## [1.11.0-beta.3] - 2026-01-21
-
-### Fixed
-
-- **未绑定写入检查逻辑修复**: 修复安全检查只检查 `sessionId` 参数导致 85% 的写工具（仅有 `workspaceId`）被错误拒绝的问题，现在支持通过 `workspaceId` 反查绑定会话
-- **设置持久化修复**: 修复 TutorialService 的 ensureTutorial/manualTriggerTutorial 使用 writeConfig 覆盖整个配置，导致 security 设置被旧配置覆盖的问题
-
-### Improved
-
-- **用户手册目录跟踪**: 滚动右侧内容时，左侧目录自动平滑滚动使当前高亮项居中显示
-
-### Docs
-
-- **用户手册增强**: 新增「与普通 AI 对话的区别」对比表、「为什么选择 TanmiWorkspace」章节、「最佳实践」章节、「跨仓库任务管理」场景说明
-
-## [1.11.0-beta.2] - 2026-01-21
-
-### Added
-
-- **未绑定写入安全检查**: 实现后端安全拦截逻辑，`allowUnboundWrite=false` 时拒绝未绑定会话的写操作（返回 `UNBOUND_WRITE_DENIED` 错误）
-
-### Improved
-
-- **设置页面整合**: 合并"派发行为配置"和"安全设置"为"偏好设置"
-- **开关逻辑优化**: "允许未绑定写入"改为"禁止未绑定写入"，语义更直观
-
-## [1.11.0-beta.1] - 2026-01-21
+## [1.11.0] - 2026-01-22
 
 ### Added
 
 - **工作流三阶段系统**: 新增 `flow-info` / `flow-design` / `flow-impl` 三阶段 Skill，替代原有的 `bootstrapping-workspace` / `starting-info-flow`
+- **Cursor IDE 插件支持**: 为 Cursor IDE 添加 Agents 和 Skills 安装支持，与 Claude Code 对等能力
+- **子树切换活跃节点拦截**: 切换到其他分支时检测当前分支活跃节点（implementing/monitoring/validating），防止未完成工作被遗忘
 - **Memo 工具拆分**: `memo_update` 拆分为 `memo_replace`（全量替换）、`memo_edit`（精确替换/行范围替换）、`memo_insert`（行后插入）
 - **Node 工具拆分**: 新增 `node_replace`（全量替换）、`node_edit`（精确替换/行范围替换）
 - **搜索功能增强**: 支持正则表达式搜索、ReDoS 防护、相关度排序（标题 > 摘要 > 需求 > 结论）
-- **工具 readonly 属性**: 新增 `TanmiTool` 类型，标识工具读写属性，未绑定会话时拒绝写操作
+- **未绑定写入安全检查**: `allowUnboundWrite=false` 时拒绝未绑定会话的写操作
+- **工具 readonly 属性**: 新增 `TanmiTool` 类型，标识工具读写属性
 - **节点选中状态 URL 持久化**: `?node=xxx` / `?memo=xxx` 参数，页面刷新自动恢复选中状态
 - **验收标准格式校验**: 新增 `validateAcceptanceCriteria()` 函数，防止 WebUI 渲染错误
-- **Skill 常量管理**: 新增 `src/constants/skills.ts`，集中定义 FLOW_SKILLS / DEPRECATED_SKILLS
 - **搜索 HTTP 路由**: 新增 `/workspaces/:wid/search` 端点
 
 ### Improved
 
+- **教程工作区增强**: 添加流程阶段介绍和能力演示，展示所有可用能力
+- **plugin_path 参数化查询**: 支持 `type`/`name` 参数直接查询特定资源路径，错误时返回可用选项列表
 - **tanmi_help 模糊搜索**: 支持无参调用返回主题列表，前缀匹配 > ID 包含 > 标题包含
 - **Hook 系统增强**: 配置深度合并保留用户自定义，自动生成 `write-tools.cjs` 工具分类
 - **派发流程引导**: 明确派发状态切换流程，exec 失败时禁止派发 spec 节点
 - **前端搜索集成**: WorkspaceView 搜索框 + 结果下拉 + 点击定位
-- **节点 Store 优化**: 新增 nodeMap 索引提高查找性能
-- **设置面板**: 新增安全配置开关 UI（allowUnboundWrite）
+- **用户手册目录跟踪**: 滚动右侧内容时，左侧目录自动平滑滚动使当前高亮项居中显示
+- **设置页面整合**: 合并"派发行为配置"和"安全设置"为"偏好设置"
 
 ### Fixed
 
+- **版本比较函数**: 修复 prerelease 版本比较错误（beta.9 < beta.10 数值比较）
+- **活跃节点收集**: 修复向上遍历时重复收集已访问子树的问题
+- **插件卸载逻辑**: 基于 `.tanmi-managed` 标记文件卸载，保护用户自定义文件
+- **info_summary 能力筛选**: 修复只选择 summary 类型能力的 bug，现在使用所有能力
+- **未绑定写入检查**: 修复只检查 sessionId 导致 85% 写工具被错误拒绝的问题
+- **设置持久化**: 修复 TutorialService 覆盖 security 设置的问题
 - **conclusionStale 标志**: 修复标志不会被清除的问题
 - **BackupService 安全**: spawn 替代 exec 防止命令注入
 - **Hook 安装机制**: 正确保留用户自定义 hook
 - **测试修复**: 修复 dispatch.test.ts 全部 15 个用例 + 6 个跳过的测试文件（56 用例）
-- **update 插件更新**: 修复 beta 更新后不自动更新插件的问题（require 缓存导致版本判断错误）
 
 ### Refactor
 
+- **impl_continue_mode 简化**: 从持久化配置改为运行时询问，每次执行前选择
 - **代码审查修复**: 常量提取、搜索性能优化、日志系统健壮性、SSE 事件服务健壮性
 - **废弃 Skill 清理**: 插件安装时自动清理 bootstrapping-workspace / starting-info-flow
+
+### Docs
+
+- **用户手册增强**: 新增「与普通 AI 对话的区别」对比表、「为什么选择 TanmiWorkspace」章节、「最佳实践」章节
 
 ## [1.10.10] - 2026-01-15
 
