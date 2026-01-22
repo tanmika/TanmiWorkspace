@@ -454,7 +454,7 @@ export class ContextService {
         );
 
         if (activeNodes.length > 0) {
-          // 去重（同一个节点可能被多次添加）
+          // 去重（防御性措施，正常情况下 collectActiveNodesOnPathUp 已排除重复）
           const uniqueActiveNodes = Array.from(
             new Map(activeNodes.map(n => [n.nodeId, n])).values()
           );
@@ -763,6 +763,8 @@ export class ContextService {
   ): Promise<ActiveNodeInfo[]> {
     const allActiveNodes: ActiveNodeInfo[] = [];
     let currentId: string | null = fromNodeId;
+    // 记录上一个访问的节点，避免在向上遍历时重复收集已访问的子树
+    let previousVisitedId: string | null = null;
 
     // 找到目标节点到 LCA 的分支（需要排除）
     let excludeBranchAtLCA: string | null = null;
@@ -784,20 +786,82 @@ export class ContextService {
       if (!meta) break;
 
       // 收集当前节点子树中的活跃节点
-      // 如果当前节点就是 LCA 的直接子节点，排除目标所在分支
-      const excludeBranch = (meta.parentId === toAncestorId) ? excludeBranchAtLCA : undefined;
-      const activeInSubtree = await this.collectActiveNodesInSubtree(
+      // 排除规则：
+      // 1. 排除已经访问过的子分支（previousVisitedId）
+      // 2. 如果当前节点是 LCA 的直接子节点，还需排除目标所在分支
+      const excludeBranches: string[] = [];
+      if (previousVisitedId) {
+        excludeBranches.push(previousVisitedId);
+      }
+      if (meta.parentId === toAncestorId && excludeBranchAtLCA) {
+        excludeBranches.push(excludeBranchAtLCA);
+      }
+
+      const activeInSubtree = await this.collectActiveNodesInSubtreeWithExclusions(
         currentId,
         graph,
         projectRoot,
         wsDirName,
-        excludeBranch ?? undefined  // null → undefined 转换
+        excludeBranches
       );
       allActiveNodes.push(...activeInSubtree);
 
+      previousVisitedId = currentId;
       currentId = meta.parentId;
     }
 
     return allActiveNodes;
+  }
+
+  /**
+   * 收集子树中的活跃节点（支持排除多个分支）
+   * @param subtreeRootId 子树根节点
+   * @param graph 节点图
+   * @param excludeBranches 要排除的分支节点 ID 列表
+   */
+  private async collectActiveNodesInSubtreeWithExclusions(
+    subtreeRootId: string,
+    graph: NodeGraph,
+    projectRoot: string,
+    wsDirName: string,
+    excludeBranches: string[]
+  ): Promise<ActiveNodeInfo[]> {
+    const activeNodes: ActiveNodeInfo[] = [];
+    const excludeSet = new Set(excludeBranches);
+
+    const dfs = async (nodeId: string) => {
+      // 如果是要排除的分支，跳过
+      if (excludeSet.has(nodeId)) return;
+
+      const meta: NodeMeta | undefined = graph.nodes[nodeId];
+      if (!meta) return;
+
+      // 检查是否是活跃状态
+      const isActive = meta.type === "planning"
+        ? PLANNING_ACTIVE_STATUSES.has(meta.status)
+        : EXECUTION_ACTIVE_STATUSES.has(meta.status);
+
+      if (isActive) {
+        // 读取节点标题
+        const nodeDirName = meta.dirName || nodeId;
+        const info = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+        activeNodes.push({
+          nodeId,
+          title: info.title,
+          status: meta.status,
+          type: meta.type,
+        });
+      }
+
+      // 递归检查子节点
+      for (const childId of meta.children) {
+        if (!excludeSet.has(childId)) {
+          await dfs(childId);
+        }
+      }
+    };
+
+    await dfs(subtreeRootId);
+    return activeNodes;
   }
 }

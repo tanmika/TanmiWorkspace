@@ -1164,10 +1164,47 @@ function installCursorAgents(): void {
 
   ensureDir(CURSOR_AGENTS);
 
+  const currentVersion = getPackageVersion();
+
+  // 1. 清理有标记但源不存在的 Agent（自动检测废弃）
+  if (existsSync(CURSOR_AGENTS)) {
+    const installedFiles = readdirSync(CURSOR_AGENTS).filter((name) => name.endsWith(".md"));
+    for (const file of installedFiles) {
+      const markerPath = join(CURSOR_AGENTS, `${file}.tanmi-managed`);
+      const existsInSource = existsSync(join(PLUGIN_AGENTS, file));
+
+      if (existsSync(markerPath) && !existsInSource) {
+        removeFile(join(CURSOR_AGENTS, file));
+        removeFile(markerPath);
+        info(`  - 已删除废弃 Agent: ${file}`);
+        logToFile("CURSOR_AGENT_CLEANUP", `删除废弃 Agent (源不存在): ${file}`);
+      }
+    }
+  }
+
+  // 2. 安装 Agent 并添加 sidecar 标记文件
   for (const agentFile of agentFiles) {
     const src = join(PLUGIN_AGENTS, agentFile);
     const dest = join(CURSOR_AGENTS, agentFile);
+    const markerPath = join(CURSOR_AGENTS, `${agentFile}.tanmi-managed`);
+
     copyFile(src, dest);
+
+    // 写入 sidecar 标记文件
+    try {
+      const markerContent = JSON.stringify(
+        {
+          installedAt: new Date().toISOString(),
+          installedVersion: currentVersion,
+          source: "tanmi-workspace",
+        },
+        null,
+        2
+      );
+      writeFileSync(markerPath, markerContent);
+    } catch (err) {
+      warn(`无法写入标记文件: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   success(`Cursor Agent 已安装到 ${CURSOR_AGENTS}/`);
@@ -1175,7 +1212,6 @@ function installCursorAgents(): void {
     info(`  - ${agentFile}`);
   }
 
-  const currentVersion = getPackageVersion();
   logToFile("CURSOR_AGENT_INSTALL", `安装 ${agentFiles.length} 个 Agent (v${currentVersion})`);
   updateInstallationMeta("cursor", "agents", "update");
 }
@@ -1281,22 +1317,29 @@ function installCursorSkills(): void {
 function uninstallCursorAgents(): void {
   info("卸载 Cursor Agent...");
 
-  // 动态获取要卸载的 agent 列表（排除 CLAUDE.md）
-  let agentFiles: string[] = [];
-  if (existsSync(PLUGIN_AGENTS)) {
-    agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
-  }
-
-  if (agentFiles.length === 0) {
-    warn("没有找到 Agent 模板文件");
+  if (!existsSync(CURSOR_AGENTS)) {
     return;
   }
 
-  for (const file of agentFiles) {
-    const filePath = join(CURSOR_AGENTS, file);
-    if (removeFile(filePath)) {
-      success(`已删除 ${filePath}`);
+  // 基于标记文件卸载：只删除有 .tanmi-managed 标记的 Agent
+  const allFiles = readdirSync(CURSOR_AGENTS);
+  const markerFiles = allFiles.filter((name) => name.endsWith(".tanmi-managed"));
+
+  if (markerFiles.length === 0) {
+    info("没有找到 tanmi 管理的 Agent");
+    return;
+  }
+
+  for (const markerFile of markerFiles) {
+    // markerFile 格式: agent-name.md.tanmi-managed
+    const agentFile = markerFile.replace(".tanmi-managed", "");
+    const agentPath = join(CURSOR_AGENTS, agentFile);
+    const markerPath = join(CURSOR_AGENTS, markerFile);
+
+    if (removeFile(agentPath)) {
+      success(`已删除 ${agentPath}`);
     }
+    removeFile(markerPath);
   }
 
   if (isDirEmpty(CURSOR_AGENTS)) {
@@ -1309,20 +1352,36 @@ function uninstallCursorAgents(): void {
 function uninstallCursorSkills(): void {
   info("卸载 Cursor Skills...");
 
-  if (!existsSync(PLUGIN_SKILLS) || !existsSync(CURSOR_SKILLS)) {
+  if (!existsSync(CURSOR_SKILLS)) {
     return;
   }
 
-  const skillDirs = readdirSync(PLUGIN_SKILLS).filter((name) => {
-    const fullPath = join(PLUGIN_SKILLS, name);
-    return statSync(fullPath).isDirectory();
+  // 基于标记文件卸载：只删除有 .tanmi-managed 标记的 Skill
+  const installedSkills = readdirSync(CURSOR_SKILLS).filter((name) => {
+    const fullPath = join(CURSOR_SKILLS, name);
+    try {
+      return statSync(fullPath).isDirectory();
+    } catch {
+      return false;
+    }
   });
 
-  for (const skillName of skillDirs) {
-    const skillDestDir = join(CURSOR_SKILLS, skillName);
-    if (removeDir(skillDestDir)) {
-      success(`已删除 ${skillDestDir}/`);
+  let deletedCount = 0;
+  for (const skillName of installedSkills) {
+    const skillPath = join(CURSOR_SKILLS, skillName);
+    const markerPath = join(skillPath, ".tanmi-managed");
+
+    // 只删除有 tanmi 标记的 Skill
+    if (existsSync(markerPath)) {
+      if (removeDir(skillPath)) {
+        success(`已删除 ${skillPath}/`);
+        deletedCount++;
+      }
     }
+  }
+
+  if (deletedCount === 0) {
+    info("没有找到 tanmi 管理的 Skill");
   }
 
   if (isDirEmpty(CURSOR_SKILLS)) {

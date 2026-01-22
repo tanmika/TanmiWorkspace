@@ -1629,15 +1629,11 @@ tanmi-workspace plugins
     // 使用 CapabilityService 导出的单一数据源
     const allCapabilities = ALL_CAPABILITY_IDS;
 
-    // 根据 role 类型筛选能力
-    // info_collection: 使用所有能力
-    // info_summary: 只使用 summary 类型的能力（上下文探索、诊断分析）
-    const selectedCapabilities = role === "info_summary"
-      ? allCapabilities.filter(id => {
-          const info = capabilityService.getCapabilityInfo(id);
-          return info.type === "summary";
-        })
-      : allCapabilities;
+    // info_collection 和 info_summary 都使用所有能力
+    // 两者的区别在于信息来源，而非可用能力：
+    // - info_collection: 主动探索（扫描项目、读文档、调研技术）
+    // - info_summary: 整理已有信息（从对话中提炼）
+    const selectedCapabilities = allCapabilities;
 
     // 定义各能力节点的目标状态（用于教程演示不同的执行阶段）
     // - 前 3 个（意图对齐、上下文探索、诊断分析）：已完成

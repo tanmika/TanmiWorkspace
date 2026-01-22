@@ -87,14 +87,18 @@ export function resolvePluginPath(
 
   // 只有 type，返回该类型目录和可用资源列表
   if (!resourceName) {
+    if (!existsSync(typeDir)) {
+      return { error: `目录不存在: ${typeDir}` };
+    }
     try {
       const available = listAvailableResources(typeDir, resourceType);
       return {
         path: typeDir,
         available,
       };
-    } catch {
-      return { error: `目录不存在: ${typeDir}` };
+    } catch (err) {
+      // 目录存在但读取失败（权限等问题）
+      return { error: `无法读取目录 ${typeDir}: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
 
