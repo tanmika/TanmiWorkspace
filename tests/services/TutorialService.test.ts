@@ -30,6 +30,7 @@ const { DispatchService } = await import("../../src/services/DispatchService.js"
 const { ConfigService } = await import("../../src/services/ConfigService.js");
 const { MemoService } = await import("../../src/services/MemoService.js");
 const { TutorialService } = await import("../../src/services/TutorialService.js");
+const { ALL_CAPABILITY_IDS, capabilityService } = await import("../../src/services/CapabilityService.js");
 
 // 状态缩写映射
 const STATUS_ABBREV: Record<string, string> = {
@@ -310,6 +311,53 @@ describe("TutorialService", () => {
       // 根节点应该有子节点（版本分组）
       expect(wsDetail.topology.children).toBeDefined();
       expect(wsDetail.topology.children!.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("能力列表同步检测", () => {
+    it("教程中的能力子节点应与 ALL_CAPABILITY_IDS 保持同步", async () => {
+      await tutorialService.ensureTutorial();
+
+      const list = await workspaceService.list({});
+      const introWs = list.workspaces.find(ws => ws.name === "TanmiWorkspace 功能简介");
+      expect(introWs).toBeDefined();
+
+      const wsDetail = await workspaceService.get({ workspaceId: introWs!.id });
+
+      // 找到信息收集节点
+      const execDemoNode = findNodeByTitle(wsDetail.topology, "执行节点演示");
+      expect(execDemoNode).toBeDefined();
+
+      const infoCollectionNode = execDemoNode!.children!.find((n: any) => n.title === "信息收集");
+      expect(infoCollectionNode).toBeDefined();
+      expect(infoCollectionNode!.children).toBeDefined();
+
+      // 获取信息收集下所有能力子节点的标题
+      const capabilityNodeTitles = infoCollectionNode!.children!.map((n: any) => n.title);
+
+      // 获取 ALL_CAPABILITY_IDS 对应的显示名称
+      const expectedTitles = ALL_CAPABILITY_IDS.map(id => capabilityService.getCapabilityInfo(id).name);
+
+      // 验证所有能力都有对应的节点
+      for (const expectedTitle of expectedTitles) {
+        expect(capabilityNodeTitles).toContain(expectedTitle);
+      }
+
+      // 验证数量一致（没有多余的节点）
+      expect(capabilityNodeTitles.length).toBe(expectedTitles.length);
+    });
+
+    it("ALL_CAPABILITY_IDS 应包含所有已定义的能力", () => {
+      // 验证 ALL_CAPABILITY_IDS 不为空
+      expect(ALL_CAPABILITY_IDS.length).toBeGreaterThan(0);
+
+      // 验证每个 ID 都能获取到能力信息（不会抛出异常）
+      for (const capabilityId of ALL_CAPABILITY_IDS) {
+        const info = capabilityService.getCapabilityInfo(capabilityId);
+        expect(info).toBeDefined();
+        expect(info.id).toBe(capabilityId);
+        expect(info.name).toBeTruthy();
+      }
     });
   });
 });

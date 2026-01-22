@@ -16,7 +16,7 @@ import type { ReferenceService } from "./ReferenceService.js";
 import type { DispatchService } from "./DispatchService.js";
 import type { ConfigService } from "./ConfigService.js";
 import type { MemoService } from "./MemoService.js";
-import { capabilityService } from "./CapabilityService.js";
+import { capabilityService, ALL_CAPABILITY_IDS } from "./CapabilityService.js";
 import type { CapabilityId } from "../types/capability.js";
 import { computeConclusionsHash } from "../utils/hash.js";
 import pkg from "../../package.json" with { type: "json" };
@@ -1626,16 +1626,8 @@ tanmi-workspace plugins
     parentId: string,
     role?: "info_collection" | "info_summary"
   ): Promise<void> {
-    // 获取所有能力 ID
-    const allCapabilities: CapabilityId[] = [
-      "intent_alignment",
-      "context_discovery",
-      "diagnosis",
-      "tech_research",
-      "measurement_analysis",
-      "solution_design",
-      "verification_strategy",
-    ];
+    // 使用 CapabilityService 导出的单一数据源
+    const allCapabilities = ALL_CAPABILITY_IDS;
 
     // 根据 role 类型筛选能力
     // info_collection: 使用所有能力

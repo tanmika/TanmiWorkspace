@@ -48,6 +48,24 @@ describe("isVersionLessThan", () => {
     it("相同 prerelease 应返回 false", () => {
       expect(isVersionLessThan("1.11.0-beta.3", "1.11.0-beta.3")).toBe(false);
     });
+
+    // 数值比较测试（修复 beta.9 vs beta.10 的 bug）
+    it("应使用数值比较 prerelease 中的数字部分", () => {
+      expect(isVersionLessThan("1.11.0-beta.9", "1.11.0-beta.10")).toBe(true);
+      expect(isVersionLessThan("1.11.0-beta.10", "1.11.0-beta.9")).toBe(false);
+      expect(isVersionLessThan("1.11.0-beta.19", "1.11.0-beta.20")).toBe(true);
+    });
+
+    it("rc 版本应大于 beta 版本", () => {
+      expect(isVersionLessThan("1.11.0-beta.1", "1.11.0-rc.1")).toBe(true);
+      expect(isVersionLessThan("1.11.0-rc.1", "1.11.0-beta.99")).toBe(false);
+    });
+
+    it("应正确处理多段 prerelease", () => {
+      // beta < beta.0 < beta.1
+      expect(isVersionLessThan("1.11.0-beta", "1.11.0-beta.0")).toBe(true);
+      expect(isVersionLessThan("1.11.0-beta.0", "1.11.0-beta.1")).toBe(true);
+    });
   });
 
   describe("边界情况", () => {

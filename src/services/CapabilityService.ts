@@ -27,6 +27,20 @@ const CAPABILITY_TO_SKILL_DIR: Record<CapabilityId, string> = {
 };
 
 /**
+ * 所有能力 ID 列表（单一数据源）
+ * 其他模块应使用此列表而非硬编码能力 ID
+ */
+export const ALL_CAPABILITY_IDS: CapabilityId[] = [
+  "intent_alignment",
+  "context_discovery",
+  "diagnosis",
+  "tech_research",
+  "measurement_analysis",
+  "solution_design",
+  "verification_strategy",
+];
+
+/**
  * 能力元信息映射（硬编码，作为 Skill 文件缺失时的降级方案）
  */
 const CAPABILITY_INFO_MAP: Record<CapabilityId, CapabilityInfo> = {

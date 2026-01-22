@@ -882,15 +882,8 @@ function installSkills(): void {
   const skillsDestDir = join(CLAUDE_HOME, "skills");
   ensureDir(skillsDestDir);
 
-  // 获取当前版本
-  let currentVersion = "unknown";
-  try {
-    const require = createRequire(import.meta.url);
-    const pkg = require(join(PROJECT_ROOT, "package.json"));
-    currentVersion = pkg.version || "unknown";
-  } catch {
-    warn("无法获取当前版本号，标记文件将使用 'unknown'");
-  }
+  // 获取当前版本（复用 getPackageVersion）
+  const currentVersion = getPackageVersion();
 
   // 1. 清理废弃的 Skill（黑名单，解决旧版用户残留）
   for (const deprecated of DEPRECATED_SKILLS) {
@@ -1182,6 +1175,8 @@ function installCursorAgents(): void {
     info(`  - ${agentFile}`);
   }
 
+  const currentVersion = getPackageVersion();
+  logToFile("CURSOR_AGENT_INSTALL", `安装 ${agentFiles.length} 个 Agent (v${currentVersion})`);
   updateInstallationMeta("cursor", "agents", "update");
 }
 
@@ -1205,15 +1200,8 @@ function installCursorSkills(): void {
 
   ensureDir(CURSOR_SKILLS);
 
-  // 获取当前版本
-  let currentVersion = "unknown";
-  try {
-    const require = createRequire(import.meta.url);
-    const pkg = require(join(PROJECT_ROOT, "package.json"));
-    currentVersion = pkg.version || "unknown";
-  } catch {
-    warn("无法获取当前版本号，标记文件将使用 'unknown'");
-  }
+  // 获取当前版本（复用 getPackageVersion）
+  const currentVersion = getPackageVersion();
 
   // 1. 清理废弃的 Skill（黑名单）
   for (const deprecated of DEPRECATED_SKILLS) {

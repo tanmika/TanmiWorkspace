@@ -729,7 +729,7 @@ export class ContextService {
         activeNodes.push({
           nodeId,
           title: info.title,
-          status: meta.status as any,
+          status: meta.status,
           type: meta.type,
         });
       }
@@ -791,7 +791,7 @@ export class ContextService {
         graph,
         projectRoot,
         wsDirName,
-        excludeBranch || undefined
+        excludeBranch ?? undefined  // null → undefined 转换
       );
       allActiveNodes.push(...activeInSubtree);
 

@@ -2,7 +2,7 @@
 // plugin_path 工具的核心逻辑
 
 import { join } from "path";
-import { readdirSync, existsSync } from "fs";
+import { readdirSync, existsSync, statSync } from "fs";
 
 export interface PluginPathResult {
   path?: string;
@@ -41,8 +41,16 @@ function listAvailableResources(
       .filter((e) => e.endsWith(".md") && e !== "CLAUDE.md")
       .map((e) => e.replace(".md", ""));
   } else {
-    // skills 目录：过滤出子目录（非隐藏文件、非 .md 文件）
-    return entries.filter((e) => !e.startsWith(".") && e !== "CLAUDE.md");
+    // skills 目录：过滤出实际的子目录（排除隐藏文件、CLAUDE.md 等非目录项）
+    return entries.filter((e) => {
+      if (e.startsWith(".") || e === "CLAUDE.md") return false;
+      // 检查是否真的是目录
+      try {
+        return statSync(join(typeDir, e)).isDirectory();
+      } catch {
+        return false;
+      }
+    });
   }
 }
 
