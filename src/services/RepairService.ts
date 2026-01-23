@@ -152,19 +152,60 @@ export class RepairService {
   ): Promise<InternalIssue[]> {
     const issues: InternalIssue[] = [];
 
-    // ========== 1. 工作区目录检查 ==========
-    const wsExists = await this.fs.exists(wsPath);
-    if (!wsExists) {
+    // ========== 1. 工作区目录检查（考虑归档状态）==========
+    const isArchived = indexEntry.status === "archived";
+    const normalPath = this.fs.getWorkspacePath(projectRoot, wsDirName);
+    const archivePath = this.fs.getArchivePath(projectRoot, wsDirName);
+    const expectedPath = isArchived ? archivePath : normalPath;
+    const wrongPath = isArchived ? normalPath : archivePath;
+
+    const expectedExists = await this.fs.exists(expectedPath);
+    const wrongExists = await this.fs.exists(wrongPath);
+
+    // 1.1 检查归档位置一致性
+    if (wrongExists && !expectedExists) {
+      // 工作区存在但在错误的位置
+      issues.push({
+        id: "archive-location-mismatch",
+        severity: "error",
+        message: isArchived
+          ? "归档工作区仍在普通路径，需迁移到 archive/ 目录"
+          : "活跃工作区在 archive/ 目录，需迁移到普通路径",
+        detail: `当前位置: ${wrongPath}\n期望位置: ${expectedPath}`,
+        fixType: "auto",
+        autoFix: async () => {
+          try {
+            // 确保目标目录的父目录存在
+            const targetDir = isArchived
+              ? this.fs.getArchivePath(projectRoot, "").replace(/[/\\]$/, "")
+              : this.fs.getWorkspacePath(projectRoot, "").replace(/[/\\]$/, "");
+            await this.fs.ensureDir(targetDir);
+
+            // 移动工作区目录
+            await this.fs.moveDir(wrongPath, expectedPath);
+            return true;
+          } catch (err) {
+            console.error(`[RepairService] 迁移工作区失败:`, err);
+            return false;
+          }
+        },
+      });
+      // 虽然位置错误，但工作区存在，继续诊断（使用实际存在的路径）
+      // 后续诊断使用 wrongPath 因为那是实际存在的位置
+    } else if (!expectedExists && !wrongExists) {
       issues.push({
         id: "ws-dir-missing",
         severity: "error",
         message: "工作区目录不存在",
-        detail: `期望路径: ${wsPath}`,
+        detail: `期望路径: ${expectedPath}`,
         fixType: "manual",
       });
       // 目录不存在，无法继续诊断
       return issues;
     }
+
+    // 使用实际存在的路径进行后续诊断
+    const actualWsPath = expectedExists ? expectedPath : wrongPath;
 
     // ========== 2. Index 相关问题 ==========
 

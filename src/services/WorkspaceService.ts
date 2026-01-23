@@ -754,7 +754,7 @@ Read(file_path: <返回的 path>)
    * 解析工作区位置信息（projectRoot 和 dirName）
    * 用于需要访问文件系统的操作
    */
-  async resolveWorkspaceLocation(workspaceId: string): Promise<{ projectRoot: string; dirName: string }> {
+  async resolveWorkspaceLocation(workspaceId: string): Promise<{ projectRoot: string; dirName: string; isArchived: boolean }> {
     const location = await this.json.getWorkspaceLocation(workspaceId);
     if (!location) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);

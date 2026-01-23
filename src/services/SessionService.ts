@@ -130,17 +130,17 @@ export class SessionService {
     if (!location) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
     }
-    const { projectRoot, dirName } = location;
+    const { projectRoot, dirName, isArchived } = location;
 
-    // 验证项目目录存在
-    const workspacePath = this.fs.getWorkspacePath(projectRoot, dirName);
+    // 验证项目目录存在（考虑归档状态）
+    const workspacePath = this.fs.getWorkspaceBasePath(projectRoot, dirName, isArchived);
     if (!(await this.fs.exists(workspacePath))) {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在`);
     }
 
     // 如果指定了节点，验证节点存在并同步到 graph.currentFocus
     if (nodeId) {
-      const graph = await this.json.readGraph(projectRoot, dirName);
+      const graph = await this.json.readGraph(projectRoot, dirName, isArchived);
       if (!graph.nodes[nodeId]) {
         throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
       }
@@ -246,18 +246,18 @@ export class SessionService {
           }))
       };
     }
-    const { projectRoot, dirName } = location;
+    const { projectRoot, dirName, isArchived } = location;
 
-    // 获取工作区信息
-    const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
-    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, dirName);
-    const graph = await this.json.readGraph(projectRoot, dirName);
+    // 获取工作区信息（考虑归档状态）
+    const config = await this.json.readWorkspaceConfig(projectRoot, dirName, isArchived);
+    const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, dirName, isArchived);
+    const graph = await this.json.readGraph(projectRoot, dirName, isArchived);
 
     // 从根节点读取 goal（requirement 字段）- goal 已统一到根节点
     const rootNodeId = config.rootNodeId || "root";
     const rootNodeMeta = graph.nodes[rootNodeId];
     const rootNodeDirName = rootNodeMeta?.dirName || rootNodeId;
-    const rootNodeInfo = await this.md.readNodeInfo(projectRoot, dirName, rootNodeDirName);
+    const rootNodeInfo = await this.md.readNodeInfo(projectRoot, dirName, rootNodeDirName, isArchived);
     const goal = rootNodeInfo.requirement || "";
 
     const result: SessionStatusBoundResult = {
@@ -274,7 +274,7 @@ export class SessionService {
     const focusNodeId = graph.currentFocus || binding.focusedNodeId;
     if (focusNodeId && graph.nodes[focusNodeId]) {
       const nodeDirName = graph.nodes[focusNodeId].dirName || focusNodeId;
-      const nodeInfo = await this.md.readNodeInfo(projectRoot, dirName, nodeDirName);
+      const nodeInfo = await this.md.readNodeInfo(projectRoot, dirName, nodeDirName, isArchived);
       result.focusedNode = {
         id: focusNodeId,
         title: nodeInfo.title,
@@ -396,11 +396,11 @@ export class SessionService {
         reminderText: ""
       };
     }
-    const { projectRoot, dirName } = location;
+    const { projectRoot, dirName, isArchived } = location;
 
-    // 读取工作区配置
+    // 读取工作区配置（考虑归档状态）
     try {
-      const config = await this.json.readWorkspaceConfig(projectRoot, dirName);
+      const config = await this.json.readWorkspaceConfig(projectRoot, dirName, isArchived);
       const manualChanges = config.pendingManualChanges || [];
 
       if (manualChanges.length === 0) {

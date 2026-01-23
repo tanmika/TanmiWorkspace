@@ -873,7 +873,7 @@ Read(file_path: <返回的 path>)
               if (binding) {
                 const location = await services.json.getWorkspaceLocation(binding.workspaceId);
                 if (location) {
-                  const config = await services.json.readWorkspaceConfig(location.projectRoot, location.dirName);
+                  const config = await services.json.readWorkspaceConfig(location.projectRoot, location.dirName, location.isArchived);
                   scenario = config.scenario;
                 }
               }

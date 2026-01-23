@@ -39,6 +39,9 @@ const BACKUPS_DIR = join(GLOBAL_DIR, "backups");
 // 系统目录（不是工作区）
 const SYSTEM_DIRS = ["scripts", "logs", "tutorial", "node_modules", "backups"];
 
+// 导出常量供测试使用
+export { FOLDER_NAME, SYSTEM_DIRS };
+
 // 最大保留备份数
 const MAX_BACKUPS = 10;
 
@@ -532,8 +535,9 @@ function scanForProjects(rootPath: string, maxDepth: number = 3): string[] {
 
 /**
  * 验证工作区是否有效（目录存在且配置完整）
+ * @exported 供测试和外部模块使用
  */
-function verifyWorkspace(entry: WorkspaceEntry): { valid: boolean; reason?: string; upgradedDirName?: string } {
+export function verifyWorkspace(entry: WorkspaceEntry): { valid: boolean; reason?: string; upgradedDirName?: string } {
   // 检查必要字段
   if (!entry.id) {
     return { valid: false, reason: "索引条目缺少 id 字段" };
@@ -585,13 +589,33 @@ function verifyWorkspace(entry: WorkspaceEntry): { valid: boolean; reason?: stri
   };
 
   const originalDirName = entry.dirName;
+  const isArchived = entry.status === "archived";
 
   // 如果 dirName 存在，先尝试直接验证
   if (originalDirName) {
-    const wsPath = join(entry.projectRoot, FOLDER_NAME, originalDirName);
+    // 根据归档状态决定正确的路径
+    const normalPath = join(entry.projectRoot, FOLDER_NAME, originalDirName);
+    const archivePath = join(entry.projectRoot, FOLDER_NAME, "archive", originalDirName);
+    const expectedPath = isArchived ? archivePath : normalPath;
+    const wrongPath = isArchived ? normalPath : archivePath;
 
-    if (existsSync(wsPath)) {
-      const result = readAndValidateConfig(wsPath);
+    // 检查工作区是否在错误的位置
+    if (existsSync(wrongPath)) {
+      const wrongResult = readAndValidateConfig(wrongPath);
+      if (wrongResult.valid && wrongResult.config.id === entry.id) {
+        // 工作区存在但在错误的位置
+        return {
+          valid: false,
+          reason: isArchived
+            ? `归档工作区 ${originalDirName} 仍在普通路径，应迁移到 archive/ 目录`
+            : `活跃工作区 ${originalDirName} 在 archive/ 目录，应迁移到普通路径`
+        };
+      }
+    }
+
+    // 检查工作区是否在正确的位置
+    if (existsSync(expectedPath)) {
+      const result = readAndValidateConfig(expectedPath);
       if (result.valid && result.config.id === entry.id) {
         // 验证通过
         return { valid: true };
@@ -1031,7 +1055,6 @@ export {
   scanAndSync,
   verifyAndClean,
   readWorkspacesFromProject,
-  verifyWorkspace,
   readIndex,
   writeIndex,
   scanForProjects,

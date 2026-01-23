@@ -478,14 +478,15 @@ export class JsonStorage {
   }
 
   /**
-   * 根据 workspaceId 获取 projectRoot 和 dirName
+   * 根据 workspaceId 获取 projectRoot、dirName 和归档状态
    */
-  async getWorkspaceLocation(workspaceId: string): Promise<{ projectRoot: string; dirName: string } | null> {
+  async getWorkspaceLocation(workspaceId: string): Promise<{ projectRoot: string; dirName: string; isArchived: boolean } | null> {
     const entry = await this.findWorkspaceEntry(workspaceId);
     if (!entry?.projectRoot) return null;
     return {
       projectRoot: entry.projectRoot,
-      dirName: entry.dirName || entry.id
+      dirName: entry.dirName || entry.id,
+      isArchived: entry.status === "archived"
     };
   }
 
