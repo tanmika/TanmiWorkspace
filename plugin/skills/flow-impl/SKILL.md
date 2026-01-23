@@ -13,6 +13,26 @@ Before executing this skill, you MUST announce to the user:
 
 ---
 
+## The Iron Law
+
+```
+ACCEPTANCE CRITERIA ARE NOT NEGOTIABLE:
+  1. ALL criteria MUST pass      → Before marking complete, verify each one
+  2. Failed = detailed problem   → No vague "didn't work", record exactly what/why
+  3. Static state before change  → Non-static nodes BLOCK phase transition
+  4. User answers in notes       → Persistent record, not temporary log
+
+SKIP VERIFICATION = FALSE COMPLETION = BROKEN PRODUCT
+```
+
+**No exceptions:**
+- Don't mark complete with untested criteria
+- Don't record "failed" without detailed problem analysis
+- Don't force phase change with implementing/validating nodes
+- Don't proceed on unsolvable issues without user discussion
+
+---
+
 ## 第零步：创建阶段进入 Todo（MANDATORY）
 
 进入 impl 阶段后，**必须首先**创建阶段进入追踪：
@@ -184,12 +204,30 @@ exec 节点完成前必须满足：
 - 详尽记录 problem（失败原因、尝试过的方案、卡点）
 - 评估是否可解决，无法解决时必须与用户商讨核对需求
 
-### 5.2 操作记录要求
+### 5.2 记录规范
 
-执行过程中，对每个操作记录：
+**⚠️ notes vs log - Critical Distinction**:
+
+| 字段 | 用途 | 持久性 | 内容 |
+|------|------|--------|------|
+| **notes** | 用户回答、关键决策 | **持久化** | 执行模式选择、用户确认、关键决策 |
+| **log** | 操作记录 | 临时 | 修改位置、修改目的、调试信息 |
+| **conclusion** | 执行结果 | 持久化 | 完成了什么、关键产出、遗留问题 |
+| **problem** | 失败分析 | 持久化 | 失败原因、尝试过的方案、卡点 |
+
+**Core assumption**: 用户不看对话输出，只看工作台。**用户回答必须进 notes，不能只靠 log**。
+
+**操作记录要求**（记录到 log）：
 - **修改位置**：文件路径、函数/类名
 - **修改目的**：为什么做这个修改
-- 记录到节点的 log 中
+
+**Conclusion template** (execution 节点):
+```
+**结果**: [一句话总结完成了什么]
+**产出**: [具体修改的文件/功能]
+**验收**: [逐条验收结果，全部通过]
+**遗留**: [如有待后续处理的事项]
+```
 
 ### 5.3 直接执行流程
 
@@ -531,23 +569,17 @@ node_transition({
 
 ## Red Flags
 
-1. 跳过 signal 直接开始 → 阶段状态未同步
-2. 不展示任务直接执行 → 用户失去选择权
-3. 不询问执行模式 → 默认行为可能不符合用户期望
-4. 不记录操作位置和目的 → 无法追溯修改原因
-5. 验收标准未全部通过就标记完成 → 节点质量不达标
-6. failed 节点不记录详细 problem → 无法后续分析
-7. 无法解决的问题不与用户商讨 → 可能方向错误
-8. 发现问题继续执行 → 可能造成更大问题
-9. 有非静止态节点时转换阶段 → 违反状态约束
-10. planning 节点无结论直接标记完成 → 丢失汇总信息
-11. 忽略失败任务直接结束 → 未处理的失败会累积
-12. 用 log 记录用户回答 → 应使用 notes
-13. 直接引用 MEMO 或文档 → 必须使用 node_reference 建立引用关系
-14. 不创建阶段进入 todo → 用户无法了解阶段进度
-15. 确认模式后不创建任务 todo → 用户无法了解任务进度
-16. todo 状态与节点状态不一致 → 进度展示失真
-17. 用 todo 替代节点操作 → 工作台记录缺失，无法追溯
+| Thought | Reality |
+|---------|---------|
+| "Most criteria passed, close enough" | ALL criteria MUST pass. Partial completion = incomplete. |
+| "It failed, I'll just mark it failed" | Failed nodes need detailed problem: what, why, what was tried. |
+| "I'll fix this node later, let me switch phase first" | Non-static nodes BLOCK phase transition. Finish or fail first. |
+| "The user saw my output, no need to record in notes" | User answers go to notes (persistent). Dialogue output may be lost. |
+| "Let me just start executing without showing tasks" | MUST show task list and get user confirmation on execution mode. |
+| "Recording every operation is tedious" | Each operation needs location + purpose in log. Traceability matters. |
+| "This issue is hard, I'll skip it for now" | Unsolvable issues MUST be discussed with user. Don't hide problems. |
+| "Todo is enough for tracking" | Todo is for display only. Node operations (transition/log/conclusion) still required. |
+| "Planning node is done when children are done" | Planning nodes need manual completion with summarized conclusion. |
 
 ---
 

@@ -13,6 +13,26 @@ Before executing this skill, you MUST announce to the user:
 
 ---
 
+## The Iron Law
+
+```
+TASK DECOMPOSITION IS NOT NEGOTIABLE:
+  1. All exec MUST be under plan   → Never hang exec directly under root
+  2. 8/80 rule                     → Each exec = 8-80 hours of work
+  3. 100% rule                     → Subtasks sum = parent task completely
+  4. Quality requirements          → Each node: requirement ≥3 lines, criteria ≥2
+
+SKIP DECOMPOSITION = UNMANAGEABLE TASKS = FAILED EXECUTION
+```
+
+**No exceptions:**
+- Don't create a single large exec "to save time"
+- Don't skip detailed requirement writing
+- Don't leave acceptance criteria vague or missing
+- Don't proceed to impl without user confirmation
+
+---
+
 ## 第一步：确认进入阶段
 
 调用以下命令确认进入规划阶段：
@@ -480,6 +500,28 @@ node_create({
 
 ---
 
+## 记录规范
+
+**⚠️ notes vs log - Critical Distinction**:
+
+| 字段 | 用途 | 持久性 | 内容 |
+|------|------|--------|------|
+| **notes** | 用户回答、关键决策 | **持久化** | 用户选择、规划理由、约束说明 |
+| **log** | 临时工作记录 | 临时 | 调试信息、中间状态 |
+| **conclusion** | 规划概述 | 持久化 | 分解结构、执行顺序建议 |
+
+**Core assumption**: 用户不看对话输出，只看工作台。**用户回答必须进 notes，不能只靠 log**。
+
+**Conclusion template** (planning 节点):
+```
+**规划概述**: [一句话描述规划目标]
+**分解结构**: [plan] → [exec1, exec2, ...]
+**执行顺序**: [依赖关系和建议顺序]
+**关键约束**: [如有]
+```
+
+---
+
 ## 第六步：完成规划并转为监视
 
 ### 6.1 完成 planning 节点规划
@@ -584,20 +626,17 @@ Skill(flow-impl)
 
 ## Red Flags
 
-1. 跳过 signal 直接开始 → 阶段状态未同步
-2. 不回顾设计直接分解 → 脱离设计方案
-3. exec 直接挂在根节点下 → 必须有 plan 包裹
-4. 不做任务分解直接创建大 exec → 必须完整分解
-5. 不遵循场景模板 → feature 不用 TDD、debug 不复现先
-6. 需求描述只有 1-2 行 → 描述不充分
-7. 无验收标准或标准模糊 → 无法验证完成
-8. exec 节点超过 8 小时工作量 → 需要继续分解
-9. 子任务之和不等于父任务 → 违反 100% 规则
-10. 不满足完成条件就转换状态 → 节点质量不达标
-11. 在规划阶段修改代码 → 违反阶段约束
-12. 不展示规划直接进入执行 → 用户失去确认权
-13. 用 log 记录用户回答 → 应使用 notes
-14. 直接引用 MEMO 或文档 → 必须使用 node_reference 建立引用关系
+| Thought | Reality |
+|---------|---------|
+| "I'll create one big exec to keep it simple" | All exec MUST be under plan. Decompose properly. |
+| "The requirement is obvious, 1 line is enough" | Each node needs ≥3 lines requirement. Obvious to you ≠ clear to executor. |
+| "Acceptance criteria can be added later" | No criteria = no way to verify completion. Define now. |
+| "This exec is 2 days work, no need to split" | 8/80 rule: if >80 hours, MUST decompose further. |
+| "I'll just start coding, planning wastes time" | Design phase NEVER modifies code. Plan first, execute later. |
+| "User will understand my plan" | MUST show plan and get explicit confirmation before impl. |
+| "Log is fine for recording user answers" | User answers go to notes (persistent), not log (temporary). |
+| "TDD is optional for this feature" | Feature scenario MUST follow TDD: test first → implement → verify. |
+| "I'll figure out the structure as I go" | 100% rule: subtasks must completely cover parent. Plan upfront. |
 
 ---
 

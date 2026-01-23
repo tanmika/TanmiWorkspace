@@ -196,6 +196,51 @@ Skill(flow-design)
 
 ---
 
+## 流程回溯机制
+
+**流程并非严格线性**。在探索过程中可能发现之前遗漏的信息，此时应**重开已完成的节点**补充，而非强行继续。
+
+### 常见回溯场景
+
+| 触发点 | 回溯目标 | 场景说明 |
+|--------|----------|----------|
+| discovering-context 用户核对阶段 | aligning-intent 节点 | 探索中发现意图核对遗漏的技术约束/需求点 |
+| 任意能力节点执行中 | 前置能力节点 | 发现前置信息不足，需要补充 |
+| 方案设计中 | discovering-context 节点 | 设计时发现对现状理解不够 |
+
+### Reopen 操作
+
+```typescript
+node_transition({
+  workspaceId: "ws-xxx",
+  nodeId: "需要补充的节点ID",
+  action: "reopen",
+  reason: "补充原因说明"
+})
+```
+
+### 状态转换
+
+| 节点类型 | reopen 转换 |
+|----------|-------------|
+| 执行节点 | `completed → implementing` |
+| 规划节点 | `completed/cancelled → planning` |
+
+**规则**：
+- 重开后节点回到活跃状态，可继续补充信息
+- 补充完成后正常 `complete`
+- 父节点会自动级联更新到 `monitoring` 状态
+
+### 回溯 vs 创建新节点
+
+| 场景 | 选择 |
+|------|------|
+| 补充同一主题的遗漏信息 | **reopen** 原节点 |
+| 发现全新的探索方向 | 创建新能力节点 |
+| 意图有变化需要重新核对 | **reopen** aligning-intent |
+
+---
+
 ## Mandatory Rules
 
 1. MUST call signal first - 确认进入信息阶段
@@ -224,3 +269,5 @@ Skill(flow-design)
 8. 用户要求补充时直接进入下一阶段 → 忽略用户需求
 9. 用 log 记录用户回答 → 应使用 notes（log 用于工作记录，notes 用于用户输入）
 10. 直接引用 MEMO 或文档 → 必须使用 node_reference 建立引用关系
+11. **发现遗漏却不回溯** → 应 reopen 对应节点补充，而非强行继续
+12. **补充信息时创建重复节点** → 补充同一主题应 reopen 原节点，而非新建

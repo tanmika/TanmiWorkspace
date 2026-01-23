@@ -58,74 +58,126 @@ This creates a commitment checkpoint. Proceed only after announcing.
 - New domain → Macro first, then Micro deep dive
 - Clear local scope → Micro first
 
+## The Iron Law
+
+```
+THREE PHASES ARE NOT NEGOTIABLE:
+  1. Broad Exploration  → Use Explore agent, build global view
+  2. Deep Supplement    → Fill gaps between findings and requirements
+  3. User Verification  → Present findings, get confirmation, reopen if needed
+
+SKIP ANY PHASE = INCOMPLETE CONTEXT = WRONG IMPLEMENTATION
+```
+
+**No exceptions:**
+- Don't "save time" by skipping broad exploration
+- Don't assume deep supplement is unnecessary
+- Don't proceed without user verification
+- If intent gaps discovered → MUST reopen aligning-intent
+
 ## SOP
 
-### 1. Entry Point Location
+上下文探索分为三个阶段：**广度探索 → 深度补充 → 用户核对**
 
-**Macro entries**:
-1. Project root README.md
-2. docs/ directory
-3. package.json / pyproject.toml
-4. CHANGELOG.md
+### 1. Broad Exploration (广度探索)
 
-**Micro entries**:
-1. Grep for keywords
-2. src/index.* or main.*
-3. Type definitions (src/types/)
-4. Test files
+使用 Explore 子代理并行探索，快速建立全面认知。
 
-### 2. Dependency Analysis
+**执行方式**:
+```typescript
+Task({
+  subagent_type: "Explore",
+  prompt: "探索 [具体范围]，关注 [关键点]...",
+  description: "广度探索: [简述]"
+})
+```
 
-**Module dependencies**:
-- Analyze import/export relationships
-- Identify core vs auxiliary modules
-- Build mental dependency graph
+**探索内容**（根据策略选择）:
 
-**External dependencies**:
-- Extract production vs dev dependencies
-- Identify core libraries and their purpose
-- Note version constraints
+| 策略 | 入口点 | 关注内容 |
+|------|--------|----------|
+| **Macro** | README, docs/, CHANGELOG | 架构设计、模块结构、业务逻辑 |
+| **Micro** | src/index.*, types/, tests/ | 实现细节、类型定义、调用链 |
 
-**Data dependencies**:
-- Identify shared data structures
-- Trace data flow paths
-- Understand state management
+**⚠️ Checkpoint**: MUST `log_append` 广度探索结论（防止上下文丢失）
 
-**⚠️ Checkpoint**: After completing dependency analysis, `log_append` key module relationships before proceeding.
+**Output**: 广度探索报告 + checkpoint 记录
 
-### 3. Data Flow Tracing
+### 2. Deep Supplement (深度补充)
 
-**For functional tasks**:
-- Start from user input
-- Track through modules
-- Identify transformations
-- Locate final output
+分析"广度结论"与"当前需求"的差异，针对性收集缺失细节。
 
-**For system tasks**:
-- Identify core data structures
-- Understand persistence
-- Analyze sync mechanisms
-- Trace config propagation
+**执行流程**:
+1. 对比广度探索结果与用户需求
+2. 识别信息缺口（哪些问题还没回答）
+3. 针对性深挖（直接 Read/Grep/LSP，不再用 Explore）
+
+**深挖手段**:
+- **依赖分析**: import/export 关系、核心 vs 辅助模块
+- **数据流追踪**: 用户输入 → 模块处理 → 最终输出
+- **类型理解**: 核心数据结构、接口定义
 
 **Visualization rules**:
 - Code investigation: **MUST** use mermaid sequenceDiagram
 - Architecture overview: flowchart or simple `A → B → C`
 
-**⚠️ Checkpoint**: After tracing data flow, `log_append` the flow diagram before proceeding.
+**⚠️ Checkpoint**: `log_append` 补充的关键细节
 
-### 4. Output Knowledge Snapshot
+**Output**: 补充细节列表 + 更新后的整体理解
 
-Structure findings using output template.
+### 3. User Verification (用户核对)
 
-### 5. Record to Workspace (MANDATORY)
+展示发现、确认理解、发现遗漏时触发回溯。
 
-After exploration, MUST record to workspace node:
+**展示内容**:
+1. 完整的探索发现（使用 Output Template）
+2. 与意图核对环节的关联点
+3. 发现的技术约束/限制
+
+**核对问题**:
+- "这些发现是否覆盖了你关心的范围？"
+- "有没有遗漏的技术约束需要补充？"
+- "是否需要调整之前确定的需求范围？"
+
+**根据用户反馈**:
+
+| 用户反馈 | 后续动作 |
+|----------|----------|
+| 确认无误 | 继续后续流程 |
+| 需要补充探索 | 回到步骤1或步骤2补充 |
+| 发现意图遗漏 | **reopen** aligning-intent 节点补充 |
+
+**Reopen 操作**:
+```typescript
+node_transition({
+  nodeId: "aligning-intent-node-id",
+  action: "reopen",
+  reason: "上下文探索中发现遗漏的技术约束/需求点"
+})
+```
+
+**Output**: 用户确认 or 回溯指令
+
+### 4. Record to Workspace (MANDATORY)
+
+After exploration, MUST record to workspace node.
+
+**⚠️ notes vs log - Critical Distinction**:
+
+| 字段 | 用途 | 持久性 | 内容 |
+|------|------|--------|------|
+| **notes** | 关键发现、过程记录 | **持久化** | 做了什么、发现什么、决策理由 |
+| **log** | 临时 checkpoint | 临时 | 防止上下文丢失的快照 |
+| **conclusion** | 最终结论 | 持久化 | 简洁总结 |
+| **MEMO** | 详细内容 | 持久化 | >200 行的完整文档 |
+
+**Core assumption**: 用户不看对话输出，只看工作台。**关键信息必须进 notes，不能只靠 log**。
 
 **Recording locations**:
 | Content | Location | Tool |
 |---------|----------|------|
 | Key conclusions (brief) | conclusion | node_update |
-| Scope, key files, dependencies | notes | node_update |
+| Process + findings + decisions | **notes** | node_update |
 | Full knowledge snapshot (>200 lines) | MEMO | memo_create + node_reference |
 
 **NEVER hardcode MEMO IDs** in text like "见 MEMO#xxx". Use `node_reference` to link.
@@ -136,21 +188,32 @@ After exploration, MUST record to workspace node:
 - Dependencies: module names with paths
 - Core principle: references enable traceability, not bureaucracy
 
-**Conclusion template** (brief):
+**Conclusion template** (brief, 3-5 lines):
 ```
-[探索范围] + [关键发现] + [待确认项]
+**结果**: [一句话总结关键发现]
+**范围**: [探索了什么]
+**待确认**: [如有]
 ```
 
-**Notes template** (detailed):
+**Notes template** (detailed, 记录过程):
 ```
 **Strategy**: Macro/Micro
-**Scanned**: [directories/files]
+**Phase 1 - Broad Exploration**:
+- 扫描范围: [directories/files]
+- 关键发现: [what was discovered]
+
+**Phase 2 - Deep Supplement**:
+- 信息缺口: [what was missing]
+- 补充内容: [what was filled]
+
 **Key Files**:
-- Entry: file:line
-- Types: file
-**Dependencies**: [list]
-**Data Flow**: [brief]
-**Uncertainties**: [items]
+- Entry: file:line - [作用说明]
+- Types: file - [作用说明]
+
+**Dependencies**: [module relationships]
+**Data Flow**: [brief or mermaid reference]
+**Decisions**: [决策点和理由]
+**Uncertainties**: [待确认项]
 ```
 
 **Output**: node_update called with conclusion + notes
@@ -231,6 +294,12 @@ sequenceDiagram
 - [ ] Data flow traced
 - [ ] Error handling identified
 
+### Three-Phase Flow
+- [ ] **Broad exploration**: Used Explore agent, logged conclusions
+- [ ] **Deep supplement**: Identified gaps, targeted deep-dive
+- [ ] **User verification**: Presented findings, got confirmation
+- [ ] **Reopen if needed**: Intent gaps → reopen aligning-intent
+
 ### Recording (MANDATORY)
 - [ ] **Conclusion written**: Brief summary in node conclusion
 - [ ] **Notes written**: Scope, key files, dependencies in node notes
@@ -240,28 +309,31 @@ sequenceDiagram
 ### Long Content Protection
 - [ ] **Progressive recording**: Used `log_append` after each major discovery
 - [ ] **References complete**: All key files have `file:line` references
-- [ ] **Checkpoints hit**: Logged after dependency analysis and data flow tracing
+- [ ] **Checkpoints hit**: Logged after phase 1 and phase 2
 - [ ] **Output Template complete**: Every section filled, no placeholders left
 
 ## Red Flags
 
-1. **Skip exploration** - Start implementing without reading existing code
-2. **Assume existence** - Assume feature exists without verification
-3. **Ignore dependencies** - Don't check module relationships
-4. **Wrong strategy** - Use docs when should use code, or vice versa
-5. **Silent execution** - Complete exploration, then immediately start implementing without showing user
-6. **Batch recording** - Explore for 30+ minutes without any `log_append`
-7. **Missing references** - Conclusions without `file:line` references
-8. **Skip checkpoints** - Complete long exploration without intermediate logs
+| Thought | Reality |
+|---------|---------|
+| "I'll just grep directly, no need for Explore" | Broad exploration prevents missing global context. Use Explore first. |
+| "I found enough info, skip to verification" | Deep supplement fills gaps between findings and requirements. Don't skip. |
+| "Exploration done, let's start implementing" | User verification is MANDATORY. Present findings, wait for confirmation. |
+| "Intent seems clear, no need to reopen" | If you discover gaps, you MUST reopen. Forcing ahead causes rework. |
+| "I'll record everything at the end" | Progressive recording prevents context loss. Log after each phase. |
+| "The file name is enough context" | References MUST include `file:line`. Vague locations are useless. |
+| "Notes are redundant, log is enough" | Log is temporary. Key findings MUST go to notes for persistence. |
+| "Code-first is always faster" | Strategy depends on task. Architecture → Macro, Implementation → Micro. |
 
 ## Mandatory Rules
 
-1. **MUST explore before implementing** - NEVER code without understanding existing patterns
-2. **MUST verify existence** - NEVER assume feature/module exists, check code
-3. **MUST trust code over docs** - When docs conflict with code, code is truth
-4. **MUST record findings** - Exploration without documentation is wasted effort
-5. **MUST scope exploration** - Explore what's needed, not the entire project
-6. **MUST present before proceed** - After exploration, NEVER start execution directly. Present findings, wait for user confirmation
+1. **MUST follow three phases** - Broad → Deep → Verify, no skipping
+2. **MUST use Explore in phase 1** - Broad exploration requires Explore subagent
+3. **MUST checkpoint each phase** - `log_append` after each phase completion
+4. **MUST present before proceed** - After exploration, NEVER proceed without user confirmation
+5. **MUST reopen when needed** - Discover intent gaps → reopen aligning-intent, don't force continue
+6. **MUST trust code over docs** - When docs conflict with code, code is truth
+7. **MUST record findings** - Exploration without documentation is wasted effort
 
 ## Anti-Patterns
 
