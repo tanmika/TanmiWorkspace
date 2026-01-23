@@ -164,6 +164,29 @@ export const workspaceUpdateRulesTool: TanmiTool = {
 };
 
 /**
+ * workspace_rename 工具定义
+ */
+export const workspaceRenameTool: TanmiTool = {
+  name: "workspace_rename",
+  readonly: false,
+  description: "重命名工作区。同时更新显示名称和目录名，ID 保持不变。",
+  inputSchema: {
+    type: "object",
+    properties: {
+      workspaceId: {
+        type: "string",
+        description: "工作区 ID",
+      },
+      newName: {
+        type: "string",
+        description: "新的工作区名称（不能包含特殊字符: / \\ : * ? \" < > |）",
+      },
+    },
+    required: ["workspaceId", "newName"],
+  },
+};
+
+/**
  * workspace_archive 工具定义
  */
 export const workspaceArchiveTool: TanmiTool = {
@@ -280,6 +303,7 @@ export const workspaceTools: TanmiTool[] = [
   workspaceGetTool,
   workspaceDeleteTool,
   workspaceUpdateRulesTool,
+  workspaceRenameTool,
   workspaceArchiveTool,
   workspaceRestoreTool,
   workspaceHealthTool,

@@ -352,6 +352,13 @@ function createMcpServer(services: Services): Server {
           });
           break;
 
+        case "workspace_rename":
+          result = await services.workspace.rename({
+            workspaceId: args?.workspaceId as string,
+            newName: args?.newName as string,
+          });
+          break;
+
         case "workspace_archive":
           result = await services.workspace.archive({
             workspaceId: args?.workspaceId as string,

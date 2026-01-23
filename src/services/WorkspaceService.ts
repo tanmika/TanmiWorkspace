@@ -1154,6 +1154,167 @@ Read(file_path: <返回的 path>)
     };
   }
 
+  /**
+   * 重命名工作区
+   * 采用惰性更新策略：克隆到新目录 → 更新元数据 → 删除旧目录
+   */
+  async rename(params: {
+    workspaceId: string;
+    newName: string;
+  }): Promise<{
+    success: boolean;
+    oldName: string;
+    newName: string;
+    oldDirName: string;
+    newDirName: string;
+  }> {
+    const { workspaceId } = params;
+    // trim 处理名称
+    const newName = params.newName.trim();
+
+    // 1. 前置校验 - 验证工作区存在
+    const index = await this.json.readIndex();
+    const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
+    if (!wsEntry) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 不存在`);
+    }
+
+    const { projectRoot } = wsEntry;
+    const oldName = wsEntry.name;
+    const oldDirName = wsEntry.dirName || workspaceId;
+    const isArchived = wsEntry.status === "archived";
+
+    // 2. 如果新名称与原名相同，直接返回成功（无需修改）
+    if (newName === oldName) {
+      return {
+        success: true,
+        oldName,
+        newName,
+        oldDirName,
+        newDirName: oldDirName,
+      };
+    }
+
+    // 3. 前置校验 - 验证名称合法性
+    validateWorkspaceName(newName);
+
+    // 4. 前置校验 - 验证新名称不重名（同一项目下所有工作区，包括归档的）
+    // 重命名时需要检查所有状态的工作区，避免恢复归档时名称冲突
+    const existingWs = index.workspaces.find(
+      ws => ws.projectRoot === projectRoot && ws.name === newName && ws.id !== workspaceId
+    );
+    if (existingWs) {
+      throw new TanmiError("WORKSPACE_EXISTS", `项目 "${projectRoot}" 下工作区 "${newName}" 已存在`);
+    }
+
+    // 4. 生成新目录名
+    const newDirName = generateWorkspaceDirName(newName, workspaceId);
+    const currentTime = now();
+
+    // 5. 获取新旧路径
+    const oldPath = this.fs.getWorkspaceBasePath(projectRoot, oldDirName, isArchived);
+    const newPath = this.fs.getWorkspaceBasePath(projectRoot, newDirName, isArchived);
+
+    // 6. 验证源目录存在
+    if (!(await this.fs.exists(oldPath))) {
+      throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区目录不存在: ${oldPath}`);
+    }
+
+    // 7. 克隆到新目录
+    try {
+      await this.fs.copyDir(oldPath, newPath);
+    } catch (copyError) {
+      // 克隆失败，尝试清理不完整的新目录
+      try {
+        if (await this.fs.exists(newPath)) {
+          await this.fs.rmdir(newPath);
+        }
+      } catch {
+        // 清理失败忽略
+      }
+      throw copyError;
+    }
+
+    // 8. 更新新目录中的元数据
+    try {
+      // 8.1 更新 workspace.json
+      const config = await this.json.readWorkspaceConfig(projectRoot, newDirName, isArchived);
+      config.name = newName;
+      config.dirName = newDirName;
+      config.updatedAt = currentTime;
+      await this.json.writeWorkspaceConfig(projectRoot, newDirName, config, isArchived);
+
+      // 8.2 更新 Workspace.md
+      const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, newDirName, isArchived);
+      workspaceMdData.name = newName;
+      workspaceMdData.updatedAt = currentTime;
+      // writeWorkspaceMd 不支持 isArchived 参数，需要直接写入文件
+      const mdPath = this.fs.getWorkspaceMdPathWithArchive(projectRoot, newDirName, isArchived);
+      const rulesContent = workspaceMdData.rules.length > 0
+        ? workspaceMdData.rules.map(rule => `- ${rule}`).join("\n")
+        : "";
+      const docsContent = workspaceMdData.docs.length > 0
+        ? workspaceMdData.docs.map(doc => `- [${doc.description}](${doc.path})`).join("\n")
+        : "";
+      const mdContent = `---
+name: ${workspaceMdData.name}
+createdAt: ${workspaceMdData.createdAt}
+updatedAt: ${workspaceMdData.updatedAt}
+---
+
+## 规则
+
+> 只读，上下文必须遵循的约束
+
+${rulesContent}
+
+## 文档
+
+> 读写，全局参考文档
+
+${docsContent}
+`;
+      await this.fs.writeFile(mdPath, mdContent);
+
+      // 9. 更新全局索引
+      wsEntry.name = newName;
+      wsEntry.dirName = newDirName;
+      wsEntry.updatedAt = currentTime;
+      await this.json.writeIndex(index);
+
+      // 10. 删除旧目录
+      await this.fs.rmdir(oldPath);
+
+      // 11. 追加日志
+      await this.md.appendLog(projectRoot, newDirName, {
+        time: currentTime,
+        operator: "system",
+        event: `工作区重命名: ${oldName} → ${newName}`,
+      }, isArchived);
+
+      // 12. 发送事件通知
+      eventService.emitWorkspaceUpdate(workspaceId);
+
+      return {
+        success: true,
+        oldName,
+        newName,
+        oldDirName,
+        newDirName,
+      };
+    } catch (updateError) {
+      // 更新元数据失败，尝试清理新目录，保持原状
+      try {
+        if (await this.fs.exists(newPath)) {
+          await this.fs.rmdir(newPath);
+        }
+      } catch {
+        // 清理失败忽略
+      }
+      throw updateError;
+    }
+  }
+
   // ========== 项目文档扫描 ==========
 
   /** 排除的目录名 */

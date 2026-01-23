@@ -401,6 +401,15 @@ export class FileSystemAdapter {
   }
 
   /**
+   * 复制目录（递归）
+   * @param srcPath 源目录路径
+   * @param destPath 目标目录路径
+   */
+  async copyDir(srcPath: string, destPath: string): Promise<void> {
+    await fs.cp(srcPath, destPath, { recursive: true });
+  }
+
+  /**
    * 安全重命名目录（处理名称冲突）
    * @returns 实际使用的新目录名（可能带序号后缀）
    */

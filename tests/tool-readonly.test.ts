@@ -78,6 +78,7 @@ const EXPECTED_WRITE_TOOLS = new Set([
   "workspace_init",
   "workspace_delete",
   "workspace_update_rules",
+  "workspace_rename",
   "workspace_archive",
   "workspace_restore",
   "signal",
