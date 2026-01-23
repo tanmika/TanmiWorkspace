@@ -24,7 +24,11 @@ const {
   analyzeNodeStatus,
   shouldThrottle,
   updateLastReminder,
-  getNodeGraph
+  getNodeGraph,
+  // 配置检查
+  getGlobalConfig,
+  // 日志记录
+  logHookOutput
 } = require('./shared/index.cjs');
 
 // 导入生成的工具白名单配置
@@ -417,14 +421,22 @@ function handleBeforeMCPExecution(sessionId, binding, input) {
     return { permission: 'allow' };
   }
 
-  // 未绑定工作区时：阻止写操作
+  // 未绑定工作区时：阻止写操作（除非配置允许）
   if (!binding?.workspaceId) {
-    // 检查是否为写操作工具
     const shortName = tool_name?.split('__').pop() || tool_name;
     if (WRITE_TOOLS.has(shortName) && !SPECIAL_ALLOW.has(shortName)) {
-      return {
-        permission: 'deny',
-        agent_message: `<tanmi-write-blocked>
+      // 检查全局配置是否允许未绑定写操作
+      const config = getGlobalConfig();
+      if (!config?.security?.allowUnboundWrite) {
+        logHookOutput(sessionId, 'BeforeMCPExecution', 'deny', {
+          tool: tool_name,
+          shortName: shortName,
+          reason: 'unbound_write_restricted',
+          allowUnboundWrite: false
+        });
+        return {
+          permission: 'deny',
+          agent_message: `<tanmi-write-blocked>
 未绑定工作区，不允许执行写操作工具 ${shortName}。
 
 请先绑定工作区：
@@ -434,8 +446,13 @@ session_bind(workspaceId: "...")
 
 或使用 session_status 查看可用工作区。
 </tanmi-write-blocked>`
-      };
+        };
+      }
     }
+    logHookOutput(sessionId, 'BeforeMCPExecution', 'allow', {
+      tool: tool_name,
+      reason: 'not_bound'
+    });
     return { permission: 'allow' };
   }
 
@@ -447,6 +464,14 @@ session_bind(workspaceId: "...")
   // 流程强制机制：phaseSkillInvoked=false 时阻止非白名单工具
   if (!phaseSkillInvoked && !isWhitelistedForSkillInit(tool_name)) {
     const skillName = getSkillForPhase(phase);
+    logHookOutput(sessionId, 'BeforeMCPExecution', 'deny', {
+      tool: tool_name,
+      phase: phase,
+      reason: 'skill_init_required',
+      workspaceId: binding.workspaceId,
+      phaseSkillInvoked: false,
+      requiredSkill: skillName
+    });
     return {
       permission: 'deny',
       agent_message: `<tanmi-skill-required>
@@ -462,6 +487,39 @@ Skill(skill: "${skillName}")
     };
   }
 
+  // 阶段约束：info/design 阶段禁用 Write/Edit/MultiEdit
+  const disallowedTools = {
+    'info': ['Write', 'Edit', 'MultiEdit'],
+    'design': ['Write', 'Edit', 'MultiEdit'],
+    'impl': []
+  };
+  const phaseLabels = { 'info': '信息收集', 'design': '方案设计', 'impl': '实现' };
+
+  const blocked = disallowedTools[phase] || [];
+  if (blocked.includes(tool_name)) {
+    logHookOutput(sessionId, 'BeforeMCPExecution', 'deny', {
+      tool: tool_name,
+      phase: phase,
+      reason: 'phase_constraint',
+      workspaceId: binding.workspaceId,
+      blockedTools: blocked,
+      phaseLabel: phaseLabels[phase]
+    });
+    return {
+      permission: 'deny',
+      agent_message: `<tanmi-phase-constraint>
+当前处于「${phaseLabels[phase]}」阶段，不允许使用 ${tool_name}。
+
+请调用 flow-impl 切换到实现阶段后再进行文件操作。
+</tanmi-phase-constraint>`
+    };
+  }
+
+  logHookOutput(sessionId, 'BeforeMCPExecution', 'allow', {
+    tool: tool_name,
+    phase: phase,
+    workspaceId: binding.workspaceId
+  });
   return { permission: 'allow' };
 }
 

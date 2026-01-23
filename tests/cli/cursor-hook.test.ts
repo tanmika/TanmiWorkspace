@@ -1,7 +1,7 @@
 /**
  * Cursor Hook 事件处理器测试
  *
- * 测试用例（12个）：
+ * 测试用例（14个）：
  * P0 核心测试:
  * - TC-001: sessionStart 上下文注入
  * - TC-002: sessionStart 工作区建议
@@ -19,6 +19,7 @@
  * - TC-010: 无 sessionId 静默通过
  * - TC-011: 白名单工具放行
  * - TC-012: signal 工具白名单放行
+ * - TC-013: 阶段约束检查
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -445,6 +446,31 @@ describe("Cursor Hook - P2 Edge Tests", () => {
 
       // Then: 允许执行
       expect(result.permission).not.toBe("deny");
+    });
+  });
+
+  describe("TC-013: 阶段约束检查", () => {
+    // 注：阶段约束检查需要 phaseSkillInvoked=true，但由于 getNodeGraph 从文件系统读取，
+    // 测试工作区不存在时返回 null，导致 phaseSkillInvoked 默认为 false。
+    // 这里测试的是阶段约束的辅助函数逻辑，实际阻止会先被流程强制机制触发。
+    // 完整的端到端测试需要真实工作区或 mock getNodeGraph。
+
+    it("Given: normalizeWorkflowPhase 函数, When: 传入有效阶段, Then: 返回对应阶段", () => {
+      expect(cursorHook.normalizeWorkflowPhase("info")).toBe("info");
+      expect(cursorHook.normalizeWorkflowPhase("design")).toBe("design");
+      expect(cursorHook.normalizeWorkflowPhase("impl")).toBe("impl");
+    });
+
+    it("Given: normalizeWorkflowPhase 函数, When: 传入无效阶段, Then: 返回默认值 info", () => {
+      expect(cursorHook.normalizeWorkflowPhase("invalid")).toBe("info");
+      expect(cursorHook.normalizeWorkflowPhase(null)).toBe("info");
+      expect(cursorHook.normalizeWorkflowPhase(undefined)).toBe("info");
+    });
+
+    it("Given: getSkillForPhase 函数, When: 传入各阶段, Then: 返回对应 Skill 名", () => {
+      expect(cursorHook.getSkillForPhase("info")).toBe("flow-info");
+      expect(cursorHook.getSkillForPhase("design")).toBe("flow-design");
+      expect(cursorHook.getSkillForPhase("impl")).toBe("flow-impl");
     });
   });
 });
