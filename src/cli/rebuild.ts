@@ -446,6 +446,7 @@ function restoreWorkspaceBackup(workspaceId: string, backupName: string): void {
 
 /**
  * 从项目的 .tanmi-workspace 目录读取工作区信息
+ * 同时扫描 archive/ 子目录中的归档工作区
  */
 function readWorkspacesFromProject(projectRoot: string): WorkspaceEntry[] {
   const wsDir = join(projectRoot, FOLDER_NAME);
@@ -455,35 +456,72 @@ function readWorkspacesFromProject(projectRoot: string): WorkspaceEntry[] {
 
   const entries: WorkspaceEntry[] = [];
 
+  // 辅助函数：从目录读取工作区
+  const readWorkspaceFromDir = (dir: string, dirName: string, forceArchived: boolean): WorkspaceEntry | null => {
+    // 支持两种格式：config.json (项目工作区) 和 workspace.json (导出的工作区)
+    const configPath = join(dir, "config.json");
+    const workspacePath = join(dir, "workspace.json");
+    const actualPath = existsSync(configPath) ? configPath : existsSync(workspacePath) ? workspacePath : null;
+
+    if (!actualPath) {
+      return null;
+    }
+
+    try {
+      const config = JSON.parse(readFileSync(actualPath, "utf-8"));
+      return {
+        id: config.id || dirName,
+        name: config.name || dirName,
+        projectRoot: projectRoot,
+        // 如果在 archive/ 目录中，强制设为 archived 状态
+        status: forceArchived ? "archived" : (config.status || "active"),
+        createdAt: config.createdAt || new Date().toISOString(),
+        updatedAt: config.updatedAt || new Date().toISOString(),
+        dirName: dirName,
+      };
+    } catch {
+      warn(`无法读取工作区配置: ${actualPath}`);
+      return null;
+    }
+  };
+
   try {
+    // 1. 扫描普通工作区（直接子目录）
     const items = readdirSync(wsDir, { withFileTypes: true });
     for (const item of items) {
       if (!item.isDirectory() || SYSTEM_DIRS.includes(item.name)) {
         continue;
       }
 
-      // 支持两种格式：config.json (项目工作区) 和 workspace.json (导出的工作区)
-      const configPath = join(wsDir, item.name, "config.json");
-      const workspacePath = join(wsDir, item.name, "workspace.json");
-      const actualPath = existsSync(configPath) ? configPath : existsSync(workspacePath) ? workspacePath : null;
-
-      if (!actualPath) {
+      // 跳过 archive 目录，稍后单独处理
+      if (item.name === "archive") {
         continue;
       }
 
+      const entry = readWorkspaceFromDir(join(wsDir, item.name), item.name, false);
+      if (entry) {
+        entries.push(entry);
+      }
+    }
+
+    // 2. 扫描归档工作区（archive/ 子目录）
+    const archiveDir = join(wsDir, "archive");
+    if (existsSync(archiveDir)) {
       try {
-        const config = JSON.parse(readFileSync(actualPath, "utf-8"));
-        entries.push({
-          id: config.id || item.name,
-          name: config.name || item.name,
-          projectRoot: projectRoot,
-          status: config.status || "active",
-          createdAt: config.createdAt || new Date().toISOString(),
-          updatedAt: config.updatedAt || new Date().toISOString(),
-          dirName: item.name,
-        });
+        const archivedItems = readdirSync(archiveDir, { withFileTypes: true });
+        for (const item of archivedItems) {
+          if (!item.isDirectory()) {
+            continue;
+          }
+
+          // 归档工作区强制设为 archived 状态
+          const entry = readWorkspaceFromDir(join(archiveDir, item.name), item.name, true);
+          if (entry) {
+            entries.push(entry);
+          }
+        }
       } catch {
-        warn(`无法读取工作区配置: ${configPath}`);
+        warn(`无法扫描归档目录: ${archiveDir}`);
       }
     }
   } catch {
