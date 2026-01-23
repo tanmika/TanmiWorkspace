@@ -1,7 +1,7 @@
 /**
  * Cursor Hook 事件处理器测试
  *
- * 测试用例（14个）：
+ * 测试用例（20个）：
  * P0 核心测试:
  * - TC-001: sessionStart 上下文注入
  * - TC-002: sessionStart 工作区建议
@@ -19,7 +19,8 @@
  * - TC-010: 无 sessionId 静默通过
  * - TC-011: 白名单工具放行
  * - TC-012: signal 工具白名单放行
- * - TC-013: 阶段约束检查
+ * - TC-013: 工作流阶段辅助函数
+ * - TC-014: validateSignalPreCheck 阶段转换预检查
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -449,11 +450,10 @@ describe("Cursor Hook - P2 Edge Tests", () => {
     });
   });
 
-  describe("TC-013: 阶段约束检查", () => {
-    // 注：阶段约束检查需要 phaseSkillInvoked=true，但由于 getNodeGraph 从文件系统读取，
-    // 测试工作区不存在时返回 null，导致 phaseSkillInvoked 默认为 false。
-    // 这里测试的是阶段约束的辅助函数逻辑，实际阻止会先被流程强制机制触发。
-    // 完整的端到端测试需要真实工作区或 mock getNodeGraph。
+  describe("TC-013: 工作流阶段辅助函数", () => {
+    // 注：这里测试工作流阶段相关的辅助函数
+    // 完整的阶段约束端到端测试需要真实工作区或 mock getNodeGraph
+    // TODO: 添加使用 mock getNodeGraph 的端到端测试
 
     it("Given: normalizeWorkflowPhase 函数, When: 传入有效阶段, Then: 返回对应阶段", () => {
       expect(cursorHook.normalizeWorkflowPhase("info")).toBe("info");
@@ -471,6 +471,84 @@ describe("Cursor Hook - P2 Edge Tests", () => {
       expect(cursorHook.getSkillForPhase("info")).toBe("flow-info");
       expect(cursorHook.getSkillForPhase("design")).toBe("flow-design");
       expect(cursorHook.getSkillForPhase("impl")).toBe("flow-impl");
+    });
+  });
+
+  describe("TC-014: validateSignalPreCheck 阶段转换预检查", () => {
+    // 注：测试 validateSignalPreCheck 函数的阶段转换逻辑
+    // 此函数与 Claude Code Hook 保持一致
+
+    it("Given: 同阶段转换, When: info→info, Then: 允许", () => {
+      const graph = { workflow: { phase: "info" }, nodes: {} };
+      const result = cursorHook.validateSignalPreCheck(graph, "info", {
+        code: "aW5mbw",
+      }); // info
+      expect(result.allowed).toBe(true);
+    });
+
+    it("Given: info→impl 直接跳转, When: 调用 signal, Then: 阻止并提示", () => {
+      const graph = { workflow: { phase: "info" }, nodes: {} };
+      const result = cursorHook.validateSignalPreCheck(graph, "info", {
+        code: "aW1wbA",
+      }); // impl
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("不允许从信息收集阶段直接跳转");
+    });
+
+    it("Given: design→impl 无执行节点, When: 调用 signal, Then: 阻止并提示创建执行节点", () => {
+      const graph = {
+        workflow: { phase: "design" },
+        nodes: {
+          root: { id: "root", type: "planning", status: "completed" },
+        },
+      };
+      const result = cursorHook.validateSignalPreCheck(graph, "design", {
+        code: "aW1wbA",
+      }); // impl
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("创建至少一个执行节点");
+    });
+
+    it("Given: design→impl 有未完成规划, When: 调用 signal, Then: 阻止并提示完成规划", () => {
+      const graph = {
+        workflow: { phase: "design" },
+        nodes: {
+          root: { id: "root", type: "planning", status: "completed" },
+          plan1: {
+            id: "plan1",
+            type: "planning",
+            status: "planning",
+            dirName: "plan-task",
+          },
+        },
+      };
+      const result = cursorHook.validateSignalPreCheck(graph, "design", {
+        code: "aW1wbA",
+      }); // impl
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("规划节点未完成");
+    });
+
+    it("Given: design→impl 规划完成且有执行节点, When: 调用 signal, Then: 允许", () => {
+      const graph = {
+        workflow: { phase: "design" },
+        nodes: {
+          root: { id: "root", type: "planning", status: "completed" },
+          exec1: { id: "exec1", type: "execution", status: "pending" },
+        },
+      };
+      const result = cursorHook.validateSignalPreCheck(graph, "design", {
+        code: "aW1wbA",
+      }); // impl
+      expect(result.allowed).toBe(true);
+    });
+
+    it("Given: 无效 signal code, When: 调用 validateSignalPreCheck, Then: 允许（由 MCP 层处理）", () => {
+      const graph = { workflow: { phase: "info" }, nodes: {} };
+      const result = cursorHook.validateSignalPreCheck(graph, "info", {
+        code: "invalid",
+      });
+      expect(result.allowed).toBe(true);
     });
   });
 });

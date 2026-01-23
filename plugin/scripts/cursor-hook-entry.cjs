@@ -32,7 +32,7 @@ const {
 } = require('./shared/index.cjs');
 
 // 导入生成的工具白名单配置
-const { WRITE_TOOLS, SPECIAL_ALLOW, SKILL_INIT_WHITELIST } = require('../hooks/generated/write-tools.cjs');
+const { WRITE_TOOLS, SPECIAL_ALLOW, SKILL_INIT_WHITELIST, SIGNAL_CODES } = require('../hooks/generated/write-tools.cjs');
 
 // ============================================================================
 // 节流时间常量（毫秒）
@@ -101,6 +101,94 @@ function getSkillForPhase(phase) {
     'impl': 'flow-impl'
   };
   return mapping[phase] || 'flow-info';
+}
+
+/**
+ * Signal 阶段转换预检查（简化版，完整验证在 MCP 层）
+ * @param {object} graph - 节点图
+ * @param {string} currentPhase - 当前阶段
+ * @param {object} toolInput - 工具输入参数
+ * @returns {{ allowed: boolean, reason?: string }}
+ */
+function validateSignalPreCheck(graph, currentPhase, toolInput) {
+  // 使用导入的 SIGNAL_CODES 解析目标阶段
+  const targetPhase = SIGNAL_CODES[toolInput?.code];
+  if (!targetPhase) {
+    return { allowed: true }; // 无效 code 由 MCP 层处理
+  }
+
+  // 同阶段转换：允许
+  if (currentPhase === targetPhase) {
+    return { allowed: true };
+  }
+
+  const nodes = graph?.nodes ? Object.values(graph.nodes) : [];
+
+  // impl 转出：检查 execution 节点是否静止态
+  if (currentPhase === 'impl' && (targetPhase === 'info' || targetPhase === 'design')) {
+    const nonStaticExec = nodes.filter(n =>
+      n.type === 'execution' &&
+      (n.status === 'implementing' || n.status === 'validating')
+    );
+    if (nonStaticExec.length > 0) {
+      const nodeNames = nonStaticExec.slice(0, 3).map(n => n.dirName || n.id).join(', ');
+      return {
+        allowed: false,
+        reason: `阶段转换被阻止：有 ${nonStaticExec.length} 个执行任务正在进行中（${nodeNames}${nonStaticExec.length > 3 ? '...' : ''}）。请先完成或暂停这些任务。`
+      };
+    }
+  }
+
+  // design → impl：检查 planning 节点状态
+  if (currentPhase === 'design' && targetPhase === 'impl') {
+    const invalidPlanning = nodes.filter(n =>
+      n.type === 'planning' &&
+      n.id !== 'root' &&
+      (n.status === 'pending' || n.status === 'planning')
+    );
+    if (invalidPlanning.length > 0) {
+      const nodeNames = invalidPlanning.slice(0, 3).map(n => n.dirName || n.id).join(', ');
+      return {
+        allowed: false,
+        reason: `阶段转换被阻止：有 ${invalidPlanning.length} 个规划节点未完成（${nodeNames}${invalidPlanning.length > 3 ? '...' : ''}）。请先完成规划。`
+      };
+    }
+
+    // 检查是否有执行节点
+    const hasExecution = nodes.some(n => n.type === 'execution');
+    if (!hasExecution) {
+      return {
+        allowed: false,
+        reason: '阶段转换被阻止：请先创建至少一个执行节点。'
+      };
+    }
+  }
+
+  // info → design：检查信息节点完成状态（允许 completed 和 cancelled）
+  if (currentPhase === 'info' && targetPhase === 'design') {
+    const incompleteInfo = nodes.filter(n =>
+      (n.role === 'info_collection' || n.role === 'info_summary') &&
+      n.status !== 'completed' &&
+      n.status !== 'cancelled'
+    );
+    if (incompleteInfo.length > 0) {
+      const nodeNames = incompleteInfo.slice(0, 3).map(n => n.dirName || n.id).join(', ');
+      return {
+        allowed: false,
+        reason: `阶段转换被阻止：有 ${incompleteInfo.length} 个信息收集节点未完成（${nodeNames}${incompleteInfo.length > 3 ? '...' : ''}）。请先完成信息收集。`
+      };
+    }
+  }
+
+  // info → impl：不允许直接跳转
+  if (currentPhase === 'info' && targetPhase === 'impl') {
+    return {
+      allowed: false,
+      reason: '不允许从信息收集阶段直接跳转到实现阶段。请先进入设计阶段。'
+    };
+  }
+
+  return { allowed: true };
 }
 
 // ============================================================================
@@ -424,15 +512,19 @@ function handleBeforeMCPExecution(sessionId, binding, input) {
   // 未绑定工作区时：阻止写操作（除非配置允许）
   if (!binding?.workspaceId) {
     const shortName = tool_name?.split('__').pop() || tool_name;
-    if (WRITE_TOOLS.has(shortName) && !SPECIAL_ALLOW.has(shortName)) {
+    const isWriteTool = WRITE_TOOLS.has(shortName) && !SPECIAL_ALLOW.has(shortName);
+
+    if (isWriteTool) {
       // 检查全局配置是否允许未绑定写操作
       const config = getGlobalConfig();
-      if (!config?.security?.allowUnboundWrite) {
+      const allowUnboundWrite = config?.security?.allowUnboundWrite ?? false;
+      if (!allowUnboundWrite) {
         logHookOutput(sessionId, 'BeforeMCPExecution', 'deny', {
           tool: tool_name,
           shortName: shortName,
           reason: 'unbound_write_restricted',
-          allowUnboundWrite: false
+          isWriteTool: true,
+          allowUnboundWrite: allowUnboundWrite
         });
         return {
           permission: 'deny',
@@ -448,11 +540,18 @@ session_bind(workspaceId: "...")
 </tanmi-write-blocked>`
         };
       }
+      // allowUnboundWrite=true 时允许写操作
+      logHookOutput(sessionId, 'BeforeMCPExecution', 'allow', {
+        tool: tool_name,
+        shortName: shortName,
+        reason: 'unbound_write_allowed_by_config',
+        isWriteTool: true,
+        allowUnboundWrite: true
+      });
+      return { permission: 'allow' };
     }
-    logHookOutput(sessionId, 'BeforeMCPExecution', 'allow', {
-      tool: tool_name,
-      reason: 'not_bound'
-    });
+
+    // 非写操作工具：直接放行（不记录详细日志，避免噪音）
     return { permission: 'allow' };
   }
 
@@ -487,7 +586,32 @@ Skill(skill: "${skillName}")
     };
   }
 
+  // Signal 阶段转换预检查（与 Claude Code 保持一致）
+  // 注：signal 在白名单中所以能通过上面的流程强制检查，这里做阶段转换约束
+  const shortToolName = tool_name?.split('__').pop() || tool_name;
+  if (shortToolName === 'signal') {
+    const validation = validateSignalPreCheck(graph, phase, tool_input);
+    if (!validation.allowed) {
+      logHookOutput(sessionId, 'BeforeMCPExecution', 'deny', {
+        tool: tool_name,
+        phase: phase,
+        reason: 'phase_transition_blocked',
+        workspaceId: binding.workspaceId,
+        signalCode: tool_input?.code,
+        validationDetail: validation.reason
+      });
+      return {
+        permission: 'deny',
+        agent_message: `<tanmi-phase-transition-blocked>
+${validation.reason}
+</tanmi-phase-transition-blocked>`
+      };
+    }
+  }
+
   // 阶段约束：info/design 阶段禁用 Write/Edit/MultiEdit
+  // 注：此检查在流程强制之后，只有 phaseSkillInvoked=true 时才会触发
+  // 因为 Write/Edit/MultiEdit 不在 SKILL_INIT_WHITELIST 中，phaseSkillInvoked=false 时会被上面拦截
   const disallowedTools = {
     'info': ['Write', 'Edit', 'MultiEdit'],
     'design': ['Write', 'Edit', 'MultiEdit'],
@@ -774,6 +898,7 @@ module.exports = {
   normalizeWorkflowPhase,
   isWhitelistedForSkillInit,
   getSkillForPhase,
+  validateSignalPreCheck,
   // 事件处理器
   handleSessionStart,
   handleBeforeMCPExecution,
@@ -785,6 +910,7 @@ module.exports = {
   THROTTLE_MS,
   VALID_WORKFLOW_PHASES,
   SKILL_INIT_WHITELIST,
+  SIGNAL_CODES,
   // 响应函数
   outputCursorResponse,
   passThrough

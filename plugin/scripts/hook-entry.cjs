@@ -28,7 +28,7 @@ const {
 } = require('./shared/index.cjs');
 
 // 导入生成的工具白名单配置
-const { WRITE_TOOLS, SPECIAL_ALLOW, SKILL_INIT_WHITELIST } = require('../hooks/generated/write-tools.cjs');
+const { WRITE_TOOLS, SPECIAL_ALLOW, SKILL_INIT_WHITELIST, SIGNAL_CODES } = require('../hooks/generated/write-tools.cjs');
 
 // ============================================================================
 // 节流时间常量（毫秒）
@@ -648,12 +648,7 @@ function handlePreToolUse(sessionId, binding, input) {
  * @returns {{ allowed: boolean, reason?: string }}
  */
 function validateSignalPreCheck(graph, currentPhase, toolInput) {
-  // 解析目标阶段
-  const SIGNAL_CODES = {
-    'aW5mbw': 'info',
-    'VzaWdu': 'design',
-    'aW1wbA': 'impl'
-  };
+  // 使用导入的 SIGNAL_CODES 解析目标阶段
   const targetPhase = SIGNAL_CODES[toolInput?.code];
   if (!targetPhase) {
     return { allowed: true }; // 无效 code 由 MCP 层处理

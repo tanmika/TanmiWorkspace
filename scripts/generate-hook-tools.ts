@@ -38,6 +38,9 @@ const SKILL_INIT_WHITELIST = [
   "Bash",
   "Read",
   // MCP 工具（简短名）
+  // 注：session_unbind 同时在 SPECIAL_ALLOW 中，两个白名单用途不同：
+  // - SPECIAL_ALLOW: 未绑定时的写操作特例
+  // - SKILL_INIT_WHITELIST: phaseSkillInvoked=false 时的流程强制白名单
   "session_unbind",
   "session_status",
   "tanmi_help",
@@ -45,6 +48,14 @@ const SKILL_INIT_WHITELIST = [
   // Signal 工具：用于 Skill 流程启动，必须在白名单中
   "signal",
 ];
+
+// Signal 阶段编码映射（统一定义，避免多处硬编码）
+// 编码来源：base64 encode 的阶段名称前缀
+const SIGNAL_CODES: Record<string, string> = {
+  "aW5mbw": "info",    // from 'sw_info'
+  "VzaWdu": "design",  // from 'sw_design'
+  "aW1wbA": "impl",    // from 'sw_impl'
+};
 
 interface ToolInfo {
   name: string;
@@ -163,7 +174,16 @@ ${SPECIAL_ALLOW.map(t => `    '${t}'`).join(",\n")}
    */
   SKILL_INIT_WHITELIST: new Set([
 ${SKILL_INIT_WHITELIST.map(t => `    '${t}'`).join(",\n")}
-  ])
+  ]),
+
+  /**
+   * Signal 阶段编码映射
+   * 用于 validateSignalPreCheck 解析目标阶段
+   * 编码来源：base64 encode 的阶段名称前缀
+   */
+  SIGNAL_CODES: {
+${Object.entries(SIGNAL_CODES).map(([k, v]) => `    '${k}': '${v}'`).join(",\n")}
+  }
 };
 `;
 
@@ -182,6 +202,7 @@ ${SKILL_INIT_WHITELIST.map(t => `    '${t}'`).join(",\n")}
   console.log(`写操作工具: ${uniqueWriteTools.length} 个`);
   console.log(`特殊允许: ${SPECIAL_ALLOW.length} 个`);
   console.log(`流程初始化白名单: ${SKILL_INIT_WHITELIST.length} 个`);
+  console.log(`Signal 编码: ${Object.keys(SIGNAL_CODES).length} 个`);
   console.log(`输出文件: ${OUTPUT_FILE}`);
   console.log("");
   console.log("写操作工具列表:");
@@ -189,6 +210,9 @@ ${SKILL_INIT_WHITELIST.map(t => `    '${t}'`).join(",\n")}
   console.log("");
   console.log("流程初始化白名单:");
   SKILL_INIT_WHITELIST.forEach(t => console.log(`  - ${t}`));
+  console.log("");
+  console.log("Signal 编码映射:");
+  Object.entries(SIGNAL_CODES).forEach(([k, v]) => console.log(`  - ${k} → ${v}`));
 }
 
 // 主流程

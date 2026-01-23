@@ -1,13 +1,13 @@
 /**
  * Claude Code Hook 事件处理器测试
  *
- * 测试用例（10个）：
+ * 测试用例（25个）：
  * P0 核心测试:
- * - TC-001: PreToolUse 未绑定写操作拦截
- * - TC-002: PreToolUse 特殊工具放行
+ * - TC-001: isWhitelistedForSkillInit 非白名单工具检查
+ * - TC-002: isWhitelistedForSkillInit 白名单工具检查
  * - TC-003: PreToolUse 流程强制（phaseSkillInvoked=false）
  * - TC-004: PreToolUse signal 工具白名单
- * - TC-005: PreToolUse 阶段约束
+ * - TC-005: PreToolUse 阶段约束（getSkillForPhase）
  *
  * P1 辅助测试:
  * - TC-006: validateSignalPreCheck 同阶段转换
@@ -17,6 +17,10 @@
  * P2 边界测试:
  * - TC-009: MCP 工具名解析（标准格式）
  * - TC-010: MCP 工具名解析（-dev1 格式）
+ *
+ * 工具函数测试:
+ * - normalizeWorkflowPhase 规范化
+ * - VALID_WORKFLOW_PHASES 常量
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -46,12 +50,14 @@ describe("Claude Code Hook - P0 Core Tests", () => {
     vi.restoreAllMocks();
   });
 
-  describe("TC-001: PreToolUse 未绑定写操作拦截", () => {
-    it("Given: 未绑定工作区, When: 调用写操作工具, Then: isWhitelistedForSkillInit 返回 false", () => {
-      // Given: 未绑定工作区，调用写操作工具
+  describe("TC-001: isWhitelistedForSkillInit 非白名单工具检查", () => {
+    // 注：此测试验证 isWhitelistedForSkillInit 函数对非白名单工具返回 false
+    // 这是流程强制机制的基础，不是未绑定写操作拦截（那是 WRITE_TOOLS + SPECIAL_ALLOW 的逻辑）
+    it("Given: 非白名单工具, When: 检查 isWhitelistedForSkillInit, Then: 返回 false", () => {
+      // Given: 非白名单工具（如 node_create）
       const toolName = "node_create";
 
-      // When: 检查是否在白名单
+      // When: 检查是否在流程初始化白名单
       const result = hookEntry.isWhitelistedForSkillInit(toolName);
 
       // Then: 不在白名单中
@@ -59,23 +65,25 @@ describe("Claude Code Hook - P0 Core Tests", () => {
     });
   });
 
-  describe("TC-002: PreToolUse 特殊工具放行", () => {
-    it("Given: 未绑定工作区, When: 调用 Skill 工具, Then: isWhitelistedForSkillInit 返回 true", () => {
-      // Given: 未绑定工作区，调用 Skill
+  describe("TC-002: isWhitelistedForSkillInit 白名单工具检查", () => {
+    // 注：此测试验证 isWhitelistedForSkillInit 对白名单中的工具返回 true
+    // 白名单工具在 phaseSkillInvoked=false 时仍可执行
+    it("Given: 白名单工具 Skill, When: 检查 isWhitelistedForSkillInit, Then: 返回 true", () => {
+      // Given: 白名单工具 Skill
       const toolName = "Skill";
 
-      // When: 检查是否在白名单
+      // When: 检查是否在流程初始化白名单
       const result = hookEntry.isWhitelistedForSkillInit(toolName);
 
       // Then: 在白名单中
       expect(result).toBe(true);
     });
 
-    it("Given: 调用 Bash 工具, When: 检查白名单, Then: 返回 true", () => {
+    it("Given: 白名单工具 Bash, When: 检查白名单, Then: 返回 true", () => {
       expect(hookEntry.isWhitelistedForSkillInit("Bash")).toBe(true);
     });
 
-    it("Given: 调用 Read 工具, When: 检查白名单, Then: 返回 true", () => {
+    it("Given: 白名单工具 Read, When: 检查白名单, Then: 返回 true", () => {
       expect(hookEntry.isWhitelistedForSkillInit("Read")).toBe(true);
     });
   });
