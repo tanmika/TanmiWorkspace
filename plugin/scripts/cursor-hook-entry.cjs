@@ -27,8 +27,8 @@ const {
   getNodeGraph
 } = require('./shared/index.cjs');
 
-// 导入生成的写操作工具列表
-const { WRITE_TOOLS, SPECIAL_ALLOW } = require('../hooks/generated/write-tools.cjs');
+// 导入生成的工具白名单配置
+const { WRITE_TOOLS, SPECIAL_ALLOW, SKILL_INIT_WHITELIST } = require('../hooks/generated/write-tools.cjs');
 
 // ============================================================================
 // 节流时间常量（毫秒）
@@ -50,19 +50,8 @@ const THROTTLE_MS = {
 const VALID_WORKFLOW_PHASES = new Set(['info', 'design', 'impl']);
 
 // ============================================================================
-// 流程强制机制：phaseSkillInvoked=false 时的白名单
+// 流程强制机制
 // ============================================================================
-
-/**
- * phaseSkillInvoked=false 时允许的工具白名单
- * 绑定工作区后必须先调用 Skill 进入流程，此前只允许这些工具
- */
-const SKILL_INIT_WHITELIST = new Set([
-  // Claude 内置工具
-  'Skill', 'Bash', 'Read',
-  // MCP 工具（简短名）
-  'session_unbind', 'session_status', 'tanmi_help', 'plugin_path'
-]);
 
 /**
  * 检查工具是否在流程初始化白名单中

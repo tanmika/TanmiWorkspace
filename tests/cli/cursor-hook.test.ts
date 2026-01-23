@@ -1,7 +1,7 @@
 /**
  * Cursor Hook 事件处理器测试
  *
- * 测试用例（11个）：
+ * 测试用例（12个）：
  * P0 核心测试:
  * - TC-001: sessionStart 上下文注入
  * - TC-002: sessionStart 工作区建议
@@ -18,6 +18,7 @@
  * P2 边界测试:
  * - TC-010: 无 sessionId 静默通过
  * - TC-011: 白名单工具放行
+ * - TC-012: signal 工具白名单放行
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -381,6 +382,58 @@ describe("Cursor Hook - P2 Edge Tests", () => {
       const input = {
         tool_name: "Skill", // 白名单工具
         tool_input: { skill: "flow-impl" },
+      };
+
+      // When: 调用 handleBeforeMCPExecution
+      const result = cursorHook.handleBeforeMCPExecution(
+        sessionId,
+        binding,
+        input
+      );
+
+      // Then: 允许执行
+      expect(result.permission).not.toBe("deny");
+    });
+  });
+
+  describe("TC-012: signal 工具白名单放行", () => {
+    it("Given: phaseSkillInvoked=false, When: 调用 signal 工具, Then: 允许执行（不被流程强制阻止）", () => {
+      // Given: 已绑定但 phaseSkillInvoked=false（Skill 调用 signal 前的状态）
+      const sessionId = "test-session-012";
+      const binding: MockBinding = {
+        workspaceId: "ws-test-012",
+        workspaceName: "Test Workspace",
+        phase: "info",
+        phaseSkillInvoked: false,
+      };
+      const input = {
+        tool_name: "signal", // signal 工具应该在白名单中
+        tool_input: { workspaceId: "ws-test-012", code: "aW5mbw" },
+      };
+
+      // When: 调用 handleBeforeMCPExecution
+      const result = cursorHook.handleBeforeMCPExecution(
+        sessionId,
+        binding,
+        input
+      );
+
+      // Then: 允许执行（signal 应该在流程初始化白名单中）
+      expect(result.permission).not.toBe("deny");
+    });
+
+    it("Given: phaseSkillInvoked=false, When: 调用 MCP 格式的 signal 工具, Then: 允许执行", () => {
+      // Given: 已绑定但 phaseSkillInvoked=false
+      const sessionId = "test-session-012b";
+      const binding: MockBinding = {
+        workspaceId: "ws-test-012b",
+        workspaceName: "Test Workspace",
+        phase: "info",
+        phaseSkillInvoked: false,
+      };
+      const input = {
+        tool_name: "mcp__tanmi-workspace__signal", // MCP 完整格式
+        tool_input: { workspaceId: "ws-test-012b", code: "aW5mbw" },
       };
 
       // When: 调用 handleBeforeMCPExecution

@@ -27,8 +27,8 @@ const {
   getGlobalConfig
 } = require('./shared/index.cjs');
 
-// 导入生成的写操作工具列表
-const { WRITE_TOOLS, SPECIAL_ALLOW } = require('../hooks/generated/write-tools.cjs');
+// 导入生成的工具白名单配置
+const { WRITE_TOOLS, SPECIAL_ALLOW, SKILL_INIT_WHITELIST } = require('../hooks/generated/write-tools.cjs');
 
 // ============================================================================
 // 节流时间常量（毫秒）
@@ -50,19 +50,8 @@ const THROTTLE_MS = {
 const VALID_WORKFLOW_PHASES = new Set(['info', 'design', 'impl']);
 
 // ============================================================================
-// 流程强制机制：phaseSkillInvoked=false 时的白名单
+// 流程强制机制
 // ============================================================================
-
-/**
- * phaseSkillInvoked=false 时允许的工具白名单
- * 绑定工作区后必须先调用 Skill 进入流程，此前只允许这些工具
- */
-const SKILL_INIT_WHITELIST = new Set([
-  // Claude 内置工具
-  'Skill', 'Bash', 'Read',
-  // MCP 工具（简短名）
-  'session_unbind', 'session_status', 'tanmi_help', 'plugin_path'
-]);
 
 /**
  * 检查工具是否在流程初始化白名单中
@@ -565,7 +554,9 @@ function handlePreToolUse(sessionId, binding, input) {
       if (!config?.security?.allowUnboundWrite) {
         logHookOutput(sessionId, 'PreToolUse', 'deny', {
           tool: tool_name,
-          reason: 'unbound_write_restricted'
+          reason: 'unbound_write_restricted',
+          isWriteTool: true,
+          allowUnboundWrite: config?.security?.allowUnboundWrite ?? false
         });
         outputPreToolUseResponse('deny', '❌ 写操作需要先绑定工作区\n💡 使用 tanmi_help 获取帮助');
         return;
@@ -592,7 +583,11 @@ function handlePreToolUse(sessionId, binding, input) {
     logHookOutput(sessionId, 'PreToolUse', 'deny', {
       tool: tool_name,
       phase: phase,
-      reason: 'skill_init_required'
+      reason: 'skill_init_required',
+      workspaceId: binding.workspaceId,
+      phaseSkillInvoked: phaseSkillInvoked,
+      isWhitelisted: false,
+      requiredSkill: skillName
     });
     outputPreToolUseResponse('deny', `已进入工作区模式，必须调用 Skill(${skillName}) 并遵循工作区流程`);
     return;
@@ -606,7 +601,9 @@ function handlePreToolUse(sessionId, binding, input) {
         tool: tool_name,
         phase: phase,
         reason: 'phase_transition_blocked',
-        detail: validation.reason
+        workspaceId: binding.workspaceId,
+        signalCode: tool_input?.code,
+        validationDetail: validation.reason
       });
       outputPreToolUseResponse('deny', validation.reason);
       return;
@@ -627,7 +624,10 @@ function handlePreToolUse(sessionId, binding, input) {
     logHookOutput(sessionId, 'PreToolUse', 'deny', {
       tool: tool_name,
       phase: phase,
-      reason: 'phase_constraint'
+      reason: 'phase_constraint',
+      workspaceId: binding.workspaceId,
+      blockedTools: blocked,
+      phaseLabel: phaseLabels[phase]
     });
     outputPreToolUseResponse('deny', `当前处于「${phaseLabels[phase]}」阶段，不允许使用 ${tool_name}。请调用 flow-impl 切换到实现阶段。`);
     return;
@@ -1000,7 +1000,30 @@ async function main() {
   }
 }
 
-main().catch(() => {
-  // 任何错误都静默退出，不干扰用户
-  process.exit(0);
-});
+// 仅在直接运行时执行 main()，被 require 时跳过
+if (require.main === module) {
+  main().catch(() => {
+    // 任何错误都静默退出，不干扰用户
+    process.exit(0);
+  });
+}
+
+// 导出供测试使用
+module.exports = {
+  // 辅助函数
+  normalizeWorkflowPhase,
+  isWhitelistedForSkillInit,
+  getSkillForPhase,
+  validateSignalPreCheck,
+  // 事件处理器
+  handleSessionStart,
+  handleUserPromptSubmit,
+  handlePostToolUse,
+  handlePreToolUse,
+  handleStop,
+  // 常量
+  THROTTLE_MS,
+  VALID_WORKFLOW_PHASES,
+  // 响应函数
+  outputPreToolUseResponse
+};
