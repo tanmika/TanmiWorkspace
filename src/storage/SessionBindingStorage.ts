@@ -49,7 +49,13 @@ export class SessionBindingStorage {
       };
     }
     const content = await this.fs.readFile(bindingsPath);
-    return JSON.parse(content) as SessionBindingIndex;
+    const data = JSON.parse(content) as Partial<SessionBindingIndex>;
+
+    // 验证数据结构完整性，缺失字段使用默认值
+    return {
+      version: data.version || "1.0",
+      bindings: data.bindings || {}
+    };
   }
 
   /**
