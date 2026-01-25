@@ -497,162 +497,308 @@ fi
 
 ## OpenCode Hook 系统
 
-> ⚠️ OpenCode 使用不同的 Hook 机制，需要适配
+> 更新时间：2026-01-25
+>
+> 项目地址：https://github.com/anomalyco/opencode
+> 官网：https://opencode.ai/
 
-### 可用事件（25+ 种）
+OpenCode 使用基于 **Plugin** 的 Hook 系统，通过 JavaScript/TypeScript 模块实现，与 Claude Code 的外部脚本模式有本质区别。
 
-OpenCode 使用 **插件系统** 而非配置文件来实现 Hooks，按类别分为 8 大类。
+### 架构概述
 
-#### Command 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `command.executed` | 命令执行完成 | - |
+| 特性 | Claude Code | OpenCode |
+|------|-------------|----------|
+| **架构方式** | 独立 Hook 配置 (settings.json) | 插件系统内嵌 |
+| **实现语言** | 外部脚本（任意语言） | JavaScript/TypeScript 模块 |
+| **配置格式** | JSON | JSON + JS/TS 代码 |
+| **执行方式** | 外部进程，stdin/stdout 通信 | 内嵌模块，直接修改对象 |
 
-#### File 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `file.edited` | 文件被修改 | - |
-| `file.watcher.updated` | 文件系统变更 | - |
+### 可用 Hook 事件
 
-#### Installation 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `installation.updated` | 安装状态变更 | - |
+#### 事件监听 Hooks
 
-#### LSP 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `lsp.client.diagnostics` | LSP 诊断信息 | - |
-| `lsp.updated` | LSP 服务器更新 | - |
+通过 `event` hook 订阅的事件类型：
 
-#### Message 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `message.part.removed` | 消息组件删除 | - |
-| `message.part.updated` | 消息组件更新 | - |
-| `message.removed` | 整条消息删除 | - |
-| `message.updated` | 消息更新 | - |
-
-#### Permission 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `permission.replied` | 权限请求响应 | PermissionRequest |
-| `permission.updated` | 权限设置变更 | - |
-
-#### Server 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `server.connected` | 服务器连接建立 | - |
-
-#### Session 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
+**Session 事件**：
+| 事件类型 | 触发时机 | 对应 Claude Code |
+|----------|----------|------------------|
 | `session.created` | 会话创建 | SessionStart |
-| `session.compacted` | 上下文压缩 | PreCompact |
-| `session.deleted` | 会话删除 | SessionEnd |
-| `session.diff` | 会话差异 | - |
+| `session.idle` | 会话空闲/完成 | Stop |
 | `session.error` | 会话错误 | - |
-| `session.idle` | 会话空闲 | Stop（部分） |
-| `session.status` | 会话状态变更 | - |
+| `session.deleted` | 会话删除 | SessionEnd |
+| `session.compacted` | 上下文压缩后 | - |
 | `session.updated` | 会话更新 | - |
+| `session.status` | 会话状态变更（idle/retry/busy） | - |
+| `session.diff` | 会话差异信息 | - |
 
-#### Todo 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `todo.updated` | 任务列表变更 | - |
-
-#### Tool 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
+**Tool 事件**：
+| 事件类型 | 触发时机 | 对应 Claude Code |
+|----------|----------|------------------|
 | `tool.execute.before` | 工具执行前 | PreToolUse |
 | `tool.execute.after` | 工具执行后 | PostToolUse |
 
-#### TUI 事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `tui.prompt.append` | 提示追加 | - |
-| `tui.command.execute` | TUI 命令执行 | - |
+**File 事件**：
+| 事件类型 | 触发时机 | 对应 Claude Code |
+|----------|----------|------------------|
+| `file.edited` | 文件被修改 | - |
+| `file.watcher.updated` | 文件系统变更（add/change/unlink） | - |
+
+**Message 事件**：
+| 事件类型 | 触发时机 | 对应 Claude Code |
+|----------|----------|------------------|
+| `message.updated` | 消息更新 | - |
+| `message.removed` | 消息移除 | - |
+| `message.part.updated` | 消息部件更新 | - |
+| `message.part.removed` | 消息部件移除 | - |
+
+**Permission 事件**：
+| 事件类型 | 触发时机 | 对应 Claude Code |
+|----------|----------|------------------|
+| `permission.replied` | 权限请求响应 | PermissionRequest |
+| `permission.updated` | 权限设置变更 | - |
+
+**TUI 事件**：
+| 事件类型 | 触发时机 | 对应 Claude Code |
+|----------|----------|------------------|
 | `tui.toast.show` | Toast 通知显示 | Notification |
+| `tui.prompt.append` | TUI 提示追加 | - |
+| `tui.command.execute` | TUI 命令执行 | - |
 
-#### 实验性事件
-| 事件 | 触发时机 | 对应 Claude Code |
-|------|---------|------------------|
-| `experimental.session.compacting` | 压缩前注入上下文 | PreCompact（增强）|
+**其他事件**：
+| 事件类型 | 触发时机 | 对应 Claude Code |
+|----------|----------|------------------|
+| `command.executed` | 命令执行完成 | - |
+| `lsp.client.diagnostics` | LSP 诊断信息 | - |
+| `lsp.updated` | LSP 更新 | - |
+| `todo.updated` | 任务列表变更 | - |
+| `server.connected` | 服务器连接 | - |
+| `vcs.branch.updated` | VCS 分支更新 | - |
+| `installation.updated` | 安装更新 | - |
 
-### 与 Claude Code 的差异
+#### 可拦截/修改的 Hooks
 
-| 特性 | Claude Code | OpenCode |
-|------|------------|----------|
-| 配置方式 | JSON 配置文件 | JS/TS 插件代码 |
-| 事件数量 | 10 种 | 25+ 种 |
-| Matcher | ✅ 正则匹配 | ❌ 不支持 |
-| 工具参数修改 | ✅ updatedInput | ❌ 不支持 |
-| **UserPromptSubmit** | ✅ 支持 | ❌ **无对应** |
-| 会话标识 | `session_id` | `event.session.id` |
-| 热加载 | ❌ 需重启 | ✅ 支持 |
+| Hook 名称 | 触发时机 | 可修改内容 | 对应 Claude Code |
+|-----------|----------|------------|------------------|
+| `tool.execute.before` | 工具执行前 | **工具参数 (args)** | PreToolUse |
+| `tool.execute.after` | 工具执行后 | title, output, metadata | PostToolUse |
+| `chat.message` | 收到新消息时 | 消息内容和部件 | UserPromptSubmit（部分） |
+| `chat.params` | 发送 LLM 请求前 | temperature, topP, topK, options | - |
+| `chat.headers` | 发送 LLM 请求前 | HTTP 请求头 | - |
+| `permission.ask` | 请求权限时 | 权限状态 (ask/deny/allow) | PermissionRequest |
+| `command.execute.before` | 命令执行前 | 消息部件 | - |
+| `config` | 配置加载后 | 配置对象 | - |
+| `auth` | 认证时 | 认证方法 | - |
+
+**实验性 Hooks**：
+| Hook 名称 | 触发时机 | 可修改内容 |
+|-----------|----------|------------|
+| `experimental.chat.system.transform` | 系统提示转换 | 系统提示数组 |
+| `experimental.chat.messages.transform` | 消息转换 | 消息列表 |
+| `experimental.session.compacting` | 会话压缩前 | context 数组, prompt |
+| `experimental.text.complete` | 文本补全 | text |
+
+### 与 Claude Code 的功能对比
+
+| 功能 | Claude Code | OpenCode | 说明 |
+|------|-------------|----------|------|
+| **SessionStart** | ✅ 支持 | ✅ `session.created` 事件 | 功能等效 |
+| **SessionEnd** | ✅ 支持 | ✅ `session.deleted` 事件 | 功能等效 |
+| **UserPromptSubmit** | ✅ 支持 | ⚠️ `chat.message` | 部分等效 |
+| **PreToolUse** | ✅ 支持 | ✅ `tool.execute.before` | 功能等效 |
+| **PostToolUse** | ✅ 支持 | ✅ `tool.execute.after` | 功能等效 |
+| **Stop** | ✅ 支持 | ✅ `session.idle` 事件 | 功能等效 |
+| **PreCompact** | ✅ 支持 | ✅ `experimental.session.compacting` | 实验性功能 |
+| **PermissionRequest** | ✅ 支持 | ✅ `permission.ask` | 功能等效 |
+| **Notification** | ✅ 支持 | ✅ `tui.toast.show` 事件 | 功能等效 |
+| **SubagentStop** | ✅ 支持 | ❌ 不支持 | - |
+| **Matcher 模式** | ✅ 正则匹配 | ❌ 代码内判断 | 需手动实现 |
+| **工具参数修改** | ✅ updatedInput | ✅ 直接修改 output.args | 功能等效 |
+| **LLM 参数修改** | ❌ 不支持 | ✅ `chat.params` | OpenCode 独有 |
+| **HTTP 头修改** | ❌ 不支持 | ✅ `chat.headers` | OpenCode 独有 |
+| **系统提示修改** | ❌ 不支持 | ✅ `experimental.chat.system.transform` | OpenCode 独有 |
+| **消息转换** | ❌ 不支持 | ✅ `experimental.chat.messages.transform` | OpenCode 独有 |
 
 ### 配置位置
 
-**插件目录**：
-- `.opencode/plugin/` - 项目级
-- `~/.config/opencode/plugin/` - 全局
+**全局配置**：
+- 配置文件：`~/.config/opencode/opencode.json`
+- 插件目录：`~/.config/opencode/plugins/`
+
+**项目配置**：
+- 配置文件：`opencode.json`（项目根目录）
+- 插件目录：`.opencode/plugins/`
+
+### 配置格式
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "opencode-helicone-session",
+    "@my-org/custom-plugin"
+  ]
+}
+```
 
 ### 插件格式
 
 ```typescript
-// .opencode/plugin/tanmi-hooks.ts
-export default function tanmiPlugin(ctx) {
-  return {
-    // session.created → SessionStart
-    "session.created": async (event) => {
-      const sessionId = event.session.id;
-      // 注入上下文
-      return { context: "..." };
-    },
+// .opencode/plugins/my-plugin.ts
+import type { Plugin } from "@opencode-ai/plugin"
 
-    // tool.execute.after → PostToolUse
-    "tool.execute.after": async (event) => {
-      if (event.tool.name === 'edit') {
-        return { message: "提醒记录日志" };
+export const MyPlugin: Plugin = async ({ project, client, $, directory }) => {
+  return {
+    // 事件监听
+    event: async ({ event }) => {
+      if (event.type === "session.created") {
+        // 会话开始
+      }
+      if (event.type === "session.idle") {
+        // 会话完成
       }
     },
 
-    // OpenCode 独有：文件编辑后
-    "file.edited": async (event) => {
-      console.log(`文件已编辑: ${event.path}`);
-    }
-  };
+    // 工具执行前拦截（可修改参数）
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        // 修改命令参数
+        output.args.command = sanitize(output.args.command)
+      }
+    },
+
+    // 工具执行后处理
+    "tool.execute.after": async (input, output) => {
+      // 修改输出
+      output.title = `[Modified] ${output.title}`
+    },
+
+    // 自定义工具
+    tool: {
+      mytool: tool({
+        description: "Custom tool",
+        args: { foo: tool.schema.string() },
+        async execute(args, ctx) {
+          return `Hello ${args.foo}!`
+        },
+      }),
+    },
+  }
 }
+```
+
+### Hook 函数签名
+
+```typescript
+// 拦截型 Hook（可修改）
+"hook.name": (
+  input: InputType,   // 只读的上下文信息
+  output: OutputType  // 可修改的输出对象
+) => Promise<void>
+
+// 事件型 Hook（只监听）
+event: ({ event }: { event: Event }) => Promise<void>
 ```
 
 ### TanmiWorkspace 兼容性
 
-| Hook 功能 | 兼容性 | 说明 |
-|-----------|--------|------|
-| 会话上下文注入 | ⚠️ 部分 | 通过 session.created 实现 |
-| MCP 调用错误提醒 | ✅ | 通过 tool.execute.after |
-| 文件变更提醒 | ✅ | 通过 file.edited |
-| 用户输入检测 | ❌ | 无 UserPromptSubmit 替代 |
-| 智能提醒 | ⚠️ 降级 | 需要其他机制替代 |
+| Hook 功能 | Claude Code | OpenCode | 兼容策略 |
+|-----------|-------------|----------|----------|
+| 会话上下文注入 | SessionStart | ✅ `session.created` 事件 | 可完整实现 |
+| 用户输入检测 | UserPromptSubmit | ⚠️ `chat.message` | 部分支持 |
+| 工具调用监控 | PreToolUse | ✅ `tool.execute.before` | 可完整实现 |
+| 工具参数修改 | updatedInput | ✅ 直接修改 output.args | 可完整实现 |
+| 结果处理 | PostToolUse | ✅ `tool.execute.after` | 可完整实现 |
+| MCP 调用拦截 | Matcher 匹配 | ❌ 无 Matcher | 需在代码中手动过滤 |
+| 子代理监控 | SubagentStop | ❌ 不支持 | 无法实现 |
+| 智能提醒 | Hook 注入 | ✅ 事件系统 | 可完整实现 |
 
-### 适配建议
+### TanmiWorkspace OpenCode 插件
 
-1. **环境变量检测平台**：
-   ```typescript
-   const isOpenCode = process.env.OPENCODE === "true";
-   ```
+TanmiWorkspace 提供了完整的 OpenCode 插件实现，位于 `plugin/opencode/index.ts`。
 
-2. **双模式输出**：
-   ```typescript
-   function outputResponse(context) {
-     if (isOpenCode) {
-       return { context, continue: true };
-     } else {
-       // Claude Code 格式
-       console.log(JSON.stringify({ hookSpecificOutput: { ... } }));
-     }
+#### 功能特性
+
+| 功能 | Hook | 说明 |
+|------|------|------|
+| **会话初始化** | `session.created` 事件 | 获取 sessionId，加载绑定和工作区上下文 |
+| **上下文注入** | `experimental.chat.system.transform` | 将工作区上下文注入系统提示 |
+| **权限控制** | `tool.execute.before` | 三层检查：绑定/阶段约束/写入限制 |
+| **智能提醒** | `tool.execute.after` | 节点完成提醒、日志记录提醒 |
+| **用户消息提醒** | `chat.message` | 未绑定时的绑定提醒 |
+| **会话空闲检测** | `session.idle` 事件 | 检测未提交问题、进行中节点 |
+
+#### 使用方式
+
+1. **配置 opencode.json**：
+   ```json
+   {
+     "plugin": [
+       "./path/to/tanmi-workspace/plugin/opencode/index.ts"
+     ]
    }
    ```
+
+2. **或者全局安装后配置**：
+   ```json
+   {
+     "plugin": ["tanmi-workspace/plugin/opencode"]
+   }
+   ```
+
+#### 与 Claude Code 版本的差异
+
+| 功能 | Claude Code | OpenCode | 差异说明 |
+|------|-------------|----------|----------|
+| **上下文注入** | additionalContext | 系统提示追加 | 使用 `experimental.chat.system.transform` |
+| **用户消息拦截** | UserPromptSubmit | chat.message | 无法阻止，只能事后提醒 |
+| **会话结束处理** | Stop | session.idle | 只读事件，无法阻止会话结束 |
+| **Matcher 匹配** | 正则配置 | 代码内判断 | 需手动实现过滤逻辑 |
+
+#### 代码结构
+
+```typescript
+// plugin/opencode/index.ts 主要导出
+export const TanmiWorkspacePlugin: Plugin = async (ctx) => {
+  return {
+    // 1. 事件监听
+    event: async ({ event }) => {
+      // session.created: 初始化会话状态
+      // session.idle: 检测未完成的工作
+      // session.deleted: 清理会话状态
+    },
+
+    // 2. 系统提示注入（OpenCode 独有）
+    'experimental.chat.system.transform': async (input, output) => {
+      // 追加 TanmiWorkspace 上下文到系统提示
+    },
+
+    // 3. 权限控制
+    'tool.execute.before': async (input, output) => {
+      // 绑定检查、阶段约束、写入限制
+    },
+
+    // 4. 智能提醒
+    'tool.execute.after': async (input, output) => {
+      // 节点完成提醒、日志记录提醒
+    },
+
+    // 5. 用户消息提醒
+    'chat.message': async (input, output) => {
+      // 未绑定时检测关键词并提醒
+    },
+  }
+}
+```
+
+#### 降级功能说明
+
+1. **chat.message vs UserPromptSubmit**
+   - Claude Code：用户发送前触发，可阻止或修改
+   - OpenCode：消息发送后触发，只能追加提醒
+
+2. **session.idle vs Stop**
+   - Claude Code：可阻止会话结束，强制用户处理
+   - OpenCode：只读事件，只能记录警告日志
 
 ---
 
