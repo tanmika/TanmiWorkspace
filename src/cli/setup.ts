@@ -4,7 +4,7 @@
  * 交互式配置向导，帮助用户快速配置 TanmiWorkspace
  */
 
-import { select, confirm } from "@inquirer/prompts";
+import { select } from "@inquirer/prompts";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import { join, dirname } from "path";
@@ -493,20 +493,9 @@ export default async function setup() {
     console.log(`  Skills: ${formatPluginStatus(env.claudeCode.skillsInstalled > 0, env.claudeCode.skillsInstalled, env.claudeCode.skillsNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
     console.log("");
 
-    const choice = await select({
-      message: "选择安装方式:",
-      choices: [
-        { name: "MCP + 所有插件 (推荐)", value: "all" },
-        { name: "仅 MCP (不含插件)", value: "mcp-only" },
-      ],
-    });
-
     await configureClaudeMcp(env);
     await configureClaudePermission();
-
-    if (choice === "all") {
-      await installPlugins("claude");
-    }
+    await installPlugins("claude");
 
     console.log("\n" + colors.green("配置完成！请重启 Claude Code。"));
     return;
@@ -515,14 +504,7 @@ export default async function setup() {
   if (args.includes("--cursor")) {
     console.log(colors.bold("\n=== TanmiWorkspace Cursor 快速配置 ===\n"));
     await configureCursorMcp();
-
-    const installPluginsAnswer = await confirm({
-      message: "是否安装插件？(Hooks, Agents, Skills)",
-      default: true,
-    });
-    if (installPluginsAnswer) {
-      await installPlugins("cursor");
-    }
+    await installPlugins("cursor");
 
     console.log("\n" + colors.green("配置完成！请重启 Cursor。"));
     return;
@@ -539,19 +521,8 @@ export default async function setup() {
     console.log(`  Skills: ${formatPluginStatus(env.opencode.skillsInstalled > 0, env.opencode.skillsInstalled, env.opencode.skillsNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
     console.log("");
 
-    const choice = await select({
-      message: "选择安装方式:",
-      choices: [
-        { name: "MCP + 所有插件 (推荐)", value: "all" },
-        { name: "仅 MCP (不含插件)", value: "mcp-only" },
-      ],
-    });
-
     await configureOpenCodeMcp();
-
-    if (choice === "all") {
-      await installPlugins("opencode");
-    }
+    await installPlugins("opencode");
 
     console.log("\n" + colors.green("配置完成！请重启 OpenCode。"));
     return;
@@ -636,22 +607,11 @@ ${colors.bold("4. 其他平台")}
 
   // 执行配置
   if (platform === "claude") {
-    const choice = await select({
-      message: "选择安装方式:",
-      choices: [
-        { name: "MCP + 所有插件 (推荐)", value: "all" },
-        { name: "仅 MCP (不含插件)", value: "mcp-only" },
-      ],
-    });
-
     const mcpSuccess = await configureClaudeMcp(env);
     if (mcpSuccess) {
       await configureClaudePermission();
     }
-
-    if (choice === "all") {
-      await installPlugins("claude");
-    }
+    await installPlugins("claude");
 
     console.log("\n" + colors.green(colors.bold("✓ 配置完成！")));
     console.log("\n下一步:");
@@ -662,16 +622,7 @@ ${colors.bold("4. 其他平台")}
 
   if (platform === "cursor") {
     await configureCursorMcp();
-
-    if (!env.cursor.hookInstalled) {
-      const installPluginsAnswer = await confirm({
-        message: "是否安装插件？(Hooks)",
-        default: true,
-      });
-      if (installPluginsAnswer) {
-        await installPlugins("cursor");
-      }
-    }
+    await installPlugins("cursor");
 
     console.log("\n" + colors.green(colors.bold("✓ 配置完成！")));
     console.log("\n下一步:");
@@ -680,19 +631,8 @@ ${colors.bold("4. 其他平台")}
   }
 
   if (platform === "opencode") {
-    const choice = await select({
-      message: "选择安装方式:",
-      choices: [
-        { name: "MCP + 所有插件 (推荐)", value: "all" },
-        { name: "仅 MCP (不含插件)", value: "mcp-only" },
-      ],
-    });
-
     await configureOpenCodeMcp();
-
-    if (choice === "all") {
-      await installPlugins("opencode");
-    }
+    await installPlugins("opencode");
 
     console.log("\n" + colors.green(colors.bold("✓ 配置完成！")));
     console.log("\n下一步:");
