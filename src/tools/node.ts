@@ -86,7 +86,7 @@ export const nodeCreateTool: TanmiTool = {
       },
       role: {
         type: "string",
-        enum: ["info_collection", "info_summary", "dispatch_exec", "dispatch_spec", "dispatch_quality", "spec_review", "quality_review"],
+        enum: ["info_collection", "info_summary", "dispatch_exec", "dispatch_spec", "dispatch_quality"],
         description: "节点角色（可选）：info_collection=信息收集，info_summary=信息总结，dispatch_exec=派发执行，dispatch_spec=派发规格审查，dispatch_quality=派发质量审查",
       },
       acceptanceCriteria: {
