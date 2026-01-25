@@ -13,6 +13,7 @@ import { promisify } from "util";
 import {
   installClaudeAll,
   installCursorAll,
+  installOpenCodeAll,
   updateInstallationMeta,
   getPluginStatus,
 } from "./plugins.js";
@@ -31,6 +32,8 @@ const CLAUDE_JSON = join(HOME, ".claude.json"); // MCP 配置
 const CLAUDE_SETTINGS_LOCAL = join(CLAUDE_HOME, "settings.local.json"); // 权限配置
 const CURSOR_HOME = join(HOME, ".cursor");
 const CURSOR_MCP = join(CURSOR_HOME, "mcp.json");
+const OPENCODE_HOME = join(HOME, ".config", "opencode");
+const OPENCODE_CONFIG = join(OPENCODE_HOME, "opencode.json");
 const IS_DEV = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
 const TANMI_BASE = IS_DEV ? ".tanmi-workspace-dev" : ".tanmi-workspace";
 const TANMI_SCRIPTS = join(HOME, TANMI_BASE, "scripts");
@@ -82,6 +85,16 @@ interface Environment {
     agentsInstalled: number;  // 已安装 Agent 数量
     agentsNeedsUpdate?: boolean;
     skillsInstalled: number;  // 已安装 Skill 数量
+    skillsNeedsUpdate?: boolean;
+  };
+  opencode: {
+    installed: boolean;
+    mcpConfigured: boolean;
+    pluginInstalled: boolean;
+    pluginNeedsUpdate?: boolean;
+    agentsInstalled: number;
+    agentsNeedsUpdate?: boolean;
+    skillsInstalled: number;
     skillsNeedsUpdate?: boolean;
   };
 }
@@ -138,6 +151,20 @@ async function detectEnvironment(): Promise<Environment> {
     }
   }
 
+  // 检测 OpenCode MCP 配置
+  let opencodeMcpConfigured = false;
+  if (existsSync(OPENCODE_CONFIG)) {
+    try {
+      const config = JSON.parse(readFileSync(OPENCODE_CONFIG, "utf-8"));
+      // OpenCode 使用 mcp 字段而非 mcpServers
+      if (config.mcp?.["tanmi-workspace"]) {
+        opencodeMcpConfigured = true;
+      }
+    } catch {
+      // 解析失败
+    }
+  }
+
   // 检测插件安装状态
   const pluginStatus = getPluginStatus();
 
@@ -165,6 +192,16 @@ async function detectEnvironment(): Promise<Environment> {
       agentsNeedsUpdate: pluginStatus.cursor.agentsNeedsUpdate,
       skillsInstalled: pluginStatus.cursor.skills.length,
       skillsNeedsUpdate: pluginStatus.cursor.skillsNeedsUpdate,
+    },
+    opencode: {
+      installed: existsSync(OPENCODE_HOME),
+      mcpConfigured: opencodeMcpConfigured,
+      pluginInstalled: pluginStatus.opencode?.plugins ?? false,
+      pluginNeedsUpdate: pluginStatus.opencode?.pluginsNeedsUpdate,
+      agentsInstalled: pluginStatus.opencode?.agents?.length ?? 0,
+      agentsNeedsUpdate: pluginStatus.opencode?.agentsNeedsUpdate,
+      skillsInstalled: pluginStatus.opencode?.skills?.length ?? 0,
+      skillsNeedsUpdate: pluginStatus.opencode?.skillsNeedsUpdate,
     },
   };
 }
@@ -204,6 +241,14 @@ function showStatus(env: Environment) {
   console.log(`  Hooks:  ${formatPluginStatus(env.cursor.hookInstalled, null, env.cursor.hookNeedsUpdate)}`);
   console.log(`  Agents: ${formatPluginStatus(env.cursor.agentsInstalled > 0, env.cursor.agentsInstalled, env.cursor.agentsNeedsUpdate)}`);
   console.log(`  Skills: ${formatPluginStatus(env.cursor.skillsInstalled > 0, env.cursor.skillsInstalled, env.cursor.skillsNeedsUpdate)}`);
+  console.log("");
+
+  console.log(colors.bold("OpenCode:"));
+  console.log(`  目录:   ${env.opencode.installed ? colors.green("✓") : colors.red("✗")} ${OPENCODE_HOME}`);
+  console.log(`  MCP:    ${env.opencode.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
+  console.log(`  Plugin: ${formatPluginStatus(env.opencode.pluginInstalled, null, env.opencode.pluginNeedsUpdate)}`);
+  console.log(`  Agents: ${formatPluginStatus(env.opencode.agentsInstalled > 0, env.opencode.agentsInstalled, env.opencode.agentsNeedsUpdate)}`);
+  console.log(`  Skills: ${formatPluginStatus(env.opencode.skillsInstalled > 0, env.opencode.skillsInstalled, env.opencode.skillsNeedsUpdate)}`);
   console.log("");
 }
 
@@ -346,13 +391,50 @@ async function configureCursorMcp(): Promise<boolean> {
   }
 }
 
-// 安装插件（Hooks + Agents + Skills）
-async function installPlugins(platform: "claude" | "cursor"): Promise<boolean> {
+// 配置 OpenCode MCP
+async function configureOpenCodeMcp(): Promise<boolean> {
+  console.log("\n" + colors.blue("配置 OpenCode MCP..."));
+
+  try {
+    if (!existsSync(OPENCODE_HOME)) {
+      mkdirSync(OPENCODE_HOME, { recursive: true });
+    }
+
+    let config: Record<string, unknown> = {};
+    if (existsSync(OPENCODE_CONFIG)) {
+      config = JSON.parse(readFileSync(OPENCODE_CONFIG, "utf-8"));
+    }
+
+    // OpenCode 使用 mcp 字段而非 mcpServers
+    if (!config.mcp) {
+      config.mcp = {};
+    }
+
+    // OpenCode MCP 配置格式: type + command (array)
+    (config.mcp as Record<string, unknown>)["tanmi-workspace"] = {
+      type: "local",
+      command: ["npx", "tanmi-workspace"],
+    };
+
+    writeFileSync(OPENCODE_CONFIG, JSON.stringify(config, null, 2));
+    console.log(colors.green("  ✓ MCP 配置已写入 " + OPENCODE_CONFIG));
+    updateInstallationMeta("opencode", "mcp", "update");
+    return true;
+  } catch (error) {
+    console.log(colors.red("  ✗ 配置失败: " + error));
+    return false;
+  }
+}
+
+// 安装插件（Hooks/Plugin + Agents + Skills）
+async function installPlugins(platform: "claude" | "cursor" | "opencode"): Promise<boolean> {
   try {
     if (platform === "claude") {
       installClaudeAll();
-    } else {
+    } else if (platform === "cursor") {
       installCursorAll();
+    } else {
+      installOpenCodeAll();
     }
     return true;
   } catch (error) {
@@ -372,6 +454,7 @@ ${colors.bold("用法:")}
   tanmi-workspace setup --status     查看当前配置状态
   tanmi-workspace setup --claude-code  快速配置 Claude Code
   tanmi-workspace setup --cursor     快速配置 Cursor
+  tanmi-workspace setup --opencode   快速配置 OpenCode
   tanmi-workspace setup --help       显示帮助
 
 ${colors.bold("说明:")}
@@ -445,6 +528,35 @@ export default async function setup() {
     return;
   }
 
+  if (args.includes("--opencode") || args.includes("-o")) {
+    console.log(colors.bold("\n=== TanmiWorkspace OpenCode 快速配置 ===\n"));
+
+    // 显示当前状态
+    console.log(colors.bold("当前状态:"));
+    console.log(`  MCP:    ${env.opencode.mcpConfigured ? colors.green("已配置") : colors.yellow("未配置")}`);
+    console.log(`  Plugin: ${formatPluginStatus(env.opencode.pluginInstalled, null, env.opencode.pluginNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
+    console.log(`  Agents: ${formatPluginStatus(env.opencode.agentsInstalled > 0, env.opencode.agentsInstalled, env.opencode.agentsNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
+    console.log(`  Skills: ${formatPluginStatus(env.opencode.skillsInstalled > 0, env.opencode.skillsInstalled, env.opencode.skillsNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
+    console.log("");
+
+    const choice = await select({
+      message: "选择安装方式:",
+      choices: [
+        { name: "MCP + 所有插件 (推荐)", value: "all" },
+        { name: "仅 MCP (不含插件)", value: "mcp-only" },
+      ],
+    });
+
+    await configureOpenCodeMcp();
+
+    if (choice === "all") {
+      await installPlugins("opencode");
+    }
+
+    console.log("\n" + colors.green("配置完成！请重启 OpenCode。"));
+    return;
+  }
+
   // 交互式向导
   console.log(colors.bold("\n=== TanmiWorkspace 配置向导 ===\n"));
 
@@ -464,6 +576,11 @@ export default async function setup() {
   if (env.cursor.installed) {
     const status = env.cursor.mcpConfigured ? " (已配置)" : "";
     platforms.push({ name: `Cursor${status}`, value: "cursor" });
+  }
+
+  if (env.opencode.installed) {
+    const status = env.opencode.mcpConfigured ? " (已配置)" : "";
+    platforms.push({ name: `OpenCode${status}`, value: "opencode" });
   }
 
   platforms.push({ name: "显示手动配置说明", value: "manual" });
@@ -498,7 +615,18 @@ ${colors.bold("2. Cursor")}
      }
    }
 
-${colors.bold("3. 其他平台")}
+${colors.bold("3. OpenCode")}
+   编辑 ~/.config/opencode/opencode.json:
+   {
+     "mcp": {
+       "tanmi-workspace": {
+         "type": "local",
+         "command": ["npx", "tanmi-workspace"]
+       }
+     }
+   }
+
+${colors.bold("4. 其他平台")}
    在 MCP 配置中添加:
    - command: npx
    - args: ["tanmi-workspace"]
@@ -548,6 +676,27 @@ ${colors.bold("3. 其他平台")}
     console.log("\n" + colors.green(colors.bold("✓ 配置完成！")));
     console.log("\n下一步:");
     console.log("  1. 重启 Cursor");
+    console.log('  2. 说「介绍一下工作台的使用方式」开始使用\n');
+  }
+
+  if (platform === "opencode") {
+    const choice = await select({
+      message: "选择安装方式:",
+      choices: [
+        { name: "MCP + 所有插件 (推荐)", value: "all" },
+        { name: "仅 MCP (不含插件)", value: "mcp-only" },
+      ],
+    });
+
+    await configureOpenCodeMcp();
+
+    if (choice === "all") {
+      await installPlugins("opencode");
+    }
+
+    console.log("\n" + colors.green(colors.bold("✓ 配置完成！")));
+    console.log("\n下一步:");
+    console.log("  1. 重启 OpenCode");
     console.log('  2. 说「介绍一下工作台的使用方式」开始使用\n');
   }
 }

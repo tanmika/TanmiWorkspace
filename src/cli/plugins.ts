@@ -57,6 +57,13 @@ const CURSOR_HOOKS = join(CURSOR_HOME, "hooks.json");
 const CURSOR_AGENTS = join(CURSOR_HOME, "agents");
 const CURSOR_SKILLS = join(CURSOR_HOME, "skills");
 
+// OpenCode 配置
+const OPENCODE_HOME = join(HOME, ".config", "opencode");
+const OPENCODE_CONFIG = join(OPENCODE_HOME, "opencode.json");
+const OPENCODE_AGENTS = join(OPENCODE_HOME, "agents");
+const OPENCODE_SKILLS = join(OPENCODE_HOME, "skills");
+const OPENCODE_PLUGINS = join(OPENCODE_HOME, "plugins");
+
 // 安装元信息
 const INSTALLATION_META_PATH = join(TANMI_HOME, "installation-meta.json");
 
@@ -305,6 +312,17 @@ interface PluginStatus {
     skillsVersion?: string;
     skillsNeedsUpdate?: boolean;
   };
+  opencode: {
+    plugins: boolean; // OpenCode 使用 plugins 而非 hooks
+    pluginsVersion?: string;
+    pluginsNeedsUpdate?: boolean;
+    agents: string[];
+    agentsVersion?: string;
+    agentsNeedsUpdate?: boolean;
+    skills: string[];
+    skillsVersion?: string;
+    skillsNeedsUpdate?: boolean;
+  };
 }
 
 // 比较版本，完整比较 major.minor.patch
@@ -318,6 +336,7 @@ function getPluginStatus(): PluginStatus {
   const meta = readInstallationMeta();
   const claudePlatform = meta.global.platforms["claudeCode"];
   const cursorPlatform = meta.global.platforms["cursor"];
+  const opencodePlatform = meta.global.platforms["opencode"];
 
   // Claude hooks
   const claudeHooksInstalled = existsSync(join(TANMI_SCRIPTS, "hook-entry.cjs"));
@@ -386,6 +405,38 @@ function getPluginStatus(): PluginStatus {
   }
   const cursorSkillsVersion = cursorPlatform?.components?.skills?.version;
 
+  // OpenCode plugins - 检测 tanmi-workspace.ts 是否已安装
+  const opencodePluginsInstalled = existsSync(join(OPENCODE_PLUGINS, "tanmi-workspace.ts"));
+  const opencodePluginsVersion = opencodePlatform?.components?.plugins?.version;
+
+  // OpenCode agents - 动态检测已安装的 agent
+  const installedOpencodeAgents: string[] = [];
+  if (existsSync(OPENCODE_AGENTS) && existsSync(PLUGIN_AGENTS)) {
+    const sourceAgents = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
+    for (const agent of sourceAgents) {
+      // OpenCode agent 文件名保持一致
+      if (existsSync(join(OPENCODE_AGENTS, agent))) {
+        installedOpencodeAgents.push(agent);
+      }
+    }
+  }
+  const opencodeAgentsVersion = opencodePlatform?.components?.agents?.version;
+
+  // OpenCode skills - 动态检测已安装的 skill
+  const installedOpencodeSkills: string[] = [];
+  if (existsSync(PLUGIN_SKILLS) && existsSync(OPENCODE_SKILLS)) {
+    const sourceSkills = readdirSync(PLUGIN_SKILLS).filter((name) => {
+      const fullPath = join(PLUGIN_SKILLS, name);
+      return statSync(fullPath).isDirectory() && existsSync(join(fullPath, "SKILL.md"));
+    });
+    for (const skill of sourceSkills) {
+      if (existsSync(join(OPENCODE_SKILLS, skill, "SKILL.md"))) {
+        installedOpencodeSkills.push(skill);
+      }
+    }
+  }
+  const opencodeSkillsVersion = opencodePlatform?.components?.skills?.version;
+
   return {
     currentVersion,
     claude: {
@@ -409,6 +460,17 @@ function getPluginStatus(): PluginStatus {
       skills: installedCursorSkills,
       skillsVersion: cursorSkillsVersion,
       skillsNeedsUpdate: installedCursorSkills.length > 0 && needsVersionUpdate(cursorSkillsVersion, currentVersion),
+    },
+    opencode: {
+      plugins: opencodePluginsInstalled,
+      pluginsVersion: opencodePluginsVersion,
+      pluginsNeedsUpdate: opencodePluginsInstalled && needsVersionUpdate(opencodePluginsVersion, currentVersion),
+      agents: installedOpencodeAgents,
+      agentsVersion: opencodeAgentsVersion,
+      agentsNeedsUpdate: installedOpencodeAgents.length > 0 && needsVersionUpdate(opencodeAgentsVersion, currentVersion),
+      skills: installedOpencodeSkills,
+      skillsVersion: opencodeSkillsVersion,
+      skillsNeedsUpdate: installedOpencodeSkills.length > 0 && needsVersionUpdate(opencodeSkillsVersion, currentVersion),
     },
   };
 }
@@ -478,6 +540,23 @@ function showStatus(): void {
   }
   console.log("");
 
+  // OpenCode
+  console.log(colors.bold("OpenCode:"));
+  console.log(`  Plugin: ${formatComponentStatus(status.opencode.plugins, null, status.opencode.pluginsNeedsUpdate, status.opencode.pluginsVersion)}`);
+  console.log(`  Agents: ${formatComponentStatus(status.opencode.agents.length > 0, status.opencode.agents.length, status.opencode.agentsNeedsUpdate, status.opencode.agentsVersion)}`);
+  if (status.opencode.agents.length > 0) {
+    for (const agent of status.opencode.agents) {
+      console.log(`          ${colors.gray("-")} ${agent}`);
+    }
+  }
+  console.log(`  Skills: ${formatComponentStatus(status.opencode.skills.length > 0, status.opencode.skills.length, status.opencode.skillsNeedsUpdate, status.opencode.skillsVersion)}`);
+  if (status.opencode.skills.length > 0) {
+    for (const skill of status.opencode.skills) {
+      console.log(`          ${colors.gray("-")} ${skill}`);
+    }
+  }
+  console.log("");
+
   // 安装路径
   console.log(colors.gray("安装路径:"));
   console.log(colors.gray(`  Scripts: ${TANMI_SCRIPTS}`));
@@ -485,6 +564,9 @@ function showStatus(): void {
   console.log(colors.gray(`  Claude Skills:  ${join(CLAUDE_HOME, "skills")}`));
   console.log(colors.gray(`  Cursor Agents:  ${CURSOR_AGENTS}`));
   console.log(colors.gray(`  Cursor Skills:  ${CURSOR_SKILLS}`));
+  console.log(colors.gray(`  OpenCode Plugins: ${OPENCODE_PLUGINS}`));
+  console.log(colors.gray(`  OpenCode Agents:  ${OPENCODE_AGENTS}`));
+  console.log(colors.gray(`  OpenCode Skills:  ${OPENCODE_SKILLS}`));
   console.log("");
 }
 
@@ -1477,6 +1559,252 @@ export function uninstallCursorAll(): void {
 }
 
 // ============================================================================
+// OpenCode 插件
+// ============================================================================
+
+// OpenCode Plugin 源文件
+const OPENCODE_PLUGIN_SOURCE = join(PLUGIN_ROOT, "opencode", "index.ts");
+
+/**
+ * 转换 Claude Agent 格式到 OpenCode Agent 格式
+ * Claude: tools: "Read, Write, Edit, Bash, ..." (逗号分隔字符串)
+ * OpenCode: tools: {read: true, write: true, edit: true, bash: true, ...} (布尔对象)
+ */
+function convertAgentToOpenCodeFormat(content: string): string {
+  // 解析 YAML frontmatter
+  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!frontmatterMatch) {
+    return content; // 无 frontmatter，直接返回
+  }
+
+  const frontmatter = frontmatterMatch[1];
+  const body = content.slice(frontmatterMatch[0].length);
+
+  // 解析 frontmatter 字段
+  const lines = frontmatter.split("\n");
+  const fields: Record<string, string> = {};
+  for (const line of lines) {
+    const colonIndex = line.indexOf(":");
+    if (colonIndex > 0) {
+      const key = line.slice(0, colonIndex).trim();
+      const value = line.slice(colonIndex + 1).trim();
+      fields[key] = value;
+    }
+  }
+
+  // 转换 tools: "Read, Write, ..." → tools 布尔对象
+  let toolsYaml = "";
+  if (fields.tools) {
+    const toolList = fields.tools.split(",").map((t) => t.trim().toLowerCase());
+    const toolLines: string[] = [];
+    for (const tool of toolList) {
+      if (tool.includes("*")) {
+        // 通配符如 tanmi-workspace/* 保持原样
+        toolLines.push(`  "${tool}": true`);
+      } else {
+        toolLines.push(`  ${tool}: true`);
+      }
+    }
+    toolsYaml = `tools:\n${toolLines.join("\n")}`;
+  }
+
+  // 不转换 model 字段 - OpenCode 用户可能使用不同的 provider，应使用用户默认配置
+
+  // 构建 OpenCode 格式的 frontmatter
+  const newFrontmatter = [
+    `name: ${fields.name || "unnamed"}`,
+    `description: ${fields.description || "No description"}`,
+    toolsYaml,
+    "mode: all", // OpenCode 需要 mode 字段
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return `---\n${newFrontmatter}\n---${body}`;
+}
+
+function installOpenCodePlugins(): void {
+  info("安装 OpenCode Plugin...");
+
+  ensureDir(OPENCODE_PLUGINS);
+
+  if (!existsSync(OPENCODE_PLUGIN_SOURCE)) {
+    warn(`OpenCode Plugin 源文件不存在: ${OPENCODE_PLUGIN_SOURCE}`);
+    return;
+  }
+
+  const destPath = join(OPENCODE_PLUGINS, "tanmi-workspace.ts");
+  copyFile(OPENCODE_PLUGIN_SOURCE, destPath);
+  success(`Plugin 已安装到 ${destPath}`);
+  updateInstallationMeta("opencode", "plugins", "update");
+  logToFile("INSTALL", `OpenCode Plugin: ${destPath}`);
+}
+
+function uninstallOpenCodePlugins(): void {
+  info("卸载 OpenCode Plugin...");
+
+  const pluginPath = join(OPENCODE_PLUGINS, "tanmi-workspace.ts");
+  if (removeFile(pluginPath)) {
+    success("Plugin 已卸载");
+    updateInstallationMeta("opencode", "plugins", "remove");
+    logToFile("UNINSTALL", `OpenCode Plugin: ${pluginPath}`);
+  } else {
+    info("Plugin 未安装，跳过");
+  }
+}
+
+function installOpenCodeAgents(): void {
+  info("安装 OpenCode Agents...");
+
+  ensureDir(OPENCODE_AGENTS);
+
+  if (!existsSync(PLUGIN_AGENTS)) {
+    warn(`Agent 源目录不存在: ${PLUGIN_AGENTS}`);
+    return;
+  }
+
+  const agents = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
+
+  for (const agent of agents) {
+    const srcPath = join(PLUGIN_AGENTS, agent);
+    const destPath = join(OPENCODE_AGENTS, agent);
+
+    // 读取并转换格式
+    const content = readFileSync(srcPath, "utf-8");
+    const convertedContent = convertAgentToOpenCodeFormat(content);
+    writeFileSync(destPath, convertedContent, "utf-8");
+    info(`  已安装: ${agent}`);
+  }
+
+  success(`${agents.length} 个 Agent 已安装到 ${OPENCODE_AGENTS}/`);
+  updateInstallationMeta("opencode", "agents", "update");
+  logToFile("INSTALL", `OpenCode Agents: ${agents.join(", ")}`);
+}
+
+function uninstallOpenCodeAgents(): void {
+  info("卸载 OpenCode Agents...");
+
+  if (!existsSync(OPENCODE_AGENTS)) {
+    info("Agents 目录不存在，跳过");
+    return;
+  }
+
+  if (!existsSync(PLUGIN_AGENTS)) {
+    warn("无法确定要卸载的 Agent（源目录不存在）");
+    return;
+  }
+
+  const sourceAgents = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
+  let removed = 0;
+
+  for (const agent of sourceAgents) {
+    const agentPath = join(OPENCODE_AGENTS, agent);
+    if (removeFile(agentPath)) {
+      info(`  已卸载: ${agent}`);
+      removed++;
+    }
+  }
+
+  if (removed > 0) {
+    success(`${removed} 个 Agent 已卸载`);
+    updateInstallationMeta("opencode", "agents", "remove");
+    logToFile("UNINSTALL", `OpenCode Agents: ${removed} removed`);
+  } else {
+    info("没有 Agent 需要卸载");
+  }
+}
+
+function installOpenCodeSkills(): void {
+  info("安装 OpenCode Skills...");
+
+  ensureDir(OPENCODE_SKILLS);
+
+  if (!existsSync(PLUGIN_SKILLS)) {
+    warn(`Skill 源目录不存在: ${PLUGIN_SKILLS}`);
+    return;
+  }
+
+  const skills = readdirSync(PLUGIN_SKILLS).filter((name) => {
+    const fullPath = join(PLUGIN_SKILLS, name);
+    return statSync(fullPath).isDirectory() && existsSync(join(fullPath, "SKILL.md"));
+  });
+
+  for (const skill of skills) {
+    const srcPath = join(PLUGIN_SKILLS, skill);
+    const destPath = join(OPENCODE_SKILLS, skill);
+    // 直接复制，OpenCode 兼容 Claude 的 skill 格式
+    copyDir(srcPath, destPath);
+    info(`  已安装: ${skill}`);
+  }
+
+  success(`${skills.length} 个 Skill 已安装到 ${OPENCODE_SKILLS}/`);
+  updateInstallationMeta("opencode", "skills", "update");
+  logToFile("INSTALL", `OpenCode Skills: ${skills.join(", ")}`);
+}
+
+function uninstallOpenCodeSkills(): void {
+  info("卸载 OpenCode Skills...");
+
+  if (!existsSync(OPENCODE_SKILLS)) {
+    info("Skills 目录不存在，跳过");
+    return;
+  }
+
+  if (!existsSync(PLUGIN_SKILLS)) {
+    warn("无法确定要卸载的 Skill（源目录不存在）");
+    return;
+  }
+
+  const sourceSkills = readdirSync(PLUGIN_SKILLS).filter((name) => {
+    const fullPath = join(PLUGIN_SKILLS, name);
+    return statSync(fullPath).isDirectory() && existsSync(join(fullPath, "SKILL.md"));
+  });
+
+  let removed = 0;
+
+  for (const skill of sourceSkills) {
+    const skillPath = join(OPENCODE_SKILLS, skill);
+    if (removeDir(skillPath)) {
+      info(`  已卸载: ${skill}`);
+      removed++;
+    }
+  }
+
+  if (removed > 0) {
+    success(`${removed} 个 Skill 已卸载`);
+    updateInstallationMeta("opencode", "skills", "remove");
+    logToFile("UNINSTALL", `OpenCode Skills: ${removed} removed`);
+  } else {
+    info("没有 Skill 需要卸载");
+  }
+}
+
+export function installOpenCodeAll(): void {
+  info("安装 OpenCode 全部插件...");
+  console.log("");
+
+  installOpenCodePlugins();
+  installOpenCodeAgents();
+  installOpenCodeSkills();
+
+  console.log("");
+  success("OpenCode 插件安装完成！");
+  info("请重启 OpenCode 使配置生效。");
+}
+
+export function uninstallOpenCodeAll(): void {
+  info("卸载 OpenCode 全部插件...");
+  console.log("");
+
+  uninstallOpenCodePlugins();
+  uninstallOpenCodeAgents();
+  uninstallOpenCodeSkills();
+
+  console.log("");
+  success("OpenCode 插件已卸载");
+}
+
+// ============================================================================
 // 帮助
 // ============================================================================
 
@@ -1492,10 +1820,12 @@ ${colors.bold("用法:")}
 ${colors.bold("平台:")}
   --claude    Claude Code (Hooks, Agents, Skills)
   --cursor    Cursor (Hooks, Agents, Skills)
+  --opencode  OpenCode (Plugin, Agents, Skills)
 
 ${colors.bold("示例:")}
   tanmi-workspace plugins                    # 查看状态
   tanmi-workspace plugins install --claude   # 安装 Claude 插件
+  tanmi-workspace plugins install --opencode # 安装 OpenCode 插件
   tanmi-workspace plugins uninstall --cursor # 卸载 Cursor 插件
 `);
 }
@@ -1522,8 +1852,10 @@ export default function main(): void {
         installClaudeAll();
       } else if (platform === "--cursor") {
         installCursorAll();
+      } else if (platform === "--opencode") {
+        installOpenCodeAll();
       } else {
-        error("请指定平台: --claude 或 --cursor");
+        error("请指定平台: --claude, --cursor 或 --opencode");
         showHelp();
         process.exit(1);
       }
@@ -1534,8 +1866,10 @@ export default function main(): void {
         uninstallClaudeAll();
       } else if (platform === "--cursor") {
         uninstallCursorAll();
+      } else if (platform === "--opencode") {
+        uninstallOpenCodeAll();
       } else {
-        error("请指定平台: --claude 或 --cursor");
+        error("请指定平台: --claude, --cursor 或 --opencode");
         showHelp();
         process.exit(1);
       }
