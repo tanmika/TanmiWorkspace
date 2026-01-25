@@ -8,7 +8,7 @@ import type { TanmiTool } from "../types/tool.js";
 export const nodeTransitionTool: TanmiTool = {
   name: "node_transition",
   readonly: false,
-  description: `变更节点状态。根据节点类型支持不同的状态转换：
+  description: `变更节点状态。**使用前必须先调用 node_get 获取 nodeHash**。
 
 **执行节点 (execution)**：
 - start: pending → implementing（开始执行）
@@ -25,6 +25,7 @@ export const nodeTransitionTool: TanmiTool = {
 - reopen: completed/cancelled → planning（重新规划）
 
 **注意事项**：
+- ⚠️ 必须先 node_get 获取 nodeHash，确保了解节点当前状态
 - 执行节点 start/reopen 会自动级联更新父规划节点到 monitoring 状态
 - 规划节点（有子节点）complete 时需要提供 conclusionsHash 参数，通过 context_get 获取`,
   inputSchema: {
@@ -37,6 +38,10 @@ export const nodeTransitionTool: TanmiTool = {
       nodeId: {
         type: "string",
         description: "节点 ID",
+      },
+      nodeHash: {
+        type: "string",
+        description: "节点内容的 hash（从 node_get 获取，用于先读后写校验）",
       },
       action: {
         type: "string",
@@ -71,7 +76,7 @@ export const nodeTransitionTool: TanmiTool = {
         required: ["token", "userInput"],
       },
     },
-    required: ["workspaceId", "nodeId", "action"],
+    required: ["workspaceId", "nodeId", "nodeHash", "action"],
   },
 };
 

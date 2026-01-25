@@ -5,14 +5,19 @@ import * as crypto from "node:crypto";
 import { FileSystemAdapter } from "../../src/storage/FileSystemAdapter.js";
 
 describe("FileSystemAdapter", () => {
-  const testBasePath = `.test-tanmi-workspace-fs-${crypto.randomUUID()}`;
+  let testBasePath: string;
+  let testGlobalPath: string;
   let adapter: FileSystemAdapter;
   let projectRoot: string;
 
   beforeEach(async () => {
+    const testId = crypto.randomUUID().slice(0, 8);
+    testBasePath = `.test-tanmi-workspace-fs-${testId}`;
+    testGlobalPath = path.join(process.cwd(), testBasePath, "global");
     projectRoot = path.join(process.cwd(), testBasePath, "project");
     await fs.rm(path.join(process.cwd(), testBasePath), { recursive: true, force: true }).catch(() => {});
-    adapter = new FileSystemAdapter();
+    // 使用隔离的测试全局路径
+    adapter = new FileSystemAdapter(testGlobalPath);
   });
 
   afterEach(async () => {
@@ -22,9 +27,8 @@ describe("FileSystemAdapter", () => {
   describe("路径方法", () => {
     it("应该返回正确的索引路径结构", () => {
       const indexPath = adapter.getIndexPath();
-      // 验证路径以正确的目录名和 index.json 结尾
-      expect(indexPath).toContain(adapter.getDirName());
-      expect(indexPath).toMatch(/index\.json$/);
+      // 验证路径以 index.json 结尾，且在测试全局路径下
+      expect(indexPath).toBe(path.join(testGlobalPath, "index.json"));
     });
 
     it("应该返回正确的工作区路径", () => {

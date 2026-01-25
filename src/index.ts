@@ -536,6 +536,7 @@ Read(file_path: <返回的 path>)
             workspaceId: args?.workspaceId as string,
             nodeId: args?.nodeId as string,
             action: args?.action as TransitionAction,
+            nodeHash: args?.nodeHash as string,
             reason: args?.reason as string | undefined,
             conclusion: args?.conclusion as string | undefined,
             conclusionsHash: args?.conclusionsHash as string | undefined,

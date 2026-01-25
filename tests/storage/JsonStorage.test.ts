@@ -7,6 +7,7 @@ import { FileSystemAdapter } from "../../src/storage/FileSystemAdapter.js";
 
 describe("JsonStorage", () => {
   let testBasePath: string;
+  let testGlobalPath: string;
   let testId: string;
   let jsonStorage: JsonStorage;
   let fsAdapter: FileSystemAdapter;
@@ -15,19 +16,16 @@ describe("JsonStorage", () => {
   beforeEach(async () => {
     testId = crypto.randomUUID().slice(0, 8);
     testBasePath = `.test-tanmi-workspace-json-${testId}`;
+    testGlobalPath = path.join(process.cwd(), testBasePath, "global");
     projectRoot = path.join(process.cwd(), testBasePath, "project");
     await fs.rm(path.join(process.cwd(), testBasePath), { recursive: true, force: true }).catch(() => {});
-    fsAdapter = new FileSystemAdapter();
+    // 使用隔离的测试全局路径
+    fsAdapter = new FileSystemAdapter(testGlobalPath);
     jsonStorage = new JsonStorage(fsAdapter);
   });
 
   afterEach(async () => {
-    // 清理测试工作区条目
-    try {
-      const index = await jsonStorage.readIndex();
-      index.workspaces = index.workspaces.filter(ws => !ws.id.includes(testId));
-      await jsonStorage.writeIndex(index);
-    } catch { /* ignore */ }
+    // 直接删除隔离的测试目录即可，不需要清理全局索引
     await fs.rm(path.join(process.cwd(), testBasePath), { recursive: true, force: true }).catch(() => {});
   });
 

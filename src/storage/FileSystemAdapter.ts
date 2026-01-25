@@ -29,13 +29,16 @@ export class FileSystemAdapter {
   private globalBasePath: string;
   private localDirName: string;
 
-  constructor() {
+  /**
+   * @param customGlobalPath 可选的自定义全局路径（用于测试隔离）
+   */
+  constructor(customGlobalPath?: string) {
     // 根据环境选择目录名
     const suffix = isDevelopment() ? "-dev" : "";
     this.localDirName = `.tanmi-workspace${suffix}`;
 
-    // 全局索引目录（用户主目录下）
-    this.globalBasePath = path.join(os.homedir(), this.localDirName);
+    // 全局索引目录：使用自定义路径或默认的用户主目录
+    this.globalBasePath = customGlobalPath ?? path.join(os.homedir(), this.localDirName);
   }
 
   /**

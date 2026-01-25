@@ -18,7 +18,7 @@ import type {
 } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
-import { computeConclusionsHash } from "../utils/hash.js";
+import { computeConclusionsHash, computeNodeHash } from "../utils/hash.js";
 import { validateMultilineContent } from "../utils/contentValidation.js";
 import type { DocRef } from "../types/workspace.js";
 import { randomBytes } from "crypto";
@@ -124,7 +124,7 @@ export class StateService {
    * 执行状态转换
    */
   async transition(params: NodeTransitionParams): Promise<NodeTransitionResult> {
-    const { workspaceId, nodeId, action, reason, conclusion, confirmation, conclusionsHash } = params;
+    const { workspaceId, nodeId, action, nodeHash, reason, conclusion, confirmation, conclusionsHash } = params;
 
     // 1. 如果提供了 confirmation，验证 token
     if (confirmation) {
@@ -166,6 +166,21 @@ export class StateService {
     const nodeMeta = graph.nodes[nodeId];
     const nodeType = nodeMeta.type;
     const currentStatus = nodeMeta.status;
+    const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
+
+    // 3.1 验证 nodeHash（先读后写校验，MCP 调用时必填，内部调用可跳过）
+    if (nodeHash) {
+      const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+      const currentNodeHash = computeNodeHash({
+        title: nodeInfo.title,
+        requirement: nodeInfo.requirement,
+        note: nodeInfo.notes,
+        conclusion: nodeInfo.conclusion,
+      });
+      if (currentNodeHash !== nodeHash) {
+        throw new TanmiError("CONTENT_CHANGED", "nodeHash 不匹配，节点内容已变更。请重新调用 node_get 获取最新内容。");
+      }
+    }
 
     // 4. 根据节点类型验证转换合法性
     const newStatus = this.validateTransition(nodeType, currentStatus, action);
@@ -399,7 +414,6 @@ export class StateService {
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
     // 8. 更新 Info.md 的 frontmatter 和结论部分
-    const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
     await this.md.updateNodeStatus(projectRoot, wsDirName, nodeDirName, newStatus);
     if (conclusion) {
       await this.md.updateConclusion(projectRoot, wsDirName, nodeDirName, conclusion);

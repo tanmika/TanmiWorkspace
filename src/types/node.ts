@@ -335,6 +335,8 @@ export interface NodeTransitionParams {
   workspaceId: string;
   nodeId: string;
   action: TransitionAction;
+  /** 节点内容的 hash，用于先读后写校验（从 node_get 获取，MCP 调用必填，内部调用可省略） */
+  nodeHash?: string;
   reason?: string;
   conclusion?: string;    // complete/fail 时必填
   confirmation?: ConfirmationData;  // Confirmation Token 验证数据（当 actionRequired 返回 token 时必须提供）
