@@ -13,6 +13,7 @@ import { isVersionLessThan } from "../../utils/version.js";
 interface ComponentVersionsConfig {
   claudeCode: Record<string, string>;
   cursor: Record<string, string>;
+  opencode: Record<string, string>;
 }
 
 // 加载组件最低版本配置
@@ -28,6 +29,7 @@ function loadComponentVersions(): ComponentVersionsConfig {
     return {
       claudeCode: {},
       cursor: {},
+      opencode: {},
     };
   }
 }
@@ -157,6 +159,16 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
           skills: defaultComponent(),
         },
       },
+      opencode: {
+        name: "OpenCode",
+        enabled: false,
+        components: {
+          mcp: defaultComponent(),
+          plugins: defaultComponent(),  // OpenCode 用 plugins 不是 hooks
+          agents: defaultComponent(),
+          skills: defaultComponent(),
+        },
+      },
     };
 
     // 填充实际数据
@@ -166,7 +178,18 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
       if (info?.enabled) {
         platform.enabled = true;
         platform.components.mcp = buildComponentStatus(info.components.mcp, versions.mcp);
-        platform.components.hooks = buildComponentStatus(info.components.hooks, versions.hooks);
+        // OpenCode 用 plugins，其他平台用 hooks
+        if (key === "opencode") {
+          (platform.components as Record<string, unknown>).plugins = buildComponentStatus(
+            info.components.plugins,
+            versions.plugins
+          );
+        } else {
+          (platform.components as Record<string, unknown>).hooks = buildComponentStatus(
+            info.components.hooks,
+            versions.hooks
+          );
+        }
         platform.components.agents = buildComponentStatus(info.components.agents, versions.agents);
         platform.components.skills = buildComponentStatus(info.components.skills, versions.skills);
       }

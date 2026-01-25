@@ -37,7 +37,8 @@ export interface ComponentStatus {
 // 平台组件状态
 export interface PlatformComponents {
   mcp: ComponentStatus
-  hooks: ComponentStatus
+  hooks?: ComponentStatus   // Claude Code / Cursor 用 hooks
+  plugins?: ComponentStatus // OpenCode 用 plugins
   agents: ComponentStatus
   skills: ComponentStatus
 }
@@ -55,6 +56,7 @@ export interface InstallationStatusResult {
   platforms: {
     claudeCode: PlatformStatus
     cursor: PlatformStatus
+    opencode: PlatformStatus
   }
   updateCommand: string
 }

@@ -211,6 +211,7 @@ export function updateInstallationMeta(platform: string, component: string, acti
 
     if (action === "update") {
       meta.global.platforms[platform].components[component] = { installed: true, version };
+      meta.global.platforms[platform].enabled = true; // 有组件安装则启用平台
       meta.global.packageVersion = version;
     } else {
       meta.global.platforms[platform].components[component] = { installed: false };

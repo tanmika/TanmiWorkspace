@@ -76,7 +76,7 @@ export interface ConfigSetResult {
 /**
  * 支持的平台类型
  */
-export type PlatformType = "claudeCode" | "cursor" | "codex";
+export type PlatformType = "claudeCode" | "cursor" | "codex" | "opencode";
 
 /**
  * 组件安装信息
@@ -93,10 +93,11 @@ export interface PlatformInstallation {
   enabled: boolean;
   installedAt: string;  // ISO timestamp
   components: {
-    hooks: ComponentInfo;
+    hooks?: ComponentInfo;     // Claude Code / Cursor 用 hooks
+    plugins?: ComponentInfo;   // OpenCode 用 plugins（替代 hooks）
     mcp: ComponentInfo;
-    agents?: ComponentInfo;    // Claude Code 特有（dispatch agents）
-    skills?: ComponentInfo;    // Claude Code 特有（skills 模板）
+    agents?: ComponentInfo;    // Claude Code / OpenCode 特有（dispatch agents）
+    skills?: ComponentInfo;    // Claude Code / OpenCode 特有（skills 模板）
     agentsMd?: ComponentInfo;  // Codex 特有
     modes?: ComponentInfo;     // Cursor 特有
   };
@@ -116,6 +117,7 @@ export interface InstallationMeta {
       claudeCode?: PlatformInstallation;
       cursor?: PlatformInstallation;
       codex?: PlatformInstallation;
+      opencode?: PlatformInstallation;
     };
   };
 }

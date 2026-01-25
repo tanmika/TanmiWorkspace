@@ -128,6 +128,10 @@ export class InstallationService {
           agents: this.mergeComponent(existing?.components?.agents, info.components?.agents),
           skills: this.mergeComponent(existing?.components?.skills, info.components?.skills),
         }),
+        ...(platform === "opencode" && {
+          agents: this.mergeComponent(existing?.components?.agents, info.components?.agents),
+          skills: this.mergeComponent(existing?.components?.skills, info.components?.skills),
+        }),
         ...(platform === "codex" && {
           agentsMd: this.mergeComponent(existing?.components?.agentsMd, info.components?.agentsMd),
         }),

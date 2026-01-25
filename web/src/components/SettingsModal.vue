@@ -167,11 +167,14 @@ function formatTime(isoString?: string | null) {
 // 检查平台是否有过期组件
 function hasOutdatedComponent(platform: PlatformStatus): boolean {
   const comps = platform.components
-  return comps.mcp.outdated || comps.hooks.outdated || comps.agents.outdated || comps.skills.outdated
+  // hooks 和 plugins 是互斥的：Claude Code/Cursor 用 hooks，OpenCode 用 plugins
+  const hooksOrPluginsOutdated = comps.hooks?.outdated || comps.plugins?.outdated || false
+  return comps.mcp.outdated || hooksOrPluginsOutdated || comps.agents.outdated || comps.skills.outdated
 }
 
 // 获取状态指示器样式类
-function getIndicatorClass(comp: ComponentStatus): string {
+function getIndicatorClass(comp: ComponentStatus | undefined): string {
+  if (!comp) return 'not-installed'
   if (!comp.supported) return 'unsupported'
   if (!comp.installed) return 'not-installed'
   if (comp.outdated) return 'outdated'
@@ -451,6 +454,39 @@ async function handleGenerateTutorial() {
                 <span
                   class="component-name"
                   :class="getIndicatorClass(installationStatus.platforms.cursor.components[comp as keyof typeof installationStatus.platforms.cursor.components])"
+                >{{ comp.charAt(0).toUpperCase() + comp.slice(1) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- OpenCode -->
+          <div class="platform-card">
+            <div class="platform-label">
+              <span class="platform-name">OPENCODE</span>
+              <span
+                class="platform-status"
+                :class="{
+                  installed: installationStatus.platforms.opencode.enabled && !hasOutdatedComponent(installationStatus.platforms.opencode),
+                  outdated: installationStatus.platforms.opencode.enabled && hasOutdatedComponent(installationStatus.platforms.opencode),
+                  disabled: !installationStatus.platforms.opencode.enabled
+                }"
+              >
+                {{ !installationStatus.platforms.opencode.enabled ? 'NOT INSTALLED' : (hasOutdatedComponent(installationStatus.platforms.opencode) ? 'UPDATE' : 'INSTALLED') }}
+              </span>
+            </div>
+            <div class="component-box">
+              <div
+                v-for="comp in ['mcp', 'plugins', 'agents', 'skills']"
+                :key="comp"
+                class="component-cell"
+              >
+                <span
+                  class="status-block"
+                  :class="getIndicatorClass(installationStatus.platforms.opencode.components[comp as keyof typeof installationStatus.platforms.opencode.components])"
+                ></span>
+                <span
+                  class="component-name"
+                  :class="getIndicatorClass(installationStatus.platforms.opencode.components[comp as keyof typeof installationStatus.platforms.opencode.components])"
                 >{{ comp.charAt(0).toUpperCase() + comp.slice(1) }}</span>
               </div>
             </div>
