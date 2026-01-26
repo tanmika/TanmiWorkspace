@@ -9,6 +9,16 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.11.1
+    requirement: OpenCode 全面支持、WebUI 交互式安装、工作区重命名、Cursor Hook 同步
+    conclusion: |-
+      - OpenCode 全面支持：新增 OpenCode 插件和配置，OpenCode 用户可正常使用
+      - WebUI 交互式安装：设置页面新增可视化安装面板，一键安装各平台组件
+      - 工作区重命名：支持修改工作区名称
+      - Cursor Hook 同步：Cursor IDE Hook 功能与 Claude Code 对齐
+      - setup 命令简化：直接安装全部组件，无需选择
+      - 多项稳定性修复：归档工作区、MEMO 引用刷新、会话绑定健壮性等
+    note: ""
   - version: 1.11.0
     requirement: 工作流三阶段系统、Cursor 插件支持、活跃节点拦截、工具拆分、搜索增强
     conclusion: |-

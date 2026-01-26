@@ -11,6 +11,41 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.11.1] - 2026-01-26
+
+### Added
+
+- **OpenCode 全面支持**: 新增 OpenCode 插件、CLI `setup --opencode` 命令、WebUI Settings 页面 OpenCode 平台选项
+- **WebUI 交互式安装面板**: 在设置页面提供可视化的插件安装界面，支持一键安装各平台组件
+- **工作区重命名功能**: 新增 `workspace_rename` 工具，支持重命名工作区
+- **node_transition 先读后写校验**: 新增 nodeHash 参数，防止并发修改冲突
+- **Cursor Hook 同步**: Cursor IDE Hook 功能与 Claude Code 对齐
+
+### Improved
+
+- **node_edit 空字段支持**: 支持向空字段添加内容
+- **版本检查 UI 统一**: 统一版本检查入口为卡片样式
+- **dev-setup.sh 脚本**: 添加开发环境配置脚本，简化本地开发流程
+- **setup 命令简化**: 移除安装方式询问，直接安装全部组件
+- **flow-info 声明模板优化**: 明确区分任务类型和信息阶段操作类型
+- **AI 引导内容优化**: SessionStart 操作指南 + session_bind 完整工作流引导
+- **Skill 流程设计优化**: 基于 Superpowers 调研优化设计
+
+### Fixed
+
+- **MEMO 引用刷新**: 修复 Focus 操作后节点详情 MEMO 引用不更新的问题
+- **归档工作区扫描**: readWorkspacesFromProject 支持扫描 archive/ 目录恢复归档工作区
+- **归档工作区路径错误**: 修复归档工作区路径导致 ENOENT 问题
+- **signal 工具死锁**: 修复 signal 工具死锁问题并增强 Hook 测试覆盖
+- **Hook 机制修复**: Hook 机制代码审查修复
+- **Cursor 组件版本**: 更新 Cursor Agents/Skills 组件版本配置
+- **session-bindings 健壮性**: 修复 session-bindings.json 损坏时的崩溃问题
+
+### Docs
+
+- 添加 dev-setup.sh 说明到构建命令
+- 更新用户手册 Cursor 支持程度描述
+
 ## [1.11.0] - 2026-01-22
 
 ### Added
