@@ -243,8 +243,12 @@ export class MarkdownStorage {
 
   /**
    * 写入 Workspace.md
+   * @param projectRoot 项目根目录
+   * @param wsDirName 工作区目录名
+   * @param data 工作区 Markdown 数据
+   * @param isArchived 是否为归档工作区（默认 false）
    */
-  async writeWorkspaceMd(projectRoot: string, workspaceId: string, data: WorkspaceMdData): Promise<void> {
+  async writeWorkspaceMd(projectRoot: string, wsDirName: string, data: WorkspaceMdData, isArchived = false): Promise<void> {
     // 验证内容格式
     validateSingleLineContent(data.name, "工作区名称");
     // goal 已移至根节点 requirement，不再写入 Workspace.md
@@ -252,7 +256,7 @@ export class MarkdownStorage {
       validateRules(data.rules);
     }
 
-    const mdPath = this.fs.getWorkspaceMdPath(projectRoot, workspaceId);
+    const mdPath = this.fs.getWorkspaceMdPathWithArchive(projectRoot, wsDirName, isArchived);
 
     const rulesContent = data.rules.length > 0
       ? data.rules.map(rule => `- ${rule}`).join("\n")

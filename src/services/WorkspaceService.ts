@@ -1248,33 +1248,7 @@ Read(file_path: <返回的 path>)
       const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, newDirName, isArchived);
       workspaceMdData.name = newName;
       workspaceMdData.updatedAt = currentTime;
-      // writeWorkspaceMd 不支持 isArchived 参数，需要直接写入文件
-      const mdPath = this.fs.getWorkspaceMdPathWithArchive(projectRoot, newDirName, isArchived);
-      const rulesContent = workspaceMdData.rules.length > 0
-        ? workspaceMdData.rules.map(rule => `- ${rule}`).join("\n")
-        : "";
-      const docsContent = workspaceMdData.docs.length > 0
-        ? workspaceMdData.docs.map(doc => `- [${doc.description}](${doc.path})`).join("\n")
-        : "";
-      const mdContent = `---
-name: ${workspaceMdData.name}
-createdAt: ${workspaceMdData.createdAt}
-updatedAt: ${workspaceMdData.updatedAt}
----
-
-## 规则
-
-> 只读，上下文必须遵循的约束
-
-${rulesContent}
-
-## 文档
-
-> 读写，全局参考文档
-
-${docsContent}
-`;
-      await this.fs.writeFile(mdPath, mdContent);
+      await this.md.writeWorkspaceMd(projectRoot, newDirName, workspaceMdData, isArchived);
 
       // 9. 更新全局索引
       wsEntry.name = newName;

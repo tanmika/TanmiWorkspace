@@ -128,11 +128,19 @@ function resetState() {
   installSuccess.value = false
 }
 
+// 复制反馈状态
+const isCopied = ref(false)
+
 // 复制命令
 async function copyCommand() {
   const command = 'tanmi-workspace setup'
   try {
     await navigator.clipboard.writeText(command)
+    isCopied.value = true
+    // 2秒后恢复为COPY
+    setTimeout(() => {
+      isCopied.value = false
+    }, 2000)
   } catch {
     // 复制失败静默处理
   }
@@ -196,7 +204,9 @@ async function copyCommand() {
         <div class="command-label">命令行安装</div>
         <div class="command-box" @click="copyCommand">
           <code>tanmi-workspace setup</code>
-          <span class="copy-hint">COPY</span>
+          <span class="copy-hint" :class="{ copied: isCopied }">
+            {{ isCopied ? 'COPIED' : 'COPY' }}
+          </span>
         </div>
       </div>
     </div>
@@ -477,6 +487,11 @@ async function copyCommand() {
   font-weight: 600;
   color: #666;
   text-transform: uppercase;
+  transition: color 0.2s;
+}
+
+.command-box .copy-hint.copied {
+  color: #4ade80;
 }
 
 /* 按钮区 */

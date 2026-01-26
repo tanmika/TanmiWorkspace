@@ -9,6 +9,7 @@ const workspace = require('./workspace.cjs');
 const context = require('./context.cjs');
 const reminder = require('./reminder.cjs');
 const logger = require('./logger.cjs');
+const workflow = require('./workflow.cjs');
 
 module.exports = {
   // 配置
@@ -30,5 +31,8 @@ module.exports = {
   ...reminder,
 
   // 日志
-  ...logger
+  ...logger,
+
+  // 工作流
+  ...workflow
 };

@@ -124,19 +124,18 @@ export class InstallationService {
       components: {
         hooks: this.mergeComponent(existing?.components?.hooks, info.components?.hooks),
         mcp: this.mergeComponent(existing?.components?.mcp, info.components?.mcp),
-        ...(platform === "claudeCode" && {
+        // claudeCode/cursor/opencode 共用 agents 和 skills
+        ...(["claudeCode", "cursor", "opencode"].includes(platform) && {
           agents: this.mergeComponent(existing?.components?.agents, info.components?.agents),
           skills: this.mergeComponent(existing?.components?.skills, info.components?.skills),
         }),
+        // opencode 使用 plugins 替代 hooks
         ...(platform === "opencode" && {
-          agents: this.mergeComponent(existing?.components?.agents, info.components?.agents),
-          skills: this.mergeComponent(existing?.components?.skills, info.components?.skills),
+          plugins: this.mergeComponent(existing?.components?.plugins, info.components?.plugins),
         }),
+        // codex 特有：agentsMd
         ...(platform === "codex" && {
           agentsMd: this.mergeComponent(existing?.components?.agentsMd, info.components?.agentsMd),
-        }),
-        ...(platform === "cursor" && {
-          modes: this.mergeComponent(existing?.components?.modes, info.components?.modes),
         }),
       },
     };

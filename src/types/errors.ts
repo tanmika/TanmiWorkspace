@@ -24,6 +24,7 @@ export const ErrorCodes = {
 
   // 状态转换错误
   INVALID_TRANSITION: "INVALID_TRANSITION",
+  MISSING_NODE_HASH: "MISSING_NODE_HASH",
   CONCLUSION_REQUIRED: "CONCLUSION_REQUIRED",
   CONCLUSION_TOO_LONG: "CONCLUSION_TOO_LONG",
   CONCLUSION_STALE: "CONCLUSION_STALE",
@@ -128,6 +129,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   INVALID_ACCEPTANCE_CRITERIA: "验收标准格式错误，应为对象数组而非字符串数组",
   CANNOT_DELETE_ROOT: "无法删除根节点",
   INVALID_TRANSITION: "非法状态转换",
+  MISSING_NODE_HASH: "必须提供 nodeHash 参数，请先调用 node_get 获取节点的 nodeHash",
   CONCLUSION_REQUIRED: "complete/fail 动作必须提供 conclusion",
   CONCLUSION_TOO_LONG: "结论过长，请创建 memo 记录详情后提交精简结论",
   CONCLUSION_STALE: "结论已过期，请先更新结论后再切换焦点",

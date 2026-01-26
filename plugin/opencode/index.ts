@@ -183,26 +183,53 @@ type Plugin = (ctx: PluginContext) => Promise<PluginHooks>;
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require('path');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const os = require('os');
+
+/**
+ * 获取 TanmiWorkspace 基础目录
+ * 根据环境变量判断是开发模式还是生产模式
+ * - 开发模式: ~/.tanmi-workspace-dev/
+ * - 生产模式: ~/.tanmi-workspace/
+ */
+function getTanmiBaseDir(): string {
+  const isDev = process.env.NODE_ENV === 'development' || process.env.TANMI_DEV === 'true';
+  const baseDir = isDev ? '.tanmi-workspace-dev' : '.tanmi-workspace';
+  return path.join(os.homedir(), baseDir);
+}
+
+/**
+ * 获取 TanmiWorkspace 脚本目录
+ * - 开发模式: ~/.tanmi-workspace-dev/scripts/
+ * - 生产模式: ~/.tanmi-workspace/scripts/
+ */
+function getTanmiScriptsDir(): string {
+  return path.join(getTanmiBaseDir(), 'scripts');
+}
+
+/**
+ * 获取 TanmiWorkspace Hooks 目录
+ * - 开发模式: ~/.tanmi-workspace-dev/hooks/
+ * - 生产模式: ~/.tanmi-workspace/hooks/
+ */
+function getTanmiHooksDir(): string {
+  return path.join(getTanmiBaseDir(), 'hooks');
+}
 
 /**
  * 获取 shared 模块的路径
- * 在编译后，index.js 位于 dist/plugin/opencode/
- * shared 模块位于 plugin/scripts/shared/
+ * shared 模块安装在 ~/.tanmi-workspace/scripts/shared/
  */
 function getSharedModulePath(moduleName: string): string {
-  // __dirname 在 CommonJS 模式下指向当前文件所在目录
-  // 在 ESM 模式下需要使用 import.meta.url
-  // 这里使用相对于当前文件的路径
-  return path.resolve(__dirname, '../scripts/shared', moduleName);
+  return path.join(getTanmiScriptsDir(), 'shared', moduleName);
 }
 
 /**
  * 获取 hooks/generated 模块的路径
- * 在编译后，index.js 位于 dist/plugin/opencode/
- * generated 模块位于 plugin/hooks/generated/
+ * generated 模块安装在 ~/.tanmi-workspace/hooks/generated/
  */
 function getGeneratedModulePath(moduleName: string): string {
-  return path.resolve(__dirname, '../hooks/generated', moduleName);
+  return path.join(getTanmiHooksDir(), 'generated', moduleName);
 }
 
 // 延迟加载 shared 模块（避免在模块加载时就引入）

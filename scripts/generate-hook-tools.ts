@@ -49,12 +49,12 @@ const SKILL_INIT_WHITELIST = [
   "signal",
 ];
 
-// Signal 阶段编码映射（统一定义，避免多处硬编码）
-// 编码来源：base64 encode 的阶段名称前缀
+// Signal 阶段编码映射（base64 前缀，原编码过长故裁剪）
+// 用于 validateSignalPreCheck 解析目标阶段
 const SIGNAL_CODES: Record<string, string> = {
-  "aW5mbw": "info",    // from 'sw_info'
-  "VzaWdu": "design",  // from 'sw_design'
-  "aW1wbA": "impl",    // from 'sw_impl'
+  "aW5mbw": "info",    // base64("info") 裁剪
+  "VzaWdu": "design",  // base64("sw_design") 裁剪
+  "aW1wbA": "impl",    // base64("impl") 裁剪
 };
 
 interface ToolInfo {
@@ -177,9 +177,8 @@ ${SKILL_INIT_WHITELIST.map(t => `    '${t}'`).join(",\n")}
   ]),
 
   /**
-   * Signal 阶段编码映射
+   * Signal 阶段编码映射（base64 前缀，原编码过长故裁剪）
    * 用于 validateSignalPreCheck 解析目标阶段
-   * 编码来源：base64 encode 的阶段名称前缀
    */
   SIGNAL_CODES: {
 ${Object.entries(SIGNAL_CODES).map(([k, v]) => `    '${k}': '${v}'`).join(",\n")}

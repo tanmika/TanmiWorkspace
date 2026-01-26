@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import { TanmiError } from "../src/types/errors.js";
+import { TanmiError } from "../../src/types/errors.js";
 
 // 为每个测试文件生成唯一的测试目录
 const testBasePath = `.test-tanmi-workspace-rename-${crypto.randomUUID()}`;
@@ -18,10 +18,10 @@ vi.mock("node:os", async (importOriginal) => {
 });
 
 // 动态导入依赖 os.homedir 的模块（在 mock 生效后）
-const { FileSystemAdapter } = await import("../src/storage/FileSystemAdapter.js");
-const { JsonStorage } = await import("../src/storage/JsonStorage.js");
-const { MarkdownStorage } = await import("../src/storage/MarkdownStorage.js");
-const { WorkspaceService } = await import("../src/services/WorkspaceService.js");
+const { FileSystemAdapter } = await import("../../src/storage/FileSystemAdapter.js");
+const { JsonStorage } = await import("../../src/storage/JsonStorage.js");
+const { MarkdownStorage } = await import("../../src/storage/MarkdownStorage.js");
+const { WorkspaceService } = await import("../../src/services/WorkspaceService.js");
 
 describe("WorkspaceService.rename", () => {
   let basePath: string;

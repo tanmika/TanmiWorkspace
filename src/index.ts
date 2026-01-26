@@ -539,11 +539,18 @@ Read(file_path: <返回的 path>)
 
         // Phase 2: 状态转换工具
         case "node_transition":
+          // MCP 调用必须提供 nodeHash（先读后写校验）
+          if (!args?.nodeHash) {
+            throw new TanmiError(
+              "MISSING_NODE_HASH",
+              "node_transition 必须提供 nodeHash 参数。请先调用 node_get 获取节点的 nodeHash。"
+            );
+          }
           result = await services.state.transition({
             workspaceId: args?.workspaceId as string,
             nodeId: args?.nodeId as string,
             action: args?.action as TransitionAction,
-            nodeHash: args?.nodeHash as string,
+            nodeHash: args.nodeHash as string,
             reason: args?.reason as string | undefined,
             conclusion: args?.conclusion as string | undefined,
             conclusionsHash: args?.conclusionsHash as string | undefined,

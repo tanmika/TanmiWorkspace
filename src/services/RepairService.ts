@@ -1,6 +1,7 @@
 // src/services/RepairService.ts
 // 工作区修复服务 - 诊断和自动修复工作区问题
 
+import path from "path";
 import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type {
@@ -206,6 +207,8 @@ export class RepairService {
 
     // 使用实际存在的路径进行后续诊断
     const actualWsPath = expectedExists ? expectedPath : wrongPath;
+    // 实际的归档状态：如果位置错误，实际状态与索引状态相反
+    const actualIsArchived = wrongExists && !expectedExists ? !isArchived : isArchived;
 
     // ========== 2. Index 相关问题 ==========
 
@@ -259,7 +262,8 @@ export class RepairService {
 
     // ========== 3. workspace.json 问题 ==========
 
-    const configPath = this.fs.getWorkspaceConfigPath(projectRoot, wsDirName);
+    // 使用实际存在的路径检查配置文件
+    const configPath = path.join(actualWsPath, "workspace.json");
     const configExists = await this.fs.exists(configPath);
 
     if (!configExists) {
@@ -271,7 +275,8 @@ export class RepairService {
       });
     } else {
       try {
-        const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
+        // 诊断时使用实际归档状态
+        const config = await this.json.readWorkspaceConfig(projectRoot, wsDirName, actualIsArchived);
 
         // 3.1 缺少 dirName
         if (!config.dirName) {
@@ -281,9 +286,10 @@ export class RepairService {
             message: "workspace.json 缺少 dirName 字段",
             fixType: "auto",
             autoFix: async () => {
-              const cfg = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
+              // 修复时使用索引中的归档状态（位置迁移应已完成）
+              const cfg = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
               cfg.dirName = wsDirName;
-              await this.json.writeWorkspaceConfig(projectRoot, wsDirName, cfg);
+              await this.json.writeWorkspaceConfig(projectRoot, wsDirName, cfg, isArchived);
               return true;
             },
           });
@@ -298,9 +304,10 @@ export class RepairService {
             detail: `配置: ${config.dirName}, 实际: ${wsDirName}`,
             fixType: "auto",
             autoFix: async () => {
-              const cfg = await this.json.readWorkspaceConfig(projectRoot, wsDirName);
+              // 修复时使用索引中的归档状态（位置迁移应已完成）
+              const cfg = await this.json.readWorkspaceConfig(projectRoot, wsDirName, isArchived);
               cfg.dirName = wsDirName;
-              await this.json.writeWorkspaceConfig(projectRoot, wsDirName, cfg);
+              await this.json.writeWorkspaceConfig(projectRoot, wsDirName, cfg, isArchived);
               return true;
             },
           });

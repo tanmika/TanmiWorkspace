@@ -1627,6 +1627,11 @@ function convertAgentToOpenCodeFormat(content: string): string {
 function installOpenCodePlugins(): void {
   info("安装 OpenCode Plugin...");
 
+  // 确保共享脚本已安装（OpenCode 插件依赖这些模块）
+  ensureDir(TANMI_SCRIPTS);
+  installSharedScripts();
+  installHooksGenerated();
+
   ensureDir(OPENCODE_PLUGINS);
 
   if (!existsSync(OPENCODE_PLUGIN_SOURCE)) {
@@ -2105,6 +2110,13 @@ export function installCursorAllForApi(): PlatformInstallResult {
  */
 export function installOpenCodeAllForApi(): PlatformInstallResult {
   const steps: InstallStepResult[] = [];
+
+  steps.push(executeStep("安装共享脚本", () => {
+    // 确保共享脚本已安装（OpenCode 插件依赖这些模块）
+    ensureDir(TANMI_SCRIPTS);
+    installSharedScripts();
+    installHooksGenerated();
+  }));
 
   steps.push(executeStep("安装 Plugin", () => {
     ensureDir(OPENCODE_PLUGINS);
