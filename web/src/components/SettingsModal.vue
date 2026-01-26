@@ -12,6 +12,7 @@ import WsCollapse from '@/components/ui/WsCollapse.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
 import IndexManagementModal from '@/components/IndexManagementModalNew.vue'
 import BackupManager from '@/components/BackupManager.vue'
+import InstallPanel from '@/components/InstallPanel.vue'
 import { quickStartContent, triggerWords } from '@/data/helpContent'
 
 const settingsStore = useSettingsStore()
@@ -36,6 +37,9 @@ const installationStatus = ref<InstallationStatusResult | null>(null)
 // 索引管理
 const indexStats = ref<IndexStatsResult | null>(null)
 const showIndexManagement = ref(false)
+
+// 安装面板
+const showInstallPanel = ref(false)
 
 // 备份管理
 const showBackupManager = ref(false)
@@ -149,6 +153,22 @@ function openIndexManagement() {
 function handleWorkspaceImported() {
   loadIndexStats()
   emit('workspaceImported')
+}
+
+// 加载安装状态
+async function loadStatus() {
+  try {
+    installationStatus.value = await settingsApi.getInstallationStatus()
+  } catch {
+    // 忽略错误
+  }
+}
+
+// 安装成功后刷新状态卡片
+function handleInstallSuccess() {
+  showInstallPanel.value = false
+  loadStatus()
+  toastStore.success('安装成功')
 }
 
 // 格式化时间
@@ -497,9 +517,14 @@ async function handleGenerateTutorial() {
           加载中...
         </div>
 
-        <div class="command-bar">
-          <span class="command-label">插件安装方式</span>
-          <span class="command-text">tanmi-workspace setup</span>
+        <div class="install-entry" @click="showInstallPanel = true">
+          <div class="install-entry-left">
+            <div class="install-entry-text">
+              <div class="install-entry-title">安装 / 升级</div>
+              <div class="install-entry-desc">配置各平台插件组件</div>
+            </div>
+          </div>
+          <div class="install-entry-arrow">→</div>
         </div>
       </div>
 
@@ -611,6 +636,15 @@ async function handleGenerateTutorial() {
 
   <!-- 备份管理弹窗 -->
   <BackupManager v-model:visible="showBackupManager" @change="loadBackupCount" />
+
+  <!-- 安装面板弹窗 -->
+  <WsModal v-model="showInstallPanel" title="INSTALL" width="480px">
+    <InstallPanel
+      :installation-status="installationStatus"
+      @success="handleInstallSuccess"
+      @close="showInstallPanel = false"
+    />
+  </WsModal>
 
   <!-- 生成功能介绍确认弹窗 -->
   <WsConfirmDialog
@@ -1736,6 +1770,50 @@ async function handleGenerateTutorial() {
 
 .version-link:hover .version-link-arrow {
   transform: translateX(3px);
+}
+
+/* 安装入口 - 简洁样式 */
+.install-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  margin-top: 10px;
+  background: var(--path-bg);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.install-entry:hover {
+  background: var(--card-bg);
+}
+
+.install-entry-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.install-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.install-entry-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.install-entry-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.install-entry-arrow {
+  font-size: 14px;
+  color: var(--text-muted);
 }
 
 </style>

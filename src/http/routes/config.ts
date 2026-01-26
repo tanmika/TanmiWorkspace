@@ -8,6 +8,12 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getServices } from "../services.js";
 import type { ConfigSetParams } from "../../types/settings.js";
 import { isVersionLessThan } from "../../utils/version.js";
+import {
+  installClaudeAllForApi,
+  installCursorAllForApi,
+  installOpenCodeAllForApi,
+  type PlatformInstallResult,
+} from "../../cli/plugins.js";
 
 // 组件最低版本配置类型
 interface ComponentVersionsConfig {
@@ -201,4 +207,71 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
       updateCommand: "bash ~/.tanmi-workspace/scripts/install-global.sh",
     };
   });
+
+  // ============================================================================
+  // Setup API
+  // ============================================================================
+
+  // 请求体类型
+  interface InstallRequestBody {
+    platforms?: unknown;
+  }
+
+  // 有效平台列表
+  const VALID_PLATFORMS = ["claude", "cursor", "opencode"] as const;
+  type ValidPlatform = typeof VALID_PLATFORMS[number];
+
+  // 平台安装函数映射
+  const platformInstallers: Record<ValidPlatform, () => PlatformInstallResult> = {
+    claude: installClaudeAllForApi,
+    cursor: installCursorAllForApi,
+    opencode: installOpenCodeAllForApi,
+  };
+
+  /**
+   * POST /api/setup/install - 安装平台插件
+   * 请求体: { platforms: string[] }
+   * 成功响应: { success: true, results: PlatformInstallResult[] }
+   * 失败响应: { success: false, error: string }
+   */
+  fastify.post<{ Body: InstallRequestBody }>(
+    "/setup/install",
+    async (request, reply) => {
+      const { platforms } = request.body;
+
+      // 验证 platforms 存在且是数组
+      if (!platforms || !Array.isArray(platforms)) {
+        reply.code(400);
+        return { success: false, error: "platforms 必须是数组" };
+      }
+
+      // 验证 platforms 不为空
+      if (platforms.length === 0) {
+        reply.code(400);
+        return { success: false, error: "platforms 不能为空" };
+      }
+
+      // 验证所有平台名有效
+      const invalidPlatforms = platforms.filter(
+        (p) => typeof p !== "string" || !VALID_PLATFORMS.includes(p as ValidPlatform)
+      );
+      if (invalidPlatforms.length > 0) {
+        reply.code(400);
+        return {
+          success: false,
+          error: `无效的平台: ${invalidPlatforms.join(", ")}。有效平台: ${VALID_PLATFORMS.join(", ")}`,
+        };
+      }
+
+      // 执行安装
+      const results: PlatformInstallResult[] = [];
+      for (const platform of platforms as ValidPlatform[]) {
+        const installer = platformInstallers[platform];
+        const result = installer();
+        results.push(result);
+      }
+
+      return { success: true, results };
+    }
+  );
 }

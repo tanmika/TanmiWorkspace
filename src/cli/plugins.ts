@@ -1806,6 +1806,364 @@ export function uninstallOpenCodeAll(): void {
 }
 
 // ============================================================================
+// API 专用安装函数（返回结构化结果）
+// ============================================================================
+
+/** 安装步骤结果 */
+export interface InstallStepResult {
+  name: string;
+  success: boolean;
+  message?: string;
+}
+
+/** 平台安装结果 */
+export interface PlatformInstallResult {
+  platform: string;
+  steps: InstallStepResult[];
+}
+
+/**
+ * 执行单个安装步骤并捕获结果
+ * @param name 步骤名称
+ * @param fn 安装函数
+ * @returns 步骤执行结果
+ */
+function executeStep(name: string, fn: () => void): InstallStepResult {
+  try {
+    fn();
+    return { name, success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { name, success: false, message };
+  }
+}
+
+/**
+ * Claude Code 平台安装（API 版本）
+ * 返回每个步骤的执行结果
+ */
+export function installClaudeAllForApi(): PlatformInstallResult {
+  const steps: InstallStepResult[] = [];
+
+  steps.push(executeStep("安装 Hook 脚本", () => {
+    ensureDir(TANMI_SCRIPTS);
+    installSharedScripts();
+    installHooksGenerated();
+
+    const hookSrc = join(PLUGIN_SCRIPTS, "hook-entry.cjs");
+    const hookDest = join(TANMI_SCRIPTS, "hook-entry.cjs");
+
+    if (!existsSync(hookSrc)) {
+      throw new Error(`Hook 脚本不存在: ${hookSrc}`);
+    }
+
+    copyFile(hookSrc, hookDest);
+  }));
+
+  steps.push(executeStep("配置 Hooks", () => {
+    ensureDir(CLAUDE_HOME);
+
+    const settings = readJsonFile(CLAUDE_SETTINGS);
+    const hookScript = join(TANMI_SCRIPTS, "hook-entry.cjs");
+
+    const tanmiHooksConfig: Record<string, Array<{ matcher?: string; hooks: Array<{ type: string; command: string; timeout: number }> }>> = {
+      SessionStart: [{
+        matcher: "startup|clear|compact",
+        hooks: [{ type: "command", command: `node "${hookScript}" SessionStart`, timeout: 10000 }],
+      }],
+      PreToolUse: [{
+        hooks: [{ type: "command", command: `node "${hookScript}" PreToolUse`, timeout: 3000 }],
+      }],
+      UserPromptSubmit: [{
+        hooks: [{ type: "command", command: `node "${hookScript}" UserPromptSubmit`, timeout: 5000 }],
+      }],
+      PostToolUse: [
+        { matcher: "mcp__tanmi-workspace__.*", hooks: [{ type: "command", command: `node "${hookScript}" PostToolUse`, timeout: 3000 }] },
+        { matcher: "Edit", hooks: [{ type: "command", command: `node "${hookScript}" PostToolUse`, timeout: 3000 }] },
+        { matcher: "Write", hooks: [{ type: "command", command: `node "${hookScript}" PostToolUse`, timeout: 3000 }] },
+        { matcher: "Bash", hooks: [{ type: "command", command: `node "${hookScript}" PostToolUse`, timeout: 3000 }] },
+        { matcher: "TodoWrite", hooks: [{ type: "command", command: `node "${hookScript}" PostToolUse`, timeout: 3000 }] },
+      ],
+    };
+
+    const existingHooks = (settings.hooks || {}) as Record<string, ClaudeHookEntry[]>;
+    settings.hooks = mergeClaudeHooks(existingHooks, tanmiHooksConfig);
+    writeJsonFile(CLAUDE_SETTINGS, settings);
+    updateInstallationMeta("claudeCode", "hooks", "update");
+  }));
+
+  steps.push(executeStep("安装 Agents", () => {
+    if (!existsSync(PLUGIN_AGENTS)) {
+      throw new Error(`Agent 模板目录不存在: ${PLUGIN_AGENTS}`);
+    }
+
+    const agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
+    if (agentFiles.length === 0) {
+      throw new Error("没有找到 Agent 模板文件");
+    }
+
+    const agentsDir = join(CLAUDE_HOME, "agents");
+    ensureDir(agentsDir);
+
+    for (const agentFile of agentFiles) {
+      copyFile(join(PLUGIN_AGENTS, agentFile), join(agentsDir, agentFile));
+    }
+
+    updateInstallationMeta("claudeCode", "agents", "update");
+  }));
+
+  steps.push(executeStep("安装 Skills", () => {
+    if (!existsSync(PLUGIN_SKILLS)) {
+      throw new Error(`Skills 模板目录不存在: ${PLUGIN_SKILLS}`);
+    }
+
+    const skillDirs = readdirSync(PLUGIN_SKILLS).filter((name) => {
+      const fullPath = join(PLUGIN_SKILLS, name);
+      return statSync(fullPath).isDirectory();
+    });
+
+    if (skillDirs.length === 0) {
+      throw new Error("Skills 模板目录为空");
+    }
+
+    const skillsDestDir = join(CLAUDE_HOME, "skills");
+    ensureDir(skillsDestDir);
+
+    const currentVersion = getPackageVersion();
+
+    // 清理废弃的 Skill
+    for (const deprecated of DEPRECATED_SKILLS) {
+      const deprecatedPath = join(skillsDestDir, deprecated);
+      if (existsSync(deprecatedPath)) {
+        removeDir(deprecatedPath);
+      }
+    }
+
+    // 安装 Skill
+    let count = 0;
+    for (const skillName of skillDirs) {
+      const skillSrcDir = join(PLUGIN_SKILLS, skillName);
+      const skillMdPath = join(skillSrcDir, "SKILL.md");
+
+      if (existsSync(skillMdPath)) {
+        const skillDestDir = join(skillsDestDir, skillName);
+        if (existsSync(skillDestDir)) {
+          removeDir(skillDestDir);
+        }
+        copyDir(skillSrcDir, skillDestDir);
+
+        const markerContent = JSON.stringify({
+          installedAt: new Date().toISOString(),
+          installedVersion: currentVersion,
+          source: "tanmi-workspace",
+        }, null, 2);
+        writeFileSync(join(skillDestDir, ".tanmi-managed"), markerContent);
+        count++;
+      }
+    }
+
+    if (count === 0) {
+      throw new Error("未找到有效的 Skill 目录（需包含 SKILL.md）");
+    }
+
+    updateInstallationMeta("claudeCode", "skills", "update");
+  }));
+
+  return { platform: "claude", steps };
+}
+
+/**
+ * Cursor 平台安装（API 版本）
+ */
+export function installCursorAllForApi(): PlatformInstallResult {
+  const steps: InstallStepResult[] = [];
+
+  steps.push(executeStep("安装 Hook 脚本", () => {
+    ensureDir(TANMI_SCRIPTS);
+    installSharedScripts();
+
+    const hookSrc = join(PLUGIN_SCRIPTS, "cursor-hook-entry.cjs");
+    const hookDest = join(TANMI_SCRIPTS, "cursor-hook-entry.cjs");
+
+    if (!existsSync(hookSrc)) {
+      throw new Error(`Hook 脚本不存在: ${hookSrc}`);
+    }
+
+    copyFile(hookSrc, hookDest);
+  }));
+
+  steps.push(executeStep("配置 Hooks", () => {
+    ensureDir(CURSOR_HOME);
+
+    const hookScript = join(TANMI_SCRIPTS, "cursor-hook-entry.cjs");
+    let cursorConfig = readJsonFile(CURSOR_HOOKS);
+
+    if (Object.keys(cursorConfig).length === 0) {
+      cursorConfig = { version: 1, hooks: {} };
+    }
+    if (!cursorConfig.hooks) {
+      cursorConfig.hooks = {};
+    }
+
+    const existingHooks = cursorConfig.hooks as Record<string, CursorHookEntry[]>;
+    const tanmiHookEntry: CursorHookEntry = { command: `node "${hookScript}"` };
+
+    cursorConfig.hooks = mergeCursorHooks(existingHooks, tanmiHookEntry, CURSOR_TANMI_HOOK_EVENTS);
+    writeJsonFile(CURSOR_HOOKS, cursorConfig);
+    updateInstallationMeta("cursor", "hooks", "update");
+  }));
+
+  steps.push(executeStep("安装 Agents", () => {
+    if (!existsSync(PLUGIN_AGENTS)) {
+      throw new Error(`Agent 模板目录不存在: ${PLUGIN_AGENTS}`);
+    }
+
+    const agentFiles = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
+    if (agentFiles.length === 0) {
+      throw new Error("没有找到 Agent 模板文件");
+    }
+
+    ensureDir(CURSOR_AGENTS);
+    const currentVersion = getPackageVersion();
+
+    for (const agentFile of agentFiles) {
+      const dest = join(CURSOR_AGENTS, agentFile);
+      const markerPath = join(CURSOR_AGENTS, `${agentFile}.tanmi-managed`);
+
+      copyFile(join(PLUGIN_AGENTS, agentFile), dest);
+
+      const markerContent = JSON.stringify({
+        installedAt: new Date().toISOString(),
+        installedVersion: currentVersion,
+        source: "tanmi-workspace",
+      }, null, 2);
+      writeFileSync(markerPath, markerContent);
+    }
+
+    updateInstallationMeta("cursor", "agents", "update");
+  }));
+
+  steps.push(executeStep("安装 Skills", () => {
+    if (!existsSync(PLUGIN_SKILLS)) {
+      throw new Error(`Skills 模板目录不存在: ${PLUGIN_SKILLS}`);
+    }
+
+    const skillDirs = readdirSync(PLUGIN_SKILLS).filter((name) => {
+      const fullPath = join(PLUGIN_SKILLS, name);
+      return statSync(fullPath).isDirectory();
+    });
+
+    if (skillDirs.length === 0) {
+      throw new Error("Skills 模板目录为空");
+    }
+
+    ensureDir(CURSOR_SKILLS);
+    const currentVersion = getPackageVersion();
+
+    // 清理废弃的 Skill
+    for (const deprecated of DEPRECATED_SKILLS) {
+      const deprecatedPath = join(CURSOR_SKILLS, deprecated);
+      if (existsSync(deprecatedPath)) {
+        removeDir(deprecatedPath);
+      }
+    }
+
+    let count = 0;
+    for (const skillName of skillDirs) {
+      const skillSrcDir = join(PLUGIN_SKILLS, skillName);
+      const skillMdPath = join(skillSrcDir, "SKILL.md");
+
+      if (existsSync(skillMdPath)) {
+        const skillDestDir = join(CURSOR_SKILLS, skillName);
+        if (existsSync(skillDestDir)) {
+          removeDir(skillDestDir);
+        }
+        copyDir(skillSrcDir, skillDestDir);
+
+        const markerContent = JSON.stringify({
+          installedAt: new Date().toISOString(),
+          installedVersion: currentVersion,
+          source: "tanmi-workspace",
+        }, null, 2);
+        writeFileSync(join(skillDestDir, ".tanmi-managed"), markerContent);
+        count++;
+      }
+    }
+
+    if (count === 0) {
+      throw new Error("未找到有效的 Skill 目录（需包含 SKILL.md）");
+    }
+
+    updateInstallationMeta("cursor", "skills", "update");
+  }));
+
+  return { platform: "cursor", steps };
+}
+
+/**
+ * OpenCode 平台安装（API 版本）
+ */
+export function installOpenCodeAllForApi(): PlatformInstallResult {
+  const steps: InstallStepResult[] = [];
+
+  steps.push(executeStep("安装 Plugin", () => {
+    ensureDir(OPENCODE_PLUGINS);
+
+    if (!existsSync(OPENCODE_PLUGIN_SOURCE)) {
+      throw new Error(`OpenCode Plugin 源文件不存在: ${OPENCODE_PLUGIN_SOURCE}`);
+    }
+
+    const destPath = join(OPENCODE_PLUGINS, "tanmi-workspace.ts");
+    copyFile(OPENCODE_PLUGIN_SOURCE, destPath);
+    updateInstallationMeta("opencode", "plugins", "update");
+  }));
+
+  steps.push(executeStep("安装 Agents", () => {
+    ensureDir(OPENCODE_AGENTS);
+
+    if (!existsSync(PLUGIN_AGENTS)) {
+      throw new Error(`Agent 源目录不存在: ${PLUGIN_AGENTS}`);
+    }
+
+    const agents = readdirSync(PLUGIN_AGENTS).filter((name) => name.endsWith(".md") && name !== "CLAUDE.md");
+
+    for (const agent of agents) {
+      const srcPath = join(PLUGIN_AGENTS, agent);
+      const destPath = join(OPENCODE_AGENTS, agent);
+
+      const content = readFileSync(srcPath, "utf-8");
+      const convertedContent = convertAgentToOpenCodeFormat(content);
+      writeFileSync(destPath, convertedContent, "utf-8");
+    }
+
+    updateInstallationMeta("opencode", "agents", "update");
+  }));
+
+  steps.push(executeStep("安装 Skills", () => {
+    ensureDir(OPENCODE_SKILLS);
+
+    if (!existsSync(PLUGIN_SKILLS)) {
+      throw new Error(`Skill 源目录不存在: ${PLUGIN_SKILLS}`);
+    }
+
+    const skills = readdirSync(PLUGIN_SKILLS).filter((name) => {
+      const fullPath = join(PLUGIN_SKILLS, name);
+      return statSync(fullPath).isDirectory() && existsSync(join(fullPath, "SKILL.md"));
+    });
+
+    for (const skill of skills) {
+      const srcPath = join(PLUGIN_SKILLS, skill);
+      const destPath = join(OPENCODE_SKILLS, skill);
+      copyDir(srcPath, destPath);
+    }
+
+    updateInstallationMeta("opencode", "skills", "update");
+  }));
+
+  return { platform: "opencode", steps };
+}
+
+// ============================================================================
 // 帮助
 // ============================================================================
 

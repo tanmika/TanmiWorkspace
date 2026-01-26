@@ -61,6 +61,26 @@ export interface InstallationStatusResult {
   updateCommand: string
 }
 
+// 安装步骤结果
+export interface InstallStep {
+  name: string
+  success: boolean
+  message?: string
+}
+
+// 平台安装结果
+export interface PlatformResult {
+  platform: string
+  steps: InstallStep[]
+}
+
+// 安装接口响应
+export interface SetupInstallResponse {
+  success: boolean
+  results?: PlatformResult[]
+  error?: string
+}
+
 export const settingsApi = {
   /**
    * 获取全局配置
@@ -93,5 +113,13 @@ export const settingsApi = {
    */
   async getInstallationStatus(): Promise<InstallationStatusResult> {
     return client.get('/installation-status')
+  },
+
+  /**
+   * 执行平台安装
+   * @param platforms 要安装的平台列表，如 ['claude-code', 'cursor', 'opencode']
+   */
+  async install(platforms: string[]): Promise<SetupInstallResponse> {
+    return client.post('/setup/install', { platforms })
   },
 }
