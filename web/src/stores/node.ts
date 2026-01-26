@@ -174,6 +174,10 @@ export const useNodeStore = defineStore('node', () => {
     try {
       await contextApi.focus(workspaceId, nodeId)
       await workspaceStore.fetchWorkspace(workspaceId)
+      // 刷新当前选中节点的详情（包括 docs/MEMO 引用）
+      if (selectedNodeId.value) {
+        await selectNode(selectedNodeId.value)
+      }
     } catch (e) {
       error.value = e instanceof Error ? e.message : '设置焦点失败'
       throw e
