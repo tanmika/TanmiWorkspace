@@ -83,6 +83,13 @@ export function updatePluginsIfNeeded(): PluginUpdateResult {
     platformsToUpdate.push("cursor");
   }
 
+  // 检测 OpenCode 插件
+  if (status.opencode.plugins || status.opencode.agents.length > 0 || status.opencode.skills.length > 0) {
+    if (status.opencode.pluginsNeedsUpdate || status.opencode.agentsNeedsUpdate || status.opencode.skillsNeedsUpdate) {
+      platformsToUpdate.push("opencode");
+    }
+  }
+
   if (platformsToUpdate.length === 0) {
     return { success: true, failedPlatforms: [] }; // 无需更新
   }
