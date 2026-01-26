@@ -1281,7 +1281,7 @@ export class NodeService {
 
     // 2. 参数校验
     if (mode === "string") {
-      if (!old_str) {
+      if (old_str === undefined || old_str === null) {
         return { success: false, error: "mode=string 时 old_str 必填" };
       }
       if (lineStart !== undefined || lineEnd !== undefined) {
@@ -1342,20 +1342,28 @@ export class NodeService {
 
     if (mode === "string") {
       // 8a. 字符串模式：检查 old_str 存在性和唯一性
-      const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(escapeRegExp(old_str!), "g");
-      const matches = targetContent.match(regex);
-      const count = matches ? matches.length : 0;
+      // 特殊情况：old_str 为空字符串时，仅当目标字段也为空时允许（用于向空字段添加内容）
+      if (old_str === "") {
+        if (targetContent !== "") {
+          return { success: false, error: "old_str 为空时，目标字段也必须为空（用于向空字段添加内容）" };
+        }
+        newContent = new_str;
+      } else {
+        const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const regex = new RegExp(escapeRegExp(old_str!), "g");
+        const matches = targetContent.match(regex);
+        const count = matches ? matches.length : 0;
 
-      if (count === 0) {
-        return { success: false, error: "old_str 未找到" };
-      }
-      if (count > 1) {
-        return { success: false, error: "old_str 出现多次，请提供更精确的匹配" };
-      }
+        if (count === 0) {
+          return { success: false, error: "old_str 未找到" };
+        }
+        if (count > 1) {
+          return { success: false, error: "old_str 出现多次，请提供更精确的匹配" };
+        }
 
-      // 执行替换
-      newContent = targetContent.replace(old_str!, new_str);
+        // 执行替换
+        newContent = targetContent.replace(old_str!, new_str);
+      }
     } else {
       // 8b. 行范围模式：按行替换
       const lines = targetContent.split("\n");

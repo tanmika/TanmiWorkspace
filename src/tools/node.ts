@@ -304,7 +304,10 @@ export const nodeEditTool: TanmiTool = {
 
 **互斥规则**:
 - mode=string 时：old_str 必填，禁止使用 lineStart/lineEnd
-- mode=line_range 时：lineStart/lineEnd 必填，禁止使用 old_str`,
+- mode=line_range 时：lineStart/lineEnd 必填，禁止使用 old_str
+
+**空字段添加内容**:
+- 当字段为空时，可使用 old_str="" 来添加内容，new_str 将作为字段的新内容`,
   readonly: false,
   inputSchema: {
     type: "object",
@@ -333,7 +336,7 @@ export const nodeEditTool: TanmiTool = {
       },
       old_str: {
         type: "string",
-        description: "要替换的原文（必须存在且唯一）。mode=string 时必填",
+        description: "要替换的原文（必须存在且唯一）。mode=string 时必填。若字段为空可传空字符串来添加内容",
       },
       new_str: {
         type: "string",
