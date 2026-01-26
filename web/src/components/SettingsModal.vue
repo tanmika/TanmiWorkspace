@@ -363,10 +363,14 @@ async function handleGenerateTutorial() {
         >
           [WARN] 前后端编译时间不一致，若为版本更新后需要指示 AI 重新编译前后端
         </div>
-        <div class="version-links">
-          <a class="version-link" href="javascript:void(0)" @click="openVersionModal">
-            检查版本更新 <span class="version-link-arrow">&rarr;</span>
-          </a>
+        <div class="install-entry" @click="openVersionModal">
+          <div class="install-entry-left">
+            <div class="install-entry-text">
+              <div class="install-entry-title">检查版本更新</div>
+              <div class="install-entry-desc">查看最新版本</div>
+            </div>
+          </div>
+          <div class="install-entry-arrow">→</div>
         </div>
       </div>
 
@@ -1744,35 +1748,7 @@ async function handleGenerateTutorial() {
 }
 
 /* 版本链接 */
-.version-links {
-  margin-top: 16px;
-}
-
-.version-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--accent-red);
-  text-decoration: none;
-  cursor: pointer;
-  transition: opacity 0.2s ease;
-}
-
-.version-link:hover {
-  opacity: 0.8;
-}
-
-.version-link-arrow {
-  font-size: 14px;
-  transition: transform 0.2s ease;
-}
-
-.version-link:hover .version-link-arrow {
-  transform: translateX(3px);
-}
-
-/* 安装入口 - 简洁样式 */
+/* 入口卡片 - 简洁样式 */
 .install-entry {
   display: flex;
   align-items: center;
