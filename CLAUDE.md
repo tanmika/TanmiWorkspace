@@ -11,6 +11,7 @@
 - 前端: `cd web && npm run build`
 - 开发服务器: `npm run dev:all` 或分别启动
 - **开发测试**: `./scripts/dev-rebuild.sh` (编译前后端 + 重启开发服务)
+- **开发环境 setup**: `./scripts/dev-setup.sh` (自动设置 TANMI_DEV=true)
 
 ## 注意事项
 
