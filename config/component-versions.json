@@ -5,18 +5,18 @@
     "mcp": "1.0.0",
     "hooks": "1.11.1",
     "agents": "1.11.0",
-    "skills": "1.11.1"
+    "skills": "1.11.2"
   },
   "cursor": {
     "mcp": "1.0.0",
     "hooks": "1.11.1",
     "agents": "1.11.0",
-    "skills": "1.11.1"
+    "skills": "1.11.2"
   },
   "opencode": {
     "mcp": "1.0.0",
     "plugins": "1.11.1",
     "agents": "1.11.0",
-    "skills": "1.11.1"
+    "skills": "1.11.2"
   }
 }

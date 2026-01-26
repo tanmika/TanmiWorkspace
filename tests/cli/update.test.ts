@@ -62,6 +62,17 @@ describe("CLI update - updatePluginsIfNeeded", () => {
         hooksVersion: undefined,
         hooksNeedsUpdate: false,
       },
+      opencode: {
+        plugins: false,
+        pluginsVersion: undefined,
+        pluginsNeedsUpdate: false,
+        agents: [],
+        agentsVersion: undefined,
+        agentsNeedsUpdate: false,
+        skills: [],
+        skillsVersion: undefined,
+        skillsNeedsUpdate: false,
+      },
     });
 
     const result = updatePluginsIfNeeded();
@@ -90,6 +101,17 @@ describe("CLI update - updatePluginsIfNeeded", () => {
         hooksVersion: "1.11.0",
         hooksNeedsUpdate: false,
       },
+      opencode: {
+        plugins: false,
+        pluginsVersion: undefined,
+        pluginsNeedsUpdate: false,
+        agents: [],
+        agentsVersion: undefined,
+        agentsNeedsUpdate: false,
+        skills: [],
+        skillsVersion: undefined,
+        skillsNeedsUpdate: false,
+      },
     });
 
     const result = updatePluginsIfNeeded();
@@ -117,6 +139,17 @@ describe("CLI update - updatePluginsIfNeeded", () => {
         hooks: false,
         hooksVersion: undefined,
         hooksNeedsUpdate: false,
+      },
+      opencode: {
+        plugins: false,
+        pluginsVersion: undefined,
+        pluginsNeedsUpdate: false,
+        agents: [],
+        agentsVersion: undefined,
+        agentsNeedsUpdate: false,
+        skills: [],
+        skillsVersion: undefined,
+        skillsNeedsUpdate: false,
       },
     });
 
@@ -153,6 +186,17 @@ describe("CLI update - updatePluginsIfNeeded", () => {
         hooksVersion: "1.10.7",
         hooksNeedsUpdate: true,
       },
+      opencode: {
+        plugins: false,
+        pluginsVersion: undefined,
+        pluginsNeedsUpdate: false,
+        agents: [],
+        agentsVersion: undefined,
+        agentsNeedsUpdate: false,
+        skills: [],
+        skillsVersion: undefined,
+        skillsNeedsUpdate: false,
+      },
     });
 
     mockSpawnSync.mockReturnValue({ status: 0 } as SpawnSyncReturns<Buffer>);
@@ -187,6 +231,17 @@ describe("CLI update - updatePluginsIfNeeded", () => {
         hooks: true,
         hooksVersion: "1.10.7",
         hooksNeedsUpdate: true,
+      },
+      opencode: {
+        plugins: false,
+        pluginsVersion: undefined,
+        pluginsNeedsUpdate: false,
+        agents: [],
+        agentsVersion: undefined,
+        agentsNeedsUpdate: false,
+        skills: [],
+        skillsVersion: undefined,
+        skillsNeedsUpdate: false,
       },
     });
 
@@ -230,6 +285,17 @@ describe("CLI update - updatePluginsIfNeeded", () => {
         hooksVersion: "1.10.7",
         hooksNeedsUpdate: true,
       },
+      opencode: {
+        plugins: false,
+        pluginsVersion: undefined,
+        pluginsNeedsUpdate: false,
+        agents: [],
+        agentsVersion: undefined,
+        agentsNeedsUpdate: false,
+        skills: [],
+        skillsVersion: undefined,
+        skillsNeedsUpdate: false,
+      },
     });
 
     // Claude 成功，Cursor 失败
@@ -261,6 +327,17 @@ describe("CLI update - updatePluginsIfNeeded", () => {
         hooks: false,
         hooksVersion: undefined,
         hooksNeedsUpdate: false,
+      },
+      opencode: {
+        plugins: false,
+        pluginsVersion: undefined,
+        pluginsNeedsUpdate: false,
+        agents: [],
+        agentsVersion: undefined,
+        agentsNeedsUpdate: false,
+        skills: [],
+        skillsVersion: undefined,
+        skillsNeedsUpdate: false,
       },
     });
 
@@ -294,6 +371,17 @@ describe("CLI update - updatePluginsIfNeeded", () => {
         hooks: false,
         hooksVersion: undefined,
         hooksNeedsUpdate: false,
+      },
+      opencode: {
+        plugins: false,
+        pluginsVersion: undefined,
+        pluginsNeedsUpdate: false,
+        agents: [],
+        agentsVersion: undefined,
+        agentsNeedsUpdate: false,
+        skills: [],
+        skillsVersion: undefined,
+        skillsNeedsUpdate: false,
       },
     });
 

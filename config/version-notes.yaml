@@ -9,6 +9,12 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.11.2
+    requirement: OpenCode 插件自动更新、flow-design 节点引用强化
+    conclusion: |-
+      - OpenCode 插件自动更新：tw update 命令现在会正确更新 OpenCode 插件
+      - flow-design 节点引用强化：节点必须关联参考文档，exec 节点需列出影响文件
+    note: ""
   - version: 1.11.1
     requirement: OpenCode 全面支持、WebUI 交互式安装、工作区重命名、Cursor Hook 同步
     conclusion: |-
