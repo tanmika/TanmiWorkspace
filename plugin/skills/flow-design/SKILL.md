@@ -619,8 +619,10 @@ Skill(flow-impl)
 12. MUST show plan and ask user - 展示规划并获得用户确认
 13. MUST record user answers in notes - 用户的所有回答用 notes 记录（不是 log）
 14. MUST use node_reference for citations - 引用 MEMO 或文档必须使用 node_reference，禁止直接引用
-15. NEVER modify code - 规划阶段禁止 Write/Edit
-16. NEVER dispatch - 规划阶段禁止派发
+15. MUST attach references to each node - 每个节点必须通过 node_reference 标记需要参考的文档（MEMO、设计文档、API文档等）
+16. MUST specify file modifications for exec nodes - 执行节点必须明确列出需要修改的文件及具体修改内容
+17. NEVER modify code - 规划阶段禁止 Write/Edit
+18. NEVER dispatch - 规划阶段禁止派发
 
 ---
 
@@ -637,6 +639,8 @@ Skill(flow-impl)
 | "Log is fine for recording user answers" | User answers go to notes (persistent), not log (temporary). |
 | "TDD is optional for this feature" | Feature scenario MUST follow TDD: test first → implement → verify. |
 | "I'll figure out the structure as I go" | 100% rule: subtasks must completely cover parent. Plan upfront. |
+| "This node doesn't need references" | Every node needs context. Attach relevant MEMOs, docs, or design specs via node_reference. |
+| "I'll figure out which files to modify later" | Exec nodes MUST list files and their modifications upfront. No vague "影响文件 TBD". |
 
 ---
 
@@ -657,6 +661,8 @@ Skill(flow-impl)
 - [ ] 每个节点验收标准 ≥2 条
 - [ ] 每条验收标准有 verify 方法
 - [ ] 无模糊或无意义的描述
+- [ ] 每个节点已通过 node_reference 关联参考文档
+- [ ] 每个 exec 节点已明确列出影响文件及修改内容
 
 ### 状态检查
 - [ ] 所有 planning 节点为 monitoring
