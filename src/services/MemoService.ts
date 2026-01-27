@@ -252,7 +252,7 @@ export class MemoService {
   /**
    * 全量替换 - 替换整个 memo 内容
    */
-  async replace(params: MemoReplaceParams): Promise<{ success: boolean; error?: string }> {
+  async replace(params: MemoReplaceParams): Promise<{ success: boolean; error?: string; contentHash?: string }> {
     const { workspaceId, memoId, contentHash, content, title, summary, tags } = params;
 
     // 1. 获取工作区信息
@@ -294,7 +294,10 @@ export class MemoService {
     // 8. 发送事件通知
     eventService.emitMemoUpdate(workspaceId, memoId);
 
-    return { success: true };
+    // 9. 计算并返回新的 contentHash（供后续操作复用，避免重复 memo_get）
+    const newContentHash = computeContentHash(content);
+
+    return { success: true, contentHash: newContentHash };
   }
 
   /**
@@ -304,7 +307,7 @@ export class MemoService {
    * - mode='string': 字符串精确替换，需提供 oldStr + newStr
    * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + newStr
    */
-  async edit(params: MemoEditParams): Promise<{ success: boolean; error?: string }> {
+  async edit(params: MemoEditParams): Promise<{ success: boolean; error?: string; contentHash?: string }> {
     const { workspaceId, memoId, contentHash, field, oldStr, newStr, lineStart, lineEnd } = params;
 
     // 1. 验证 mode 参数（默认 'string'）
@@ -431,13 +434,19 @@ export class MemoService {
     // 11. 发送事件通知
     eventService.emitMemoUpdate(workspaceId, memoId);
 
-    return { success: true };
+    // 12. 计算并返回新的 contentHash（供后续操作复用，避免重复 memo_get）
+    // 仅编辑 content 字段时 hash 变化，编辑 title/summary 时内容文件不变
+    const newContentHash = field === "content"
+      ? computeContentHash(newContent)
+      : contentHash;
+
+    return { success: true, contentHash: newContentHash };
   }
 
   /**
    * 行号插入 - 在指定行后插入文本
    */
-  async insert(params: MemoInsertParams): Promise<{ success: boolean; error?: string }> {
+  async insert(params: MemoInsertParams): Promise<{ success: boolean; error?: string; contentHash?: string }> {
     const { workspaceId, memoId, contentHash, line, text } = params;
 
     // 1. 获取工作区信息
@@ -505,7 +514,10 @@ export class MemoService {
     // 10. 发送事件通知
     eventService.emitMemoUpdate(workspaceId, memoId);
 
-    return { success: true };
+    // 11. 计算并返回新的 contentHash（供后续操作复用，避免重复 memo_get）
+    const newContentHash = computeContentHash(finalContent);
+
+    return { success: true, contentHash: newContentHash };
   }
 
   /**

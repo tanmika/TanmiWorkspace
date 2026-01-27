@@ -470,12 +470,22 @@ export class StateService {
       await this.json.writeIndex(index);
     }
 
+    // 13. 计算变更后的 nodeHash（供后续操作复用，避免重复 node_get）
+    const finalNodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+    const newNodeHash = computeNodeHash({
+      title: finalNodeInfo.title,
+      requirement: finalNodeInfo.requirement,
+      note: finalNodeInfo.notes,
+      conclusion: finalNodeInfo.conclusion,
+    });
+
     // 13. 返回结果
     const result: NodeTransitionResult = {
       success: true,
       previousStatus: currentStatus,
       currentStatus: newStatus,
       conclusion: conclusion ?? null,
+      nodeHash: newNodeHash,
     };
 
     // 如果有级联更新，加入返回结果

@@ -351,6 +351,8 @@ export interface NodeTransitionResult {
   previousStatus: NodeStatus;
   currentStatus: NodeStatus;
   conclusion: string | null;
+  /** 变更后的节点内容 hash，可用于后续操作的先读后写校验（避免重复 node_get） */
+  nodeHash?: string;
   cascadeUpdates?: string[];  // 级联更新的父节点状态变化
   hint?: string;              // 工作流提示，提醒 AI 下一步应做什么
   guidance?: string;          // 场景感知引导内容（L0 级别）

@@ -1183,7 +1183,7 @@ export class NodeService {
    * 全量替换节点字段
    * 直接替换 requirement/conclusion/notes 字段内容
    */
-  async replace(params: NodeReplaceParams): Promise<{ success: boolean; error?: string }> {
+  async replace(params: NodeReplaceParams): Promise<{ success: boolean; error?: string; contentHash?: string }> {
     const { workspaceId, nodeId, contentHash, requirement, conclusion, notes } = params;
 
     // 1. 获取 projectRoot 和 wsDirName
@@ -1231,9 +1231,9 @@ export class NodeService {
       updates.push("notes");
     }
 
-    // 如果没有任何更新，直接返回成功
+    // 如果没有任何更新，直接返回成功（contentHash 不变）
     if (updates.length === 0) {
-      return { success: true };
+      return { success: true, contentHash };
     }
 
     // 6. 更新时间戳
@@ -1263,7 +1263,15 @@ export class NodeService {
     // 10. 推送 SSE 事件
     eventService.emitNodeUpdate(workspaceId, nodeId);
 
-    return { success: true };
+    // 11. 计算并返回新的 contentHash（供后续操作复用，避免重复 node_get）
+    const newContentHash = computeNodeHash({
+      title: nodeInfo.title,
+      requirement: nodeInfo.requirement,
+      note: nodeInfo.notes,
+      conclusion: nodeInfo.conclusion,
+    });
+
+    return { success: true, contentHash: newContentHash };
   }
 
   /**
@@ -1273,7 +1281,7 @@ export class NodeService {
    * - mode='string': 字符串精确替换，需提供 oldStr + newStr
    * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + newStr
    */
-  async edit(params: NodeEditParams): Promise<{ success: boolean; error?: string }> {
+  async edit(params: NodeEditParams): Promise<{ success: boolean; error?: string; contentHash?: string }> {
     const { workspaceId, nodeId, contentHash, field, oldStr, newStr, lineStart, lineEnd } = params;
 
     // 1. 验证 mode 参数（默认 'string'）
@@ -1421,6 +1429,14 @@ export class NodeService {
     // 13. 推送 SSE 事件
     eventService.emitNodeUpdate(workspaceId, nodeId);
 
-    return { success: true };
+    // 14. 计算并返回新的 contentHash（供后续操作复用，避免重复 node_get）
+    const newContentHash = computeNodeHash({
+      title: nodeInfo.title,
+      requirement: nodeInfo.requirement,
+      note: nodeInfo.notes,
+      conclusion: nodeInfo.conclusion,
+    });
+
+    return { success: true, contentHash: newContentHash };
   }
 }
