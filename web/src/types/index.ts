@@ -130,10 +130,20 @@ export interface NodeMeta {
   updatedAt: string
 }
 
+// 工作流阶段
+export type WorkflowPhase = 'info' | 'design' | 'impl'
+
+// 工作流状态
+export interface WorkflowState {
+  phase: WorkflowPhase
+  phaseSkillInvoked: boolean
+}
+
 export interface NodeGraph {
   version: string
   currentFocus: string | null
   nodes: Record<string, NodeMeta>
+  workflow?: WorkflowState
 }
 
 export interface NodeTreeItem {

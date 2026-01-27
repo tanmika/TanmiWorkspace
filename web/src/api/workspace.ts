@@ -95,6 +95,11 @@ export const workspaceApi = {
   markError(id: string, message: string, errorType?: string): Promise<{ success: boolean }> {
     return client.post(`/workspaces/${id}/mark-error`, { message, errorType })
   },
+
+  // 切换工作流阶段
+  setPhase(id: string, phase: import('@/types').WorkflowPhase): Promise<{ success: boolean; phase: import('@/types').WorkflowPhase; error?: string }> {
+    return client.post(`/workspaces/${id}/phase`, { phase })
+  },
 }
 
 // 开发信息结果类型

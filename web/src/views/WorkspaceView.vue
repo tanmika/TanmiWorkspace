@@ -19,6 +19,7 @@ import DisableDispatchDialog from '@/components/dispatch/DisableDispatchDialog.v
 import SwitchDispatchModeDialog from '@/components/dispatch/SwitchDispatchModeDialog.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsModal from '@/components/ui/WsModal.vue'
+import PhaseBadge from '@/components/tree/PhaseBadge.vue'
 
 // Toast store
 const toastStore = useToastStore()
@@ -502,6 +503,19 @@ const showDisableDispatchDialog = ref(false)
 const showSwitchModeDialog = ref(false)
 const isEnablingDispatch = ref(false)
 
+async function handlePhaseChange(phase: import('@/types').WorkflowPhase) {
+  try {
+    const result = await workspaceStore.setPhase(phase)
+    if (result.success) {
+      showToast('阶段已切换', 'success')
+    } else {
+      showToast(result.error || '切换阶段失败', 'error')
+    }
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '切换阶段失败', 'error')
+  }
+}
+
 async function handleEnableDispatch() {
   await settingsStore.loadSettings()
   const mode = settingsStore.settings.defaultDispatchMode
@@ -887,6 +901,12 @@ function closeExportWarningDialog() {
                 <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
               </div>
             </div>
+          </div>
+        </div>
+        <div class="info-item info-phase">
+          <span class="info-label">Phase / 阶段</span>
+          <div class="info-value phase-value">
+            <PhaseBadge :phase="workspaceStore.currentPhase" @change="handlePhaseChange" />
           </div>
         </div>
         <div class="info-item">
@@ -1398,6 +1418,10 @@ function closeExportWarningDialog() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.info-value.phase-value {
+  overflow: visible;
 }
 
 /* 进度条 - 构成主义风格 */

@@ -10,6 +10,7 @@ import type {
   WorkspaceStatusResult,
   DocRef,
   TypedLogEntry,
+  WorkflowPhase,
 } from '@/types'
 
 // 解析 Workspace.md 提取规则和文档
@@ -115,6 +116,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const dispatch = currentWorkspace.value?.dispatch
     if (!dispatch?.enabled) return 'disabled'
     return dispatch.useGit ? 'enabled-git' : 'enabled'
+  })
+
+  // 当前工作流阶段
+  const currentPhase = computed<WorkflowPhase>(() => {
+    return currentGraph.value?.workflow?.phase || 'info'
   })
 
   // 方法
@@ -289,6 +295,30 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  async function setPhase(phase: WorkflowPhase) {
+    if (!currentWorkspace.value) {
+      throw new Error('当前没有选中的工作区')
+    }
+    error.value = null
+    try {
+      const result = await workspaceApi.setPhase(currentWorkspace.value.id, phase)
+      if (result.success && currentGraph.value) {
+        // 本地更新 workflow 状态，避免重新请求
+        currentGraph.value = {
+          ...currentGraph.value,
+          workflow: {
+            phase: result.phase,
+            phaseSkillInvoked: currentGraph.value.workflow?.phaseSkillInvoked ?? false,
+          },
+        }
+      }
+      return result
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '切换阶段失败'
+      throw e
+    }
+  }
+
   async function switchDispatchMode(useGit: boolean) {
     if (!currentWorkspace.value) {
       throw new Error('当前没有选中的工作区')
@@ -324,6 +354,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     archivedWorkspaces,
     currentFocus,
     dispatchStatus,
+    currentPhase,
     // 方法
     fetchWorkspaces,
     fetchWorkspace,
@@ -337,5 +368,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     enableDispatch,
     disableDispatch,
     switchDispatchMode,
+    setPhase,
   }
 })

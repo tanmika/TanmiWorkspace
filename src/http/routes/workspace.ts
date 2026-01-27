@@ -299,6 +299,24 @@ export async function workspaceRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
+   * POST /api/workspaces/:id/phase - 切换工作流阶段
+   */
+  fastify.post<{ Params: WorkspaceIdParams; Body: { phase: string } }>(
+    "/workspaces/:id/phase",
+    { schema: workspaceIdParamsSchema },
+    async (request: FastifyRequest<{ Params: WorkspaceIdParams; Body: { phase: string } }>) => {
+      const phase = request.body?.phase;
+      if (!phase) {
+        return { success: false, error: "phase is required" };
+      }
+      return services.workspace.setPhase(
+        request.params.id,
+        phase as "info" | "design" | "impl"
+      );
+    }
+  );
+
+  /**
    * POST /api/workspaces/:id/reload - 重新加载错误状态的工作区
    * 尝试重新加载工作区和节点树，如果成功则清除错误状态
    */

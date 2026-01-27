@@ -558,6 +558,7 @@ Read(file_path: <返回的 path>)
       currentFocus: graph.currentFocus,
       lastWriteCodeVersion: graph.lastWriteCodeVersion,
       memos: lightMemos,
+      workflow: graph.workflow,
     };
 
     const result: WorkspaceGetResult = {
@@ -2630,6 +2631,48 @@ Read(file_path: <返回的 path>)
       success: true,
       message: "状态已同步",
     };
+  }
+
+  /**
+   * 设置工作流阶段（HTTP API 专用）
+   * 直接接受阶段名称，内部执行验证和更新
+   */
+  async setPhase(workspaceId: string, phase: WorkflowPhase): Promise<{ success: boolean; phase: WorkflowPhase; error?: string; issues?: Array<{ nodeId: string; title: string; status: string; type: string }> }> {
+    // 1. 验证 phase 是否有效
+    if (!VALID_WORKFLOW_PHASES.has(phase)) {
+      return { success: false, phase, error: `无效的阶段值: ${phase}` };
+    }
+
+    // 2. 获取工作区位置信息
+    const { projectRoot, dirName } = await this.resolveWorkspaceLocation(workspaceId);
+
+    // 3. 读取 graph.json
+    const graph = await this.json.readGraph(projectRoot, dirName);
+    const currentPhase = normalizeWorkflowPhase(graph.workflow?.phase);
+
+    // 4. 验证阶段转换
+    const validation = this.validatePhaseTransition(graph, currentPhase, phase);
+    if (!validation.allowed) {
+      return { success: false, phase: currentPhase, error: validation.reason, issues: validation.issues };
+    }
+
+    // 5. 更新 workflow 状态
+    if (currentPhase === phase) {
+      return { success: true, phase: currentPhase };
+    }
+
+    graph.workflow = {
+      phase,
+      phaseSkillInvoked: false,
+    };
+
+    // 6. 写入 graph.json
+    await this.json.writeGraph(projectRoot, dirName, graph);
+
+    // 7. 发送事件通知
+    eventService.emitWorkspaceUpdate(workspaceId);
+
+    return { success: true, phase };
   }
 
   // ========== 工作区配置 ==========
