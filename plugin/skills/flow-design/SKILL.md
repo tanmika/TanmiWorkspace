@@ -555,6 +555,8 @@ node_transition({
 
 ## 第七步：展示规划并询问用户
 
+**前置条件**：执行此步骤前，所有 planning 和 execution 节点必须已通过 `node_create` 实际创建完成，并通过 `node_transition` 将 planning 节点转为 monitoring 状态。如果节点尚未创建，必须先回到第五步完成创建。
+
 ### 7.1 展示任务树
 
 模板：
@@ -621,8 +623,9 @@ Skill(flow-impl)
 14. MUST use node_reference for citations - 引用 MEMO 或文档必须使用 node_reference，禁止直接引用
 15. MUST attach references to each node - 每个节点必须通过 node_reference 标记需要参考的文档（MEMO、设计文档、API文档等）
 16. MUST specify file modifications for exec nodes - 执行节点必须明确列出需要修改的文件及具体修改内容
-17. NEVER modify code - 规划阶段禁止 Write/Edit
-18. NEVER dispatch - 规划阶段禁止派发
+17. MUST create nodes via node_create - 规划必须通过 node_create 工具实际创建节点，仅在对话中展示文字树结构不算完成规划
+18. NEVER modify code - 规划阶段禁止 Write/Edit
+19. NEVER dispatch - 规划阶段禁止派发
 
 ---
 
@@ -641,6 +644,7 @@ Skill(flow-impl)
 | "I'll figure out the structure as I go" | 100% rule: subtasks must completely cover parent. Plan upfront. |
 | "This node doesn't need references" | Every node needs context. Attach relevant MEMOs, docs, or design specs via node_reference. |
 | "I'll figure out which files to modify later" | Exec nodes MUST list files and their modifications upfront. No vague "影响文件 TBD". |
+| "I'll just show the task tree in chat" | Text output is NOT planning. Every node MUST be created via node_create tool call. |
 
 ---
 
