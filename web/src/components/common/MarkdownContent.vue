@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { marked, type Tokens } from 'marked'
 import DOMPurify from 'dompurify'
 import { initMermaid, renderMermaid, isMermaidCode, updateMermaidTheme } from '@/utils/mermaid'
@@ -19,6 +19,8 @@ onMounted(() => {
 
 // 监听主题变化，重新渲染 mermaid
 let lastTheme = getTheme()
+let themeCheckInterval: ReturnType<typeof setInterval> | null = null
+
 const checkThemeChange = () => {
   const currentTheme = getTheme()
   if (currentTheme !== lastTheme) {
@@ -28,10 +30,16 @@ const checkThemeChange = () => {
   }
 }
 
-// 定期检查主题变化（简单方案，避免复杂的事件监听）
+// 定期检查主题变化
 onMounted(() => {
-  const interval = setInterval(checkThemeChange, 500)
-  return () => clearInterval(interval)
+  themeCheckInterval = setInterval(checkThemeChange, 500)
+})
+
+onUnmounted(() => {
+  if (themeCheckInterval) {
+    clearInterval(themeCheckInterval)
+    themeCheckInterval = null
+  }
 })
 
 // 自定义 renderer 处理 mermaid 代码块
@@ -76,14 +84,26 @@ const renderedContent = computed(() => {
   })
 })
 
+// 渲染版本号，用于取消过期的渲染任务
+let renderVersion = 0
+
 // 异步渲染 mermaid 图表
 async function renderMermaidBlocks() {
+  const currentVersion = ++renderVersion
+
+  await nextTick()
+  // 双重 nextTick 确保 v-html 更新后 DOM 完全就绪
   await nextTick()
   if (!containerRef.value) return
 
   const containers = containerRef.value.querySelectorAll('.mermaid-container[data-mermaid-id]')
 
   for (const container of containers) {
+    // 如果内容已经再次变化，放弃当前渲染
+    if (renderVersion !== currentVersion) return
+    // 跳过已渲染的块
+    if (container.classList.contains('mermaid-rendered')) continue
+
     const id = container.getAttribute('data-mermaid-id')
     if (!id) continue
 
@@ -92,10 +112,14 @@ async function renderMermaidBlocks() {
 
     try {
       const svg = await renderMermaid(code)
+      // 再次检查版本，避免将过期结果写入 DOM
+      if (renderVersion !== currentVersion) return
       container.innerHTML = svg
       container.classList.add('mermaid-rendered')
     } catch (error) {
-      container.innerHTML = `<div class="mermaid-error">图表渲染失败</div>`
+      if (renderVersion === currentVersion) {
+        container.innerHTML = `<div class="mermaid-error">图表渲染失败</div>`
+      }
     }
   }
 }

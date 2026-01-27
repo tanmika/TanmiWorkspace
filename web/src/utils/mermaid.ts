@@ -74,17 +74,52 @@ export function updateMermaidTheme() {
   })
 }
 
-// 渲染单个 mermaid 图表
+// 渲染队列：串行化 mermaid 渲染，避免并发冲突
+let renderQueue: Promise<void> = Promise.resolve()
 let renderCounter = 0
-export async function renderMermaid(code: string): Promise<string> {
+
+function cleanupMermaidElement(id: string) {
+  // mermaid.render() 可能在 DOM 中残留临时元素，手动清理
+  const el = document.getElementById(id)
+  if (el) el.remove()
+  // 同时清理可能的 d{id} 容器
+  const dEl = document.getElementById('d' + id)
+  if (dEl) dEl.remove()
+}
+
+async function doRender(code: string): Promise<string> {
   const id = `mermaid-${Date.now()}-${renderCounter++}`
   try {
     const { svg } = await mermaid.render(id, code)
     return svg
   } catch (error) {
+    cleanupMermaidElement(id)
     console.error('Mermaid render error:', error)
-    return `<pre class="mermaid-error">Mermaid 渲染错误: ${error instanceof Error ? error.message : '未知错误'}</pre>`
+    throw error
   }
+}
+
+// 渲染单个 mermaid 图表（串行化 + 重试）
+export function renderMermaid(code: string, retries = 2): Promise<string> {
+  return new Promise((resolve) => {
+    renderQueue = renderQueue.then(async () => {
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const svg = await doRender(code)
+          resolve(svg)
+          return
+        } catch (error) {
+          if (attempt < retries) {
+            // 重试前重新初始化 mermaid，清除可能的脏状态
+            initMermaid()
+            await new Promise(r => setTimeout(r, 100))
+          } else {
+            resolve(`<pre class="mermaid-error">Mermaid 渲染错误: ${error instanceof Error ? error.message : '未知错误'}</pre>`)
+          }
+        }
+      }
+    })
+  })
 }
 
 // 检测是否为 mermaid 代码块
