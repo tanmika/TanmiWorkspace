@@ -837,16 +837,39 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
      * - 在系统提示末尾追加工作区上下文
      * - 注入 sessionId 信息
      * - 注入当前聚焦节点的需求和验收标准
+     *
+     * 注意：OpenCode 没有 session.created 事件，所以直接在此 hook 中生成上下文
      */
     'experimental.chat.system.transform': async (input, output) => {
-      // 检查是否有需要注入的上下文
-      if (!currentSessionState.contextToInject) {
+      const sessionId = input.sessionID;
+      if (!sessionId) {
         return;
       }
 
+      // 直接在此处生成上下文（因为 OpenCode 没有 session.created 事件）
+      const bindingModule = getBindingModule();
+      const contextModule = getContextModule();
+
+      // 检查会话绑定状态
+      const binding = bindingModule.getSessionBinding(sessionId);
+
+      let contextToInject: string;
+      if (binding) {
+        // 已绑定：生成完整工作区上下文
+        const fullContext = contextModule.getFullWorkspaceContext(binding);
+        contextToInject = fullContext || contextModule.generateSessionIdContext(sessionId, 'opencode');
+      } else {
+        // 未绑定：仅生成 sessionId 上下文
+        contextToInject = contextModule.generateSessionIdContext(sessionId, 'opencode');
+      }
+
+      // 同时更新模块级状态（供其他 hook 使用）
+      currentSessionState.sessionId = sessionId;
+      currentSessionState.binding = binding;
+      currentSessionState.contextToInject = contextToInject;
+
       // 在系统提示末尾追加 TanmiWorkspace 上下文
-      // OpenCode 的系统提示是 string[]，直接 push 字符串
-      output.system.push(currentSessionState.contextToInject);
+      output.system.push(contextToInject);
     },
   };
 };
