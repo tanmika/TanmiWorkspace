@@ -39,15 +39,18 @@ interface PluginEvent {
 
 /**
  * tool.execute.before 输入
+ * 注意：args 在 output 中，不在 input 中
  */
 interface ToolExecuteBeforeInput {
   tool: string;
-  args: Record<string, unknown>;
+  sessionID: string;
+  callID: string;
   [key: string]: unknown;
 }
 
 /**
  * tool.execute.before 输出（可修改）
+ * args 是工具调用的参数，可以在此修改
  */
 interface ToolExecuteBeforeOutput {
   args: Record<string, unknown>;
@@ -56,21 +59,23 @@ interface ToolExecuteBeforeOutput {
 
 /**
  * tool.execute.after 输入
+ * 注意：OpenCode 不在 input 中提供 args 和 result
  */
 interface ToolExecuteAfterInput {
   tool: string;
-  args: Record<string, unknown>;
-  result: unknown;
+  sessionID: string;
+  callID: string;
   [key: string]: unknown;
 }
 
 /**
  * tool.execute.after 输出（可修改）
+ * 可以修改工具执行结果的展示
  */
 interface ToolExecuteAfterOutput {
-  title?: string;
-  output?: string;
-  metadata?: Record<string, unknown>;
+  title: string;
+  output: string;
+  metadata: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -141,17 +146,18 @@ interface ChatMessageOutput {
  * 系统提示转换 hook，用于在发送给 LLM 之前修改系统提示
  */
 interface SystemTransformInput {
-  /** 原始系统提示数组 */
-  system: Array<{ type: string; text?: string; [key: string]: unknown }>;
+  /** 会话 ID */
+  sessionID: string;
   [key: string]: unknown;
 }
 
 /**
  * experimental.chat.system.transform 输出（可修改）
+ * 注意：system 是 string 数组，不是对象数组
  */
 interface SystemTransformOutput {
-  /** 修改后的系统提示数组 */
-  system: Array<{ type: string; text?: string; [key: string]: unknown }>;
+  /** 系统提示数组（每个元素是一个字符串） */
+  system: string[];
   [key: string]: unknown;
 }
 
@@ -178,13 +184,15 @@ type Plugin = (ctx: PluginContext) => Promise<PluginHooks>;
 
 // ============================================================================
 // 共享模块引用
-// 注意：shared 模块是 CommonJS 格式，使用 require() 引入
+// 注意：shared 模块是 CommonJS 格式，需要使用 createRequire 在 ES 模块中创建 require
 // ============================================================================
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const path = require('path');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const os = require('os');
+import { createRequire } from 'module';
+import path from 'path';
+import { homedir } from 'os';
+
+// 创建 require 函数用于加载 CommonJS 模块
+const require = createRequire(import.meta.url);
 
 /**
  * 获取 TanmiWorkspace 基础目录
@@ -195,7 +203,7 @@ const os = require('os');
 function getTanmiBaseDir(): string {
   const isDev = process.env.NODE_ENV === 'development' || process.env.TANMI_DEV === 'true';
   const baseDir = isDev ? '.tanmi-workspace-dev' : '.tanmi-workspace';
-  return path.join(os.homedir(), baseDir);
+  return path.join(homedir(), baseDir);
 }
 
 /**
@@ -352,14 +360,14 @@ let currentSessionState: SessionState = {
 /**
  * 获取当前会话状态（供外部模块或测试使用）
  */
-export function getSessionState(): SessionState {
+function getSessionState(): SessionState {
   return { ...currentSessionState };
 }
 
 /**
  * 重置会话状态（用于会话结束或测试）
  */
-export function resetSessionState(): void {
+function resetSessionState(): void {
   currentSessionState = {
     sessionId: null,
     binding: null,
@@ -506,7 +514,7 @@ function handleSessionIdle(): void {
  * - tool.execute.before: 工具执行前权限检查
  * - tool.execute.after: 工具执行后智能提醒
  */
-export const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) => {
+const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) => {
   // 插件初始化
   // TODO: 后续任务中实现具体逻辑
 
@@ -562,7 +570,8 @@ export const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directo
      */
     'tool.execute.before': async (input, output) => {
       const toolName = input.tool;
-      const toolArgs = input.args;
+      // 注意：args 在 output 中，不在 input 中（OpenCode API 规范）
+      const toolArgs = output.args;
 
       // 获取必要的模块
       const { WRITE_TOOLS, SPECIAL_ALLOW } = getWriteToolsModule();
@@ -675,8 +684,10 @@ export const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directo
      */
     'tool.execute.after': async (input, output) => {
       const toolName = input.tool;
-      const toolArgs = input.args;
-      const toolResult = input.result;
+      // 注意：OpenCode 的 after hook 不提供原始 args 和 result
+      // args 可能在 output.metadata 中，result 在 output.output 中
+      const toolOutput = output.output;
+      const toolMetadata = output.metadata || {};
 
       // 1. 检查是否为 tanmi-workspace MCP 工具
       // MCP 工具格式：mcp__tanmi-workspace__xxx 或 mcp__tanmi-workspace-dev1__xxx
@@ -710,22 +721,22 @@ export const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directo
       // 6. 检查是否需要生成提醒
       let reminderMessage: string | null = null;
 
-      // 6.1 node_transition(action=complete) 后提醒记录 conclusion
+      // 6.1 node_transition 后检查是否完成
+      // 由于无法获取原始 args，通过解析 output.output 判断
       if (shortToolName === 'node_transition') {
-        const action = toolArgs?.action as string;
-        if (action === 'complete') {
-          // 检查结果是否成功（工具调用成功但可能节点状态转换失败）
-          const resultStr = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult || '');
-          const isSuccess = resultStr.includes('"success":true') || resultStr.includes('"currentStatus":"completed"');
+        // 检查输出是否包含完成状态的标志
+        const outputStr = typeof toolOutput === 'string' ? toolOutput : '';
+        const isCompleteTransition = outputStr.includes('"currentStatus":"completed"') ||
+                                     outputStr.includes('completed');
+        const isSuccess = outputStr.includes('"success":true');
 
-          if (isSuccess) {
-            reminderMessage = `<tanmi-post-tool-reminder>
+        if (isCompleteTransition && isSuccess) {
+          reminderMessage = `<tanmi-post-tool-reminder>
 节点已完成。请确保 conclusion 中包含：
 - 实现内容摘要
 - 修改的文件列表
 - 验证方式
 </tanmi-post-tool-reminder>`;
-          }
         }
       }
 
@@ -755,7 +766,7 @@ export const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directo
       // 7. 如果有提醒消息，添加到输出
       if (reminderMessage) {
         // OpenCode 的 tool.execute.after 可以修改 output 对象
-        // 使用 metadata 存储提醒，或者追加到 output 字符串
+        // 追加到 output 字符串
         if (typeof output.output === 'string') {
           output.output = output.output + '\n\n' + reminderMessage;
         } else {
@@ -834,14 +845,8 @@ export const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directo
       }
 
       // 在系统提示末尾追加 TanmiWorkspace 上下文
-      // OpenCode 的系统提示是一个数组，每个元素是 { type: 'text', text: '...' }
-      const contextBlock = {
-        type: 'text',
-        text: currentSessionState.contextToInject,
-      };
-
-      // 追加到系统提示数组
-      output.system.push(contextBlock);
+      // OpenCode 的系统提示是 string[]，直接 push 字符串
+      output.system.push(currentSessionState.contextToInject);
     },
   };
 };
@@ -854,7 +859,7 @@ export default TanmiWorkspacePlugin;
 /**
  * 插件元信息（供调试和版本检查使用）
  */
-export const pluginInfo = {
+const pluginInfo = {
   name: PLUGIN_NAME,
   version: PLUGIN_VERSION,
   description: 'TanmiWorkspace integration for OpenCode',
