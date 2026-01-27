@@ -144,11 +144,11 @@ export interface MemoReplaceParams {
  * memo_edit 输入 - 精确字符串替换或行范围替换
  *
  * 替换模式：
- * - mode='string': 字符串精确替换，需提供 old_str + new_str
- * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + new_str
+ * - mode='string': 字符串精确替换，需提供 oldStr + newStr
+ * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + newStr
  *
  * 约束：
- * - old_str 和 lineStart/lineEnd 不能同时存在
+ * - oldStr 和 lineStart/lineEnd 不能同时存在
  * - 行号从 1 开始
  */
 export interface MemoEditParams {
@@ -161,9 +161,9 @@ export interface MemoEditParams {
   mode?: 'string' | 'line_range';
 
   /** 要替换的原文本（mode='string' 时必填） */
-  old_str?: string;
+  oldStr?: string;
   /** 替换后的文本 */
-  new_str: string;
+  newStr: string;
 
   /** 起始行号（mode='line_range' 时必填，从 1 开始） */
   lineStart?: number;

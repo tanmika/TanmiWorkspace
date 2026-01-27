@@ -191,12 +191,12 @@ export const memoEditTool: TanmiTool = {
   description: `精确替换备忘中的特定文本。推荐用于局部修改。使用前必须先 memo_get 获取当前内容和 contentHash。
 
 **两种模式**:
-- string（默认）：按字符串匹配替换，需提供 old_str 和 new_str
-- line_range：按行范围替换，需提供 lineStart、lineEnd 和 new_str
+- string（默认）：按字符串匹配替换，需提供 oldStr 和 newStr
+- line_range：按行范围替换，需提供 lineStart、lineEnd 和 newStr
 
 **互斥规则**:
-- mode=string 时：old_str 必填，禁止使用 lineStart/lineEnd
-- mode=line_range 时：lineStart/lineEnd 必填，禁止使用 old_str`,
+- mode=string 时：oldStr 必填，禁止使用 lineStart/lineEnd
+- mode=line_range 时：lineStart/lineEnd 必填，禁止使用 oldStr`,
   inputSchema: {
     type: "object",
     properties: {
@@ -222,11 +222,11 @@ export const memoEditTool: TanmiTool = {
         enum: ["string", "line_range"],
         description: "替换模式。string=按字符串匹配替换，line_range=按行范围替换。默认 string",
       },
-      old_str: {
+      oldStr: {
         type: "string",
         description: "要替换的原文（必须存在且唯一）。mode=string 时必填",
       },
-      new_str: {
+      newStr: {
         type: "string",
         description: "替换后的新文",
       },
@@ -239,7 +239,7 @@ export const memoEditTool: TanmiTool = {
         description: "结束行号（包含该行）。mode=line_range 时必填",
       },
     },
-    required: ["workspaceId", "memoId", "contentHash", "field", "new_str"],
+    required: ["workspaceId", "memoId", "contentHash", "field", "newStr"],
   },
 };
 

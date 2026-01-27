@@ -862,7 +862,7 @@ export class NodeService {
    * 更新节点
    */
   async update(params: NodeUpdateParams): Promise<NodeUpdateResult> {
-    const { workspaceId, nodeId, nodeHash, title, requirement, note, conclusion, field, old_str, new_str, conclusionsHash } = params;
+    const { workspaceId, nodeId, nodeHash, title, requirement, note, conclusion, field, oldStr, newStr, conclusionsHash } = params;
 
     // 1. 获取 projectRoot 和 wsDirName
     const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
@@ -899,7 +899,7 @@ export class NodeService {
 
     // 6.1 stale 节点更新 conclusion 时要求 conclusionsHash
     const nodeMeta = graph.nodes[nodeId];
-    const isUpdatingConclusion = conclusion !== undefined || (field === "conclusion" && old_str !== undefined);
+    const isUpdatingConclusion = conclusion !== undefined || (field === "conclusion" && oldStr !== undefined);
     if (nodeMeta.conclusionStale && isUpdatingConclusion) {
       if (!conclusionsHash) {
         throw new TanmiError(
@@ -926,18 +926,18 @@ export class NodeService {
       }
     }
 
-    // 7. 处理精确替换逻辑（field + old_str + new_str）
+    // 7. 处理精确替换逻辑（field + oldStr + newStr）
     const updates: string[] = [];
     let titleChanged = false;
 
-    if (field && old_str !== undefined && new_str !== undefined) {
+    if (field && oldStr !== undefined && newStr !== undefined) {
       // 精确替换模式
       const fieldKey = field === "note" ? "notes" : field;
       const targetContent = nodeInfo[fieldKey] || "";
 
       // 使用正则计算匹配次数（转义特殊字符）
       const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(escapeRegExp(old_str), "g");
+      const regex = new RegExp(escapeRegExp(oldStr), "g");
       const matches = targetContent.match(regex);
       const count = matches ? matches.length : 0;
 
@@ -949,7 +949,7 @@ export class NodeService {
       }
 
       // 执行替换
-      const newContent = targetContent.replace(old_str, new_str);
+      const newContent = targetContent.replace(oldStr, newStr);
       nodeInfo[fieldKey] = newContent;
       updates.push(`${field} 精确替换`);
     } else {
@@ -1270,19 +1270,19 @@ export class NodeService {
    * 精确替换节点字段中的特定字符串或行范围
    *
    * 替换模式：
-   * - mode='string': 字符串精确替换，需提供 old_str + new_str
-   * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + new_str
+   * - mode='string': 字符串精确替换，需提供 oldStr + newStr
+   * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + newStr
    */
   async edit(params: NodeEditParams): Promise<{ success: boolean; error?: string }> {
-    const { workspaceId, nodeId, contentHash, field, old_str, new_str, lineStart, lineEnd } = params;
+    const { workspaceId, nodeId, contentHash, field, oldStr, newStr, lineStart, lineEnd } = params;
 
     // 1. 验证 mode 参数（默认 'string'）
     const mode = params.mode ?? "string";
 
     // 2. 参数校验
     if (mode === "string") {
-      if (old_str === undefined || old_str === null) {
-        return { success: false, error: "mode=string 时 old_str 必填" };
+      if (oldStr === undefined || oldStr === null) {
+        return { success: false, error: "mode=string 时 oldStr 必填" };
       }
       if (lineStart !== undefined || lineEnd !== undefined) {
         return { success: false, error: "mode=string 时不能指定 lineStart/lineEnd" };
@@ -1291,8 +1291,8 @@ export class NodeService {
       if (lineStart === undefined || lineEnd === undefined) {
         return { success: false, error: "mode=line_range 时 lineStart 和 lineEnd 必填" };
       }
-      if (old_str !== undefined) {
-        return { success: false, error: "mode=line_range 时不能指定 old_str" };
+      if (oldStr !== undefined) {
+        return { success: false, error: "mode=line_range 时不能指定 oldStr" };
       }
       // 行号基本校验
       if (lineStart < 1) {
@@ -1341,28 +1341,28 @@ export class NodeService {
     const currentTime = now();
 
     if (mode === "string") {
-      // 8a. 字符串模式：检查 old_str 存在性和唯一性
-      // 特殊情况：old_str 为空字符串时，仅当目标字段也为空时允许（用于向空字段添加内容）
-      if (old_str === "") {
+      // 8a. 字符串模式：检查 oldStr 存在性和唯一性
+      // 特殊情况：oldStr 为空字符串时，仅当目标字段也为空时允许（用于向空字段添加内容）
+      if (oldStr === "") {
         if (targetContent !== "") {
-          return { success: false, error: "old_str 为空时，目标字段也必须为空（用于向空字段添加内容）" };
+          return { success: false, error: "oldStr 为空时，目标字段也必须为空（用于向空字段添加内容）" };
         }
-        newContent = new_str;
+        newContent = newStr;
       } else {
         const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const regex = new RegExp(escapeRegExp(old_str!), "g");
+        const regex = new RegExp(escapeRegExp(oldStr!), "g");
         const matches = targetContent.match(regex);
         const count = matches ? matches.length : 0;
 
         if (count === 0) {
-          return { success: false, error: "old_str 未找到" };
+          return { success: false, error: "oldStr 未找到" };
         }
         if (count > 1) {
-          return { success: false, error: "old_str 出现多次，请提供更精确的匹配" };
+          return { success: false, error: "oldStr 出现多次，请提供更精确的匹配" };
         }
 
         // 执行替换
-        newContent = targetContent.replace(old_str!, new_str);
+        newContent = targetContent.replace(oldStr!, newStr);
       }
     } else {
       // 8b. 行范围模式：按行替换
@@ -1376,16 +1376,16 @@ export class NodeService {
 
       // 执行行范围替换：
       // - 删除 lineStart 到 lineEnd 的行（闭区间）
-      // - 在 lineStart 位置插入 new_str（可能是多行或空字符串）
+      // - 在 lineStart 位置插入 newStr（可能是多行或空字符串）
       const beforeLines = lines.slice(0, lineStart! - 1);
       const afterLines = lines.slice(lineEnd!);
 
-      if (new_str === "") {
+      if (newStr === "") {
         // 空字符串：删除指定行
         newContent = [...beforeLines, ...afterLines].join("\n");
       } else {
         // 非空：替换为新内容（可能是多行）
-        const newLines = new_str.split("\n");
+        const newLines = newStr.split("\n");
         newContent = [...beforeLines, ...newLines, ...afterLines].join("\n");
       }
     }

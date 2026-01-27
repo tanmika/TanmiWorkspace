@@ -340,15 +340,15 @@ export const TOOLS_QUICK_REFERENCE = `
    })
    \`\`\`
 
-2. **精确替换**：使用 \`field\` + \`old_str\` + \`new_str\` 只替换部分内容
+2. **精确替换**：使用 \`field\` + \`oldStr\` + \`newStr\` 只替换部分内容
    \`\`\`typescript
    node_update({
      workspaceId: "ws-xxx",
      nodeId: "node-xxx",
      nodeHash: "abc123",
      field: "requirement",    // 目标字段
-     old_str: "旧的部分内容",  // 要替换的内容
-     new_str: "新的部分内容"   // 替换后的内容
+     oldStr: "旧的部分内容",  // 要替换的内容
+     newStr: "新的部分内容"   // 替换后的内容
    })
    \`\`\`
 
@@ -405,7 +405,7 @@ export const TOOLS_QUICK_REFERENCE = `
 | memo_list | 列出备忘录 | workspaceId, tag? |
 | memo_get | 获取备忘录详情（返回 contentHash） | workspaceId, memoId |
 | memo_replace | 全量替换备忘录内容 | workspaceId, memoId, **contentHash**, content |
-| memo_edit | 精确替换备忘录字段 | workspaceId, memoId, **contentHash**, field, new_str, ... |
+| memo_edit | 精确替换备忘录字段 | workspaceId, memoId, **contentHash**, field, newStr, ... |
 | memo_insert | 在指定行后插入内容 | workspaceId, memoId, **contentHash**, line, text |
 | memo_delete | 删除备忘录 | workspaceId, memoId |
 
@@ -439,8 +439,8 @@ export const TOOLS_QUICK_REFERENCE = `
      memoId: "memo-xxx",
      contentHash: "def456",
      field: "content",
-     old_str: "旧的部分内容",
-     new_str: "新的部分内容"
+     oldStr: "旧的部分内容",
+     newStr: "新的部分内容"
    })
    // 行范围模式
    memo_edit({
@@ -451,7 +451,7 @@ export const TOOLS_QUICK_REFERENCE = `
      mode: "line_range",
      lineStart: 10,
      lineEnd: 15,
-     new_str: "替换第10-15行的内容"
+     newStr: "替换第10-15行的内容"
    })
    \`\`\`
 

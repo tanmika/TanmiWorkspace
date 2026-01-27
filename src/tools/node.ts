@@ -299,15 +299,15 @@ export const nodeEditTool: TanmiTool = {
   description: `精确替换节点字段中的特定文本。推荐用于局部修改。使用前必须先 node_get 获取 contentHash。
 
 **两种模式**:
-- string（默认）：按字符串匹配替换，需提供 old_str 和 new_str
-- line_range：按行范围替换，需提供 lineStart、lineEnd 和 new_str
+- string（默认）：按字符串匹配替换，需提供 oldStr 和 newStr
+- line_range：按行范围替换，需提供 lineStart、lineEnd 和 newStr
 
 **互斥规则**:
-- mode=string 时：old_str 必填，禁止使用 lineStart/lineEnd
-- mode=line_range 时：lineStart/lineEnd 必填，禁止使用 old_str
+- mode=string 时：oldStr 必填，禁止使用 lineStart/lineEnd
+- mode=line_range 时：lineStart/lineEnd 必填，禁止使用 oldStr
 
 **空字段添加内容**:
-- 当字段为空时，可使用 old_str="" 来添加内容，new_str 将作为字段的新内容`,
+- 当字段为空时，可使用 oldStr="" 来添加内容，newStr 将作为字段的新内容`,
   readonly: false,
   inputSchema: {
     type: "object",
@@ -334,11 +334,11 @@ export const nodeEditTool: TanmiTool = {
         enum: ["string", "line_range"],
         description: "替换模式。string=按字符串匹配替换，line_range=按行范围替换。默认 string",
       },
-      old_str: {
+      oldStr: {
         type: "string",
         description: "要替换的原文（必须存在且唯一）。mode=string 时必填。若字段为空可传空字符串来添加内容",
       },
-      new_str: {
+      newStr: {
         type: "string",
         description: "替换后的新文",
       },
@@ -351,7 +351,7 @@ export const nodeEditTool: TanmiTool = {
         description: "结束行号（包含该行）。mode=line_range 时必填",
       },
     },
-    required: ["workspaceId", "nodeId", "contentHash", "field", "new_str"],
+    required: ["workspaceId", "nodeId", "contentHash", "field", "newStr"],
   },
 };
 

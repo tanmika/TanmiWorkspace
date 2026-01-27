@@ -369,7 +369,7 @@ export type NodeUpdateField = 'requirement' | 'note' | 'conclusion';
  *
  * 支持两种更新模式：
  * 1. 整体替换：直接提供 requirement/note/conclusion 字段值
- * 2. 精确替换：提供 field + old_str + new_str 进行字符串替换
+ * 2. 精确替换：提供 field + oldStr + newStr 进行字符串替换
  *
  * 两种模式都需要提供 nodeHash 进行先读后写校验
  */
@@ -382,12 +382,12 @@ export interface NodeUpdateParams {
   requirement?: string;
   note?: string;
   conclusion?: string;
-  /** 指定要精确替换的字段（与 old_str/new_str 配合使用） */
+  /** 指定要精确替换的字段（与 oldStr/newStr 配合使用） */
   field?: NodeUpdateField;
   /** 要替换的原文本（精确替换模式） */
-  old_str?: string;
+  oldStr?: string;
   /** 替换后的文本（精确替换模式） */
-  new_str?: string;
+  newStr?: string;
   /** 上下文 hash，stale=true 时更新 conclusion 必填（先 context_get 获取） */
   conclusionsHash?: string;
 }
@@ -457,11 +457,11 @@ export interface NodeReplaceParams {
  * node_edit 输入 - 精确字符串替换或行范围替换
  *
  * 替换模式：
- * - mode='string': 字符串精确替换，需提供 old_str + new_str
- * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + new_str
+ * - mode='string': 字符串精确替换，需提供 oldStr + newStr
+ * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + newStr
  *
  * 约束：
- * - old_str 和 lineStart/lineEnd 不能同时存在
+ * - oldStr 和 lineStart/lineEnd 不能同时存在
  * - 行号从 1 开始
  */
 export interface NodeEditParams {
@@ -475,9 +475,9 @@ export interface NodeEditParams {
   mode?: 'string' | 'line_range';
 
   /** 要替换的原文本（mode='string' 时必填） */
-  old_str?: string;
+  oldStr?: string;
   /** 替换后的文本 */
-  new_str: string;
+  newStr: string;
 
   /** 起始行号（mode='line_range' 时必填，从 1 开始） */
   lineStart?: number;

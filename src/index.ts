@@ -511,8 +511,8 @@ Read(file_path: <返回的 path>)
             contentHash: args?.contentHash as string,
             field: args?.field as "requirement" | "conclusion" | "notes",
             mode: args?.mode as "string" | "line_range" | undefined,
-            old_str: args?.old_str as string | undefined,
-            new_str: args?.new_str as string,
+            oldStr: args?.oldStr as string | undefined,
+            newStr: args?.newStr as string,
             lineStart: args?.lineStart as number | undefined,
             lineEnd: args?.lineEnd as number | undefined,
           });
@@ -846,8 +846,8 @@ Read(file_path: <返回的 path>)
             contentHash: args?.contentHash as string,
             field: args?.field as "content" | "title" | "summary",
             mode: args?.mode as "string" | "line_range" | undefined,
-            old_str: args?.old_str as string | undefined,
-            new_str: args?.new_str as string,
+            oldStr: args?.oldStr as string | undefined,
+            newStr: args?.newStr as string,
             lineStart: args?.lineStart as number | undefined,
             lineEnd: args?.lineEnd as number | undefined,
           });

@@ -183,7 +183,7 @@ export function validateAndCorrectParams(
   const validParams = getSchemaProperties(tool);
 
   // ========== 未知参数检测与自动纠正（优先于必填检查） ==========
-  // 必须先执行自动纠正，否则 camelCase 变体（如 newStr→new_str）
+  // 必须先执行自动纠正，否则命名变体（如 new_str→newStr）
   // 会在必填检查中被误报为缺失
   if (args && Object.keys(args).length > 0 && validParams.length > 0) {
     const inputParams = Object.keys(args);

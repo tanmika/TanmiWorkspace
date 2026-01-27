@@ -301,19 +301,19 @@ export class MemoService {
    * 精确替换 - 替换指定字段中的特定字符串或行范围
    *
    * 替换模式：
-   * - mode='string': 字符串精确替换，需提供 old_str + new_str
-   * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + new_str
+   * - mode='string': 字符串精确替换，需提供 oldStr + newStr
+   * - mode='line_range': 行范围替换，需提供 lineStart + lineEnd + newStr
    */
   async edit(params: MemoEditParams): Promise<{ success: boolean; error?: string }> {
-    const { workspaceId, memoId, contentHash, field, old_str, new_str, lineStart, lineEnd } = params;
+    const { workspaceId, memoId, contentHash, field, oldStr, newStr, lineStart, lineEnd } = params;
 
     // 1. 验证 mode 参数（默认 'string'）
     const mode = params.mode ?? "string";
 
     // 2. 参数校验
     if (mode === "string") {
-      if (!old_str) {
-        return { success: false, error: "mode=string 时 old_str 必填" };
+      if (!oldStr) {
+        return { success: false, error: "mode=string 时 oldStr 必填" };
       }
       if (lineStart !== undefined || lineEnd !== undefined) {
         return { success: false, error: "mode=string 时不能指定 lineStart/lineEnd" };
@@ -322,8 +322,8 @@ export class MemoService {
       if (lineStart === undefined || lineEnd === undefined) {
         return { success: false, error: "mode=line_range 时 lineStart 和 lineEnd 必填" };
       }
-      if (old_str !== undefined) {
-        return { success: false, error: "mode=line_range 时不能指定 old_str" };
+      if (oldStr !== undefined) {
+        return { success: false, error: "mode=line_range 时不能指定 oldStr" };
       }
       // 行号基本校验
       if (lineStart < 1) {
@@ -372,21 +372,21 @@ export class MemoService {
     const timestamp = now();
 
     if (mode === "string") {
-      // 8a. 字符串模式：检查 old_str 存在性和唯一性
+      // 8a. 字符串模式：检查 oldStr 存在性和唯一性
       const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(escapeRegExp(old_str!), "g");
+      const regex = new RegExp(escapeRegExp(oldStr!), "g");
       const matches = targetContent.match(regex);
       const count = matches ? matches.length : 0;
 
       if (count === 0) {
-        return { success: false, error: "old_str 未找到" };
+        return { success: false, error: "oldStr 未找到" };
       }
       if (count > 1) {
-        return { success: false, error: "old_str 出现多次，请提供更精确的匹配" };
+        return { success: false, error: "oldStr 出现多次，请提供更精确的匹配" };
       }
 
       // 执行替换
-      newContent = targetContent.replace(old_str!, new_str);
+      newContent = targetContent.replace(oldStr!, newStr);
     } else {
       // 8b. 行范围模式：按行替换
       const lines = targetContent.split("\n");
@@ -399,16 +399,16 @@ export class MemoService {
 
       // 执行行范围替换：
       // - 删除 lineStart 到 lineEnd 的行（闭区间）
-      // - 在 lineStart 位置插入 new_str（可能是多行或空字符串）
+      // - 在 lineStart 位置插入 newStr（可能是多行或空字符串）
       const beforeLines = lines.slice(0, lineStart! - 1);
       const afterLines = lines.slice(lineEnd!);
 
-      if (new_str === "") {
+      if (newStr === "") {
         // 空字符串：删除指定行
         newContent = [...beforeLines, ...afterLines].join("\n");
       } else {
         // 非空：替换为新内容（可能是多行）
-        const newLines = new_str.split("\n");
+        const newLines = newStr.split("\n");
         newContent = [...beforeLines, ...newLines, ...afterLines].join("\n");
       }
     }
