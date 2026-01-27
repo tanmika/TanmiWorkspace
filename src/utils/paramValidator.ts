@@ -182,7 +182,61 @@ export function validateAndCorrectParams(
 
   const validParams = getSchemaProperties(tool);
 
-  // ========== 必填字段检查 ==========
+  // ========== 未知参数检测与自动纠正（优先于必填检查） ==========
+  // 必须先执行自动纠正，否则 camelCase 变体（如 newStr→new_str）
+  // 会在必填检查中被误报为缺失
+  if (args && Object.keys(args).length > 0 && validParams.length > 0) {
+    const inputParams = Object.keys(args);
+
+    for (const inputParam of inputParams) {
+      // 跳过有效参数
+      if (validParams.includes(inputParam)) {
+        continue;
+      }
+
+      // 检测未知参数
+      const match = findMostSimilar(inputParam, validParams);
+
+      if (match) {
+        const [suggestedParam, sim] = match;
+
+        if (sim >= AUTO_CORRECT_THRESHOLD) {
+          // 高相似度：自动纠正 + 警告
+          // 只有当目标参数未被设置时才纠正
+          if (result.correctedArgs[suggestedParam] === undefined) {
+            result.correctedArgs[suggestedParam] = args[inputParam];
+            delete result.correctedArgs[inputParam];
+            result.warnings.push(
+              `参数自动纠正: "${inputParam}" → "${suggestedParam}"`
+            );
+          } else {
+            // 目标参数已存在，报错
+            result.errors.push(
+              `未知参数 "${inputParam}"（与已存在的 "${suggestedParam}" 冲突）`
+            );
+          }
+        } else if (sim >= SUGGEST_THRESHOLD) {
+          // 中等相似度：报错 + 建议
+          result.errors.push(
+            `未知参数 "${inputParam}"，是否想使用 "${suggestedParam}"？`
+          );
+        } else {
+          // 低相似度：报错 + 列出支持参数（不给具体建议）
+          result.errors.push(
+            `未知参数 "${inputParam}"。${toolName} 支持的参数: ${validParams.join(", ")}`
+          );
+        }
+      } else {
+        // 没有找到相似参数
+        result.errors.push(
+          `未知参数 "${inputParam}"。${toolName} 支持的参数: ${validParams.join(", ")}`
+        );
+      }
+    }
+  }
+  // ==============================================================
+
+  // ========== 必填字段检查（在自动纠正之后执行） ==========
   const requiredFields = schema.required || [];
   for (const field of requiredFields) {
     const value = result.correctedArgs[field];
@@ -203,64 +257,6 @@ export function validateAndCorrectParams(
     }
   }
   // ==================================
-
-  // 如果没有参数，跳过未知参数检查
-  if (!args || Object.keys(args).length === 0) {
-    return result;
-  }
-
-  if (validParams.length === 0) {
-    // 没有定义参数的工具，跳过验证
-    return result;
-  }
-
-  const inputParams = Object.keys(args);
-
-  for (const inputParam of inputParams) {
-    // 跳过有效参数
-    if (validParams.includes(inputParam)) {
-      continue;
-    }
-
-    // 检测未知参数
-    const match = findMostSimilar(inputParam, validParams);
-
-    if (match) {
-      const [suggestedParam, sim] = match;
-
-      if (sim >= AUTO_CORRECT_THRESHOLD) {
-        // 高相似度：自动纠正 + 警告
-        // 只有当目标参数未被设置时才纠正
-        if (result.correctedArgs[suggestedParam] === undefined) {
-          result.correctedArgs[suggestedParam] = args[inputParam];
-          delete result.correctedArgs[inputParam];
-          result.warnings.push(
-            `参数自动纠正: "${inputParam}" → "${suggestedParam}"`
-          );
-        } else {
-          // 目标参数已存在，报错
-          result.errors.push(
-            `未知参数 "${inputParam}"（与已存在的 "${suggestedParam}" 冲突）`
-          );
-        }
-      } else if (sim >= SUGGEST_THRESHOLD) {
-        // 中等相似度：报错 + 建议
-        result.errors.push(
-          `未知参数 "${inputParam}"，是否想使用 "${suggestedParam}"？`
-        );
-      } else {
-        // 低相似度：报错 + 列出支持参数（不给具体建议）
-        result.errors.push(
-          `未知参数 "${inputParam}"。${toolName} 支持的参数: ${validParams.join(", ")}`
-        );
-      }
-    } else {
-      // 没有找到相似参数
-      result.errors.push(
-        `未知参数 "${inputParam}"。${toolName} 支持的参数: ${validParams.join(", ")}`
-      );
-    }
-  }
 
   return result;
 }
