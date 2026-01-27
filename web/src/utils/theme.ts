@@ -5,6 +5,12 @@ export function getTheme(): 'light' | 'dark' {
 export function setTheme(theme: 'light' | 'dark') {
   document.documentElement.dataset.theme = theme
   localStorage.setItem('theme', theme)
+
+  // 动态切换 favicon
+  const link = document.querySelector('link[rel="icon"]') as HTMLLinkElement
+  if (link) {
+    link.href = theme === 'dark' ? '/favicon-dark.svg' : '/favicon.svg'
+  }
 }
 
 export function initTheme() {
