@@ -516,7 +516,6 @@ function handleSessionIdle(): void {
  */
 const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) => {
   // 插件初始化
-  // TODO: 后续任务中实现具体逻辑
 
   return {
     /**
@@ -580,10 +579,18 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
 
       // 辅助函数：规范化工具名（处理 MCP 工具格式）
       // MCP 工具格式：mcp__tanmi-workspace__xxx 或 mcp__tanmi-workspace-dev1__xxx
+      // OpenCode 格式：tanmi-workspace-dev2_xxx（单下划线分隔）
       const normalizeToolName = (name: string): string => {
         if (name?.startsWith('mcp__tanmi-workspace')) {
           const parts = name.split('__');
           return parts[parts.length - 1];
+        }
+        // OpenCode MCP 工具格式：tanmi-workspace-dev2_signal → signal
+        if (name?.startsWith('tanmi-workspace')) {
+          const underscoreIdx = name.indexOf('_', name.lastIndexOf('-') + 1);
+          if (underscoreIdx > 0) {
+            return name.slice(underscoreIdx + 1);
+          }
         }
         return name;
       };

@@ -807,6 +807,14 @@ async function main() {
 
   // 读取 Hook 输入
   const input = await readStdin();
+
+  // OpenCode 兼容：oh-my-opencode 的 Claude Code 兼容层会读取本文件的 hooks 配置
+  // 并在 OpenCode 中执行，导致与 OpenCode 专属插件 (plugin/opencode/) 的检查冲突。
+  // oh-my-opencode 在 stdin 中标记 hook_source: "opencode-plugin"，检测到时直接放行。
+  if (input.hook_source === 'opencode-plugin') {
+    process.exit(0);
+  }
+
   const sessionId = input.session_id;
 
   if (!sessionId) {
