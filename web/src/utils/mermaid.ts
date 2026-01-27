@@ -91,6 +91,8 @@ async function doRender(code: string): Promise<string> {
   const id = `mermaid-${Date.now()}-${renderCounter++}`
   try {
     const { svg } = await mermaid.render(id, code)
+    // 成功后也需要清理临时 DOM 元素，避免泄漏
+    cleanupMermaidElement(id)
     return svg
   } catch (error) {
     cleanupMermaidElement(id)
@@ -101,7 +103,7 @@ async function doRender(code: string): Promise<string> {
 
 // 渲染单个 mermaid 图表（串行化 + 重试）
 export function renderMermaid(code: string, retries = 2): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     renderQueue = renderQueue.then(async () => {
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
@@ -114,7 +116,8 @@ export function renderMermaid(code: string, retries = 2): Promise<string> {
             initMermaid()
             await new Promise(r => setTimeout(r, 100))
           } else {
-            resolve(`<pre class="mermaid-error">Mermaid 渲染错误: ${error instanceof Error ? error.message : '未知错误'}</pre>`)
+            // 最后一次重试失败，reject 错误
+            reject(error)
           }
         }
       }

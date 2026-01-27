@@ -517,6 +517,26 @@ function handleSessionIdle(): void {
 const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) => {
   // 插件初始化
 
+  /**
+   * 辅助函数：规范化工具名（处理 MCP 工具格式）
+   * MCP 工具格式：mcp__tanmi-workspace__xxx 或 mcp__tanmi-workspace-dev1__xxx
+   * OpenCode 格式：tanmi-workspace-dev2_xxx（单下划线分隔）
+   */
+  const normalizeToolName = (name: string): string => {
+    if (name?.startsWith('mcp__tanmi-workspace')) {
+      const parts = name.split('__');
+      return parts[parts.length - 1];
+    }
+    // OpenCode MCP 工具格式：tanmi-workspace-dev2_signal → signal
+    if (name?.startsWith('tanmi-workspace')) {
+      const underscoreIdx = name.indexOf('_', name.lastIndexOf('-') + 1);
+      if (underscoreIdx > 0) {
+        return name.slice(underscoreIdx + 1);
+      }
+    }
+    return name;
+  };
+
   return {
     /**
      * 事件监听器
@@ -576,24 +596,6 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
       const { WRITE_TOOLS, SPECIAL_ALLOW } = getWriteToolsModule();
       const { getGlobalConfig } = getConfigModule();
       const { getNodeGraph, getWorkspaceConfig } = getWorkspaceModule();
-
-      // 辅助函数：规范化工具名（处理 MCP 工具格式）
-      // MCP 工具格式：mcp__tanmi-workspace__xxx 或 mcp__tanmi-workspace-dev1__xxx
-      // OpenCode 格式：tanmi-workspace-dev2_xxx（单下划线分隔）
-      const normalizeToolName = (name: string): string => {
-        if (name?.startsWith('mcp__tanmi-workspace')) {
-          const parts = name.split('__');
-          return parts[parts.length - 1];
-        }
-        // OpenCode MCP 工具格式：tanmi-workspace-dev2_signal → signal
-        if (name?.startsWith('tanmi-workspace')) {
-          const underscoreIdx = name.indexOf('_', name.lastIndexOf('-') + 1);
-          if (underscoreIdx > 0) {
-            return name.slice(underscoreIdx + 1);
-          }
-        }
-        return name;
-      };
 
       const shortToolName = normalizeToolName(toolName);
 
@@ -694,11 +696,15 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
       // 注意：OpenCode 的 after hook 不提供原始 args 和 result
       // args 可能在 output.metadata 中，result 在 output.output 中
       const toolOutput = output.output;
-      const toolMetadata = output.metadata || {};
 
-      // 1. 检查是否为 tanmi-workspace MCP 工具
-      // MCP 工具格式：mcp__tanmi-workspace__xxx 或 mcp__tanmi-workspace-dev1__xxx
-      const isTanmiWorkspaceTool = toolName?.startsWith('mcp__tanmi-workspace');
+      // 1. 规范化工具名并检查是否为 tanmi-workspace 工具
+      const shortToolName = normalizeToolName(toolName);
+
+      // 检查是否为 tanmi-workspace MCP 工具
+      // 通过规范化后的结果判断：如果 toolName 包含 tanmi-workspace 前缀，规范化后会提取出短名称
+      const isTanmiWorkspaceTool =
+        toolName?.includes('tanmi-workspace') && shortToolName !== toolName;
+
       if (!isTanmiWorkspaceTool) {
         // 非 tanmi-workspace MCP 工具，静默返回
         return;
@@ -714,21 +720,17 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
       const now = new Date().toISOString();
       currentSessionState.lastMcpToolCallTime = now;
 
-      // 4. 提取工具短名称
-      const parts = toolName.split('__');
-      const shortToolName = parts[parts.length - 1];
-
-      // 5. 处理 log_append 调用 - 更新时间戳
+      // 4. 处理 log_append 调用 - 更新时间戳
       if (shortToolName === 'log_append') {
         currentSessionState.lastLogAppendTime = now;
         // log_append 本身不需要提醒
         return;
       }
 
-      // 6. 检查是否需要生成提醒
+      // 5. 检查是否需要生成提醒
       let reminderMessage: string | null = null;
 
-      // 6.1 node_transition 后检查是否完成
+      // 5.1 node_transition 后检查是否完成
       // 由于无法获取原始 args，通过解析 output.output 判断
       if (shortToolName === 'node_transition') {
         // 检查输出是否包含完成状态的标志
@@ -747,7 +749,7 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
         }
       }
 
-      // 6.2 长时间未调用 log_append 时提醒（30 分钟 = 1800000 毫秒）
+      // 5.2 长时间未调用 log_append 时提醒（30 分钟 = 1800000 毫秒）
       if (!reminderMessage && currentSessionState.lastLogAppendTime) {
         const { getMinutesSinceISO } = getReminderModule();
         const minutesSinceLog = getMinutesSinceISO(currentSessionState.lastLogAppendTime);
@@ -763,17 +765,16 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
         }
       }
 
-      // 6.3 首次 MCP 调用但从未记录日志（检查是否需要初始化 lastLogAppendTime）
+      // 5.3 首次 MCP 调用但从未记录日志（检查是否需要初始化 lastLogAppendTime）
       if (!reminderMessage && !currentSessionState.lastLogAppendTime) {
         // 首次调用，初始化 lastLogAppendTime 为当前时间
         // 这样 30 分钟后才会开始提醒
         currentSessionState.lastLogAppendTime = now;
       }
 
-      // 7. 如果有提醒消息，添加到输出
+      // 6. 如果有提醒消息，追加到输出
       if (reminderMessage) {
         // OpenCode 的 tool.execute.after 可以修改 output 对象
-        // 追加到 output 字符串
         if (typeof output.output === 'string') {
           output.output = output.output + '\n\n' + reminderMessage;
         } else {

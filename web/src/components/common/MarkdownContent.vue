@@ -101,8 +101,8 @@ async function renderMermaidBlocks() {
   for (const container of containers) {
     // 如果内容已经再次变化，放弃当前渲染
     if (renderVersion !== currentVersion) return
-    // 跳过已渲染的块
-    if (container.classList.contains('mermaid-rendered')) continue
+    // 跳过已渲染的块（成功或失败都会有标记）
+    if (container.classList.contains('mermaid-rendered') || container.classList.contains('mermaid-error')) continue
 
     const id = container.getAttribute('data-mermaid-id')
     if (!id) continue
@@ -117,8 +117,12 @@ async function renderMermaidBlocks() {
       container.innerHTML = svg
       container.classList.add('mermaid-rendered')
     } catch (error) {
+      // 渲染失败，显示错误信息
       if (renderVersion === currentVersion) {
-        container.innerHTML = `<div class="mermaid-error">图表渲染失败</div>`
+        const errorMsg = error instanceof Error ? error.message : '未知错误'
+        container.innerHTML = `<div class="mermaid-error">图表渲染失败: ${errorMsg}</div>`
+        // 标记为错误，避免重复渲染
+        container.classList.add('mermaid-error')
       }
     }
   }

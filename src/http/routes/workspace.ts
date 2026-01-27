@@ -306,8 +306,8 @@ export async function workspaceRoutes(fastify: FastifyInstance): Promise<void> {
     { schema: workspaceIdParamsSchema },
     async (request: FastifyRequest<{ Params: WorkspaceIdParams; Body: { phase: string } }>) => {
       const phase = request.body?.phase;
-      if (!phase) {
-        return { success: false, error: "phase is required" };
+      if (!phase || typeof phase !== 'string') {
+        return { success: false, error: "参数 'phase' 必须为非空字符串" };
       }
       return services.workspace.setPhase(
         request.params.id,

@@ -509,7 +509,15 @@ async function handlePhaseChange(phase: import('@/types').WorkflowPhase) {
     if (result.success) {
       showToast('阶段已切换', 'success')
     } else {
-      showToast(result.error || '切换阶段失败', 'error')
+      // 失败时展示错误和阻止原因
+      let errorMsg = result.error || '切换阶段失败'
+      if (result.issues && result.issues.length > 0) {
+        const issueList = result.issues
+          .map(issue => `• ${issue.title} (${issue.status})`)
+          .join('\n')
+        errorMsg += `\n\n阻止阶段切换的节点：\n${issueList}`
+      }
+      showToast(errorMsg, 'error')
     }
   } catch (error) {
     showToast(error instanceof Error ? error.message : '切换阶段失败', 'error')

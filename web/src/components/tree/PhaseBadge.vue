@@ -56,7 +56,7 @@ onUnmounted(() => {
       <span class="caret">▾</span>
     </span>
     <div v-if="showDropdown" class="phase-dropdown">
-      <div class="phase-dropdown-header">Switch Phase</div>
+      <div class="phase-dropdown-header">切换阶段</div>
       <div
         v-for="option in PHASE_OPTIONS"
         :key="option.value"

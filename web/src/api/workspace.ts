@@ -97,7 +97,12 @@ export const workspaceApi = {
   },
 
   // 切换工作流阶段
-  setPhase(id: string, phase: import('@/types').WorkflowPhase): Promise<{ success: boolean; phase: import('@/types').WorkflowPhase; error?: string }> {
+  setPhase(id: string, phase: import('@/types').WorkflowPhase): Promise<{
+    success: boolean
+    phase: import('@/types').WorkflowPhase
+    error?: string
+    issues?: Array<{ nodeId: string; title: string; status: string; type: string }>
+  }> {
     return client.post(`/workspaces/${id}/phase`, { phase })
   },
 }

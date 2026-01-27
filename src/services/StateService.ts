@@ -169,14 +169,17 @@ export class StateService {
     const nodeDirName = nodeMeta.dirName || nodeId;  // 向后兼容
 
     // 3.1 验证 nodeHash（先读后写校验，MCP 调用时必填，内部调用可跳过）
+    // 缓存 nodeInfo 用于后续计算 newNodeHash，避免重复读取磁盘
+    let cachedNodeInfo: { title: string; requirement: string; note: string; conclusion: string } | null = null;
     if (nodeHash) {
       const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
-      const currentNodeHash = computeNodeHash({
+      cachedNodeInfo = {
         title: nodeInfo.title,
         requirement: nodeInfo.requirement,
-        note: nodeInfo.notes,
+        note: nodeInfo.notes,  // readNodeInfo 返回 notes（复数），computeNodeHash 要求 note（单数）
         conclusion: nodeInfo.conclusion,
-      });
+      };
+      const currentNodeHash = computeNodeHash(cachedNodeInfo);
       if (currentNodeHash !== nodeHash) {
         throw new TanmiError("CONTENT_CHANGED", "nodeHash 不匹配，节点内容已变更。请重新调用 node_get 获取最新内容。");
       }
@@ -471,15 +474,28 @@ export class StateService {
     }
 
     // 13. 计算变更后的 nodeHash（供后续操作复用，避免重复 node_get）
-    const finalNodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
-    const newNodeHash = computeNodeHash({
-      title: finalNodeInfo.title,
-      requirement: finalNodeInfo.requirement,
-      note: finalNodeInfo.notes,
-      conclusion: finalNodeInfo.conclusion,
-    });
+    // 优先使用缓存的 nodeInfo（如果有 nodeHash 验证），只有 conclusion 可能在中间被更新
+    let newNodeHash: string;
+    if (cachedNodeInfo) {
+      // 使用缓存 + 更新后的 conclusion（nodeMeta.conclusion 是最新值）
+      newNodeHash = computeNodeHash({
+        title: cachedNodeInfo.title,
+        requirement: cachedNodeInfo.requirement,
+        note: cachedNodeInfo.note,
+        conclusion: nodeMeta.conclusion || "",
+      });
+    } else {
+      // 没有缓存，读取磁盘（这种情况只发生在没有 nodeHash 验证的内部调用）
+      const finalNodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
+      newNodeHash = computeNodeHash({
+        title: finalNodeInfo.title,
+        requirement: finalNodeInfo.requirement,
+        note: finalNodeInfo.notes,
+        conclusion: finalNodeInfo.conclusion,
+      });
+    }
 
-    // 13. 返回结果
+    // 14. 返回结果
     const result: NodeTransitionResult = {
       success: true,
       previousStatus: currentStatus,
