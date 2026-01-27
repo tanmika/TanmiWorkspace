@@ -111,51 +111,11 @@ function handleSessionStart(sessionId, binding, input) {
   let logDetails = {};
 
   if (binding) {
-    // 已绑定：检测工作流状态
-    const graph = getNodeGraph(binding.workspaceId);
-    const rawWorkflow = graph?.workflow || { phase: 'info', phaseSkillInvoked: false };
-    const workflow = {
-      phase: normalizeWorkflowPhase(rawWorkflow.phase),
-      phaseSkillInvoked: rawWorkflow.phaseSkillInvoked || false
-    };
-
-    if (!workflow.phaseSkillInvoked) {
-      // 需要引导调用阶段 Skill
-      const skillName = getSkillForPhase(workflow.phase);
-      context = getFullWorkspaceContext(binding);
-
-      const actionRequired = {
-        type: 'invoke_skill',
-        message: `请调用 ${skillName} 开始当前阶段工作`,
-        data: { skill: skillName, phase: workflow.phase }
-      };
-
-      logDetails = {
-        bound: true,
-        workspaceId: binding.workspaceId,
-        workflow: { phase: workflow.phase, phaseSkillInvoked: false },
-        actionRequired: true
-      };
-
-      logHookOutput(sessionId, 'SessionStart', 'output', logDetails, context);
-
-      const response = {
-        hookSpecificOutput: {
-          hookEventName: 'SessionStart',
-          additionalContext: context,
-          actionRequired: actionRequired
-        }
-      };
-      console.log(JSON.stringify(response));
-      return;
-    }
-
-    // phaseSkillInvoked=true：正常注入工作区上下文
+    // 已绑定：注入完整工作区上下文
     context = getFullWorkspaceContext(binding);
     logDetails = {
       bound: true,
-      workspaceId: binding.workspaceId,
-      workflow: { phase: workflow.phase, phaseSkillInvoked: true }
+      workspaceId: binding.workspaceId
     };
   } else {
     // 未绑定：检查是否有匹配的工作区
@@ -793,6 +753,72 @@ function handleUserPromptSubmit(sessionId, binding, input) {
   }
 }
 
+/**
+ * 处理 PreCompact 事件
+ * 在会话压缩前重置 phaseSkillInvoked，强制压缩后重新调用 skill
+ */
+function handlePreCompact(sessionId, binding, input) {
+  // 未绑定工作区时不处理
+  if (!binding?.workspaceId) {
+    logHookOutput(sessionId, 'PreCompact', 'silent', { reason: 'not_bound' });
+    process.exit(0);
+    return;
+  }
+
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { getWorkspaceLocation } = require('./shared/binding.cjs');
+  const { getNodeGraph } = require('./shared/workspace.cjs');
+
+  try {
+    const location = getWorkspaceLocation(binding.workspaceId);
+    if (!location) {
+      logHookOutput(sessionId, 'PreCompact', 'silent', { reason: 'workspace_not_found' });
+      process.exit(0);
+      return;
+    }
+
+    const { projectRoot, dirName, isArchived } = location;
+    const graph = getNodeGraph(binding.workspaceId);
+
+    if (graph?.workflow) {
+      // 重置 phaseSkillInvoked，强制压缩后重新调用 skill
+      if (graph.workflow.phaseSkillInvoked !== false) {
+        graph.workflow.phaseSkillInvoked = false;
+
+        // 构造 graph.json 路径并写入
+        const basePath = isArchived ? '.tanmiworkspace-archive' : '.tanmiworkspace';
+        const graphPath = path.join(projectRoot, basePath, dirName, 'graph.json');
+        fs.writeFileSync(graphPath, JSON.stringify(graph, null, 2), 'utf-8');
+
+        logHookOutput(sessionId, 'PreCompact', 'output', {
+          workspaceId: binding.workspaceId,
+          phase: graph.workflow.phase,
+          resetPhaseSkillInvoked: true,
+          trigger: input.trigger || 'unknown'
+        });
+      } else {
+        logHookOutput(sessionId, 'PreCompact', 'silent', {
+          workspaceId: binding.workspaceId,
+          reason: 'already_false'
+        });
+      }
+    } else {
+      logHookOutput(sessionId, 'PreCompact', 'silent', {
+        workspaceId: binding.workspaceId,
+        reason: 'no_workflow'
+      });
+    }
+  } catch (error) {
+    logHookOutput(sessionId, 'PreCompact', 'error', {
+      workspaceId: binding.workspaceId,
+      error: error.message
+    });
+  }
+
+  process.exit(0);
+}
+
 // ============================================================================
 // 主逻辑
 // ============================================================================
@@ -847,6 +873,10 @@ async function main() {
       handleStop(sessionId, binding, input);
       break;
 
+    case 'PreCompact':
+      handlePreCompact(sessionId, binding, input);
+      break;
+
     default:
       // 未知事件，静默退出
       process.exit(0);
@@ -872,6 +902,7 @@ module.exports = {
   handleSessionStart,
   handleUserPromptSubmit,
   handlePostToolUse,
+  handlePreCompact,
   handlePreToolUse,
   handleStop,
   // 常量

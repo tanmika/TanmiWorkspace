@@ -669,6 +669,71 @@ mcp-cli info ${toolPath}
   }
 }
 
+/**
+ * 处理 preCompact 事件
+ * 在会话压缩前重置 phaseSkillInvoked，强制压缩后重新调用 skill
+ */
+function handlePreCompact(conversationId, binding, input) {
+  // 未绑定工作区时不处理
+  if (!binding?.workspaceId) {
+    logHookOutput(conversationId, 'preCompact', 'silent', { reason: 'not_bound' });
+    passThrough();
+    return;
+  }
+
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { getWorkspaceLocation } = require('./shared/binding.cjs');
+  const { getNodeGraph } = require('./shared/workspace.cjs');
+
+  try {
+    const location = getWorkspaceLocation(binding.workspaceId);
+    if (!location) {
+      logHookOutput(conversationId, 'preCompact', 'silent', { reason: 'workspace_not_found' });
+      passThrough();
+      return;
+    }
+
+    const { projectRoot, dirName, isArchived } = location;
+    const graph = getNodeGraph(binding.workspaceId);
+
+    if (graph?.workflow) {
+      // 重置 phaseSkillInvoked，强制压缩后重新调用 skill
+      if (graph.workflow.phaseSkillInvoked !== false) {
+        graph.workflow.phaseSkillInvoked = false;
+
+        // 构造 graph.json 路径并写入
+        const basePath = isArchived ? '.tanmiworkspace-archive' : '.tanmiworkspace';
+        const graphPath = path.join(projectRoot, basePath, dirName, 'graph.json');
+        fs.writeFileSync(graphPath, JSON.stringify(graph, null, 2), 'utf-8');
+
+        logHookOutput(conversationId, 'preCompact', 'output', {
+          workspaceId: binding.workspaceId,
+          phase: graph.workflow.phase,
+          resetPhaseSkillInvoked: true
+        });
+      } else {
+        logHookOutput(conversationId, 'preCompact', 'silent', {
+          workspaceId: binding.workspaceId,
+          reason: 'already_false'
+        });
+      }
+    } else {
+      logHookOutput(conversationId, 'preCompact', 'silent', {
+        workspaceId: binding.workspaceId,
+        reason: 'no_workflow'
+      });
+    }
+  } catch (error) {
+    logHookOutput(conversationId, 'preCompact', 'error', {
+      workspaceId: binding.workspaceId,
+      error: error.message
+    });
+  }
+
+  passThrough();
+}
+
 // ============================================================================
 // 主逻辑
 // ============================================================================
@@ -722,6 +787,10 @@ async function main() {
 
     case 'stop':
       handleStop(conversationId, binding, input);
+      break;
+
+    case 'preCompact':
+      handlePreCompact(conversationId, binding, input);
       break;
 
     default:

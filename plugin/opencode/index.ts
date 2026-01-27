@@ -438,6 +438,54 @@ function handleSessionDeleted(sessionId: string): void {
 }
 
 /**
+ * 处理 experimental.session.compacting 事件
+ * 在会话压缩前重置 phaseSkillInvoked，强制压缩后重新调用 skill
+ */
+function handleSessionCompacting(sessionId: string): void {
+  // 1. 检查是否有绑定的工作区
+  if (!currentSessionState.binding?.workspaceId) {
+    // 未绑定工作区，无需处理
+    return;
+  }
+
+  const workspaceId = currentSessionState.binding.workspaceId;
+
+  // 2. 获取工作区模块
+  const workspaceModule = getWorkspaceModule();
+  const bindingModule = getBindingModule();
+
+  // 3. 获取工作区位置和节点图
+  const location = bindingModule.getWorkspaceLocation(workspaceId);
+  if (!location) {
+    return;
+  }
+
+  const graph = workspaceModule.getNodeGraph(workspaceId);
+  if (!graph || !graph.workflow) {
+    return;
+  }
+
+  // 4. 重置 phaseSkillInvoked
+  if (graph.workflow.phaseSkillInvoked !== false) {
+    graph.workflow.phaseSkillInvoked = false;
+
+    // 5. 写回文件
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const { projectRoot, dirName, isArchived } = location;
+    const basePath = isArchived ? '.tanmiworkspace-archive' : '.tanmiworkspace';
+    const graphPath = path.join(projectRoot, basePath, dirName, 'graph.json');
+
+    try {
+      fs.writeFileSync(graphPath, JSON.stringify(graph, null, 2), 'utf-8');
+      // console.error(`[TanmiWorkspace] Compacting: reset phaseSkillInvoked for workspace ${workspaceId}`);
+    } catch (error) {
+      console.error(`[TanmiWorkspace] Failed to reset phaseSkillInvoked:`, error);
+    }
+  }
+}
+
+/**
  * 处理 session.idle 事件
  * 检测会话状态：未提交的问题、未完成的节点等
  * 记录警告日志供后续查看
@@ -571,6 +619,17 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
         case 'session.idle': {
           // 会话空闲事件：检测未完成的工作状态并记录警告
           handleSessionIdle();
+          break;
+        }
+
+        case 'experimental.session.compacting': {
+          // 会话压缩前事件：重置 phaseSkillInvoked
+          const session = event.session as { id?: string } | undefined;
+          const sessionId = session?.id || currentSessionState.sessionId;
+
+          if (sessionId) {
+            handleSessionCompacting(sessionId);
+          }
           break;
         }
 

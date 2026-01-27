@@ -138,17 +138,34 @@ export class SessionService {
       throw new TanmiError("WORKSPACE_NOT_FOUND", `工作区 "${workspaceId}" 的项目目录不存在`);
     }
 
+    // 读取 graph 用于节点验证和 workflow 重置
+    const graph = await this.json.readGraph(projectRoot, dirName, isArchived);
+    let graphModified = false;
+
     // 如果指定了节点，验证节点存在并同步到 graph.currentFocus
     if (nodeId) {
-      const graph = await this.json.readGraph(projectRoot, dirName, isArchived);
       if (!graph.nodes[nodeId]) {
         throw new TanmiError("NODE_NOT_FOUND", `节点 "${nodeId}" 不存在`);
       }
       // 同步聚焦节点到 graph.currentFocus，确保单一数据源
       if (graph.currentFocus !== nodeId) {
         graph.currentFocus = nodeId;
-        await this.json.writeGraph(projectRoot, dirName, graph);
+        graphModified = true;
       }
+    }
+
+    // 重置 phaseSkillInvoked，强制新会话重新调用 skill
+    if (!graph.workflow) {
+      graph.workflow = { phase: "info", phaseSkillInvoked: false };
+      graphModified = true;
+    } else if (graph.workflow.phaseSkillInvoked !== false) {
+      graph.workflow.phaseSkillInvoked = false;
+      graphModified = true;
+    }
+
+    // 如果 graph 被修改，写回文件
+    if (graphModified) {
+      await this.json.writeGraph(projectRoot, dirName, graph);
     }
 
     // 获取工作区名称
