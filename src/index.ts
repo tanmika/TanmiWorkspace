@@ -899,12 +899,23 @@ Read(file_path: <返回的 path>)
             throw new Error("scenario 参数必填。请传入 scenario 参数，或确保当前会话已绑定到包含 scenario 配置的工作区。");
           }
 
-          const { capabilityService } = await import("./services/CapabilityService.js");
+          const { capabilityService, ALL_CAPABILITY_IDS } = await import("./services/CapabilityService.js");
           const capabilities = capabilityService.getCapabilitiesForScenario(scenario);
+
+          // 计算 basePack + optionalPack 之外的剩余能力（仅 id + name，不含 description）
+          const usedIds = new Set([
+            ...capabilities.basePack.map(c => c.id),
+            ...capabilities.optionalPack.map(c => c.id),
+          ]);
+          const remainingPack = ALL_CAPABILITY_IDS
+            .filter(id => !usedIds.has(id))
+            .map(id => ({ id, name: capabilityService.getCapabilityInfo(id).name }));
+
           result = {
             scenario,
             basePack: capabilities.basePack,
             optionalPack: capabilities.optionalPack,
+            remainingPack,
             hint: "使用 capability_select 确认选择的能力包",
           };
           break;

@@ -46,8 +46,9 @@ capability_list({ workspaceId: "ws-xxx" })
 ```
 
 返回：
-- basePack：必选能力（全部必须选择）
-- optionalPack：可选能力（用户选择）
+- basePack：必选能力（全部必须选择，含 id + name + description）
+- optionalPack：推荐可选能力（含 id + name + description）
+- remainingPack：其他可选能力（仅 id + name，不含 description）
 
 ### 3.2 展示并询问用户
 
@@ -60,12 +61,19 @@ capability_list({ workspaceId: "ws-xxx" })
 - **{能力名}**: {任务语境下的具体作用}
 - **{能力名}**: {任务语境下的具体作用}
 
-还可以选择：
+还推荐选择以下能力：
   a. **{能力名}** - {语境下描述}
   b. **{能力名}** - {语境下描述}
 
-需要添加哪些？（输入序号如 a、ab，或回车跳过）
+除此之外还可以选择：{能力名1}、{能力名2}、...
+
+需要添加哪些？（输入序号如 a、ab，或输入能力名称，回车跳过）
 ```
+
+展示规则：
+- 如果 optionalPack 为空，省略「还推荐选择」段落
+- 如果 remainingPack 为空，省略「除此之外」段落
+- 「除此之外」仅列名称，不展开描述，保持简洁
 
 任务类型对照：
 | 类型 | 使用场景 |
@@ -79,6 +87,7 @@ capability_list({ workspaceId: "ws-xxx" })
 规则：
 - basePack：直接说「我将执行」，不问用户
 - optionalPack：用 abc 序号，方便用户输入
+- remainingPack：仅枚举名称，用户可通过名称选择
 - MUST 等待用户响应后再调用 capability_select
 - MUST 用 **notes** 记录用户回答（不是 log）
 
