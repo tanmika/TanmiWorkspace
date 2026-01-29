@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useNodeStore, useWorkspaceStore } from '@/stores'
-import { STATUS_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type TransitionAction } from '@/types'
+import { STATUS_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type TransitionAction, type DocRef, type DocRefMemo, type DocRefNode } from '@/types'
 import NodeIcon from '@/components/tree/NodeIcon.vue'
 import DispatchBadge from '@/components/tree/DispatchBadge.vue'
 import MarkdownContent from '@/components/common/MarkdownContent.vue'
@@ -17,6 +17,10 @@ const emit = defineEmits<{
 
 const nodeStore = useNodeStore()
 const workspaceStore = useWorkspaceStore()
+
+// 类型守卫函数
+const isMemoRef = (doc: DocRef): doc is DocRefMemo => doc.refType === 'memo'
+const isNodeRef = (doc: DocRef): doc is DocRefNode => doc.refType === 'node'
 
 // 弹窗状态
 const showPromptDialog = ref(false)
@@ -286,9 +290,9 @@ function handleNodeClick(nodeId: string) {
         <template v-for="doc in currentNode.docs" :key="doc.path">
           <!-- memo 引用：显示为可点击的富卡片 -->
           <div
-            v-if="doc.refType === 'memo' && doc.memoMeta"
+            v-if="isMemoRef(doc) && doc.memoMeta"
             class="ref-card-base memo-ref-card"
-            @click="handleMemoClick(doc.memoMeta.id)"
+            @click="handleMemoClick(doc.memoMeta!.id)"
           >
             <div class="memo-ref-header">
               <NodeIcon
@@ -296,13 +300,13 @@ function handleNodeClick(nodeId: string) {
                 status="pending"
                 :is-memo="true"
               />
-              <span class="memo-ref-title">{{ doc.memoMeta.title }}</span>
+              <span class="memo-ref-title">{{ doc.memoMeta!.title }}</span>
             </div>
-            <div class="memo-ref-meta" v-if="doc.memoMeta.summary || doc.memoMeta.tags?.length">
-              <div class="memo-ref-summary" v-if="doc.memoMeta.summary">{{ doc.memoMeta.summary }}</div>
-              <div class="memo-ref-tags" v-if="doc.memoMeta.tags?.length">
+            <div class="memo-ref-meta" v-if="doc.memoMeta!.summary || doc.memoMeta!.tags?.length">
+              <div class="memo-ref-summary" v-if="doc.memoMeta!.summary">{{ doc.memoMeta!.summary }}</div>
+              <div class="memo-ref-tags" v-if="doc.memoMeta!.tags?.length">
                 <span
-                  v-for="tag in doc.memoMeta.tags"
+                  v-for="tag in doc.memoMeta!.tags"
                   :key="tag"
                   class="memo-mini-tag"
                 >{{ tag }}</span>
@@ -311,18 +315,18 @@ function handleNodeClick(nodeId: string) {
           </div>
           <!-- node 引用：显示为可点击的富卡片 -->
           <div
-            v-else-if="doc.refType === 'node' && doc.nodeMeta"
+            v-else-if="isNodeRef(doc) && doc.nodeMeta"
             class="ref-card-base node-ref-card"
-            @click="handleNodeClick(doc.nodeMeta.id)"
+            @click="handleNodeClick(doc.nodeMeta!.id)"
           >
             <div class="node-ref-header">
               <NodeIcon
-                :type="doc.nodeMeta.type"
-                :status="doc.nodeMeta.status"
+                :type="doc.nodeMeta!.type"
+                :status="doc.nodeMeta!.status"
               />
-              <span class="node-ref-title">{{ doc.nodeMeta.title }}</span>
-              <span class="node-ref-status" :data-status="doc.nodeMeta.status">
-                {{ STATUS_CONFIG[doc.nodeMeta.status]?.label || doc.nodeMeta.status }}
+              <span class="node-ref-title">{{ doc.nodeMeta!.title }}</span>
+              <span class="node-ref-status" :data-status="doc.nodeMeta!.status">
+                {{ STATUS_CONFIG[doc.nodeMeta!.status]?.label || doc.nodeMeta!.status }}
               </span>
             </div>
             <div class="node-ref-desc" v-if="doc.description">{{ doc.description }}</div>

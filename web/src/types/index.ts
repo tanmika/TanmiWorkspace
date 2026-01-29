@@ -102,8 +102,8 @@ export interface DocRefFile {
 // 文档引用（Discriminated Union）
 export type DocRef = DocRefMemo | DocRefNode | DocRefFile
 
-export interface DocRefWithStatus extends DocRef {
-  status: 'active' | 'expired'
+export type DocRefWithStatus = DocRef & {
+  status?: 'active' | 'expired'
 }
 
 export interface WorkspaceEntry {

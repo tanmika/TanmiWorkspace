@@ -47,7 +47,7 @@ interface TutorialNode {
   conclusion?: string;    // 结论
   note?: string;          // 备注
   problem?: string;       // 问题
-  docs?: Array<{ path: string; description: string }>;  // 节点文档引用
+  docs?: Array<{ refType: "file"; path: string; description: string }>;  // 节点文档引用
   logs?: Array<{ operator: "AI" | "Human"; event: string }>;
   setFocus?: boolean;     // 是否设为焦点
   children?: TutorialNode[];
@@ -84,7 +84,7 @@ const TUTORIAL_CONTENT = {
     "规则用于约束 AI 行为，如代码风格、提交规范等",
   ],
   docs: [
-    { path: "README.md", description: "项目说明文档（演示用）" },
+    { refType: "file" as const, path: "README.md", description: "项目说明文档（演示用）" },
   ],
   nodes: [
     // 界面导航

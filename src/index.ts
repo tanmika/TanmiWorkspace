@@ -25,6 +25,7 @@ import { resolvePluginPath } from "./utils/pluginPath.js";
 import { workspaceTools } from "./tools/workspace.js";
 import { nodeTools } from "./tools/node.js";
 import type { AcceptanceCriteria } from "./types/node.js";
+import type { DocRef } from "./types/workspace.js";
 import { FLOW_SKILLS } from "./constants/skills.js";
 import { stateTools } from "./tools/state.js";
 import { contextTools } from "./tools/context.js";
@@ -304,11 +305,21 @@ function createMcpServer(services: Services): Server {
             );
           }
 
+          // 处理 docs 参数：确保所有引用都有 refType 字段
+          let docs: DocRef[] | undefined;
+          if (args?.docs && Array.isArray(args.docs)) {
+            docs = (args.docs as Array<any>).map((doc: any) => ({
+              refType: doc.refType || "file",  // 默认为 file 类型
+              path: doc.path,
+              description: doc.description,
+            } as DocRef));
+          }
+
           result = await services.workspace.init({
             name: args.name as string,
             goal: args.goal as string,
             rules: args?.rules as string[] | undefined,
-            docs: args?.docs as Array<{ path: string; description: string }> | undefined,
+            docs,
             scenario: args?.scenario as 'feature' | 'summary' | 'optimize' | 'debug' | 'misc' | undefined,
           });
           break;
@@ -447,13 +458,23 @@ Read(file_path: <返回的 path>)
             }
           }
 
+          // 处理 docs 参数：确保所有引用都有 refType 字段
+          let nodeDocs: DocRef[] | undefined;
+          if (args?.docs && Array.isArray(args.docs)) {
+            nodeDocs = (args.docs as Array<any>).map((doc: any) => ({
+              refType: doc.refType || "file",  // 默认为 file 类型
+              path: doc.path,
+              description: doc.description,
+            } as DocRef));
+          }
+
           result = await services.node.create({
             workspaceId: args?.workspaceId as string,
             parentId: args?.parentId as string,
             type: args?.type as "planning" | "execution",
             title: args?.title as string,
             requirement: args?.requirement as string | undefined,
-            docs: args?.docs as Array<{ path: string; description: string }> | undefined,
+            docs: nodeDocs,
             rulesHash,
             role: nodeRole,
             acceptanceCriteria: args?.acceptanceCriteria as AcceptanceCriteria[] | undefined,

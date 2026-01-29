@@ -190,16 +190,7 @@ export class MarkdownStorage {
     if (docsMatch) {
       const docsContent = docsMatch[1].trim();
       if (docsContent) {
-        const docLines = docsContent.split("\n").filter(line => line.startsWith("- "));
-        for (const line of docLines) {
-          const docMatch = line.match(/- \[(.+?)\]\((.+?)\)(?: - (.+))?/);
-          if (docMatch) {
-            docs.push({
-              path: docMatch[2],
-              description: docMatch[3] || docMatch[1]
-            });
-          }
-        }
+        docs.push(...this.parseDocs(docsContent));
       }
     }
 
@@ -335,16 +326,7 @@ ${docsContent}
     if (docsMatch) {
       const docsContent = docsMatch[1].trim();
       if (docsContent) {
-        const docLines = docsContent.split("\n").filter(line => line.startsWith("- "));
-        for (const line of docLines) {
-          const docMatch = line.match(/- \[(.+?)\]\((.+?)\)(?: - (.+))?/);
-          if (docMatch) {
-            docs.push({
-              path: docMatch[2],
-              description: docMatch[3] || docMatch[1]
-            });
-          }
-        }
+        docs.push(...this.parseDocs(docsContent));
       }
     }
 

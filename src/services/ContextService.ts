@@ -648,7 +648,10 @@ export class ContextService {
           });
           // 填充 memoMeta
           enrichedDocs.push({
-            ...doc,
+            refType: "memo",
+            path: doc.path,
+            description: doc.description,
+            status: doc.status,
             memoMeta: {
               id: memoResult.memo.id,
               title: memoResult.memo.title,
@@ -674,7 +677,10 @@ export class ContextService {
           try {
             const refInfo = await this.md.readNodeInfo(projectRoot, wsDirName, refDirName);
             enrichedDocs.push({
-              ...doc,
+              refType: "node",
+              path: doc.path,
+              description: doc.description,
+              status: doc.status,
               nodeMeta: {
                 id: refNodeId,
                 title: refInfo.title,

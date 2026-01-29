@@ -44,6 +44,7 @@ function parseWorkspaceMd(md: string): { rules: string[]; docs: DocRef[] } {
         const docMatch = trimmed.match(/^- \[(.+?)\]\((.+?)\)(?: - (.+))?$/)
         if (docMatch && docMatch[1] && docMatch[2]) {
           docs.push({
+            refType: 'file',
             path: docMatch[2],
             description: docMatch[3] || docMatch[1],
           })

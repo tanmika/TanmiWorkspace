@@ -11,6 +11,44 @@
 - **x.Y.z (Minor)**: 新功能引入、较大改进
 - **X.y.z (Major)**: 破坏性变更、架构重构
 
+## [1.11.4] - 2026-01-29
+
+### Added
+
+- **节点引用富卡片**: WebUI 中节点引用以富卡片形式展示（图标+标题+状态），支持点击跳转到目标节点
+- **引用格式规范化**: 支持 URI 协议格式（node://, memo://, file://），智能纠错自动补全协议和路径转换
+- **工作区阶段徽章**: WebUI 添加阶段徽章，支持点击切换工作流阶段（INFO/PLAN/EXEC）
+- **三层能力包**: capability_list 返回 basePack/optionalPack/remainingPack，解决部分场景无可选能力的问题
+
+### Improved
+
+- **Skills 场景特化**: 为 Optimize/Debug/Summary 等场景添加专门的引导内容（歧义识别、度量指标、设计考量、诊断策略、探索重点、验证策略）
+- **暗色模式图标适配**: favicon 和 logo 支持深色模式自适应，解决暗色背景下不可见问题
+- **flow-design 节点创建**: 强调必须通过 node_create 实际创建节点，防止弱模型只输出文字树结构
+- **mutation 操作优化**: node_edit/node_replace/memo_edit 等操作返回新的 contentHash/nodeHash，避免重复调用 get 获取全量内容
+- **MCP 参数命名统一**: 所有工具参数统一为 camelCase 风格（old_str→oldStr，new_str→newStr），自动向后兼容 snake_case 调用
+
+### Fixed
+
+- **引用系统核心修复**:
+  - 修复引用清理被后续写回覆盖的问题（cleanup 后重新读取 graph 同步更新）
+  - 修复节点引用失败时未标记为 expired 的不一致问题
+  - 完善测试覆盖（30 个测试全部通过）
+- **会话绑定状态重置**: 修复会话绑定和压缩时未重置 phaseSkillInvoked 导致 AI 不重新调用阶段 skill 的问题
+- **Mermaid 渲染**: 修复图表渲染卡在"加载中"的问题（串行化队列、失败重试、DOM 清理、定时器泄漏修复）
+- **OpenCode 插件支持**:
+  - 修复插件加载失败问题（ES 模块语法、多重导出、Hook 参数签名）
+  - 修复上下文注入失效（改用 experimental.chat.system.transform hook）
+  - 修复工具名识别和 Hook 冲突问题
+- **参数验证顺序**: 修复参数自动纠正在必填检查之后执行导致的误报问题
+- **StateService 性能**: 减少 transition 方法中的多余磁盘读取（缓存 nodeInfo）
+- **Phase API 改进**: 错误返回包含阻止阶段切换的具体节点信息
+
+### Refactor
+
+- **引用类型系统**: DocRef 改为 discriminated union（使用 refType 字段），提升类型安全
+- **引用管理代码**: 合并重复的引用类型检查代码，统一前端 CSS 和事件处理模式
+
 ## [1.11.2] - 2026-01-26
 
 ### Improved

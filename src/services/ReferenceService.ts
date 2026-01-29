@@ -307,7 +307,7 @@ export class ReferenceService {
         uri: input,
         path: filePath,
       };
-      await this.validateFilePath(projectRoot, result.path);
+      await this.validateFilePath(projectRoot, result.path!);
       return result;
     }
 
@@ -376,7 +376,7 @@ export class ReferenceService {
         uri: `file://${input}`,
         path: input,
       };
-      await this.validateFilePath(projectRoot, result.path);
+      await this.validateFilePath(projectRoot, result.path!);
       return result;
     }
 
@@ -386,7 +386,7 @@ export class ReferenceService {
       uri: `file://${input}`,
       path: input,
     };
-    await this.validateFilePath(projectRoot, result.path);
+    await this.validateFilePath(projectRoot, result.path!);
     return result;
   }
 

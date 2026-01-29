@@ -9,6 +9,20 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.11.4
+    requirement: 引用系统增强、WebUI 交互优化、多项稳定性修复
+    conclusion: |-
+      - 节点引用富卡片: 点击引用直接跳转，查看节点状态更直观
+      - 引用格式规范化: 支持 node://、memo://、file:// 格式，自动纠错
+      - 工作区阶段切换: 可在 WebUI 点击徽章快速切换工作流阶段
+      - 能力包优化: 所有场景都能看到完整可选能力
+      - 暗色模式图标修复: logo 和 favicon 在深色背景下显示正常
+      - Skills 场景特化: 不同任务场景（优化/调试/总结等）提供针对性引导
+      - 引用系统稳定性: 修复引用清理、状态标记等核心问题
+      - Mermaid 渲染修复: 图表不再卡在加载中
+      - OpenCode 插件修复: 修复加载失败和上下文注入问题
+      - 多项体验优化: 参数验证、性能优化、错误提示改进等
+    note: ""
   - version: 1.11.2
     requirement: OpenCode 插件自动更新、flow-design 节点引用强化
     conclusion: |-

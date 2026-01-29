@@ -949,12 +949,14 @@ export class StateService {
         const colonMatch = line.match(/^([^:]+):\s*(.+)$/);
         if (colonMatch) {
           result.docs.push({
+            refType: "file",
             path: colonMatch[1].trim(),
             description: colonMatch[2].trim(),
           });
         } else {
           // 没有描述，只有路径
           result.docs.push({
+            refType: "file",
             path: line,
             description: "",
           });

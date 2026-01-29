@@ -9,6 +9,7 @@ import type {
   WorkspaceGetParams,
   WorkspaceDeleteParams,
   WorkspaceStatusParams,
+  DocRef,
 } from "../../types/index.js";
 
 // 请求类型定义
@@ -17,7 +18,7 @@ interface CreateWorkspaceBody {
   goal: string;
   projectRoot?: string;
   rules?: string[];
-  docs?: Array<{ path: string; description: string }>;
+  docs?: DocRef[];
 }
 
 interface WorkspaceIdParams {
