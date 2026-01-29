@@ -53,6 +53,16 @@ Ensure reproducible results.
 
 **Output**: Test environment documentation
 
+#### Optimize Scenario: Additional Requirements
+
+When in **optimize scenario** (performance optimization), additional steps are required:
+
+- **Record environment differences**: Document differences between test and production environments (hardware, load, data volume). This affects result interpretation.
+- **Determine warmup strategy**: Decide between cold start vs hot run measurement. Specify number of warmup iterations before actual measurement.
+- **Implement noise isolation**: Close unrelated processes, fix CPU frequency (disable turbo boost), disable background services. Ensure consistent measurement conditions.
+
+**Output**: Environment difference documentation + warmup strategy + noise isolation checklist
+
 ### 3. Get Baseline
 
 Execute tests, record current values.
@@ -67,6 +77,17 @@ Execute tests, record current values.
 
 **⚠️ Checkpoint**: After getting baseline, immediately `log_append` the baseline data. This is your reference point.
 
+#### Optimize Scenario: Multi-Run Requirements
+
+When in **optimize scenario**, strengthen measurement rigor:
+
+- **Minimum 5 runs**: Each metric MUST be measured at least 5 times. Single or few runs are statistically unreliable.
+- **Use percentiles**: Report P50 (median), P95, P99 instead of just average. Outliers can skew averages.
+- **Record variance**: Document the range/standard deviation of measurements. High variance indicates unreliable results.
+- **Immediate logging**: After baseline measurement, IMMEDIATELY call `log_append` to save results. Data loss means re-running all tests.
+
+**Output**: Baseline data with P50/P95/P99, variance recorded, logged to workspace
+
 ### 4. Post-Optimization Comparison
 
 After optimization, measure again and compare.
@@ -78,6 +99,28 @@ After optimization, measure again and compare.
 - Verify no regression in other metrics
 
 **Output**: Before/After comparison table
+
+#### Optimize Scenario: Regression and Statistical Validation
+
+When in **optimize scenario**, additional validation is required:
+
+- **Regression check**: Don't just verify the target metric improved. Check ALL related metrics for regression:
+  - Memory usage (did optimization increase memory?)
+  - CPU usage (did optimization shift load?)
+  - Latency distribution (did P99 get worse while P50 improved?)
+  - Error rate (did optimization introduce instability?)
+
+- **Statistical significance**: Improvement MUST be outside the margin of error:
+  - If baseline variance is +/-10%, a 5% improvement is NOT significant
+  - Use statistical tests (t-test) for rigorous validation when needed
+  - Rule of thumb: improvement should be > 2x the standard deviation
+
+- **Multi-scenario validation**: Test under different conditions:
+  - Normal load: typical usage patterns
+  - High load: stress test conditions
+  - Edge cases: boundary conditions, empty data, maximum data
+
+**Output**: Regression report + statistical significance analysis + multi-scenario results
 
 ### 5. Record to Workspace (MANDATORY)
 
@@ -151,6 +194,14 @@ After recording, MUST present measurement results to user:
 - [ ] **Environment documented**: Tool versions and specs recorded
 - [ ] **Data preserved**: Raw measurement data saved before analysis
 
+### Optimize Scenario Checklist
+- [ ] **Environment differences recorded**: Test vs production differences documented (hardware, load, data volume)
+- [ ] **Warmup strategy determined**: Cold start vs hot run decision made and documented
+- [ ] **Noise isolation implemented**: Unrelated processes closed, CPU frequency fixed, background services disabled
+- [ ] **Minimum 5 measurements per metric**: Each metric measured at least 5 times with P50/P95/P99 reported
+- [ ] **Regression metrics checked**: All related metrics verified for regression (memory, CPU, latency distribution, error rate)
+- [ ] **Statistical significance verified**: Improvement is outside margin of error (> 2x standard deviation)
+
 ## Output Template
 
 ```markdown
@@ -193,6 +244,13 @@ After recording, MUST present measurement results to user:
 5. **Silent execution** - Complete measurement, then immediately start optimization without showing user
 6. **Lost baseline** - Forget to log baseline before optimization
 7. **Undocumented environment** - Can't reproduce measurement conditions
+
+### Optimize Scenario Red Flags
+
+8. **Single measurement conclusion** - Drawing conclusions from single run in performance optimization. Results are unreliable without multiple measurements.
+9. **Undisclosed environment differences** - Test environment differs significantly from production but not documented. Misleads judgment about real-world impact.
+10. **Target-only tunnel vision** - Only checking target metric without verifying regression in other metrics. May improve one thing while breaking another.
+11. **Margin-of-error success claim** - Declaring optimization successful when improvement is within measurement variance. Self-deception that wastes effort.
 
 ## Mandatory Rules
 

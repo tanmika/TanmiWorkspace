@@ -35,6 +35,11 @@ This creates a commitment checkpoint. Proceed only after announcing.
 - Confirm reproduction steps (always/sometimes, trigger conditions)
 - **Locate code line**: Find code position from error stack
 
+**Debug Scenario**:
+- **Record reproduction environment**: Document environment requirements in notes (OS, versions, configs) so others can independently reproduce
+- **Handle non-reproducible cases**: If cannot reproduce, immediately `problem_update` with "Cannot reproduce, need more info" and request additional context/logs
+- **Set diagnosis time-box**: Single hypothesis verification exceeding 15 minutes without result should trigger a checkpoint
+
 #### Optimize Scenario
 - Collect performance data (response time, throughput, resource usage)
 - Identify slow operations (API, DB query, compute-intensive tasks)
@@ -70,6 +75,13 @@ Data source/Logic flaw ← Root cause
 
 **⚠️ Checkpoint**: After each hypothesis test, `log_append` the result (confirmed/rejected + evidence).
 
+**Debug Scene Enhancement - Fail Fast Mechanism**:
+- **Record every hypothesis result**: After each hypothesis test, MUST `log_append` with confirmed/rejected + evidence
+- **Trigger evaluation on 3 consecutive rejections**: If 3 hypotheses are rejected in a row:
+  1. Call `problem_update` to record current diagnosis progress and blocking point
+  2. Evaluate whether to return to design phase for re-analysis
+  3. If info insufficient, mark as failed with suggestion "Need more context/logs/permissions"
+
 ### 4. Root Cause Confirmation
 
 **Confirmation criteria**:
@@ -82,6 +94,11 @@ Data source/Logic flaw ← Root cause
 - Causal chain analysis
 - Root cause location
 - Fix recommendation
+
+**Debug Scenario**:
+- **Root cause completeness verification**: Root cause MUST explain ALL observed symptoms, not just some
+- **Impact scope assessment**: Clarify the impact scope of fix - does it affect other features?
+- **Evaluate verification node creation**: Assess whether to dynamically create a verification node to confirm the fix
 
 ### 5. Record to Workspace (MANDATORY)
 
@@ -131,6 +148,37 @@ After recording, MUST present diagnosis to user:
 
 **Output**: Diagnosis presented, user confirmation received
 
+## Fail Fast Mechanism (Debug Scenario Core Enhancement)
+
+### Diagnosis Blocking Criteria
+
+When any of the following conditions occur, trigger fail fast process:
+
+1. **Cannot reproduce** → `problem_update` + request more info from user
+2. **3 consecutive hypothesis rejections** → `problem_update` + evaluate returning to design phase
+3. **Need additional permissions/tools** → `problem_update` + mark as blocked
+4. **Diagnosis timeout (>30min without progress)** → `problem_update` + fail
+
+### Phase Switch Timing
+
+Recognize when to switch phases instead of continuing stuck diagnosis:
+
+- **Root cause exceeds current understanding** → Return to design phase for architecture re-analysis
+- **Need to fix other issues first** → Create prerequisite fix node
+- **Multiple fix options available** → Return to design phase for solution comparison
+
+### Handling Process
+
+```
+Blocking detected
+  ↓
+problem_update (record current findings + blocking point)
+  ↓
+Evaluate: recoverable?
+  ├─ Yes → attempt recovery + log_append
+  └─ No  → fail with conclusion explaining situation
+```
+
 ## Checklist
 
 ### Debug
@@ -139,6 +187,13 @@ After recording, MUST present diagnosis to user:
 - [ ] Reproduction steps confirmed
 - [ ] Root cause code located
 - [ ] Fix verified
+
+### Debug Scenario (WHEN applicable)
+- [ ] **Reproduction steps executable**: Environment requirements documented, others can independently reproduce
+- [ ] **Hypothesis results logged**: Every hypothesis test result has been `log_append`ed
+- [ ] **Blocking handled**: Called `problem_update` when stuck
+- [ ] **Root cause complete**: Root cause explains ALL observed symptoms
+- [ ] **Impact scope assessed**: Fix impact on other features has been evaluated
 
 ### Optimize
 - [ ] Performance baseline established
@@ -189,6 +244,13 @@ After recording, MUST present diagnosis to user:
 5. **Silent execution** - Complete diagnosis, then immediately start fixing without showing user
 6. **Vague location** - "The problem is in module X" without `file:line`
 7. **Lost hypotheses** - Test multiple hypotheses without logging results
+
+### Debug Scenario Red Flags
+8. **Guessing without reproduction** - Cannot reproduce but continue speculative diagnosis
+9. **Unrecorded hypothesis rejection** - Hypothesis rejected but not logged, directly try next one
+10. **Silent blocking** - Diagnosis stuck but not calling `problem_update`
+11. **Prolonged stagnation** - No progress for >30 minutes without triggering fail evaluation
+12. **Premature conclusion** - Found "one possible cause" and stopped, without verifying it explains ALL symptoms
 
 ## Mandatory Rules
 

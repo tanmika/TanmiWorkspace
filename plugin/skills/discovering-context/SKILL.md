@@ -99,6 +99,18 @@ Task({
 | **Macro** | README, docs/, CHANGELOG | 架构设计、模块结构、业务逻辑 |
 | **Micro** | src/index.*, types/, tests/ | 实现细节、类型定义、调用链 |
 
+**Scenario-Specific Exploration**:
+
+In **optimize scenarios**, additionally explore:
+- Existing performance baseline data (historical monitoring, APM data)
+- Historical optimization records (performance-related commits in git log)
+- Known profiling hotspots
+
+In **debug scenarios**, additionally explore:
+- Error-related code paths: Locate entry from error stack/logs, trace call chain
+- Error handling mechanisms: try-catch locations, error boundaries, fallback logic
+- Related test cases: Are there tests covering this scenario? Do they pass?
+
 **⚠️ Checkpoint**: MUST `log_append` 广度探索结论（防止上下文丢失）
 
 **Output**: 广度探索报告 + checkpoint 记录
@@ -116,6 +128,18 @@ Task({
 - **依赖分析**: import/export 关系、核心 vs 辅助模块
 - **数据流追踪**: 用户输入 → 模块处理 → 最终输出
 - **类型理解**: 核心数据结构、接口定义
+
+**Scenario-Specific Deep Dive**:
+
+In **optimize scenarios**, additionally:
+- Trace complete call chain of performance bottleneck (upstream/downstream dependencies)
+- Identify bottleneck characteristics: I/O-bound vs CPU-bound vs memory-bound
+- Understand existing caching/optimization mechanisms
+
+In **debug scenarios**, additionally:
+- Supplement recent change history: git log to review recent commits of related files
+- Supplement dependency version info: Related dependency versions in package.json/lock files
+- Establish error propagation path: Complete chain from trigger point to error manifestation
 
 **Visualization rules**:
 - Code investigation: **MUST** use mermaid sequenceDiagram
@@ -218,7 +242,7 @@ After exploration, MUST record to workspace node.
 
 **Output**: node_update called with conclusion + notes
 
-### 6. Present to User (MANDATORY)
+### 5. Present to User (MANDATORY)
 
 After recording, MUST present findings to user:
 
@@ -312,6 +336,20 @@ sequenceDiagram
 - [ ] **Checkpoints hit**: Logged after phase 1 and phase 2
 - [ ] **Output Template complete**: Every section filled, no placeholders left
 
+### Scenario-Specific (WHEN applicable)
+
+**Optimize Scenario**:
+- [ ] Performance baseline data collected (or confirmed non-existent)
+- [ ] Historical optimization records understood
+- [ ] Bottleneck call chain traced
+- [ ] Bottleneck type identified (I/O / CPU / Memory)
+
+**Debug Scenario**:
+- [ ] Files in error stack located
+- [ ] Call chain traced (from entry to error point)
+- [ ] Error handling mechanisms understood
+- [ ] Recent change history reviewed
+
 ## Red Flags
 
 | Thought | Reality |
@@ -324,6 +362,17 @@ sequenceDiagram
 | "The file name is enough context" | References MUST include `file:line`. Vague locations are useless. |
 | "Notes are redundant, log is enough" | Log is temporary. Key findings MUST go to notes for persistence. |
 | "Code-first is always faster" | Strategy depends on task. Architecture → Macro, Implementation → Micro. |
+
+**Scenario-Specific Red Flags**:
+
+| Scenario | Wrong Thought | Why Wrong |
+|----------|---------------|-----------|
+| **Optimize** | "Optimize first, find baseline later" | Without baseline data, cannot prove optimization effectiveness |
+| **Optimize** | "This code was never optimized before" | Without understanding historical optimizations, may repeat work and waste time |
+| **Optimize** | "It's slow, just optimize" | Without distinguishing bottleneck type (I/O/CPU/Memory), may choose wrong optimization strategy |
+| **Debug** | "Just read code to find bug" | Having error stack but not starting from stack is inefficient |
+| **Debug** | "Found error function, good enough" | Only looking at error function without call chain may miss root cause |
+| **Debug** | "Error handling logic doesn't matter" | Ignoring error handling logic exploration may miss critical information |
 
 ## Mandatory Rules
 

@@ -61,6 +61,18 @@ Check for unclear items in user input:
 
 **Output**: List of ambiguous points
 
+**Scenario-Specific Considerations**
+
+In **Optimize scenarios**, additionally identify:
+- **Performance goal ambiguity**: "fast" → how many ms? "high concurrency" → what QPS target?
+- **Resource constraint ambiguity**: "save memory" → specific MB limit? "lightweight" → CPU usage cap?
+- **Optimization scope ambiguity**: "optimize this" → just this function? or entire module architecture?
+
+In **Debug scenarios**, additionally identify:
+- **Reproduction condition ambiguity**: Always reproducible or intermittent? Frequency (every time / 10% / specific condition)?
+- **Environment dependency ambiguity**: Which environment has the issue (dev/test/prod)? OS/browser/version?
+- **Symptom vs guess**: When user says "module XX has bug", is it observed phenomenon or speculation?
+
 ### 3. Structured Questioning
 
 Generate clarifying questions for identified ambiguities:
@@ -83,6 +95,20 @@ Generate clarifying questions for identified ambiguities:
 4. **Open-ended** - Only when above don't fit
 
 **Output**: List of clarifying questions
+
+**Scenario-Specific Questions**
+
+In **Optimize scenarios**, MUST ask:
+- **Optimization type**: "Is this local performance optimization (function/algorithm) or architecture-level refactoring (module/system)?"
+- **Quantified target**: "What specific metric? What target value? (e.g., response time <100ms, QPS >1000)"
+- **Modification scope**: "What's the allowed modification scope? (this function only / module-level / architecture refactoring)"
+- **Trade-off acceptance**: "How much code complexity willing to trade for performance? (acceptable complexity increase / prioritize maintainability)"
+
+In **Debug scenarios**, MUST ask (reproduction essentials):
+- **Reproduction steps**: "Can you reproduce it consistently? What are the steps?"
+- **Error information**: "What specific error message/screenshot/logs?"
+- **First occurrence**: "When did it start? Any recent changes?"
+- **Environment info**: "In what environment? (dev/test/prod, OS/browser version)"
 
 ### 4. Confirm Acceptance Criteria
 
@@ -203,6 +229,21 @@ After recording, MUST present acceptance criteria to user for final confirmation
 - [ ] **MEMO linked**: Long content in MEMO, linked via node_reference (not hardcoded ID)
 - [ ] **Wipe test**: If context wiped now, can recall details from recorded content?
 
+### Scenario-Specific Checklist (WHEN applicable)
+
+**Optimize Scenario**
+- [ ] **Optimization type confirmed**: Local optimization / architecture refactoring
+- [ ] **Target metrics quantified**: Metric name + target value (e.g., response time <100ms)
+- [ ] **Modification scope clarified**: File/module/system level
+- [ ] **Trade-off willingness understood**: Complexity vs performance acceptance
+
+**Debug Scenario**
+- [ ] **Reproduction steps clarified**: Independently executable steps
+- [ ] **Error symptoms recorded**: Error message/screenshot/logs
+- [ ] **Environment info confirmed**: OS/version/configuration
+- [ ] **First occurrence time understood**: Associated with recent changes
+- [ ] **Impact scope assessed**: Single user/partial/all users
+
 ## Output Template (for conversation)
 
 ```markdown
@@ -250,6 +291,19 @@ When these appear, you may be skipping intent alignment:
 8. **Write/Edit in intent alignment** - 在意图对齐节点中修改代码 ⚠️ 严重错误
 9. **No questions asked** - 整个过程没有问用户任何问题
 10. **Question bombardment** - 一次问 5+ 个问题，用户难以逐一回答
+
+**Scenario-Specific Red Flags**
+
+**Optimize Scenario**
+- **Missing quantified target** - User says "make it faster" but start designing without specific metrics → MUST ask for concrete numbers
+- **Unclear optimization scope** - Start optimizing without knowing allowed modification range → May lead to over/under optimization
+- **Ignoring trade-off analysis** - Only pursue performance without considering code complexity → May sacrifice maintainability for performance
+
+**Debug Scenario**
+- **Fixing without reproduction** - Attempt to fix without reproduction steps → "Guess-based fixing" has extremely low success rate
+- **Treating user guess as fact** - User says "module XX has bug", directly go fix that module → Need to distinguish symptom description from root cause speculation
+- **Only ask "what's wrong" not "how to reproduce"** - Start analysis without reproduction essentials → Insufficient information makes diagnosis difficult
+- **Missing environment info** - Start debugging without confirming environment (dev/test/prod)
 
 ## Anti-Patterns
 

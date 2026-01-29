@@ -46,6 +46,22 @@ This creates a commitment checkpoint. Proceed only after announcing.
 
 **⏸️ User Validation**: Present boundaries to user. Ask: "这个变更范围对吗？有遗漏或需要排除的吗？" Wait for confirmation before proceeding.
 
+#### Optimize Scenario
+
+In **Optimize scenarios**, after Define Boundaries, additionally:
+
+- **Clarify optimization strategy type**: Algorithm optimization / Caching / Parallelization / Architecture refactoring
+- **Assess strategy-bottleneck match**: Does strategy match bottleneck type? (e.g., caching for I/O bottleneck, parallelization for CPU bottleneck)
+
+#### Feature Scenario
+
+In **Feature scenarios**, before entering Interface Design, additionally:
+
+- **Check related test files**: Do related test files exist? (prerequisite for TDD-driven development)
+- **Extract API contract from tests**: If tests exist, extract API contract from test cases as input for interface design
+
+**Rationale**: Feature scenarios emphasize TDD-driven development. If tests exist before implementation, interface design should derive from test contracts rather than starting from scratch. This ensures consistency between "test definition → feature implementation".
+
 ### 2. Interface Design
 
 **Goal**: Define input/output contracts.
@@ -103,11 +119,19 @@ This creates a commitment checkpoint. Proceed only after announcing.
   - Which steps are risky?
   - What could go wrong?
 
+#### Optimize Scenario
+
+In **Optimize scenarios**, Implementation Plan needs additionally:
+
+- **Trade-off analysis table**: For each optimization point: "Performance gain vs Code complexity vs Maintainability"
+- **Rollback plan**: How to quickly rollback if optimization doesn't meet expectations
+- **Incremental verification points**: Verify each optimization step independently to avoid bundled optimizations where issues can't be isolated
+
 **Output**: Numbered implementation steps (after YAGNI pruning)
 
 **⏸️ User Validation**: Present implementation plan to user. Ask: "实现步骤清晰吗？顺序和风险点有问题吗？" Wait for confirmation before proceeding.
 
-### 4.5. Test & Observability Design (MANDATORY)
+### 5. Test & Observability Design (MANDATORY)
 
 **Goal**: Define verification strategy and logging requirements BEFORE implementation.
 
@@ -117,29 +141,29 @@ For each implementation step, define HOW to verify it:
 
 | Step | Verification | Format |
 |------|--------------|--------|
-| 核心功能 | 可运行的命令 | `[cmd] pytest tests/xxx.py` |
-| UI 变更 | 手动验证步骤 | `[manual] 打开页面 → 检查显示` |
-| 代码规范 | 代码检查 | `[check] 无 TODO/FIXME` |
+| Core functionality | Executable command | `[cmd] pytest tests/xxx.py` |
+| UI changes | Manual verification steps | `[manual] Open page → Check display` |
+| Code standards | Code check | `[check] No TODO/FIXME` |
 
 **Critical questions**:
-- **哪些功能必须有测试覆盖？** 核心业务逻辑、边界条件
-- **测试放在哪里？** 现有测试目录结构
-- **无测试框架时怎么办？** `[manual]` 或 `[check]` 替代
+- **Which functions MUST have test coverage?** Core business logic, boundary conditions
+- **Where to place tests?** Existing test directory structure
+- **What if no test framework?** Use `[manual]` or `[check]` as alternative
 
 #### Logging Requirements
 
-定义实现中需要的日志点：
+Define logging points needed in implementation:
 
-| 场景 | 日志需求 |
-|------|----------|
-| **关键流程** | 入口、出口、状态变更 |
-| **错误场景** | 错误类型、上下文、恢复动作 |
-| **调试信息** | 中间状态、参数值 |
+| Scenario | Logging Needs |
+|----------|---------------|
+| **Critical flows** | Entry, exit, state changes |
+| **Error scenarios** | Error type, context, recovery actions |
+| **Debug info** | Intermediate states, parameter values |
 
 **Critical questions**:
-- **哪些操作需要日志？** 用户操作、系统事件、异常
-- **日志级别？** debug/info/warn/error 分别用在哪里
-- **日志内容？** 需要记录哪些上下文信息
+- **Which operations need logging?** User actions, system events, exceptions
+- **Log levels?** Where to use debug/info/warn/error respectively
+- **Log content?** What context information to record
 
 **Output**: Verification table + Logging requirements
 
@@ -147,7 +171,7 @@ For each implementation step, define HOW to verify it:
 
 **⏸️ User Validation**: Present test & observability design. Ask: "验证方式和日志需求合理吗？" Wait for confirmation before proceeding.
 
-### 5. Record to Workspace (MANDATORY)
+### 6. Record to Workspace (MANDATORY)
 
 After design, MUST record to workspace node:
 
@@ -188,7 +212,7 @@ After design, MUST record to workspace node:
 
 **Output**: node_update called with conclusion + notes
 
-### 6. Present to User (MANDATORY)
+### 7. Present to User (MANDATORY)
 
 After recording, MUST present design to user:
 
@@ -245,6 +269,16 @@ After recording, MUST present design to user:
 - [ ] **Checkpoint hit**: Logged interface design before data structures
 - [ ] **Scope referenced**: Affected files/modules listed
 - [ ] **Dependencies noted**: Key dependencies documented
+
+### Optimize Scenario (WHEN applicable)
+- [ ] **Strategy match**: Optimization strategy selected and matches bottleneck type
+- [ ] **Trade-off analysis**: Each optimization point has trade-off analysis (performance vs complexity vs maintainability)
+- [ ] **Rollback plan**: Rollback plan prepared
+- [ ] **Incremental verification**: Implementation steps can be incrementally verified
+
+### Feature Scenario (WHEN applicable)
+- [ ] **Test file check**: Related test files checked for existence
+- [ ] **API contract extraction**: If tests exist, API contract extracted from test cases (not designed independently)
 
 ## Output Template
 
@@ -320,6 +354,12 @@ interface CoreType {
 9. **YAGNI violation** - Adding "might be useful" features, over-engineering for hypothetical future needs
 10. **No verification plan** - Implementation steps without `[cmd]`/`[manual]`/`[check]` methods
 11. **No logging design** - Code changes without considering observability needs
+
+### Optimize Scenario Red Flags
+12. **Strategy-bottleneck mismatch** - Using algorithm optimization for I/O bottleneck, or caching for CPU bottleneck
+13. **Implementation without trade-off analysis** - May lead to over-optimization, code complexity spiraling out of control
+14. **No rollback plan** - Stuck in dilemma when optimization fails, cannot quickly recover
+15. **Bundling multiple optimizations** - Cannot identify which optimization works, which doesn't
 
 ## Mandatory Rules
 

@@ -36,12 +36,35 @@ This creates a commitment checkpoint. Proceed only after announcing.
 - Identify non-functional points (performance, security, compatibility)
 - Set verification priority (P0/P1/P2)
 
+#### Optimize Scenario: Verification Points
+
+In performance optimization scenarios, pay special attention to:
+
+- **Performance verification points**: Verify target metrics are met (response time, throughput, resource usage meet optimization goals)
+- **Regression verification points**: No degradation in other functionality or performance metrics (optimization shouldn't break existing features or degrade other metrics)
+
 ### 2. Design Test Cases
 
 - **Normal flow**: Verify core functionality under normal conditions
 - **Edge cases**: Verify handling of boundary values, limits
 - **Error cases**: Verify error handling, fault tolerance
 - Use Given/When/Then format
+
+#### Optimize Scenario: Test Cases
+
+In performance optimization scenarios, additionally design:
+
+- **Load test cases**: Performance under high concurrency and large data volumes
+- **Continuous monitoring strategy**: Long-term observation plan after optimization goes live (monitoring metrics, alert thresholds, observation period)
+- **Boundary condition tests**: Performance under extreme conditions (maximum load, resource exhaustion boundaries)
+
+#### Debug Scenario: Test Requirements
+
+In bug fix scenarios, test cases MUST include:
+
+- **Regression test cases**: Verify fix doesn't break existing functionality
+- **Reproduction verification**: Use original reproduction steps to verify problem is fixed
+- **Anti-regression tests**: Dedicated test cases for this bug, covering trigger conditions, preventing future recurrence
 
 ### 3. Determine Verification Methods
 
@@ -60,6 +83,14 @@ Choose appropriate method based on verification goal:
 - Specify expected result for each step
 - Include precondition setup
 - Include cleanup after verification
+
+#### Debug Scenario: Acceptance Requirements
+
+In bug fix scenarios, acceptance steps must pay special attention to:
+
+- **Positive + Negative verification**: Functionality works (positive) AND bug no longer appears (negative)
+- **Define regression test scope**: Determine which related features need re-verification
+- **Consider long-term monitoring**: Whether logs/alerts are needed to continuously monitor this issue
 
 ### 5. Record to Workspace (MANDATORY)
 
@@ -136,6 +167,19 @@ After recording, MUST present verification plan to user:
 ### Long Content Protection
 - [ ] **Progressive recording**: Logged after each test case category
 - [ ] **Requirements traced**: Test cases reference source requirements
+
+### Optimize Scenario (WHEN applicable)
+- [ ] **Performance target verification cases designed**: Verification cases for target metrics defined
+- [ ] **Functional regression test cases designed**: Verify optimization doesn't break existing functionality
+- [ ] **High-load test cases designed**: High concurrency, large data volume scenario tests
+- [ ] **Continuous monitoring strategy defined**: Post-deployment monitoring metrics, alert thresholds, observation period
+
+### Debug Scenario (WHEN applicable)
+- [ ] **Original reproduction steps converted to verification cases**: Bug reproduction method as verification baseline
+- [ ] **Regression test scope clarified**: Determined which related features need re-verification
+- [ ] **Anti-regression test cases designed**: Dedicated tests for this bug to prevent recurrence
+- [ ] **Acceptance includes positive+negative verification**: Functionality works + bug no longer appears
+- [ ] **Long-term monitoring needs considered**: Whether logs/alerts needed for continuous monitoring
 
 ## Output Template
 
@@ -215,6 +259,21 @@ After recording, MUST present verification plan to user:
 4. **No acceptance criteria** - No way to know if done
 5. **Silent execution** - Complete verification planning, then immediately start implementation without showing user
 6. **Untraceable tests** - Test cases without reference to source requirements
+
+### Optimize Scenario Red Flags
+
+7. **Only verify functionality, not performance** - Optimization task without performance verification cases
+8. **Only test normal load, not high load** - Missing high concurrency, large data volume scenario tests
+9. **No continuous monitoring** - No long-term observation plan after optimization goes live
+10. **Insufficient regression test coverage** - Haven't verified optimization's impact on existing functionality
+
+### Debug Scenario Red Flags
+
+11. **Only verify fix works, not that other functionality unbroken** - Missing regression tests
+12. **Not using original reproduction steps for final verification** - Cannot confirm problem truly solved
+13. **Not adding anti-regression tests after fix** - May recur in future
+14. **Regression test scope too narrow** - Only test directly related features, ignore other potentially affected modules
+15. **Forget to verify boundary conditions and error handling paths** - Bug fix incomplete
 
 ## Mandatory Rules
 
