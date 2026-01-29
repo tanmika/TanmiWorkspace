@@ -602,27 +602,34 @@ export class ContextService {
       }
     }
 
-    // 增强 docs 中的 memo:// 引用
+    // 增强 docs 中的 memo:// 和 node:// 引用
     if (workspaceId) {
-      item.docs = await this.enrichDocsWithMemoMeta(item.docs, workspaceId);
+      item.docs = await this.enrichDocsWithMeta(item.docs, workspaceId, projectRoot, wsDirName, graph);
     }
 
     return item;
   }
 
   /**
-   * 增强文档引用中的 memo:// 引用，填充 memoMeta 字段
-   * 如果 memo 已被删除，标记 status 为 expired
+   * 增强文档引用，填充 memoMeta 和 nodeMeta 字段
+   * 如果目标已被删除，标记 status 为 expired
    */
-  private async enrichDocsWithMemoMeta(docs: DocRef[], workspaceId: string): Promise<DocRef[]> {
-    if (!this.memoService) {
-      return docs;
-    }
-
+  private async enrichDocsWithMeta(
+    docs: DocRef[],
+    workspaceId: string,
+    projectRoot: string,
+    wsDirName: string,
+    graph: NodeGraph
+  ): Promise<DocRef[]> {
     const enrichedDocs: DocRef[] = [];
 
     for (const doc of docs) {
       if (doc.path.startsWith("memo://")) {
+        // memo:// 引用
+        if (!this.memoService) {
+          enrichedDocs.push(doc);
+          continue;
+        }
         const memoId = doc.path.substring(7); // 去掉 "memo://" 前缀
         try {
           const memoResult = await this.memoService.get({
@@ -647,8 +654,47 @@ export class ContextService {
             status: "expired",
           });
         }
+      } else if (doc.path.startsWith("node://")) {
+        // node:// 引用
+        const refNodeId = doc.path.substring(7); // 去掉 "node://" 前缀
+        const refNodeMeta = graph.nodes[refNodeId];
+        if (refNodeMeta) {
+          // 读取节点标题
+          const refDirName = refNodeMeta.dirName || refNodeId;
+          try {
+            const refInfo = await this.md.readNodeInfo(projectRoot, wsDirName, refDirName);
+            enrichedDocs.push({
+              ...doc,
+              nodeMeta: {
+                id: refNodeId,
+                title: refInfo.title,
+                type: refNodeMeta.type,
+                status: refNodeMeta.status,
+              },
+            });
+          } catch (error) {
+            // 节点目录读取失败，使用基本信息
+            devLog.warn("节点引用读取失败", { refNodeId, error });
+            enrichedDocs.push({
+              ...doc,
+              nodeMeta: {
+                id: refNodeId,
+                title: refNodeId, // 使用 ID 作为标题
+                type: refNodeMeta.type,
+                status: refNodeMeta.status,
+              },
+            });
+          }
+        } else {
+          // 节点不存在（已删除），标记为 expired
+          devLog.warn("节点引用已过期", { refNodeId });
+          enrichedDocs.push({
+            ...doc,
+            status: "expired",
+          });
+        }
       } else {
-        // 非 memo 引用，保持原样
+        // 其他引用（file:// 等），保持原样
         enrichedDocs.push(doc);
       }
     }

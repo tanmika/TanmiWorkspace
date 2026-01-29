@@ -112,6 +112,16 @@ export interface MemoMeta {
 }
 
 /**
+ * 节点元信息（用于 node:// 引用）
+ */
+export interface NodeRefMeta {
+  id: string;
+  title: string;
+  type: "planning" | "execution";
+  status: string;
+}
+
+/**
  * 文档引用状态
  */
 export type DocRefStatus = "active" | "expired";
@@ -123,7 +133,8 @@ export interface DocRef {
   path: string;
   description: string;
   memoMeta?: MemoMeta;          // memo:// 引用时的元信息
-  status?: DocRefStatus;        // 引用状态（expired 表示 memo 已删除）
+  nodeMeta?: NodeRefMeta;       // node:// 引用时的元信息
+  status?: DocRefStatus;        // 引用状态（expired 表示目标已删除）
 }
 
 /**

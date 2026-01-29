@@ -178,6 +178,11 @@ function getOperatorClass(operator: 'AI' | 'Human' | 'system') {
 function handleMemoClick(memoId: string) {
   emit('selectMemo', memoId)
 }
+
+// 点击 node 引用卡片
+function handleNodeClick(nodeId: string) {
+  nodeStore.selectNode(nodeId)
+}
 </script>
 
 <template>
@@ -302,6 +307,24 @@ function handleMemoClick(memoId: string) {
                 >{{ tag }}</span>
               </div>
             </div>
+          </div>
+          <!-- node 引用：显示为可点击的富卡片 -->
+          <div
+            v-else-if="doc.nodeMeta"
+            class="node-ref-card"
+            @click="handleNodeClick(doc.nodeMeta.id)"
+          >
+            <div class="node-ref-header">
+              <NodeIcon
+                :type="doc.nodeMeta.type"
+                :status="doc.nodeMeta.status"
+              />
+              <span class="node-ref-title">{{ doc.nodeMeta.title }}</span>
+              <span class="node-ref-status" :data-status="doc.nodeMeta.status">
+                {{ STATUS_CONFIG[doc.nodeMeta.status]?.label || doc.nodeMeta.status }}
+              </span>
+            </div>
+            <div class="node-ref-desc" v-if="doc.description">{{ doc.description }}</div>
           </div>
           <!-- 普通文档引用 -->
           <div v-else class="docs-item">
@@ -906,6 +929,71 @@ function handleMemoClick(memoId: string) {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   color: var(--text-muted);
+}
+
+/* Node 引用卡片 */
+.node-ref-card {
+  padding: 10px 12px;
+  background: var(--path-bg);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.node-ref-card:hover {
+  border-color: var(--border-heavy);
+  box-shadow: 2px 2px 0 var(--border-color);
+}
+
+[data-theme="dark"] .node-ref-card {
+  background: #1a1a1a;
+}
+
+.node-ref-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.node-ref-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-ref-status {
+  font-family: var(--mono-font), monospace;
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.node-ref-status[data-status="completed"] {
+  color: #67C23A;
+  border-color: #67C23A40;
+}
+
+.node-ref-status[data-status="implementing"],
+.node-ref-status[data-status="planning"] {
+  color: #409EFF;
+  border-color: #409EFF40;
+}
+
+.node-ref-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  padding-left: 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 问题框 */

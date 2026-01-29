@@ -62,10 +62,19 @@ export interface MemoMeta {
   tags: string[]
 }
 
+// 节点元数据（用于 DocRef 引用 node）
+export interface NodeRefMeta {
+  id: string
+  title: string
+  type: NodeType
+  status: NodeStatus
+}
+
 export interface DocRef {
   path: string
   description: string
   memoMeta?: MemoMeta
+  nodeMeta?: NodeRefMeta
   status?: 'active' | 'expired'
 }
 
