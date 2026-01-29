@@ -122,7 +122,7 @@ export const nodeReferenceTool: TanmiTool = {
       },
       targetIdOrPath: {
         type: "string",
-        description: "目标节点 ID 或文档路径",
+        description: "引用目标。三种格式：1) 节点引用: 直接用节点ID如 node-xxx；2) 备忘引用: memo://memo-id 如 memo://memo-abc123；3) 文档引用: 文件路径如 docs/design.md",
       },
       action: {
         type: "string",

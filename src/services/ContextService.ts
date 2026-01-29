@@ -190,8 +190,20 @@ export class ContextService {
           // Memo 不存在或读取失败，跳过
           devLog.warn("获取 memo 失败", { memoId, error });
         }
+      } else if (ref.startsWith("node://")) {
+        // 节点引用（node://node-xxx 格式）
+        const refNodeId = ref.substring(7); // 去掉 "node://" 前缀
+        if (graph.nodes[refNodeId]) {
+          const refItem = await this.buildSingleContextItem(projectRoot, wsDirName, refNodeId, graph, {
+            includeLog,
+            maxLogEntries,
+            includeProblem,
+            reverseLog,
+          }, isArchived, workspaceId);
+          references.push(refItem);
+        }
       } else if (graph.nodes[ref]) {
-        // 节点引用
+        // 节点引用（兼容旧格式 node-xxx）
         const refItem = await this.buildSingleContextItem(projectRoot, wsDirName, ref, graph, {
           includeLog,
           maxLogEntries,

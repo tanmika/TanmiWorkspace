@@ -6,6 +6,23 @@ import type { DispatchConfig, DocRef } from "./workspace.js";
 // 重新导出 DocRef 以保持向后兼容
 export type { DocRef };
 
+// ========== 引用规范化类型 ==========
+
+/**
+ * 引用类型枚举
+ */
+export type ReferenceType = "memo" | "node" | "file";
+
+/**
+ * 规范化后的引用结构
+ */
+export interface NormalizedReference {
+  type: ReferenceType;
+  uri: string;           // 规范化后的 URI（如 memo://memo-xxx）
+  targetId?: string;     // 目标 ID（memo/node 类型时有值）
+  path?: string;         // 文件路径（file 类型时有值）
+}
+
 /**
  * 带类型的日志条目（Phase 2）
  */
