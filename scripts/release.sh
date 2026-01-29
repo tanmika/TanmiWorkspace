@@ -135,27 +135,32 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 1
 fi
 
-# Step 1: 编译后端（不改版本号）
-log_info "Step 1: 编译后端..."
+# Step 1: 运行测试（不改版本号）
+log_info "Step 1: 运行测试..."
+npm run test:run
+log_info "测试通过"
+
+# Step 2: 编译后端（不改版本号）
+log_info "Step 2: 编译后端..."
 npx tsc
 log_info "后端编译完成"
 
-# Step 2: 编译前端（不改版本号）
-log_info "Step 2: 编译前端..."
+# Step 3: 编译前端（不改版本号）
+log_info "Step 3: 编译前端..."
 cd web && npm run build && cd ..
 log_info "前端编译完成"
 
-# Step 3: 编译成功，现在才更新版本号
-log_info "Step 3: 更新版本号..."
+# Step 4: 测试和编译都成功，现在才更新版本号
+log_info "Step 4: 更新版本号..."
 npm version $NEW_VERSION --no-git-tag-version
 cd web && npm version $NEW_VERSION --no-git-tag-version && cd ..
 log_info "版本号已更新（主包 + 前端包）"
 
-# Step 4: 更新组件版本
+# Step 5: 更新组件版本
 if [ "$NO_COMPONENT_UPDATE" = true ]; then
-    log_info "Step 4: 跳过组件版本更新（无组件更新）"
+    log_info "Step 5: 跳过组件版本更新（无组件更新）"
 else
-    log_info "Step 4: 更新组件版本配置..."
+    log_info "Step 5: 更新组件版本配置..."
     COMPONENT_FILE="config/component-versions.json"
     if [ ! -f "$COMPONENT_FILE" ]; then
         log_error "找不到 $COMPONENT_FILE"
