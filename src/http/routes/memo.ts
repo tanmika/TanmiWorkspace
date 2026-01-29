@@ -48,6 +48,7 @@ export async function memoRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await memo.get({
         workspaceId: wid,
         memoId: mid,
+        lineLimit: Number.MAX_SAFE_INTEGER, // HTTP API 返回全部内容，不截断
       });
 
       return result;
