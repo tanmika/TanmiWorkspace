@@ -83,6 +83,10 @@ export function createServices(): Services {
   dispatch.setNodeService(node);  // 设置 NodeService 依赖（用于自动创建 Review 节点）
   const memo = new MemoService(json, md, fs);
 
+  // 设置 ReferenceService 依赖（用于引用链清理）
+  node.setReferenceService(reference);
+  memo.setReferenceService(reference);
+
   // 设置 WorkspaceService 依赖（用于清除手动变更）
   context.setWorkspaceService(workspace);
   // 设置 MemoService 依赖（用于获取 memo 内容）

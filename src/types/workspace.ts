@@ -127,15 +127,49 @@ export interface NodeRefMeta {
 export type DocRefStatus = "active" | "expired";
 
 /**
- * 文档引用
+ * Memo 引用
+ * 注意：memoMeta 在序列化时可能不存在，会在 enrichDocsWithMeta 中补全
  */
-export interface DocRef {
-  path: string;
+export interface DocRefMemo {
+  refType: "memo";
+  path: string;                 // memo://memo-xxx
   description: string;
-  memoMeta?: MemoMeta;          // memo:// 引用时的元信息
-  nodeMeta?: NodeRefMeta;       // node:// 引用时的元信息
-  status?: DocRefStatus;        // 引用状态（expired 表示目标已删除）
+  memoMeta?: MemoMeta;          // 可选，延迟加载
+  status?: DocRefStatus;
 }
+
+/**
+ * 节点引用
+ * 注意：nodeMeta 在序列化时可能不存在，会在 enrichDocsWithMeta 中补全
+ */
+export interface DocRefNode {
+  refType: "node";
+  path: string;                 // node://node-xxx
+  description: string;
+  nodeMeta?: NodeRefMeta;       // 可选，延迟加载
+  status?: DocRefStatus;
+}
+
+/**
+ * 文件引用
+ */
+export interface DocRefFile {
+  refType: "file";
+  path: string;                 // file://... 或相对路径
+  description: string;
+  status?: DocRefStatus;
+}
+
+/**
+ * 文档引用（Discriminated Union）
+ * 使用 refType 字段区分引用类型，防止无效组合
+ *
+ * 设计说明：
+ * - refType 用于在编译时区分引用类型
+ * - memoMeta/nodeMeta 可选，支持延迟加载（在 enrichDocsWithMeta 中补全）
+ * - 这样既保持类型安全，又兼容现有的序列化/反序列化逻辑
+ */
+export type DocRef = DocRefMemo | DocRefNode | DocRefFile;
 
 /**
  * Workspace.md 数据结构

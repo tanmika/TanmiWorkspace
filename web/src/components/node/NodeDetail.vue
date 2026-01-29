@@ -12,6 +12,7 @@ import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
 
 const emit = defineEmits<{
   selectMemo: [memoId: string]
+  selectNode: [nodeId: string]
 }>()
 
 const nodeStore = useNodeStore()
@@ -181,7 +182,7 @@ function handleMemoClick(memoId: string) {
 
 // 点击 node 引用卡片
 function handleNodeClick(nodeId: string) {
-  nodeStore.selectNode(nodeId)
+  emit('selectNode', nodeId)
 }
 </script>
 
@@ -285,8 +286,8 @@ function handleNodeClick(nodeId: string) {
         <template v-for="doc in currentNode.docs" :key="doc.path">
           <!-- memo 引用：显示为可点击的富卡片 -->
           <div
-            v-if="doc.memoMeta"
-            class="memo-ref-card"
+            v-if="doc.refType === 'memo' && doc.memoMeta"
+            class="ref-card-base memo-ref-card"
             @click="handleMemoClick(doc.memoMeta.id)"
           >
             <div class="memo-ref-header">
@@ -310,8 +311,8 @@ function handleNodeClick(nodeId: string) {
           </div>
           <!-- node 引用：显示为可点击的富卡片 -->
           <div
-            v-else-if="doc.nodeMeta"
-            class="node-ref-card"
+            v-else-if="doc.refType === 'node' && doc.nodeMeta"
+            class="ref-card-base node-ref-card"
             @click="handleNodeClick(doc.nodeMeta.id)"
           >
             <div class="node-ref-header">
@@ -866,22 +867,26 @@ function handleNodeClick(nodeId: string) {
   flex-shrink: 0;
 }
 
-/* Memo 引用卡片 - 复用 MemoDrawerDetail 样式 */
-.memo-ref-card {
-  padding: 12px;
+/* 引用卡片公共样式 */
+.ref-card-base {
   background: var(--path-bg);
   border: 1px solid var(--border-color);
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.memo-ref-card:hover {
+.ref-card-base:hover {
   border-color: var(--border-heavy);
   box-shadow: 2px 2px 0 var(--border-color);
 }
 
-[data-theme="dark"] .memo-ref-card {
+[data-theme="dark"] .ref-card-base {
   background: #1a1a1a;
+}
+
+/* Memo 引用卡片 - 复用 MemoDrawerDetail 样式 */
+.memo-ref-card {
+  padding: 12px;
 }
 
 .memo-ref-header {
@@ -934,19 +939,6 @@ function handleNodeClick(nodeId: string) {
 /* Node 引用卡片 */
 .node-ref-card {
   padding: 10px 12px;
-  background: var(--path-bg);
-  border: 1px solid var(--border-color);
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.node-ref-card:hover {
-  border-color: var(--border-heavy);
-  box-shadow: 2px 2px 0 var(--border-color);
-}
-
-[data-theme="dark"] .node-ref-card {
-  background: #1a1a1a;
 }
 
 .node-ref-header {

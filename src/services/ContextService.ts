@@ -27,6 +27,11 @@ import type { InstallationService } from "./InstallationService.js";
 import { eventService } from "./EventService.js";
 
 // ========== 结论截取常量 ==========
+// 这些阈值基于 token 消耗和可读性的平衡：
+// - 600 字符约 ~150-200 tokens（中文）
+// - 保留头部 400 字符可完整展示结论主体
+// - 保留尾部 200 字符可看到总结性陈述
+// - 避免过长的旧结论占用过多 context window
 const CONCLUSION_TRUNCATE_THRESHOLD = 600;  // 超过此长度才截取
 const CONCLUSION_HEAD_LENGTH = 400;         // 保留头部字符数
 const CONCLUSION_TAIL_LENGTH = 200;         // 保留尾部字符数
@@ -613,6 +618,8 @@ export class ContextService {
   /**
    * 增强文档引用，填充 memoMeta 和 nodeMeta 字段
    * 如果目标已被删除，标记 status 为 expired
+   *
+   * 使用 refType 判断类型（Discriminated Union），向后兼容通过 path 前缀判断
    */
   private async enrichDocsWithMeta(
     docs: DocRef[],
@@ -624,7 +631,10 @@ export class ContextService {
     const enrichedDocs: DocRef[] = [];
 
     for (const doc of docs) {
-      if (doc.path.startsWith("memo://")) {
+      // 判断引用类型：优先使用 refType（新数据），回退到 path 前缀（旧数据）
+      const refType = (doc as any).refType || (doc.path.startsWith("memo://") ? "memo" : doc.path.startsWith("node://") ? "node" : "file");
+
+      if (refType === "memo") {
         // memo:// 引用
         if (!this.memoService) {
           enrichedDocs.push(doc);
@@ -654,7 +664,7 @@ export class ContextService {
             status: "expired",
           });
         }
-      } else if (doc.path.startsWith("node://")) {
+      } else if (refType === "node") {
         // node:// 引用
         const refNodeId = doc.path.substring(7); // 去掉 "node://" 前缀
         const refNodeMeta = graph.nodes[refNodeId];
@@ -673,16 +683,11 @@ export class ContextService {
               },
             });
           } catch (error) {
-            // 节点目录读取失败，使用基本信息
+            // 节点目录或 Info.md 读取失败（文件系统损坏），标记为 expired
             devLog.warn("节点引用读取失败", { refNodeId, error });
             enrichedDocs.push({
               ...doc,
-              nodeMeta: {
-                id: refNodeId,
-                title: refNodeId, // 使用 ID 作为标题
-                type: refNodeMeta.type,
-                status: refNodeMeta.status,
-              },
+              status: "expired",
             });
           }
         } else {

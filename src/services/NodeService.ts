@@ -47,6 +47,7 @@ import { eventService } from "./EventService.js";
  */
 export class NodeService {
   private stateService?: import("./StateService.js").StateService;
+  private referenceService?: import("./ReferenceService.js").ReferenceService;
   private guidanceService: GuidanceService;
 
   constructor(
@@ -62,6 +63,13 @@ export class NodeService {
    */
   setStateService(stateService: import("./StateService.js").StateService): void {
     this.stateService = stateService;
+  }
+
+  /**
+   * 设置 ReferenceService 依赖（用于引用链清理）
+   */
+  setReferenceService(referenceService: import("./ReferenceService.js").ReferenceService): void {
+    this.referenceService = referenceService;
   }
 
   /**
@@ -763,14 +771,38 @@ export class NodeService {
     // 4. 递归收集所有子节点 ID
     const deletedNodes = this.collectAllChildren(graph, nodeId);
 
-    // 5. 删除所有节点目录（使用节点的 dirName）
+    // 5. 清理其他节点中对被删除节点的引用（MUST be done BEFORE modifying graph）
+    let totalReferencesCleared = 0;
+    if (this.referenceService) {
+      // 使用 ReferenceService 的引用链清理机制
+      for (const deletedNodeId of deletedNodes) {
+        const targetUri = `node://${deletedNodeId}`;
+        try {
+          const clearedCount = await this.referenceService.cleanupReferences(workspaceId, targetUri);
+          totalReferencesCleared += clearedCount;
+        } catch (error) {
+          console.warn(`[NodeService] 清理节点 ${deletedNodeId} 的引用失败:`, error);
+        }
+      }
+      if (totalReferencesCleared > 0) {
+        console.log(`[NodeService] 已清理 ${totalReferencesCleared} 个引用链接`);
+      }
+
+      // 重新读取 graph，以获取 cleanupReferences 写回的更新
+      // (cleanupReferences 已经修改并保存了 graph，我们需要同步)
+      const updatedGraph = await this.json.readGraph(projectRoot, wsDirName);
+      // 将更新后的 nodes 复制回当前 graph
+      Object.assign(graph.nodes, updatedGraph.nodes);
+    }
+
+    // 6. 删除所有节点目录（使用节点的 dirName）
     for (const id of deletedNodes) {
       const nodeDirName = graph.nodes[id]?.dirName || id;  // 向后兼容
       const nodePath = this.fs.getNodePath(projectRoot, wsDirName, nodeDirName);
       await this.fs.rmdir(nodePath);
     }
 
-    // 6. 更新 graph.json
+    // 7. 更新 graph.json
     const currentTime = now();
     const parentId = graph.nodes[nodeId].parentId;
 
@@ -787,20 +819,7 @@ export class NodeService {
       delete graph.nodes[id];
     }
 
-    // 清理其他节点中对被删除节点的引用
-    const deletedSet = new Set(deletedNodes);
-    for (const otherNodeId of Object.keys(graph.nodes)) {
-      const otherNode = graph.nodes[otherNodeId];
-      if (otherNode.references.length > 0) {
-        const originalLength = otherNode.references.length;
-        otherNode.references = otherNode.references.filter(
-          refId => !deletedSet.has(refId)
-        );
-        if (otherNode.references.length < originalLength) {
-          otherNode.updatedAt = currentTime;
-        }
-      }
-    }
+    // 注意：引用清理已在步骤 5 中完成，这里不需要降级处理
 
     // 如果当前聚焦的节点被删除，重置聚焦
     if (graph.currentFocus && deletedNodes.includes(graph.currentFocus)) {
@@ -809,11 +828,11 @@ export class NodeService {
 
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 7. 更新工作区 updatedAt
+    // 8. 更新工作区 updatedAt
     config.updatedAt = currentTime;
     await this.json.writeWorkspaceConfig(projectRoot, wsDirName, config);
 
-    // 8. 同步更新索引中的 updatedAt
+    // 9. 同步更新索引中的 updatedAt
     const index = await this.json.readIndex();
     const wsEntry = index.workspaces.find(ws => ws.id === workspaceId);
     if (wsEntry) {
@@ -821,7 +840,7 @@ export class NodeService {
       await this.json.writeIndex(index);
     }
 
-    // 9. 追加日志
+    // 10. 追加日志
     await this.md.appendLog(projectRoot, wsDirName, {
       time: currentTime,
       operator: "system",

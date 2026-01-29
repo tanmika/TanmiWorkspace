@@ -808,10 +808,24 @@ ${data.nextStep}
 
     let match;
     while ((match = regex.exec(content)) !== null) {
+      const path = match[2];
+      const description = (match[3] || match[1]).trim();
+
+      // 根据 path 前缀判断 refType（Discriminated Union）
+      let refType: "memo" | "node" | "file";
+      if (path.startsWith("memo://")) {
+        refType = "memo";
+      } else if (path.startsWith("node://")) {
+        refType = "node";
+      } else {
+        refType = "file";
+      }
+
       docs.push({
-        path: match[2],
-        description: (match[3] || match[1]).trim(),
-      });
+        refType,
+        path,
+        description,
+      } as DocRef);  // 使用 as DocRef 因为 memoMeta/nodeMeta 稍后在 enrichDocsWithMeta 中补全
     }
 
     return docs;

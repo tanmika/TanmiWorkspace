@@ -70,13 +70,37 @@ export interface NodeRefMeta {
   status: NodeStatus
 }
 
-export interface DocRef {
+// 文档引用状态
+export type DocRefStatus = 'active' | 'expired'
+
+// Memo 引用
+export interface DocRefMemo {
+  refType: 'memo'
   path: string
   description: string
   memoMeta?: MemoMeta
-  nodeMeta?: NodeRefMeta
-  status?: 'active' | 'expired'
+  status?: DocRefStatus
 }
+
+// 节点引用
+export interface DocRefNode {
+  refType: 'node'
+  path: string
+  description: string
+  nodeMeta?: NodeRefMeta
+  status?: DocRefStatus
+}
+
+// 文件引用
+export interface DocRefFile {
+  refType: 'file'
+  path: string
+  description: string
+  status?: DocRefStatus
+}
+
+// 文档引用（Discriminated Union）
+export type DocRef = DocRefMemo | DocRefNode | DocRefFile
 
 export interface DocRefWithStatus extends DocRef {
   status: 'active' | 'expired'

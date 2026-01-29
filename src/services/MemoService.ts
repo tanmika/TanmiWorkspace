@@ -30,11 +30,20 @@ import { computeContentHash } from "../utils/hash.js";
  * 处理备忘相关的业务逻辑
  */
 export class MemoService {
+  private referenceService?: import("./ReferenceService.js").ReferenceService;
+
   constructor(
     private json: JsonStorage,
     private md: MarkdownStorage,
     private fs: FileSystemAdapter
   ) {}
+
+  /**
+   * 设置 ReferenceService 依赖（用于引用链清理）
+   */
+  setReferenceService(referenceService: import("./ReferenceService.js").ReferenceService): void {
+    this.referenceService = referenceService;
+  }
 
   /**
    * 根据 workspaceId 获取工作区信息
@@ -542,17 +551,38 @@ export class MemoService {
     // 4. 获取目录名
     const memoDirName = memoMeta.dirName;
 
-    // 5. 从索引中删除
+    // 5. 清理其他节点中对此 Memo 的引用（使用 ReferenceService）
+    let referencesCleared = 0;
+    if (this.referenceService) {
+      const targetUri = `memo://${memoId}`;
+      try {
+        referencesCleared = await this.referenceService.cleanupReferences(workspaceId, targetUri);
+        if (referencesCleared > 0) {
+          console.log(`[MemoService] 已清理 ${referencesCleared} 个引用链接`);
+        }
+
+        // 重新读取 graph，以获取 cleanupReferences 写回的更新
+        const updatedGraph = await this.json.readGraph(projectRoot, wsDirName);
+        // 将更新后的 nodes 复制回当前 graph
+        Object.assign(graph.nodes, updatedGraph.nodes);
+      } catch (error) {
+        console.warn(`[MemoService] 清理 Memo ${memoId} 的引用失败:`, error);
+      }
+    } else {
+      console.warn("[MemoService] ReferenceService 未注入，无法清理引用链");
+    }
+
+    // 6. 从索引中删除
     delete memosIndex[memoId];
 
-    // 6. 写回 graph.json
+    // 7. 写回 graph.json
     await this.json.writeGraph(projectRoot, wsDirName, graph);
 
-    // 7. 删除备忘目录
+    // 8. 删除备忘目录
     const memoDir = this.fs.getMemoDir(projectRoot, wsDirName, memoDirName);
     await this.fs.remove(memoDir);
 
-    // 8. 发送事件通知
+    // 9. 发送事件通知
     eventService.emitMemoUpdate(workspaceId, memoId);
 
     return { success: true };

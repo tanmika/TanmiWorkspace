@@ -1060,7 +1060,7 @@ function closeExportWarningDialog() {
 
       <!-- 右侧：节点/备忘详情 Content -->
       <main class="layout-content">
-        <NodeDetail v-if="selectedType === 'node' && nodeStore.selectedNodeId" @select-memo="handleDrawerSelectMemo" />
+        <NodeDetail v-if="selectedType === 'node' && nodeStore.selectedNodeId" @select-memo="handleDrawerSelectMemo" @select-node="handleNodeSelect" />
         <MemoDetail v-else-if="selectedType === 'memo' && selectedMemoId" :memo-id="selectedMemoId" @deleted="handleMemoDeleted" />
         <MemoDrawerDetail v-else-if="selectedType === 'memo-drawer'" @select-memo="handleDrawerSelectMemo" />
         <div v-else class="empty-state">

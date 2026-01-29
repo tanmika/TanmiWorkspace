@@ -62,6 +62,10 @@ describe("ReferenceService - Memo Reference", () => {
     memoService = new MemoService(json, md, fsAdapter);
     referenceService = new ReferenceService(json, md, fsAdapter);
 
+    // 注入 ReferenceService（与生产环境保持一致）
+    nodeService.setReferenceService(referenceService);
+    memoService.setReferenceService(referenceService);
+
     const result = await workspaceService.init({
       name: "reference-test-workspace",
       goal: "Test memo:// reference",
@@ -87,7 +91,9 @@ describe("ReferenceService - Memo Reference", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await fs.rm(basePath, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(basePath, { recursive: true, force: true }).catch((error) => {
+      console.warn(`[Test Cleanup] Failed to remove test directory: ${error}`);
+    });
   });
 
   describe("memo:// prefix support", () => {
@@ -276,6 +282,11 @@ describe("ReferenceService - Memo Reference", () => {
 
     // 测试场景 3: 自动补全 ./docs/a.md → file://./docs/a.md
     it("should auto-complete relative path to file:// URI", async () => {
+      // 创建测试文件（文件验证要求）
+      const docsDir = path.join(projectRoot, "docs");
+      await fs.mkdir(docsDir, { recursive: true });
+      await fs.writeFile(path.join(docsDir, "a.md"), "Test content");
+
       const input = "./docs/a.md";
       const result = await referenceService.normalizeReference(workspaceId, input);
 
@@ -365,6 +376,389 @@ describe("ReferenceService - Memo Reference", () => {
       await expect(
         referenceService.normalizeReference(workspaceId, input)
       ).rejects.toThrow(TanmiError);
+    });
+  });
+
+  // ========== Phase 2: node:// 引用测试 ==========
+  describe("node:// reference operations", () => {
+    let secondNodeId: string;
+
+    beforeEach(async () => {
+      // 创建第二个节点用于引用测试
+      const nodeResult = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Second Node",
+        requirement: "Second node for reference testing",
+      });
+      secondNodeId = nodeResult.nodeId;
+    });
+
+    it("should add node reference with node:// prefix", async () => {
+      const nodeRef = "node://" + secondNodeId;
+
+      const refResult = await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: nodeRef,
+        action: "add",
+        description: "Test node reference",
+      });
+
+      expect(refResult.success).toBe(true);
+      expect(refResult.references).toBeDefined();
+
+      const addedRef = refResult.references.find(r => r.path === nodeRef);
+      expect(addedRef).toBeDefined();
+      expect(addedRef?.description).toBe("Test node reference");
+      expect((addedRef as any)?.refType).toBe("node");
+
+      const graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].references).toContain(nodeRef);
+    });
+
+    it("should remove node reference with node:// prefix", async () => {
+      const nodeRef = "node://" + secondNodeId;
+
+      await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: nodeRef,
+        action: "add",
+      });
+
+      const removeResult = await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: nodeRef,
+        action: "remove",
+      });
+
+      expect(removeResult.success).toBe(true);
+      expect(removeResult.references.some(r => r.path === nodeRef)).toBe(false);
+
+      const graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].references).not.toContain(nodeRef);
+    });
+
+    it("should throw error when adding reference to nonexistent node", async () => {
+      const nodeRef = "node://node-nonexistent";
+
+      await expect(
+        referenceService.reference({
+          workspaceId,
+          nodeId: testNodeId,
+          targetIdOrPath: nodeRef,
+          action: "add",
+        })
+      ).rejects.toThrow(TanmiError);
+    });
+
+    it("should throw error when adding duplicate node reference", async () => {
+      const nodeRef = "node://" + secondNodeId;
+
+      await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: nodeRef,
+        action: "add",
+      });
+
+      await expect(
+        referenceService.reference({
+          workspaceId,
+          nodeId: testNodeId,
+          targetIdOrPath: nodeRef,
+          action: "add",
+        })
+      ).rejects.toThrow(TanmiError);
+    });
+  });
+
+  // ========== Phase 2: file:// 引用和路径验证测试 ==========
+  describe("file:// reference and path validation", () => {
+    beforeEach(async () => {
+      // 创建测试文件
+      await fs.mkdir(path.join(projectRoot, "docs"), { recursive: true });
+      await fs.writeFile(path.join(projectRoot, "docs", "test.md"), "# Test Doc");
+    });
+
+    it("should add file reference with relative path", async () => {
+      const filePath = "./docs/test.md";
+
+      const refResult = await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: filePath,
+        action: "add",
+        description: "Test file reference",
+      });
+
+      expect(refResult.success).toBe(true);
+
+      const addedRef = refResult.references.find(r => r.path === `file://${filePath}`);
+      expect(addedRef).toBeDefined();
+      expect((addedRef as any)?.refType).toBe("file");
+    });
+
+    it("should throw error when adding reference to nonexistent file", async () => {
+      const filePath = "./docs/nonexistent.md";
+
+      await expect(
+        referenceService.reference({
+          workspaceId,
+          nodeId: testNodeId,
+          targetIdOrPath: filePath,
+          action: "add",
+        })
+      ).rejects.toThrow(TanmiError);
+    });
+
+    it("should remove file reference", async () => {
+      const filePath = "./docs/test.md";
+      const fileUri = `file://${filePath}`;
+
+      await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: filePath,
+        action: "add",
+      });
+
+      const removeResult = await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: fileUri,
+        action: "remove",
+      });
+
+      expect(removeResult.success).toBe(true);
+      expect(removeResult.references.some(r => r.path === fileUri)).toBe(false);
+    });
+  });
+
+  // ========== Phase 2: isolate 功能测试 ==========
+  describe("node_isolate functionality", () => {
+    it("should set node as isolated", async () => {
+      const isolateResult = await referenceService.isolate({
+        workspaceId,
+        nodeId: testNodeId,
+        isolate: true,
+      });
+
+      expect(isolateResult.success).toBe(true);
+
+      const graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].isolate).toBe(true);
+    });
+
+    it("should unset node isolation", async () => {
+      // 先设置为 isolated
+      await referenceService.isolate({
+        workspaceId,
+        nodeId: testNodeId,
+        isolate: true,
+      });
+
+      // 再取消 isolated
+      const isolateResult = await referenceService.isolate({
+        workspaceId,
+        nodeId: testNodeId,
+        isolate: false,
+      });
+
+      expect(isolateResult.success).toBe(true);
+
+      const graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].isolate).toBe(false);
+    });
+  });
+
+  // ========== Phase 1 回归测试：引用链清理 ==========
+  describe("Phase 1 regression: reference cleanup on delete", () => {
+    let nodeService: NodeService;
+    let targetNodeId: string;
+
+    beforeEach(async () => {
+      nodeService = new NodeService(json, md, fsAdapter);
+      nodeService.setReferenceService(referenceService);
+
+      // 创建目标节点
+      const nodeResult = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Target Node",
+        requirement: "Target node to be deleted",
+      });
+      targetNodeId = nodeResult.nodeId;
+
+      // testNodeId 引用 targetNodeId
+      await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: `node://${targetNodeId}`,
+        action: "add",
+        description: "Reference to target node",
+      });
+    });
+
+    it("should cleanup references in graph.json when deleting referenced node", async () => {
+      // 验证引用存在
+      let graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].references).toContain(`node://${targetNodeId}`);
+
+      // 删除目标节点
+      await nodeService.delete({
+        workspaceId,
+        nodeId: targetNodeId,
+      });
+
+      // 验证引用被清理
+      graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].references).not.toContain(`node://${targetNodeId}`);
+    });
+
+    it("should cleanup references in Info.md when deleting referenced node", async () => {
+      const nodeDirName = (await json.readGraph(projectRoot, wsDirName)).nodes[testNodeId].dirName || testNodeId;
+
+      // 删除目标节点
+      await nodeService.delete({
+        workspaceId,
+        nodeId: targetNodeId,
+      });
+
+      // 读取 Info.md 验证引用被清理
+      const nodeInfo = await md.readNodeInfoFull(projectRoot, wsDirName, nodeDirName);
+      expect(nodeInfo.docs.some(d => d.path === `node://${targetNodeId}`)).toBe(false);
+    });
+
+    it("should cleanup memo references when deleting memo", async () => {
+      // 创建 memo 并添加引用
+      const memoResult = await memoService.create({
+        workspaceId,
+        title: "Target Memo",
+        summary: "Memo to be deleted",
+        content: "Test content",
+        tags: ["test", "regression"],
+      });
+
+      await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: `memo://${memoResult.memoId}`,
+        action: "add",
+      });
+
+      // 验证引用存在
+      let graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].references).toContain(`memo://${memoResult.memoId}`);
+
+      // 删除 memo
+      await memoService.delete({
+        workspaceId,
+        memoId: memoResult.memoId,
+      });
+
+      // 验证引用被清理
+      graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].references).not.toContain(`memo://${memoResult.memoId}`);
+    });
+
+    it("should cleanup multiple references to same target", async () => {
+      // 创建第二个节点也引用 targetNodeId
+      const secondResult = await nodeService.create({
+        workspaceId,
+        parentId: "root",
+        type: "execution",
+        title: "Second Ref Node",
+        requirement: "Another node referencing target",
+      });
+
+      await referenceService.reference({
+        workspaceId,
+        nodeId: secondResult.nodeId,
+        targetIdOrPath: `node://${targetNodeId}`,
+        action: "add",
+      });
+
+      // 验证两个节点都有引用
+      let graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].references).toContain(`node://${targetNodeId}`);
+      expect(graph.nodes[secondResult.nodeId].references).toContain(`node://${targetNodeId}`);
+
+      // 删除目标节点
+      await nodeService.delete({
+        workspaceId,
+        nodeId: targetNodeId,
+      });
+
+      // 验证两个节点的引用都被清理
+      graph = await json.readGraph(projectRoot, wsDirName);
+      expect(graph.nodes[testNodeId].references).not.toContain(`node://${targetNodeId}`);
+      expect(graph.nodes[secondResult.nodeId].references).not.toContain(`node://${targetNodeId}`);
+    });
+  });
+
+  // ========== Phase 1 回归测试：日志包含 description ==========
+  describe("Phase 1 regression: log includes description", () => {
+    it("should include description in log when adding reference", async () => {
+      const memoResult = await memoService.create({
+        workspaceId,
+        title: "Log Test Memo",
+        summary: "Test Summary",
+        content: "Test Content",
+        tags: ["test", "regression"],
+      });
+
+      const memoRef = "memo://" + memoResult.memoId;
+      const description = "This is a custom description";
+
+      await referenceService.reference({
+        workspaceId,
+        nodeId: testNodeId,
+        targetIdOrPath: memoRef,
+        action: "add",
+        description,
+      });
+
+      // 读取日志验证 description 被记录
+      const nodeDirName = (await json.readGraph(projectRoot, wsDirName)).nodes[testNodeId].dirName || testNodeId;
+      const logPath = path.join(projectRoot, ".tanmi-workspace", wsDirName, "nodes", nodeDirName, "Log.md");
+      const logContent = await fs.readFile(logPath, "utf-8");
+
+      expect(logContent).toContain(description);
+    });
+  });
+
+  // ========== Phase 2: 边界情况和错误处理测试 ==========
+  describe("edge cases and error handling", () => {
+    it("should throw error for ambiguous format (memo:xxx)", async () => {
+      const input = "memo:memo-xxx";
+
+      await expect(
+        referenceService.normalizeReference(workspaceId, input)
+      ).rejects.toThrow(TanmiError);
+    });
+
+    it("should throw error for ambiguous format (node:xxx)", async () => {
+      const input = "node:node-xxx";
+
+      await expect(
+        referenceService.normalizeReference(workspaceId, input)
+      ).rejects.toThrow(TanmiError);
+    });
+
+    it("should handle empty string gracefully", async () => {
+      await expect(
+        referenceService.reference({
+          workspaceId,
+          nodeId: testNodeId,
+          targetIdOrPath: "",
+          action: "add",
+        })
+      ).rejects.toThrow();
     });
   });
 });
