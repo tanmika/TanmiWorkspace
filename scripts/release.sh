@@ -1,7 +1,7 @@
 #!/bin/bash
 # TanmiWorkspace 发布准备脚本
 # 用法: ./scripts/release.sh [patch|minor|major] [--skills] [--agents] [--hooks] [--no_component_update]
-# 功能: 更新版本号 + 更新组件版本 + 编译前后端（不提交不发布）
+# 功能: 先编译检查，编译成功后才更新版本号和组件配置
 #
 # 组件更新标志（必须指定其中之一）:
 #   --skills              更新 Skills 组件
@@ -99,7 +99,7 @@ else
         patch) NEW_VERSION="$major.$minor.$((patch + 1))" ;;
     esac
 fi
-log_info "新版本: $NEW_VERSION"
+log_info "目标版本: $NEW_VERSION"
 
 # 显示组件更新情况
 echo ""
@@ -135,17 +135,27 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 1
 fi
 
-# Step 1: 更新版本号（所有 package.json）
-log_info "Step 1: 更新版本号..."
+# Step 1: 编译后端（不改版本号）
+log_info "Step 1: 编译后端..."
+npx tsc
+log_info "后端编译完成"
+
+# Step 2: 编译前端（不改版本号）
+log_info "Step 2: 编译前端..."
+cd web && npm run build && cd ..
+log_info "前端编译完成"
+
+# Step 3: 编译成功，现在才更新版本号
+log_info "Step 3: 更新版本号..."
 npm version $NEW_VERSION --no-git-tag-version
 cd web && npm version $NEW_VERSION --no-git-tag-version && cd ..
 log_info "版本号已更新（主包 + 前端包）"
 
-# Step 2: 更新组件版本
+# Step 4: 更新组件版本
 if [ "$NO_COMPONENT_UPDATE" = true ]; then
-    log_info "Step 2: 跳过组件版本更新（无组件更新）"
+    log_info "Step 4: 跳过组件版本更新（无组件更新）"
 else
-    log_info "Step 2: 更新组件版本配置..."
+    log_info "Step 4: 更新组件版本配置..."
     COMPONENT_FILE="config/component-versions.json"
     if [ ! -f "$COMPONENT_FILE" ]; then
         log_error "找不到 $COMPONENT_FILE"
@@ -186,16 +196,6 @@ console.log('已更新组件版本配置');
     log_info "组件版本配置已更新"
 fi
 
-# Step 3: 编译后端
-log_info "Step 3: 编译后端..."
-npx tsc
-log_info "后端编译完成"
-
-# Step 4: 编译前端
-log_info "Step 4: 编译前端..."
-cd web && npm run build && cd ..
-log_info "前端编译完成"
-
 # 完成
 echo ""
 log_info "========================================="
@@ -217,5 +217,6 @@ echo "  2. npx tsx scripts/sync-versions.ts"
 echo "  3. 检查 config/version-notes.yaml 的 requirement"
 echo "  4. git add -A && git commit -m '[Chore] Release v$NEW_VERSION'"
 echo "  5. git tag v$NEW_VERSION"
-echo "  6. npm publish --registry https://registry.npmjs.org"
+echo "  6. git push && git push --tags"
+echo "  7. npm publish --registry https://registry.npmjs.org"
 echo ""
