@@ -9,6 +9,10 @@
 #   npm run check-versions # 检查未填写的 requirement
 
 versions:
+  - version: 1.11.5
+    requirement: 修复 WebUI Memo 内容显示问题
+    conclusion: "- WebUI Memo 内容显示: 修复 Memo 内容显示不全的问题"
+    note: ""
   - version: 1.11.4
     requirement: 引用系统增强、WebUI 交互优化、多项稳定性修复
     conclusion: |-
