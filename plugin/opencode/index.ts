@@ -769,7 +769,20 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
         return;
       }
 
-      // 2. 检查工作区绑定状态
+      // 2. 处理 session_bind/session_unbind - 同步更新 currentSessionState.binding
+      if (shortToolName === 'session_bind' || shortToolName === 'session_unbind') {
+        const bindingModule = getBindingModule();
+        const sessionId = currentSessionState.sessionId;
+        if (sessionId) {
+          // 重新获取最新的 binding 状态
+          const binding = bindingModule.getSessionBinding(sessionId);
+          currentSessionState.binding = binding;
+        }
+        // session 操作不需要后续的提醒逻辑
+        return;
+      }
+
+      // 3. 检查工作区绑定状态
       if (!currentSessionState.binding?.workspaceId) {
         // 未绑定工作区，静默返回
         return;
