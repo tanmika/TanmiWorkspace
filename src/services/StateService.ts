@@ -16,6 +16,7 @@ import type {
   NodeMeta,
   NodeRole,
 } from "../types/node.js";
+import type { ServiceCallOptions } from "../types/service.js";
 import { TanmiError } from "../types/errors.js";
 import { now, formatShort } from "../utils/time.js";
 import { computeConclusionsHash, computeNodeHash } from "../utils/hash.js";
@@ -123,8 +124,9 @@ export class StateService {
   /**
    * 执行状态转换
    */
-  async transition(params: NodeTransitionParams): Promise<NodeTransitionResult> {
-    const { workspaceId, nodeId, action, nodeHash, reason, conclusion, confirmation, conclusionsHash } = params;
+  async transition(params: NodeTransitionParams, options?: ServiceCallOptions): Promise<NodeTransitionResult> {
+    const source = options?.source || 'mcp'; // 默认 MCP 模式（最严格）
+    let { workspaceId, nodeId, action, nodeHash, reason, conclusion, confirmation, conclusionsHash } = params;
 
     // 1. 如果提供了 confirmation，验证 token
     if (confirmation) {
@@ -231,16 +233,9 @@ export class StateService {
         );
       }
 
-      // 5.2.1 规划节点 complete 时验证 conclusionsHash（有子节点时必填）
+      // 5.2.1 规划节点 complete 时处理 conclusionsHash
       if (nodeMeta.children.length > 0) {
-        if (!conclusionsHash) {
-          throw new TanmiError(
-            "CONCLUSIONS_HASH_REQUIRED",
-            "规划节点 complete 需要提供 conclusionsHash，请先调用 context_get 获取最新上下文。"
-          );
-        }
-
-        // 计算当前 conclusionsHash 并验证
+        // 计算当前 conclusionsHash
         const childConclusions = nodeMeta.children
           .map(cid => {
             const childMeta = graph.nodes[cid];
@@ -250,12 +245,26 @@ export class StateService {
 
         const currentHash = computeConclusionsHash(childConclusions);
 
-        if (conclusionsHash !== currentHash) {
-          throw new TanmiError(
-            "CONCLUSIONS_HASH_MISMATCH",
-            "conclusionsHash 不匹配，子节点结论可能已变化。请重新调用 context_get 获取最新上下文后再完成。"
-          );
+        // 根据调用来源处理
+        if (source === 'mcp') {
+          // MCP 调用：强制验证 conclusionsHash
+          if (!conclusionsHash) {
+            throw new TanmiError(
+              "CONCLUSIONS_HASH_REQUIRED",
+              "规划节点 complete 需要提供 conclusionsHash，请先调用 context_get 获取最新上下文。"
+            );
+          }
+          if (conclusionsHash !== currentHash) {
+            throw new TanmiError(
+              "CONCLUSIONS_HASH_MISMATCH",
+              "conclusionsHash 不匹配，子节点结论可能已变化。请重新调用 context_get 获取最新上下文后再完成。"
+            );
+          }
+        } else if (source === 'http') {
+          // HTTP 调用：自动使用当前 hash（不验证，信任 HTTP 调用的一致性）
+          conclusionsHash = currentHash;
         }
+        // internal: 跳过验证
       }
     }
 

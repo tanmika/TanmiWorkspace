@@ -288,6 +288,7 @@ export interface NodeGetResult {
   infoMd: string
   logMd: string
   problemMd: string
+  nodeHash: string
 }
 
 export interface NodeListResult {
@@ -320,6 +321,7 @@ export interface ContextGetResult {
   chain: ContextChainItem[]
   references: ContextChainItem[]
   childConclusions: ChildConclusionItem[]
+  conclusionsHash?: string
 }
 
 export interface ContextFocusResult {

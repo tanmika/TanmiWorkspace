@@ -25,6 +25,7 @@ import type {
   NodeInfoData,
   NodeType,
 } from "../types/node.js";
+import type { ServiceCallOptions } from "../types/service.js";
 import { TanmiError } from "../types/errors.js";
 import { generateNodeId, generateNodeDirName, extractShortId } from "../utils/id.js";
 import { now } from "../utils/time.js";
@@ -187,7 +188,8 @@ export class NodeService {
   /**
    * 创建节点
    */
-  async create(params: NodeCreateParams): Promise<NodeCreateResult> {
+  async create(params: NodeCreateParams, options?: ServiceCallOptions): Promise<NodeCreateResult> {
+    const source = options?.source || 'mcp'; // 默认 MCP 模式（最严格）
     const { workspaceId, parentId, type, title, requirement = "", docs = [], role, acceptanceCriteria, isNeedTest, testRequirement } = params;
 
     // 0. 校验 acceptanceCriteria 格式（必须是 { when, then } 对象数组）
@@ -246,17 +248,27 @@ export class NodeService {
       );
     }
 
-    // 5.1 验证规则哈希（如果工作区有规则）
-    // 内部调用使用 INTERNAL_RULES_HASH 可绕过验证
+    // 5.1 处理和验证规则哈希（如果工作区有规则）
     const workspaceMdData = await this.md.readWorkspaceMd(projectRoot, wsDirName);
-    if (workspaceMdData.rules.length > 0 && params.rulesHash !== INTERNAL_RULES_HASH) {
+    if (workspaceMdData.rules.length > 0) {
       const expectedHash = crypto.createHash("md5").update(workspaceMdData.rules.join("\n")).digest("hex").substring(0, 8);
-      if (params.rulesHash !== expectedHash) {
-        throw new TanmiError(
-          "RULES_HASH_MISMATCH",
-          `工作区有 ${workspaceMdData.rules.length} 条规则，请先通过 workspace_get 或 context_get 获取 rulesHash，并在创建节点时传入。\n规则内容：\n${workspaceMdData.rules.map((r, i) => `${i + 1}. ${r}`).join("\n")}`
-        );
+
+      // 内部调用使用 INTERNAL_RULES_HASH 可绕过验证
+      if (params.rulesHash === INTERNAL_RULES_HASH) {
+        // 内部调用：跳过验证
+      } else if (source === 'mcp') {
+        // MCP 调用：强制验证 rulesHash
+        if (params.rulesHash !== expectedHash) {
+          throw new TanmiError(
+            "RULES_HASH_MISMATCH",
+            `工作区有 ${workspaceMdData.rules.length} 条规则，请先通过 workspace_get 或 context_get 获取 rulesHash，并在创建节点时传入。\n规则内容：\n${workspaceMdData.rules.map((r, i) => `${i + 1}. ${r}`).join("\n")}`
+          );
+        }
+      } else if (source === 'http') {
+        // HTTP 调用：自动使用当前 hash（不验证）
+        params.rulesHash = expectedHash;
       }
+      // internal: 跳过验证
     }
 
     // 6. 验证节点类型
@@ -880,8 +892,9 @@ export class NodeService {
   /**
    * 更新节点
    */
-  async update(params: NodeUpdateParams): Promise<NodeUpdateResult> {
-    const { workspaceId, nodeId, nodeHash, title, requirement, note, conclusion, field, oldStr, newStr, conclusionsHash } = params;
+  async update(params: NodeUpdateParams, options?: ServiceCallOptions): Promise<NodeUpdateResult> {
+    const source = options?.source || 'mcp'; // 默认 MCP 模式（最严格）
+    let { workspaceId, nodeId, nodeHash, title, requirement, note, conclusion, field, oldStr, newStr, conclusionsHash } = params;
 
     // 1. 获取 projectRoot 和 wsDirName
     const { projectRoot, wsDirName } = await this.resolveProjectRoot(workspaceId);
@@ -903,31 +916,28 @@ export class NodeService {
     // 5. 读取现有 Info.md
     const nodeInfo = await this.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
 
-    // 6. 如果提供了 nodeHash，进行先读后写校验（MCP 调用必须提供，内部调用可跳过）
-    if (nodeHash) {
-      const currentHash = computeNodeHash({
-        title: nodeInfo.title,
-        requirement: nodeInfo.requirement,
-        note: nodeInfo.notes,
-        conclusion: nodeInfo.conclusion,
-      });
-      if (currentHash !== nodeHash) {
-        throw new TanmiError("CONTENT_CHANGED", "内容已变更，请重新 node_get");
+    // 6. nodeHash 先读后写校验
+    if (source === 'mcp') {
+      // MCP 调用：如果提供了 nodeHash，进行验证
+      if (nodeHash) {
+        const currentHash = computeNodeHash({
+          title: nodeInfo.title,
+          requirement: nodeInfo.requirement,
+          note: nodeInfo.notes,
+          conclusion: nodeInfo.conclusion,
+        });
+        if (currentHash !== nodeHash) {
+          throw new TanmiError("CONTENT_CHANGED", "内容已变更，请重新 node_get");
+        }
       }
     }
+    // HTTP/internal: 跳过 nodeHash 验证
 
-    // 6.1 stale 节点更新 conclusion 时要求 conclusionsHash
+    // 6.1 stale 节点更新 conclusion 时处理 conclusionsHash
     const nodeMeta = graph.nodes[nodeId];
     const isUpdatingConclusion = conclusion !== undefined || (field === "conclusion" && oldStr !== undefined);
     if (nodeMeta.conclusionStale && isUpdatingConclusion) {
-      if (!conclusionsHash) {
-        throw new TanmiError(
-          "CONCLUSIONS_HASH_REQUIRED",
-          "结论已过期，更新前需要提供 conclusionsHash，请先调用 context_get 获取最新上下文。"
-        );
-      }
-
-      // 计算当前 conclusionsHash 并验证
+      // 计算当前 conclusionsHash
       const childConclusions = nodeMeta.children
         .map(cid => {
           const childMeta = graph.nodes[cid];
@@ -937,12 +947,25 @@ export class NodeService {
 
       const currentContextHash = computeConclusionsHash(childConclusions);
 
-      if (conclusionsHash !== currentContextHash) {
-        throw new TanmiError(
-          "CONCLUSIONS_HASH_MISMATCH",
-          "conclusionsHash 不匹配，子节点结论可能已变化。请重新调用 context_get 获取最新上下文。"
-        );
+      if (source === 'mcp') {
+        // MCP 调用：强制验证 conclusionsHash
+        if (!conclusionsHash) {
+          throw new TanmiError(
+            "CONCLUSIONS_HASH_REQUIRED",
+            "结论已过期，更新前需要提供 conclusionsHash，请先调用 context_get 获取最新上下文。"
+          );
+        }
+        if (conclusionsHash !== currentContextHash) {
+          throw new TanmiError(
+            "CONCLUSIONS_HASH_MISMATCH",
+            "conclusionsHash 不匹配，子节点结论可能已变化。请重新调用 context_get 获取最新上下文。"
+          );
+        }
+      } else if (source === 'http') {
+        // HTTP 调用：自动使用当前 hash
+        conclusionsHash = currentContextHash;
       }
+      // internal: 跳过验证
     }
 
     // 7. 处理精确替换逻辑（field + oldStr + newStr）

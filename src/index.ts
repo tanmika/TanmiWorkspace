@@ -480,7 +480,7 @@ Read(file_path: <返回的 path>)
             acceptanceCriteria: args?.acceptanceCriteria as AcceptanceCriteria[] | undefined,
             isNeedTest: args?.isNeedTest as boolean | undefined,
             testRequirement: args?.testRequirement as string | undefined,
-          });
+          }, { source: 'mcp' });
           break;
         }
 
@@ -576,7 +576,7 @@ Read(file_path: <返回的 path>)
             conclusion: args?.conclusion as string | undefined,
             conclusionsHash: args?.conclusionsHash as string | undefined,
             confirmation: args?.confirmation as { token: string; userInput: string } | undefined,
-          });
+          }, { source: 'mcp' });
           break;
 
         // Phase 2: 上下文工具
@@ -983,7 +983,7 @@ Read(file_path: <返回的 path>)
               requirement: `${infoNodeTitle}节点，包含以下能力：${validCapabilities.map((id) => capabilityService.getCapabilityInfo(id as any).name).join("、")}`,
               role: infoType,
               rulesHash: INTERNAL_RULES_HASH,
-            });
+            }, { source: 'internal' });
 
             infoNodeId = infoNodeResult.nodeId;
           } else {
@@ -1004,7 +1004,7 @@ Read(file_path: <返回的 path>)
               requirement: capInfo.description,
               acceptanceCriteria,
               rulesHash: INTERNAL_RULES_HASH,
-            });
+            }, { source: 'internal' });
 
             createdNodes.push({
               nodeId: childNodeResult.nodeId,

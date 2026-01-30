@@ -33,7 +33,7 @@ export async function stateRoutes(fastify: FastifyInstance): Promise<void> {
         reason: request.body.reason,
         conclusion: request.body.conclusion,
       };
-      const result = await services.state.transition(params);
+      const result = await services.state.transition(params, { source: 'http' });
 
       // 记录手动变更（WebUI 操作）
       let manualOperationRecorded = false;

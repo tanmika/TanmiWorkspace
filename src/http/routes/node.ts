@@ -156,7 +156,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         docs: request.body.docs,
         rulesHash: request.body.rulesHash,
       };
-      const result = await services.node.create(params);
+      const result = await services.node.create(params, { source: 'http' });
 
       // 记录手动变更（WebUI 操作）
       let manualOperationRecorded = false;
@@ -230,7 +230,7 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
         requirement: request.body.requirement,
         note: request.body.note,
       };
-      const result = await services.node.update(params);
+      const result = await services.node.update(params, { source: 'http' });
 
       // 记录手动变更（WebUI 操作）
       let manualOperationRecorded = false;
