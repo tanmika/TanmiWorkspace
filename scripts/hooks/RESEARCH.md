@@ -115,134 +115,140 @@
 
 ## 设计决策
 
-### 1. 数据存储：引用方式
+### 1. 数据存储
 
 **方案**：`.changes/` 存储变更内容，节点存储引用
 
 ```
 .tanmiworkspace/{workspace}/
 ├── graph.json
-├── changes/                    # 变更记录存储
+├── changes/
 │   ├── {changeId}.json         # 单个变更记录
-│   └── index.json              # 索引（按节点、时间等）
+│   ├── ambiguous/              # 待认领的变更（并发时产生）
+│   └── index.json              # 索引
 └── ...
 ```
 
-**悬空 patch 处理**：
-- 节点删除时，对应的 changes **保留**（作为历史记录）
-- 在 index.json 中标记为 `orphaned: true`
-- 提供清理工具：`change_cleanup` 清理悬空记录
+### 2. 并发问题解决方案
 
-### 2. 节点关联：并发问题
+**调研结论**：Subagent 与主会话共享同一个 session_id，无法通过 session 区分。
 
-**当前机制**：
-- `session_bind` 绑定 workspace
-- `context_focus` 设置聚焦节点（focusNodeId）
+**选定方案：ambiguous + 认领机制**
 
-**派发并发问题**：
-- 派发模式下可能有多个 subagent 并发执行
-- 每个 subagent 有自己的 session_id
-- 但共享同一个 workspace
+```
+1. Hook 收到文件变更
+   ├─ 活跃节点 = 1 → 直接归属到该节点
+   └─ 活跃节点 > 1 → 记录到 ambiguous（工作区级别）
 
-**解决方案**：
-```typescript
-// 方案 A: 使用 session → node 映射
-sessionNodeMapping: {
-  "session-abc": "node-exec-1",
-  "session-def": "node-exec-2"
-}
+2. 执行节点 node_transition(complete) 前
+   └─ 拦截，检查 ambiguous 是否有 patch
+   └─ 提示 AI 认领属于该节点的 patch
+   └─ AI 调用 change_claim(nodeId, patchIds) 认领
 
-// 方案 B: 在 node 元数据中记录执行会话
-node.dispatch.executingSessionId = "session-abc"
+3. 规划节点 node_transition(complete) 前
+   └─ 检查 ambiguous 是否清空
+   └─ 未清空则拒绝完成（强制门控）
 ```
 
-**推荐方案 B**：派发子节点创建时记录执行会话 ID
+**需要的 MCP 工具**：
+- `change_claim(nodeId, patchIds)` - 认领 patch
+- `change_transfer(patchId, fromNode, toNode)` - 转移归属（单节点归错时修正）
 
-### 3. 回滚机制
+### 3. 节点删除处理
+
+**方案：删除前询问是否回滚**
+
+```
+用户请求删除节点
+    ↓
+检查节点是否有 changes
+    ↓
+├─ 无 changes → 直接删除
+└─ 有 changes → 询问"是否回滚代码修改？"
+              ├─ 是 → 执行回滚 → 删除节点 + changes
+              └─ 否 → 直接删除节点 + changes（代码保留）
+```
+
+**WebUI 也需要此流程**。
+
+### 4. 回滚机制
 
 **流程**：
-1. 自动尝试回滚（使用 originalFile 恢复）
-2. 回滚失败时返回详细信息
-3. AI 根据信息手动处理
+1. 自动尝试回滚（基于内容匹配，非行号）
+2. 回滚失败时返回 patch 文件路径
+3. AI 读取 patch 文件，手动处理
 
-**冲突检测**：
-- 回滚前检查文件当前内容是否与 `afterContent` 匹配
-- 不匹配说明文件已被后续修改，标记为冲突
+**Patch 格式**：
+- ❌ 不用标准 unified diff（需要严格线性操作，行号匹配）
+- ✅ 使用基于内容匹配的格式（类似 apply-patch）
+- 待讨论：是否支持无 AI 情况下的回滚
 
-### 4. Hook 集成方式
+### 5. Hook 集成方式
 
-**现有架构**：
-```
-Claude Code → PostToolUse Hook
-                    ↓
-              hook-entry.cjs
-                    ↓
-              handleFileToolUse()
-                    ↓
-              直接读写 JSON 文件
-```
+**已验证**：Hook 可以直接读写文件，复用现有 hook-entry.cjs 架构。
 
-**变更追踪集成**：
 ```javascript
 // 在 handleFileToolUse() 中扩展
 function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_response) {
-  // ... 现有逻辑 ...
-
   // 新增：变更追踪
-  if (binding?.changeTracking?.enabled) {
-    recordChange(binding, sessionId, {
-      tool: tool_name,
-      filePath: tool_input.file_path,
-      originalFile: tool_response.originalFile,
-      structuredPatch: tool_response.structuredPatch,
-      // ...
-    });
+  if (workspaceConfig?.changeTracking?.enabled) {
+    const activeNodes = getActiveExecutingNodes(workspaceId);
+    if (activeNodes.length === 1) {
+      recordChange(activeNodes[0], ...);
+    } else if (activeNodes.length > 1) {
+      recordAmbiguousChange(workspaceId, ...);
+    }
   }
 }
 ```
 
-**优点**：
-- 复用现有 Hook 架构
-- 直接操作文件，无 MCP 调用开销
-- 与现有逻辑无缝集成
+## 待解决问题
 
-## 下一步
+### 1. Patch 格式设计
 
-### 待设计
+- 不能用标准 unified diff（需要严格线性，行号匹配）
+- 需要基于内容匹配的格式（类似 apply-patch）
+- 需要支持：
+  - 自动回滚（内容匹配成功时）
+  - 手动回滚（生成 patch 文件给 AI/用户）
+- **待讨论**：无 AI 情况下如何回滚？WebUI 能否直接操作？
 
-1. **数据模型**
-   - ChangeRecord 结构
-   - Index 结构
-   - 与节点的引用关系
+### 2. 数据模型细化
 
-2. **派发会话映射**
-   - 如何在派发时建立 session → node 映射
-   - 并发场景的边界情况
+- ChangeRecord 结构
+- ambiguous 存储结构
+- index.json 结构
 
-3. **回滚算法**
-   - 冲突检测逻辑
-   - 部分回滚策略
-   - 失败反馈格式
+### 3. MCP 工具设计
 
-4. **MCP 工具**
-   - `change_list(nodeId)` - 查看节点变更
-   - `change_revert(nodeId)` - 回滚节点变更
-   - `change_diff(nodeA, nodeB)` - 对比变更
+| 工具 | 说明 |
+|------|------|
+| `change_claim(nodeId, patchIds)` | 认领 ambiguous patch |
+| `change_transfer(patchId, from, to)` | 转移归属 |
+| `change_list(nodeId)` | 查看节点变更 |
+| `change_revert(nodeId)` | 回滚节点变更 |
 
-5. **配置**
-   - `workspace.changeTracking.enabled` - 启用后不可关闭
-   - 是否需要其他配置项？
+### 4. node_transition 拦截逻辑
 
-### 客户端支持
+- 执行节点 complete 前：检查 ambiguous，提示认领
+- 规划节点 complete 前：检查 ambiguous 清空
+
+### 5. WebUI 支持
+
+- 删除节点时的回滚确认弹窗
+- changes 可视化展示
+- 能否支持无 AI 回滚？
+
+## 客户端支持
 
 | 客户端 | Hook 支持 | 状态 |
 |--------|-----------|------|
 | Claude Code | PostToolUse | ✅ 已验证 |
-| Cursor | afterFileEdit | 待验证（有类似字段） |
+| Cursor | afterFileEdit | 待验证 |
 | OpenCode | tool.execute.after / file.edited | 待验证 |
 
 ## 参考资料
 
 - `assets/hook-system-reference.md` - Hook 系统参考文档
 - `plugin/scripts/hook-entry.cjs` - 现有 Hook 实现
-- `plugin/scripts/shared/` - Hook 共享工具函数
+- `/Users/tanmika/ThirdPart/agent-toolkit/mcp-servers/apply-patch` - apply-patch 项目（patch 格式参考）
