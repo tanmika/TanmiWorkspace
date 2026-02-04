@@ -113,43 +113,136 @@
 | `structuredPatch` | ✅ | - | 标准 diff 格式 |
 | `session_id` | ✅ | ✅ | 用于关联节点 |
 
+## 设计决策
+
+### 1. 数据存储：引用方式
+
+**方案**：`.changes/` 存储变更内容，节点存储引用
+
+```
+.tanmiworkspace/{workspace}/
+├── graph.json
+├── changes/                    # 变更记录存储
+│   ├── {changeId}.json         # 单个变更记录
+│   └── index.json              # 索引（按节点、时间等）
+└── ...
+```
+
+**悬空 patch 处理**：
+- 节点删除时，对应的 changes **保留**（作为历史记录）
+- 在 index.json 中标记为 `orphaned: true`
+- 提供清理工具：`change_cleanup` 清理悬空记录
+
+### 2. 节点关联：并发问题
+
+**当前机制**：
+- `session_bind` 绑定 workspace
+- `context_focus` 设置聚焦节点（focusNodeId）
+
+**派发并发问题**：
+- 派发模式下可能有多个 subagent 并发执行
+- 每个 subagent 有自己的 session_id
+- 但共享同一个 workspace
+
+**解决方案**：
+```typescript
+// 方案 A: 使用 session → node 映射
+sessionNodeMapping: {
+  "session-abc": "node-exec-1",
+  "session-def": "node-exec-2"
+}
+
+// 方案 B: 在 node 元数据中记录执行会话
+node.dispatch.executingSessionId = "session-abc"
+```
+
+**推荐方案 B**：派发子节点创建时记录执行会话 ID
+
+### 3. 回滚机制
+
+**流程**：
+1. 自动尝试回滚（使用 originalFile 恢复）
+2. 回滚失败时返回详细信息
+3. AI 根据信息手动处理
+
+**冲突检测**：
+- 回滚前检查文件当前内容是否与 `afterContent` 匹配
+- 不匹配说明文件已被后续修改，标记为冲突
+
+### 4. Hook 集成方式
+
+**现有架构**：
+```
+Claude Code → PostToolUse Hook
+                    ↓
+              hook-entry.cjs
+                    ↓
+              handleFileToolUse()
+                    ↓
+              直接读写 JSON 文件
+```
+
+**变更追踪集成**：
+```javascript
+// 在 handleFileToolUse() 中扩展
+function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_response) {
+  // ... 现有逻辑 ...
+
+  // 新增：变更追踪
+  if (binding?.changeTracking?.enabled) {
+    recordChange(binding, sessionId, {
+      tool: tool_name,
+      filePath: tool_input.file_path,
+      originalFile: tool_response.originalFile,
+      structuredPatch: tool_response.structuredPatch,
+      // ...
+    });
+  }
+}
+```
+
+**优点**：
+- 复用现有 Hook 架构
+- 直接操作文件，无 MCP 调用开销
+- 与现有逻辑无缝集成
+
 ## 下一步
 
-### 需要设计的内容
+### 待设计
 
-1. **存储格式**
-   - `.changes/` 目录结构
-   - 变更记录数据模型
-   - 与节点的关联方式
+1. **数据模型**
+   - ChangeRecord 结构
+   - Index 结构
+   - 与节点的引用关系
 
-2. **Hook 脚本**
-   - 从测试脚本升级为正式实现
-   - 调用 MCP 记录变更
-   - 处理 session_id → node_id 映射
+2. **派发会话映射**
+   - 如何在派发时建立 session → node 映射
+   - 并发场景的边界情况
 
-3. **MCP 工具**
-   - `change_record` - 记录变更（Hook 调用）
-   - `change_list` - 查看节点变更
-   - `change_revert` - 回滚特定节点变更
-   - `change_diff` - 对比两个节点的变更
+3. **回滚算法**
+   - 冲突检测逻辑
+   - 部分回滚策略
+   - 失败反馈格式
 
-4. **配置项**
-   - `workspace.changeTracking.enabled` - 是否启用
-   - 启用后不可关闭
+4. **MCP 工具**
+   - `change_list(nodeId)` - 查看节点变更
+   - `change_revert(nodeId)` - 回滚节点变更
+   - `change_diff(nodeA, nodeB)` - 对比变更
 
-5. **与现有系统集成**
-   - 替代 dispatch 的 Git 模式
-   - 工作区归档时保留变更历史
+5. **配置**
+   - `workspace.changeTracking.enabled` - 启用后不可关闭
+   - 是否需要其他配置项？
 
 ### 客户端支持
 
 | 客户端 | Hook 支持 | 状态 |
 |--------|-----------|------|
 | Claude Code | PostToolUse | ✅ 已验证 |
-| Cursor | afterFileEdit | 待验证 |
+| Cursor | afterFileEdit | 待验证（有类似字段） |
 | OpenCode | tool.execute.after / file.edited | 待验证 |
 
 ## 参考资料
 
 - `assets/hook-system-reference.md` - Hook 系统参考文档
-- `assets/apply-patch/` - apply-patch 项目分析（部分设计可借鉴）
+- `plugin/scripts/hook-entry.cjs` - 现有 Hook 实现
+- `plugin/scripts/shared/` - Hook 共享工具函数
