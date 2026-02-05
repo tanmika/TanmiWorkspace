@@ -271,6 +271,11 @@ function getReminderModule() {
   return require(getSharedModulePath('reminder.cjs'));
 }
 
+function getChangeModule() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require(getSharedModulePath('change.cjs'));
+}
+
 // ============================================================================
 // 智能提醒相关常量和函数
 // ============================================================================
@@ -745,6 +750,7 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
     /**
      * 工具执行后处理
      * 实现智能提醒：
+     * - Edit/Write 工具执行后记录变更追踪
      * - node_transition(action=complete) 后提醒记录 conclusion
      * - 长时间未调用 log_append 时提醒记录日志
      * - 非 tanmi-workspace MCP 工具不提醒
@@ -755,6 +761,43 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
       // 注意：OpenCode 的 after hook 不提供原始 args 和 result
       // args 可能在 output.metadata 中，result 在 output.output 中
       const toolOutput = output.output;
+      const metadata = output.metadata || {};
+
+      // ========== 变更追踪 ==========
+      // 处理 Edit/Write 工具的变更追踪（这些不是 tanmi-workspace MCP 工具）
+      const normalizedToolName = toolName?.toLowerCase();
+      if ((normalizedToolName === 'edit' || normalizedToolName === 'write') &&
+          currentSessionState.binding?.workspaceId) {
+        try {
+          const { recordFileChangeForOpenCode, getAmbiguousChangeCount } = getChangeModule();
+          const changeResult = recordFileChangeForOpenCode({
+            workspaceId: currentSessionState.binding.workspaceId,
+            sessionId: currentSessionState.sessionId || input.sessionID,
+            toolName: normalizedToolName,
+            metadata
+          });
+
+          // 如果有待认领变更，追加提醒到输出
+          if (changeResult?.isAmbiguous) {
+            const ambiguousCount = getAmbiguousChangeCount(currentSessionState.binding.workspaceId);
+            if (ambiguousCount > 0) {
+              const changeReminder = `\n\n<tanmi-change-reminder>
+⚠️ 存在 ${ambiguousCount} 个待认领变更，请在完成当前任务前使用 \`change_claim\` 认领。
+</tanmi-change-reminder>`;
+              if (typeof output.output === 'string') {
+                output.output = output.output + changeReminder;
+              } else {
+                output.output = changeReminder;
+              }
+            }
+          }
+        } catch (e) {
+          // 变更追踪失败不阻止后续流程
+          console.error(`[TanmiWorkspace] 变更追踪失败: ${(e as Error).message}`);
+        }
+        // Edit/Write 完成后直接返回，不需要后续的 MCP 工具提醒逻辑
+        return;
+      }
 
       // 1. 规范化工具名并检查是否为 tanmi-workspace 工具
       const shortToolName = normalizeToolName(toolName);

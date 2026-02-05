@@ -38,6 +38,9 @@ const {
   validateSignalPreCheck
 } = require('./shared/index.cjs');
 
+// 导入变更追踪模块
+const { recordFileChangeForCursor, getAmbiguousChangeCount } = require('./shared/change.cjs');
+
 // 导入生成的工具白名单配置（仅需 WRITE_TOOLS, SPECIAL_ALLOW, SIGNAL_CODES）
 const { WRITE_TOOLS, SPECIAL_ALLOW, SIGNAL_CODES } = require('../hooks/generated/write-tools.cjs');
 
@@ -559,19 +562,59 @@ function handleAfterFileEdit(sessionId, binding, input) {
 
   const filePath = input?.file_path || '';
   const fileName = filePath.split('/').pop() || filePath;
+  const edits = input?.edits || [];
+
+  // ========== 变更追踪 ==========
+  // 记录文件变更（无论提醒是否被节流）
+  let changeResult = null;
+  try {
+    changeResult = recordFileChangeForCursor({
+      workspaceId: binding.workspaceId,
+      sessionId,
+      filePath,
+      edits
+    });
+  } catch (e) {
+    // 变更追踪失败不阻止后续流程
+    logHookOutput(sessionId, 'AfterFileEdit', 'warn', {
+      message: `变更追踪失败: ${e.message}`,
+      filePath
+    });
+  }
 
   // 节流检查（使用本地节流缓存）
   if (shouldThrottleLocal(sessionId, 'file_changed', THROTTLE_MS.FILE_CHANGED)) {
+    logHookOutput(sessionId, 'AfterFileEdit', 'throttled', {
+      file: fileName,
+      changeId: changeResult?.changeId,
+      changeNodeId: changeResult?.nodeId,
+      isAmbiguous: changeResult?.isAmbiguous
+    });
     return;
   }
 
-  // 缓存提醒
-  const reminder = `📝 文件 \`${fileName}\` 已编辑。
+  // 构建提醒消息
+  let reminderMsg = `📝 文件 \`${fileName}\` 已编辑。`;
 
-**请使用 \`log_append\` 记录本次变更**，说明改动内容和目的。`;
+  // 如果有待认领变更，添加提醒
+  if (changeResult?.isAmbiguous) {
+    const ambiguousCount = getAmbiguousChangeCount(binding.workspaceId);
+    if (ambiguousCount > 0) {
+      reminderMsg += `\n\n⚠️ 存在 ${ambiguousCount} 个待认领变更，请在完成当前任务前使用 \`change_claim\` 认领。`;
+    }
+  }
 
-  addPendingReminder(sessionId, 'file_changed', reminder);
+  reminderMsg += '\n\n**请使用 `log_append` 记录本次变更**，说明改动内容和目的。';
+
+  addPendingReminder(sessionId, 'file_changed', reminderMsg);
   updateThrottleLocal(sessionId, 'file_changed');
+
+  logHookOutput(sessionId, 'AfterFileEdit', 'output', {
+    file: fileName,
+    changeId: changeResult?.changeId,
+    changeNodeId: changeResult?.nodeId,
+    isAmbiguous: changeResult?.isAmbiguous
+  });
 }
 
 /**

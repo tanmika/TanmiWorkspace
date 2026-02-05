@@ -360,12 +360,360 @@ function getAmbiguousChangeCount(workspaceId) {
   }
 }
 
+/**
+ * 记录文件变更（Cursor afterFileEdit）
+ * Cursor 特点：
+ * - 只有 Edit 操作（无 afterFileWrite Hook）
+ * - 无 originalFile，需要 Hook 主动读取当前文件（已含 newString）
+ * - 用 newString 在当前文件中定位，反向构建 oldLines
+ *
+ * @param {object} params - 参数
+ * @param {string} params.workspaceId - 工作区 ID
+ * @param {string} params.sessionId - 会话 ID (conversation_id)
+ * @param {string} params.filePath - 文件路径
+ * @param {Array<{old_string: string, new_string: string}>} params.edits - 编辑操作列表
+ * @returns {{ changeId: string, nodeId: string|null, isAmbiguous: boolean } | null}
+ */
+function recordFileChangeForCursor(params) {
+  const { workspaceId, sessionId, filePath, edits } = params;
+
+  try {
+    // 获取工作区信息
+    const entry = getWorkspaceEntry(workspaceId);
+    if (!entry?.projectRoot) {
+      logHook('change', 'debug', `工作区不存在: ${workspaceId}`);
+      return null;
+    }
+
+    const projectRoot = entry.projectRoot;
+    const wsDirName = entry.dirName || entry.id;
+
+    // 获取节点图
+    const graph = getNodeGraph(workspaceId);
+    if (!graph) {
+      logHook('change', 'debug', `无法获取节点图: ${workspaceId}`);
+      return null;
+    }
+
+    // 确定活跃执行节点
+    const activeNodes = getActiveExecutingNodes(graph);
+    let targetNodeId = null;
+    let isAmbiguous = false;
+
+    if (activeNodes.length === 1) {
+      targetNodeId = activeNodes[0];
+    } else {
+      targetNodeId = null;
+      isAmbiguous = true;
+    }
+
+    // 读取当前文件内容（已含 newString）
+    let currentContent = '';
+    try {
+      currentContent = fs.readFileSync(filePath, 'utf-8');
+    } catch (e) {
+      logHook('change', 'warn', `无法读取文件: ${filePath}`);
+    }
+
+    // 处理每个编辑操作（Cursor 可能有多个 edits）
+    // 为简化，合并为一个变更记录
+    const edit = edits?.[0];
+    if (!edit) {
+      logHook('change', 'debug', `无编辑操作: ${filePath}`);
+      return null;
+    }
+
+    const oldString = edit.old_string || '';
+    const newString = edit.new_string || '';
+
+    const oldLines = oldString.split('\n');
+    const newLines = newString.split('\n');
+
+    // 用 newString 在当前文件中定位（因为文件已被修改）
+    let lineNumber;
+    let contextBefore;
+    let contextAfter;
+
+    if (currentContent && newString) {
+      const pos = findStringPosition(currentContent, newString);
+      if (pos) {
+        lineNumber = pos.lineNumber;
+        const fileLines = currentContent.split('\n');
+        const ctx = extractContext(fileLines, pos.position, newLines.length, 3);
+        contextBefore = ctx.before;
+        contextAfter = ctx.after;
+      }
+    }
+
+    const operation = {
+      type: 'update',
+      filePath,
+      oldLines,
+      newLines,
+      lineNumber,
+      contextBefore,
+      contextAfter
+    };
+
+    // 生成变更记录
+    const changeId = generateChangeId();
+    const timestamp = new Date().toISOString();
+
+    const record = {
+      id: changeId,
+      nodeId: targetNodeId,
+      timestamp,
+      sessionId,
+      client: 'cursor',
+      operation
+    };
+
+    // 写入变更记录
+    const changePath = getChangeRecordPath(projectRoot, wsDirName, targetNodeId, changeId, graph);
+    writeChangeRecord(changePath, record);
+
+    // 更新索引
+    const changesIndex = readChangesIndex(projectRoot, wsDirName);
+
+    if (isAmbiguous) {
+      changesIndex.ambiguous.push(changeId);
+    }
+
+    if (!changesIndex.fileIndex[filePath]) {
+      changesIndex.fileIndex[filePath] = [];
+    }
+    changesIndex.fileIndex[filePath].push({
+      nodeId: targetNodeId || '',
+      changeId
+    });
+
+    changesIndex.sequence.push({
+      nodeId: targetNodeId,
+      changeId
+    });
+
+    writeChangesIndex(projectRoot, wsDirName, changesIndex);
+
+    logHook('change', 'info', `[Cursor] 记录变更: ${changeId} -> ${targetNodeId || 'ambiguous'}`, {
+      filePath,
+      operationType: operation.type,
+      isAmbiguous
+    });
+
+    return {
+      changeId,
+      nodeId: targetNodeId,
+      isAmbiguous
+    };
+  } catch (e) {
+    logHook('change', 'error', `[Cursor] 记录变更失败: ${e.message}`, {
+      workspaceId,
+      filePath,
+      error: e.stack
+    });
+    return null;
+  }
+}
+
+/**
+ * 记录文件变更（OpenCode tool.execute.after）
+ * OpenCode 特点：
+ * - Edit: output.metadata.filediff 包含 { file, before, after }（完整文件内容）
+ * - Write: output.metadata 只有 { filepath, exists }，无 content
+ *
+ * @param {object} params - 参数
+ * @param {string} params.workspaceId - 工作区 ID
+ * @param {string} params.sessionId - 会话 ID
+ * @param {string} params.toolName - 工具名 (edit/write)
+ * @param {object} params.metadata - output.metadata
+ * @returns {{ changeId: string, nodeId: string|null, isAmbiguous: boolean } | null}
+ */
+function recordFileChangeForOpenCode(params) {
+  const { workspaceId, sessionId, toolName, metadata } = params;
+
+  try {
+    // 获取工作区信息
+    const entry = getWorkspaceEntry(workspaceId);
+    if (!entry?.projectRoot) {
+      logHook('change', 'debug', `工作区不存在: ${workspaceId}`);
+      return null;
+    }
+
+    const projectRoot = entry.projectRoot;
+    const wsDirName = entry.dirName || entry.id;
+
+    // 获取节点图
+    const graph = getNodeGraph(workspaceId);
+    if (!graph) {
+      logHook('change', 'debug', `无法获取节点图: ${workspaceId}`);
+      return null;
+    }
+
+    // 确定活跃执行节点
+    const activeNodes = getActiveExecutingNodes(graph);
+    let targetNodeId = null;
+    let isAmbiguous = false;
+
+    if (activeNodes.length === 1) {
+      targetNodeId = activeNodes[0];
+    } else {
+      targetNodeId = null;
+      isAmbiguous = true;
+    }
+
+    let operation;
+    let filePath;
+
+    const normalizedToolName = toolName?.toLowerCase();
+
+    if (normalizedToolName === 'edit' && metadata?.filediff) {
+      // Edit 操作：有完整的 before/after
+      const filediff = metadata.filediff;
+      filePath = filediff.file || '';
+      const beforeContent = filediff.before || '';
+      const afterContent = filediff.after || '';
+
+      // 计算差异（简化处理：记录完整内容）
+      // 为了支持精确回滚，需要找出实际变更的部分
+      // 这里简化为记录完整的 before/after，回滚时用 before 替换
+      const beforeLines = beforeContent.split('\n');
+      const afterLines = afterContent.split('\n');
+
+      // 尝试找出差异位置（简化实现）
+      let lineNumber;
+      let contextBefore;
+      let contextAfter;
+
+      // 找第一个不同的行
+      for (let i = 0; i < Math.max(beforeLines.length, afterLines.length); i++) {
+        if (beforeLines[i] !== afterLines[i]) {
+          lineNumber = i + 1;
+          // 提取上下文
+          const ctx = extractContext(afterLines, i, 1, 3);
+          contextBefore = ctx.before;
+          contextAfter = ctx.after;
+          break;
+        }
+      }
+
+      operation = {
+        type: 'update',
+        filePath,
+        oldLines: beforeLines,
+        newLines: afterLines,
+        lineNumber,
+        contextBefore,
+        contextAfter,
+        // OpenCode 特有：保存完整内容用于精确回滚
+        _fullBefore: beforeContent,
+        _fullAfter: afterContent
+      };
+    } else if (normalizedToolName === 'write') {
+      // Write 操作：只有 filepath，需要读取当前文件
+      filePath = metadata?.filepath || '';
+      const existed = metadata?.exists;
+
+      if (!filePath) {
+        logHook('change', 'debug', `[OpenCode] Write 操作无文件路径`);
+        return null;
+      }
+
+      // 读取当前文件内容（Write 后的内容）
+      let content = '';
+      try {
+        content = fs.readFileSync(filePath, 'utf-8');
+      } catch (e) {
+        logHook('change', 'warn', `[OpenCode] 无法读取文件: ${filePath}`);
+      }
+
+      if (!existed) {
+        // 新建文件
+        operation = {
+          type: 'add',
+          filePath,
+          content
+        };
+      } else {
+        // 覆盖文件（无法获取原始内容）
+        operation = {
+          type: 'overwrite',
+          filePath,
+          newContent: content
+        };
+      }
+    } else {
+      logHook('change', 'debug', `[OpenCode] 不支持的工具: ${toolName}`);
+      return null;
+    }
+
+    // 生成变更记录
+    const changeId = generateChangeId();
+    const timestamp = new Date().toISOString();
+
+    const record = {
+      id: changeId,
+      nodeId: targetNodeId,
+      timestamp,
+      sessionId,
+      client: 'opencode',
+      operation
+    };
+
+    // 写入变更记录
+    const changePath = getChangeRecordPath(projectRoot, wsDirName, targetNodeId, changeId, graph);
+    writeChangeRecord(changePath, record);
+
+    // 更新索引
+    const changesIndex = readChangesIndex(projectRoot, wsDirName);
+
+    if (isAmbiguous) {
+      changesIndex.ambiguous.push(changeId);
+    }
+
+    if (!changesIndex.fileIndex[filePath]) {
+      changesIndex.fileIndex[filePath] = [];
+    }
+    changesIndex.fileIndex[filePath].push({
+      nodeId: targetNodeId || '',
+      changeId
+    });
+
+    changesIndex.sequence.push({
+      nodeId: targetNodeId,
+      changeId
+    });
+
+    writeChangesIndex(projectRoot, wsDirName, changesIndex);
+
+    logHook('change', 'info', `[OpenCode] 记录变更: ${changeId} -> ${targetNodeId || 'ambiguous'}`, {
+      filePath,
+      operationType: operation.type,
+      isAmbiguous
+    });
+
+    return {
+      changeId,
+      nodeId: targetNodeId,
+      isAmbiguous
+    };
+  } catch (e) {
+    logHook('change', 'error', `[OpenCode] 记录变更失败: ${e.message}`, {
+      workspaceId,
+      toolName,
+      error: e.stack
+    });
+    return null;
+  }
+}
+
 module.exports = {
   generateChangeId,
   getActiveExecutingNodes,
   readChangesIndex,
   writeChangesIndex,
   recordFileChange,
+  recordFileChangeForCursor,
+  recordFileChangeForOpenCode,
   getAmbiguousChangeCount,
   extractContext,
   findStringPosition
