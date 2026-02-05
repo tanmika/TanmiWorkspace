@@ -12,6 +12,7 @@ export { DispatchService } from "./DispatchService.js";
 export { ConfigService } from "./ConfigService.js";
 export { MemoService } from "./MemoService.js";
 export { CapabilityService, capabilityService } from "./CapabilityService.js";
+export { ChangeService } from "./ChangeService.js";
 export type {
   DispatchPrepareResult,
   DispatchUpgradeResult,

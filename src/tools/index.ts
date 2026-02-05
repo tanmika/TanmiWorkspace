@@ -20,3 +20,4 @@ export {
 export { configTools, configGetTool, configSetTool } from "./config.js";
 export { memoTools, memoCreateTool, memoListTool, memoGetTool, memoReplaceTool, memoEditTool, memoInsertTool, memoDeleteTool } from "./memo.js";
 export { capabilityTools, capabilityListTool, capabilitySelectTool } from "./capability.js";
+export { changeTools, changeClaimTool, changeTransferTool, changeListTool, changeRevertTool } from "./change.js";

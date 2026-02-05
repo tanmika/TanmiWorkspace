@@ -23,6 +23,7 @@ import { HealthService } from "../services/HealthService.js";
 import { SearchService } from "../services/SearchService.js";
 import { RepairService } from "../services/RepairService.js";
 import { HelpService } from "../tools/help.js";
+import { ChangeService } from "../services/ChangeService.js";
 import { extractShortId } from "../utils/id.js";
 
 export interface Services {
@@ -48,6 +49,7 @@ export interface Services {
   search: SearchService;
   repair: RepairService;
   help: HelpService;
+  change: ChangeService;
 }
 
 let servicesInstance: Services | null = null;
@@ -102,6 +104,10 @@ export function createServices(): Services {
   const search = new SearchService(json, md, fs);
   const repair = new RepairService(json, fs);
   const help = new HelpService();
+  const change = new ChangeService(json, fs);
+
+  // 设置 ChangeService 依赖（用于 ambiguous 变更检查）
+  state.setChangeService(change);
 
   // 设置服务依赖
   session.setInstallationService(installation);
@@ -132,6 +138,7 @@ export function createServices(): Services {
     search,
     repair,
     help,
+    change,
   };
 
   return servicesInstance;

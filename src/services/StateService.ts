@@ -27,6 +27,7 @@ import { GuidanceService } from "./GuidanceService.js";
 import type { GuidanceContext } from "../types/guidance.js";
 import { isGitRepo, getCurrentCommit } from "../utils/git.js";
 import { eventService } from "./EventService.js";
+import { ChangeService } from "./ChangeService.js";
 
 /**
  * 结论最大长度（字符数）
@@ -95,12 +96,24 @@ export class StateService {
    */
   private guidanceService: GuidanceService;
 
+  /**
+   * 变更追踪服务（可选，用于检查 ambiguous 变更）
+   */
+  private changeService?: ChangeService;
+
   constructor(
     private json: JsonStorage,
     private md: MarkdownStorage,
     private fs: FileSystemAdapter
   ) {
     this.guidanceService = new GuidanceService();
+  }
+
+  /**
+   * 设置变更追踪服务（依赖注入）
+   */
+  setChangeService(changeService: ChangeService): void {
+    this.changeService = changeService;
   }
 
   /**
@@ -342,6 +355,39 @@ export class StateService {
             `同级节点 ${activeIds} 正在执行中。请先完成或暂停当前任务，再开始新任务。遵循"一次一个节点"原则。`
           );
         }
+      }
+    }
+
+    // 4.5 执行节点 complete 时检查 ambiguous 变更
+    if (this.changeService && nodeType === "execution" && action === "complete") {
+      const ambiguousCount = await this.changeService.getAmbiguousCount(workspaceId);
+      if (ambiguousCount > 0) {
+        // 检查 changeWarned 标记
+        if (!nodeMeta.changeWarned) {
+          // 首次警告：设置标记并阻止
+          nodeMeta.changeWarned = true;
+          await this.json.writeGraph(projectRoot, wsDirName, graph);
+          throw new TanmiError(
+            "AMBIGUOUS_CHANGES_EXIST",
+            `存在 ${ambiguousCount} 个待认领的文件变更。\n\n` +
+            `请调用 change_list() 查看待认领变更，然后使用 change_claim(nodeId="${nodeId}", changeIds=[...]) 将变更认领到当前节点。\n\n` +
+            `完成后再次调用 node_transition(action="complete") 即可继续。`
+          );
+        }
+        // 已警告过，放行并清除标记
+        nodeMeta.changeWarned = undefined;
+      }
+    }
+
+    // 4.6 规划节点 complete 时强制检查 ambiguous 变更（无法跳过）
+    if (this.changeService && nodeType === "planning" && action === "complete") {
+      const ambiguousCount = await this.changeService.getAmbiguousCount(workspaceId);
+      if (ambiguousCount > 0) {
+        throw new TanmiError(
+          "AMBIGUOUS_CHANGES_BLOCK",
+          `规划节点完成前必须处理所有待认领变更（当前有 ${ambiguousCount} 个）。\n\n` +
+          `请调用 change_list() 查看待认领变更，将它们认领到相应的子节点后再完成规划节点。`
+        );
       }
     }
 

@@ -196,6 +196,9 @@ export interface NodeMeta {
   // ===== 派发相关字段（可选）=====
   dispatch?: NodeDispatchInfo;        // 派发信息（派发子节点使用）
   dispatchParent?: NodeDispatchParent; // 派发母节点信息（派发母节点使用）
+
+  // ===== 变更追踪字段（可选）=====
+  changeWarned?: boolean;             // 已警告过 ambiguous 变更（一次跳过机制）
 }
 
 /**

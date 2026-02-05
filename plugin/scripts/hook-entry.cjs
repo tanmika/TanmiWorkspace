@@ -31,7 +31,10 @@ const {
   isWhitelistedForSkillInit,
   normalizeWorkflowPhase,
   getSkillForPhase,
-  validateSignalPreCheck
+  validateSignalPreCheck,
+  // 变更追踪
+  recordFileChange,
+  getAmbiguousChangeCount
 } = require('./shared/index.cjs');
 
 // 导入生成的工具白名单配置
@@ -220,7 +223,8 @@ mcp-cli info ${toolPath}
 
 /**
  * 处理文件编辑工具 (Edit/Write)
- * 成功后提醒记录日志
+ * 1. 记录变更追踪
+ * 2. 成功后提醒记录日志
  */
 function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_response) {
   const filePath = tool_input?.file_path || '';
@@ -249,29 +253,60 @@ function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_respo
     return;
   }
 
+  // ========== 变更追踪 ==========
+  // 记录文件变更（无论提醒是否被节流）
+  let changeResult = null;
+  try {
+    changeResult = recordFileChange({
+      workspaceId: binding.workspaceId,
+      sessionId,
+      toolName: tool_name,
+      toolInput: tool_input,
+      toolResponse: tool_response
+    });
+  } catch (e) {
+    // 变更追踪失败不阻止后续流程
+    logHook('handleFileToolUse', 'warn', `变更追踪失败: ${e.message}`);
+  }
+
   // 节流检查：file_changed 类型，10秒内不重复提醒
   if (shouldThrottle(binding, 'file_changed', THROTTLE_MS.FILE_CHANGED)) {
     logHookOutput(sessionId, 'PostToolUse', 'throttled', {
       tool: tool_name,
       file: fileName,
-      reminderType: 'file_changed'
+      reminderType: 'file_changed',
+      changeId: changeResult?.changeId,
+      changeNodeId: changeResult?.nodeId,
+      isAmbiguous: changeResult?.isAmbiguous
     });
     process.exit(0);
     return;
   }
 
-  const reminder = `<tanmi-post-tool-reminder>
-📝 文件 \`${fileName}\` 已${tool_name === 'Edit' ? '编辑' : '写入'}。
+  // 构建提醒消息
+  let reminderMsg = `📝 文件 \`${fileName}\` 已${tool_name === 'Edit' ? '编辑' : '写入'}。`;
 
-**请使用 \`log_append\` 记录本次变更**，说明改动内容和目的。
-</tanmi-post-tool-reminder>`;
+  // 如果有待认领变更，添加提醒
+  if (changeResult?.isAmbiguous) {
+    const ambiguousCount = getAmbiguousChangeCount(binding.workspaceId);
+    if (ambiguousCount > 0) {
+      reminderMsg += `\n\n⚠️ 存在 ${ambiguousCount} 个待认领变更，请在完成当前任务前使用 \`change_claim\` 认领。`;
+    }
+  }
+
+  reminderMsg += '\n\n**请使用 `log_append` 记录本次变更**，说明改动内容和目的。';
+
+  const reminder = `<tanmi-post-tool-reminder>\n${reminderMsg}\n</tanmi-post-tool-reminder>`;
 
   updateLastReminder(sessionId, 'file_changed');
 
   logHookOutput(sessionId, 'PostToolUse', 'output', {
     tool: tool_name,
     file: fileName,
-    reminderType: 'file_changed'
+    reminderType: 'file_changed',
+    changeId: changeResult?.changeId,
+    changeNodeId: changeResult?.nodeId,
+    isAmbiguous: changeResult?.isAmbiguous
   }, reminder);
 
   outputHookResponse('PostToolUse', reminder);

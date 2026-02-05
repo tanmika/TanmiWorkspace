@@ -10,6 +10,7 @@ const context = require('./context.cjs');
 const reminder = require('./reminder.cjs');
 const logger = require('./logger.cjs');
 const workflow = require('./workflow.cjs');
+const change = require('./change.cjs');
 
 module.exports = {
   // 配置
@@ -34,5 +35,8 @@ module.exports = {
   ...logger,
 
   // 工作流
-  ...workflow
+  ...workflow,
+
+  // 变更追踪
+  ...change
 };

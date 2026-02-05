@@ -10,3 +10,4 @@ export * from "./memo.js";
 export * from "./capability.js";
 export * from "./health.js";
 export * from "./service.js";
+export * from "./change.js";

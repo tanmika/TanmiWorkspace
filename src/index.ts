@@ -38,6 +38,7 @@ import { configTools } from "./tools/config.js";
 import { memoTools } from "./tools/memo.js";
 import { capabilityTools } from "./tools/capability.js";
 import { searchTools } from "./tools/search.js";
+import { changeTools } from "./tools/change.js";
 import { generateImportGuide, listChanges } from "./services/OpenSpecParser.js";
 import { getFullInstructions } from "./prompts/instructions.js";
 import { TanmiError } from "./types/errors.js";
@@ -177,7 +178,7 @@ function createMcpServer(services: Services): Server {
   ];
 
   // 汇总所有工具（用于列表和参数验证）
-  const allToolsWithExtras = [...allTools, ...memoTools, ...capabilityTools, ...searchTools];
+  const allToolsWithExtras = [...allTools, ...memoTools, ...capabilityTools, ...searchTools, ...changeTools];
 
   // 创建工具名到 Tool 定义的映射（用于参数验证）
   const toolMap = new Map(allToolsWithExtras.map(tool => [tool.name, tool]));
@@ -1087,6 +1088,41 @@ Read(file_path: <返回的 path>)
             target: args?.target as "all" | "node" | "memo" | undefined,
             limit: args?.limit as number | undefined,
             context: args?.context as number | undefined,
+          });
+          break;
+        }
+
+        // Change 工具
+        case "change_claim": {
+          result = await services.change.claimChanges({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string,
+            changeIds: args?.changeIds as string[],
+          });
+          break;
+        }
+
+        case "change_transfer": {
+          result = await services.change.transferChange({
+            workspaceId: args?.workspaceId as string,
+            changeId: args?.changeId as string,
+            toNodeId: args?.toNodeId as string,
+          });
+          break;
+        }
+
+        case "change_list": {
+          result = await services.change.listChanges({
+            workspaceId: args?.workspaceId as string,
+            nodeId: args?.nodeId as string | undefined,
+          });
+          break;
+        }
+
+        case "change_revert": {
+          result = await services.change.revertChanges({
+            workspaceId: args?.workspaceId as string,
+            changeIds: args?.changeIds as string[],
           });
           break;
         }

@@ -91,6 +91,11 @@ export const ErrorCodes = {
 
   // 安全错误
   UNBOUND_WRITE_DENIED: "UNBOUND_WRITE_DENIED",
+
+  // 变更追踪错误
+  CHANGE_NOT_FOUND: "CHANGE_NOT_FOUND",
+  AMBIGUOUS_CHANGES_EXIST: "AMBIGUOUS_CHANGES_EXIST",
+  AMBIGUOUS_CHANGES_BLOCK: "AMBIGUOUS_CHANGES_BLOCK",
 } as const;
 
 /**
@@ -179,4 +184,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   VERSION_TOO_HIGH: "数据版本过高，请升级 tanmi-workspace",
   VERSION_READONLY: "数据版本高于当前代码版本，禁止写入",
   UNBOUND_WRITE_DENIED: "安全设置禁止未绑定会话执行写操作",
+  CHANGE_NOT_FOUND: "变更记录不存在",
+  AMBIGUOUS_CHANGES_EXIST: "存在待认领的变更记录，请先认领后再完成节点",
+  AMBIGUOUS_CHANGES_BLOCK: "规划节点完成前必须处理所有待认领变更",
 };
