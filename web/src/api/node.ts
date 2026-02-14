@@ -40,9 +40,11 @@ export const nodeApi = {
     return client.patch(`/workspaces/${workspaceId}/nodes/${nodeId}`, params)
   },
 
-  // 删除节点
-  delete(workspaceId: string, nodeId: string): Promise<NodeDeleteResult> {
-    return client.delete(`/workspaces/${workspaceId}/nodes/${nodeId}`)
+  // 删除节点（revert=true 时先回滚变更再删除）
+  delete(workspaceId: string, nodeId: string, revert?: boolean): Promise<NodeDeleteResult> {
+    return client.delete(`/workspaces/${workspaceId}/nodes/${nodeId}`, {
+      params: revert != null ? { revert: String(revert) } : undefined,
+    })
   },
 
   // 状态转换

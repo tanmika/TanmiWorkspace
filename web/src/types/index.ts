@@ -580,6 +580,79 @@ export interface MemoListResult {
   hint?: string
 }
 
+// ========== Change Tracking 类型 ==========
+
+export type ChangeClient = 'claude-code' | 'cursor' | 'opencode'
+export type ChangeOperationType = 'add' | 'update' | 'overwrite' | 'delete'
+
+export interface ChangeOperationAddSummary {
+  type: 'add'
+  filePath: string
+  lineCount: number
+}
+
+export interface ChangeOperationDeleteSummary {
+  type: 'delete'
+  filePath: string
+}
+
+export interface ChangeOperationUpdateSummary {
+  type: 'update'
+  filePath: string
+  oldLines: string[]
+  newLines: string[]
+  lineNumber: number
+  contextBefore?: string[]
+  contextAfter?: string[]
+}
+
+export interface ChangeOperationOverwriteSummary {
+  type: 'overwrite'
+  filePath: string
+  hasOriginal: boolean
+}
+
+export type ChangeOperationSummary =
+  | ChangeOperationAddSummary
+  | ChangeOperationDeleteSummary
+  | ChangeOperationUpdateSummary
+  | ChangeOperationOverwriteSummary
+
+export interface ChangeRecordSummary {
+  id: string
+  nodeId: string | null
+  timestamp: string
+  sessionId: string
+  client: ChangeClient
+  operation: ChangeOperationSummary
+}
+
+export interface ChangeListResult {
+  changes: ChangeRecordSummary[]
+  totalCount: number
+}
+
+export interface AmbiguousCountResult {
+  count: number
+}
+
+export interface ChangeRevertItemResult {
+  changeId: string
+  success: boolean
+  reason?: string
+}
+
+export interface ChangeRevertResult {
+  success: boolean
+  results: ChangeRevertItemResult[]
+}
+
+export interface NodeDeleteWithRevertError {
+  success: false
+  error: string
+  revertResults: ChangeRevertItemResult[]
+}
+
 // ========== 搜索类型 ==========
 
 /**
