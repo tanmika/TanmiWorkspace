@@ -47,6 +47,10 @@ interface ListNodesQuery {
   depth?: string;
 }
 
+interface DeleteNodeQuery {
+  revert?: string;
+}
+
 // JSON Schema 定义
 const workspaceIdSchema = {
   params: {
@@ -66,6 +70,17 @@ const nodeIdSchema = {
       wid: { type: "string", minLength: 1, maxLength: 50 },
       nid: { type: "string", minLength: 1, maxLength: 50 }
     }
+  }
+};
+
+const deleteNodeSchema = {
+  ...nodeIdSchema,
+  querystring: {
+    type: "object",
+    properties: {
+      revert: { type: "string", enum: ["true", "false"] }
+    },
+    additionalProperties: false
   }
 };
 
@@ -270,21 +285,60 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * DELETE /api/workspaces/:wid/nodes/:nid - 删除节点
+   * 支持 ?revert=true 查询参数：删除前先回滚节点的所有变更
    */
-  fastify.delete<{ Params: NodeIdParams }>(
+  fastify.delete<{ Params: NodeIdParams; Querystring: DeleteNodeQuery }>(
     "/workspaces/:wid/nodes/:nid",
-    { schema: nodeIdSchema },
-    async (request: FastifyRequest<{ Params: NodeIdParams }>) => {
+    { schema: deleteNodeSchema },
+    async (request: FastifyRequest<{ Params: NodeIdParams; Querystring: DeleteNodeQuery }>, reply: FastifyReply) => {
+      const wid = request.params.wid;
+      const nid = request.params.nid;
+      const shouldRevert = request.query.revert === "true";
+
+      // revert=true 时，先尝试回滚变更
+      if (shouldRevert) {
+        // 获取节点变更列表（如果节点不存在会抛 NODE_NOT_FOUND → 404）
+        const changeList = await services.change.listChanges({ workspaceId: wid, nodeId: nid });
+
+        if (changeList.totalCount > 0) {
+          const changeIds = changeList.changes.map(c => c.id);
+
+          // dry-run 先检查是否全部可回滚
+          const dryRunResult = await services.change.revertChanges({
+            workspaceId: wid,
+            changeIds,
+            dryRun: true,
+          });
+
+          if (!dryRunResult.success) {
+            // dry-run 失败：返回失败详情，不删除节点
+            return reply.status(409).send({
+              success: false,
+              error: "部分变更无法回滚",
+              revertResults: dryRunResult.results,
+            });
+          }
+
+          // dry-run 成功，执行实际回滚
+          await services.change.revertChanges({
+            workspaceId: wid,
+            changeIds,
+          });
+
+          // 清理变更记录
+          await services.change.deleteNodeChanges(wid, nid);
+        }
+      }
+
       // 先读取节点信息用于记录
-      let nodeName = request.params.nid;
+      let nodeName = nid;
       try {
-        const projectRoot = await services.workspace.resolveProjectRoot(request.params.wid);
-        // 获取正确的 dirName
-        const wsEntry = await services.json.findWorkspaceEntry(request.params.wid);
-        const wsDirName = wsEntry?.dirName || request.params.wid;
+        const projectRoot = await services.workspace.resolveProjectRoot(wid);
+        const wsEntry = await services.json.findWorkspaceEntry(wid);
+        const wsDirName = wsEntry?.dirName || wid;
         const graph = await services.json.readGraph(projectRoot, wsDirName);
-        const node = graph.nodes[request.params.nid];
-        const nodeDirName = node?.dirName || request.params.nid;
+        const node = graph.nodes[nid];
+        const nodeDirName = node?.dirName || nid;
         const nodeInfo = await services.md.readNodeInfo(projectRoot, wsDirName, nodeDirName);
         nodeName = nodeInfo.title;
       } catch {
@@ -292,18 +346,18 @@ export async function nodeRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       const params: NodeDeleteParams = {
-        workspaceId: request.params.wid,
-        nodeId: request.params.nid,
+        workspaceId: wid,
+        nodeId: nid,
       };
       const result = await services.node.delete(params);
 
       // 记录手动变更（WebUI 操作）
       let manualOperationRecorded = false;
       try {
-        await services.workspace.addManualChange(request.params.wid, {
+        await services.workspace.addManualChange(wid, {
           timestamp: new Date().toISOString(),
           type: "delete",
-          nodeId: request.params.nid,
+          nodeId: nid,
           nodeName: nodeName,
           description: `删除了节点「${nodeName}」`,
           source: "webui",

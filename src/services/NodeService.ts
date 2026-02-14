@@ -707,7 +707,7 @@ export class NodeService {
     // 构建树
     const tree = await this.buildNodeTree(projectRoot, wsDirName, graph, startId, 0, depth, isArchived);
 
-    return { tree };
+    return { tree, rootId: startId };
   }
 
   /**

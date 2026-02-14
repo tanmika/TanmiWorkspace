@@ -5,8 +5,10 @@ import type { FileSystemAdapter } from "../storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../storage/JsonStorage.js";
 import type {
   ChangeRecord,
+  ChangeRecordSummary,
   ChangesIndex,
   ChangeOperation,
+  ChangeOperationSummary,
   ChangeClient,
   ChangeClaimParams,
   ChangeClaimResult,
@@ -14,6 +16,7 @@ import type {
   ChangeTransferResult,
   ChangeListParams,
   ChangeListResult,
+  ChangeListSummaryResult,
   ChangeRevertParams,
   ChangeRevertResult,
   ChangeRevertItemResult,
@@ -477,7 +480,7 @@ export class ChangeService {
   /**
    * 列出变更
    */
-  async listChanges(params: ChangeListParams): Promise<ChangeListResult> {
+  async listChanges(params: ChangeListParams): Promise<ChangeListResult | ChangeListSummaryResult> {
     const { workspaceId, nodeId } = params;
     const { projectRoot, wsDirName, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
 
@@ -520,9 +523,55 @@ export class ChangeService {
     // 按时间排序
     changes.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
+    if (params.summary) {
+      return {
+        changes: changes.map(c => ChangeService.summarizeRecord(c)),
+        totalCount: changes.length,
+      } as ChangeListSummaryResult;
+    }
+
     return {
       changes,
       totalCount: changes.length,
+    };
+  }
+
+  /**
+   * 将完整变更记录转为精简版本
+   */
+  static summarizeRecord(record: ChangeRecord): ChangeRecordSummary {
+    let operation: ChangeOperationSummary;
+
+    switch (record.operation.type) {
+      case "add":
+        operation = {
+          type: "add",
+          filePath: record.operation.filePath,
+          lineCount: record.operation.content.split("\n").length,
+        };
+        break;
+      case "overwrite":
+        operation = {
+          type: "overwrite",
+          filePath: record.operation.filePath,
+          hasOriginal: !!record.operation.originalContent,
+        };
+        break;
+      case "update":
+        operation = { ...record.operation };
+        break;
+      case "delete":
+        operation = { ...record.operation };
+        break;
+    }
+
+    return {
+      id: record.id,
+      nodeId: record.nodeId,
+      timestamp: record.timestamp,
+      sessionId: record.sessionId,
+      client: record.client,
+      operation,
     };
   }
 
@@ -539,7 +588,7 @@ export class ChangeService {
    * 回滚变更
    */
   async revertChanges(params: ChangeRevertParams): Promise<ChangeRevertResult> {
-    const { workspaceId, changeIds } = params;
+    const { workspaceId, changeIds, dryRun } = params;
     const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
 
     const graph = await this.json.readGraph(projectRoot, wsDirName);
@@ -577,16 +626,16 @@ export class ChangeService {
         continue;
       }
 
-      // 执行回滚
-      const revertResult = await this.revertSingleChange(record);
+      // 执行回滚（dryRun 时仅检查不写入）
+      const revertResult = await this.revertSingleChange(record, !!dryRun);
       results.push({
         changeId,
         ...revertResult,
         patchFile: revertResult.success ? undefined : changePath,
       });
 
-      // 如果回滚成功，删除变更记录
-      if (revertResult.success) {
+      // 如果回滚成功且非 dryRun，删除变更记录
+      if (revertResult.success && !dryRun) {
         await this.fs.deleteFile(changePath);
 
         // 从索引中移除
@@ -616,7 +665,10 @@ export class ChangeService {
       }
     }
 
-    await this.writeChangesIndex(projectRoot, wsDirName, changesIndex);
+    // dryRun 时不写入索引变更
+    if (!dryRun) {
+      await this.writeChangesIndex(projectRoot, wsDirName, changesIndex);
+    }
 
     const allSuccess = results.every(r => r.success);
     return {
@@ -627,9 +679,11 @@ export class ChangeService {
 
   /**
    * 回滚单个变更
+   * @param dryRun 仅检查是否可回滚，不实际执行写入操作
    */
   private async revertSingleChange(
-    record: ChangeRecord
+    record: ChangeRecord,
+    dryRun: boolean = false
   ): Promise<{ success: boolean; reason?: string }> {
     const { operation } = record;
 
@@ -638,7 +692,9 @@ export class ChangeService {
         case "add":
           // 删除新增的文件
           if (await this.fs.exists(operation.filePath)) {
-            await this.fs.deleteFile(operation.filePath);
+            if (!dryRun) {
+              await this.fs.deleteFile(operation.filePath);
+            }
             return { success: true };
           }
           return { success: false, reason: "文件不存在，可能已被删除" };
@@ -648,10 +704,10 @@ export class ChangeService {
           return { success: false, reason: "删除操作无法自动回滚，需要手动恢复" };
 
         case "update":
-          return await this.revertUpdateOperation(operation);
+          return await this.revertUpdateOperation(operation, dryRun);
 
         case "overwrite":
-          return await this.revertOverwriteOperation(operation);
+          return await this.revertOverwriteOperation(operation, dryRun);
 
         default:
           return { success: false, reason: "未知的操作类型" };
@@ -666,9 +722,11 @@ export class ChangeService {
 
   /**
    * 回滚 update 操作
+   * @param dryRun 仅检查匹配，不实际写入文件
    */
   private async revertUpdateOperation(
-    operation: ChangeOperationUpdate
+    operation: ChangeOperationUpdate,
+    dryRun: boolean = false
   ): Promise<{ success: boolean; reason?: string }> {
     const { filePath, oldLines, newLines } = operation;
 
@@ -689,14 +747,16 @@ export class ChangeService {
       };
     }
 
-    // 替换回 oldLines
-    const newContent = [
-      ...lines.slice(0, result.position),
-      ...oldLines,
-      ...lines.slice(result.position + newLines.length),
-    ].join("\n");
+    if (!dryRun) {
+      // 替换回 oldLines
+      const newContent = [
+        ...lines.slice(0, result.position),
+        ...oldLines,
+        ...lines.slice(result.position + newLines.length),
+      ].join("\n");
 
-    await this.fs.writeFile(filePath, newContent);
+      await this.fs.writeFile(filePath, newContent);
+    }
 
     if (result.level !== FuzzyLevel.EXACT) {
       devLog.debug("[ChangeService] 使用模糊匹配回滚", {
@@ -710,9 +770,11 @@ export class ChangeService {
 
   /**
    * 回滚 overwrite 操作
+   * @param dryRun 仅检查是否可回滚，不实际写入文件
    */
   private async revertOverwriteOperation(
-    operation: ChangeOperationOverwrite
+    operation: ChangeOperationOverwrite,
+    dryRun: boolean = false
   ): Promise<{ success: boolean; reason?: string }> {
     const { filePath, originalContent } = operation;
 
@@ -723,7 +785,9 @@ export class ChangeService {
       };
     }
 
-    await this.fs.writeFile(filePath, originalContent);
+    if (!dryRun) {
+      await this.fs.writeFile(filePath, originalContent);
+    }
     return { success: true };
   }
 

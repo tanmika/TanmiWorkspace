@@ -15,6 +15,7 @@ const ERROR_STATUS_MAP: Partial<Record<ErrorCode, number>> = {
   NODE_NOT_FOUND: 404,
   PARENT_NOT_FOUND: 404,
   REFERENCE_NOT_FOUND: 404,
+  CHANGE_NOT_FOUND: 404,
 
   // 409 Conflict
   WORKSPACE_EXISTS: 409,

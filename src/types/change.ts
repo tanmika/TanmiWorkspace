@@ -54,6 +54,57 @@ export type ChangeOperation =
   | ChangeOperationUpdate
   | ChangeOperationOverwrite;
 
+// ========== Summary 精简类型（API 返回用） ==========
+
+/**
+ * 精简操作类型 - 添加文件（省略 content，替换为 lineCount）
+ */
+export interface ChangeOperationAddSummary {
+  type: "add";
+  filePath: string;
+  lineCount: number;
+}
+
+/**
+ * 精简操作类型 - 删除文件（与完整类型相同）
+ */
+export type ChangeOperationDeleteSummary = ChangeOperationDelete;
+
+/**
+ * 精简操作类型 - 更新文件（与完整类型相同，字段数据量小）
+ */
+export type ChangeOperationUpdateSummary = ChangeOperationUpdate;
+
+/**
+ * 精简操作类型 - 覆盖文件（省略 originalContent/newContent，替换为 hasOriginal）
+ */
+export interface ChangeOperationOverwriteSummary {
+  type: "overwrite";
+  filePath: string;
+  hasOriginal: boolean;
+}
+
+/**
+ * 精简操作联合类型
+ */
+export type ChangeOperationSummary =
+  | ChangeOperationAddSummary
+  | ChangeOperationDeleteSummary
+  | ChangeOperationUpdateSummary
+  | ChangeOperationOverwriteSummary;
+
+/**
+ * 精简变更记录（API 返回用）
+ */
+export interface ChangeRecordSummary {
+  id: string;
+  nodeId: string | null;
+  timestamp: string;
+  sessionId: string;
+  client: ChangeClient;
+  operation: ChangeOperationSummary;
+}
+
 /**
  * 单次变更记录
  */
@@ -135,6 +186,7 @@ export interface ChangeTransferResult {
 export interface ChangeListParams {
   workspaceId: string;
   nodeId?: string;                // 不传查 ambiguous，传则查该节点
+  summary?: boolean;              // true 时返回精简数据（省略大字段）
 }
 
 /**
@@ -142,6 +194,14 @@ export interface ChangeListParams {
  */
 export interface ChangeListResult {
   changes: ChangeRecord[];
+  totalCount: number;
+}
+
+/**
+ * change_list 精简输出（summary=true 时使用）
+ */
+export interface ChangeListSummaryResult {
+  changes: ChangeRecordSummary[];
   totalCount: number;
 }
 
@@ -161,6 +221,7 @@ export interface ChangeRevertItemResult {
 export interface ChangeRevertParams {
   workspaceId: string;
   changeIds: string[];
+  dryRun?: boolean;               // true 时仅模拟回滚，不实际写入文件/删除记录
 }
 
 /**

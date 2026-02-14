@@ -303,6 +303,7 @@ export interface NodeListParams {
  */
 export interface NodeListResult {
   tree: NodeTreeItem;
+  rootId: string;
 }
 
 /**

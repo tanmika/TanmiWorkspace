@@ -33,6 +33,7 @@ import { memoRoutes } from "./routes/memo.js";
 import { adminRoutes } from "./routes/admin.js";
 import { backupRoutes } from "./routes/backup.js";
 import { searchRoutes } from "./routes/search.js";
+import { changeRoutes } from "./routes/change.js";
 
 /**
  * 创建并配置 Fastify 服务器
@@ -264,6 +265,7 @@ export async function createServer(): Promise<FastifyInstance> {
   await server.register(adminRoutes, { prefix: "/api" });
   await server.register(backupRoutes, { prefix: "/api" });
   await server.register(searchRoutes, { prefix: "/api" });
+  await server.register(changeRoutes, { prefix: "/api" });
 
   // 托管前端静态文件（生产模式）
   // web/dist 目录相对于 dist/http/server.js，路径为 ../../web/dist
