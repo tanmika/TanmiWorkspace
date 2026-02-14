@@ -123,14 +123,14 @@ export const useNodeStore = defineStore('node', () => {
     }
   }
 
-  async function deleteNode(nodeId: string) {
+  async function deleteNode(nodeId: string, revert?: boolean) {
     const workspaceId = workspaceStore.currentWorkspace?.id
     if (!workspaceId) throw new Error('未选择工作区')
 
     loading.value = true
     error.value = null
     try {
-      await nodeApi.delete(workspaceId, nodeId)
+      await nodeApi.delete(workspaceId, nodeId, revert)
       await fetchNodeTree()
       if (selectedNodeId.value === nodeId) {
         selectedNodeId.value = null

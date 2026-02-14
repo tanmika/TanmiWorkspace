@@ -18,6 +18,16 @@
   --path-bg: #f4f4f4;
   --path-border: #ccc;
   --mono-font: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+  /* Diff 色 */
+  --diff-add-bg: #e6ffec;
+  --diff-add-line: #dafbe1;
+  --diff-add-text: #1a7f37;
+  --diff-del-bg: #ffebe9;
+  --diff-del-line: #ffd7d5;
+  --diff-del-text: #cf222e;
+  --diff-hunk-bg: #f0f7ff;
+  --diff-hunk-text: #0550ae;
 }
 
 /* 全局主题过渡 */
@@ -51,4 +61,14 @@
   --logo-outline: #181818;
   --path-bg: #2a2a2a;
   --path-border: #484848;
+
+  /* Diff 色 - 暗色 */
+  --diff-add-bg: #0d2818;
+  --diff-add-line: #0f3520;
+  --diff-add-text: #56d364;
+  --diff-del-bg: #2d0f0f;
+  --diff-del-line: #3d1414;
+  --diff-del-text: #f47067;
+  --diff-hunk-bg: #0d1d30;
+  --diff-hunk-text: #58a6ff;
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useNodeStore, useWorkspaceStore } from '@/stores'
+import { changeApi } from '@/api'
 import { STATUS_CONFIG, NODE_ROLE_CONFIG, DISPATCH_STATUS_CONFIG, type TransitionAction, type DocRef, type DocRefMemo, type DocRefNode } from '@/types'
 import NodeIcon from '@/components/tree/NodeIcon.vue'
 import DispatchBadge from '@/components/tree/DispatchBadge.vue'
@@ -9,6 +10,7 @@ import CompactMarkdown from '@/components/common/CompactMarkdown.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsPromptDialog from '@/components/ui/WsPromptDialog.vue'
 import WsConfirmDialog from '@/components/ui/WsConfirmDialog.vue'
+import NodeChanges from '@/components/node/NodeChanges.vue'
 
 const emit = defineEmits<{
   selectMemo: [memoId: string]
@@ -29,6 +31,10 @@ const promptMessage = ref('')
 const pendingAction = ref<TransitionAction | null>(null)
 
 const showDeleteDialog = ref(false)
+const showDeleteWithChangesDialog = ref(false)
+const deleteChangeCount = ref(0)
+const deletingWithRevert = ref(false)
+const nodeChangesRef = ref<InstanceType<typeof NodeChanges> | null>(null)
 
 // 当前节点信息
 const nodeMeta = computed(() => nodeStore.selectedNodeMeta)
@@ -158,9 +164,22 @@ async function handleSetFocus() {
 }
 
 // 删除节点
-function handleDelete() {
-  if (!nodeStore.selectedNodeId) return
-  showDeleteDialog.value = true
+async function handleDelete() {
+  if (!nodeStore.selectedNodeId || !workspaceStore.currentWorkspace) return
+
+  // 查询变更数量决定弹窗类型
+  try {
+    const result = await changeApi.list(workspaceStore.currentWorkspace.id, nodeStore.selectedNodeId)
+    if (result.totalCount > 0) {
+      deleteChangeCount.value = result.totalCount
+      showDeleteWithChangesDialog.value = true
+    } else {
+      showDeleteDialog.value = true
+    }
+  } catch {
+    // 查询失败时使用普通删除弹窗
+    showDeleteDialog.value = true
+  }
 }
 
 async function confirmDelete() {
@@ -169,6 +188,29 @@ async function confirmDelete() {
     await nodeStore.deleteNode(nodeStore.selectedNodeId)
   } catch {
     // 删除失败
+  }
+}
+
+async function confirmDeleteOnly() {
+  showDeleteWithChangesDialog.value = false
+  if (!nodeStore.selectedNodeId) return
+  try {
+    await nodeStore.deleteNode(nodeStore.selectedNodeId)
+  } catch {
+    // 删除失败
+  }
+}
+
+async function confirmDeleteWithRevert() {
+  showDeleteWithChangesDialog.value = false
+  if (!nodeStore.selectedNodeId) return
+  deletingWithRevert.value = true
+  try {
+    await nodeStore.deleteNode(nodeStore.selectedNodeId, true)
+  } catch {
+    // 删除失败（可能是 409 — 部分变更无法回滚）
+  } finally {
+    deletingWithRevert.value = false
   }
 }
 
@@ -411,6 +453,14 @@ function handleNodeClick(nodeId: string) {
       <div v-else class="log-empty">暂无日志</div>
     </div>
 
+    <!-- 变更记录 -->
+    <NodeChanges
+      v-if="nodeMeta && workspaceStore.currentWorkspace"
+      ref="nodeChangesRef"
+      :workspace-id="workspaceStore.currentWorkspace.id"
+      :node-id="nodeMeta.id"
+    />
+
     </div>
 
     <!-- 操作按钮区（固定底部） -->
@@ -457,7 +507,7 @@ function handleNodeClick(nodeId: string) {
       @cancel="handlePromptCancel"
     />
 
-    <!-- 删除确认弹窗 -->
+    <!-- 删除确认弹窗（无变更时） -->
     <WsConfirmDialog
       v-model="showDeleteDialog"
       title="删除确认"
@@ -467,6 +517,33 @@ function handleNodeClick(nodeId: string) {
       type="danger"
       @confirm="confirmDelete"
     />
+
+    <!-- 删除确认弹窗（有变更时 — 三按钮） -->
+    <Teleport to="body">
+      <div v-if="showDeleteWithChangesDialog" class="delete-changes-overlay" @click.self="showDeleteWithChangesDialog = false">
+        <div class="delete-changes-modal">
+          <div class="dcm-header">
+            <div class="dcm-title">删除确认</div>
+          </div>
+          <div class="dcm-body">
+            <div class="dcm-message">
+              该节点存在 <strong>{{ deleteChangeCount }} 条变更记录</strong>。删除节点时，您可以选择：
+            </div>
+            <div class="dcm-warning">
+              <span>⚠</span>
+              <span>回滚操作是非原子性的，部分文件可能因内容已变化而无法自动回滚。</span>
+            </div>
+          </div>
+          <div class="dcm-actions">
+            <button class="dcm-btn dcm-btn-cancel" @click="showDeleteWithChangesDialog = false">取消</button>
+            <button class="dcm-btn dcm-btn-primary" @click="confirmDeleteOnly">仅删除节点</button>
+            <button class="dcm-btn dcm-btn-danger" :disabled="deletingWithRevert" @click="confirmDeleteWithRevert">
+              {{ deletingWithRevert ? '回滚中...' : '回滚代码后删除' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -1236,5 +1313,122 @@ function handleNodeClick(nodeId: string) {
 .action-group {
   display: flex;
   gap: 8px;
+}
+
+/* 删除弹窗（有变更时 — 三按钮） */
+.delete-changes-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.delete-changes-modal {
+  background: var(--card-bg);
+  border: 2px solid var(--border-heavy);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.15);
+  max-width: 480px;
+  width: 90%;
+}
+
+.dcm-header {
+  padding: 16px 20px;
+  border-bottom: 2px solid var(--border-heavy);
+}
+
+.dcm-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dcm-title::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  background: var(--accent-red);
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.dcm-body {
+  padding: 20px;
+}
+
+.dcm-message {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.dcm-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fff8f0;
+  border-left: 3px solid var(--accent-orange);
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+[data-theme="dark"] .dcm-warning {
+  background: #2a2000;
+}
+
+.dcm-actions {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.dcm-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: none;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.dcm-btn-cancel {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+.dcm-btn-cancel:hover {
+  border-color: var(--border-heavy);
+  color: var(--text-main);
+}
+
+.dcm-btn-primary {
+  background: var(--border-heavy);
+  color: var(--card-bg);
+}
+.dcm-btn-primary:hover {
+  background: var(--accent-red);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.2);
+}
+
+.dcm-btn-danger {
+  background: var(--accent-red);
+  color: #fff;
+}
+.dcm-btn-danger:hover {
+  box-shadow: 3px 3px 0 rgba(217, 43, 43, 0.3);
+}
+.dcm-btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
