@@ -47,13 +47,16 @@ function buildUpdateDiff(operation: {
   const { oldLines, newLines, lineNumber, contextBefore = [], contextAfter = [] } = operation
   const lines: DiffLine[] = []
 
-  // hunk header
+  // hunk header — 可读格式
   const oldStart = lineNumber - contextBefore.length
-  const oldCount = contextBefore.length + oldLines.length + contextAfter.length
-  const newCount = contextBefore.length + newLines.length + contextAfter.length
+  const delCount = oldLines.length
+  const addCount = newLines.length
+  const parts: string[] = [`Line${oldStart}`]
+  if (delCount > 0) parts.push(`-${delCount}`)
+  if (addCount > 0) parts.push(`+${addCount}`)
   lines.push({
     type: 'hunk',
-    content: `@@ -${oldStart},${oldCount} +${oldStart},${newCount} @@`,
+    content: parts.join(' '),
   })
 
   // context before

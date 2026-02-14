@@ -29,6 +29,10 @@ const fileCount = computed(() => {
   return paths.size
 })
 
+const hasRevertable = computed(() =>
+  changes.value.some(c => isRevertable(c.operation))
+)
+
 // 加载变更列表
 async function fetchChanges() {
   loading.value = true
@@ -171,7 +175,7 @@ defineExpose({ fetchChanges, changes, totalCount })
         <!-- 操作栏 -->
         <div class="changes-toolbar">
           <span class="toolbar-info">{{ totalCount }} changes · {{ fileCount }} files</span>
-          <div class="toolbar-actions">
+          <div v-if="hasRevertable" class="toolbar-actions">
             <button class="btn-sm danger" :disabled="reverting" @click="revertAll">回滚全部</button>
           </div>
         </div>
@@ -251,6 +255,43 @@ defineExpose({ fetchChanges, changes, totalCount })
 </template>
 
 <style scoped>
+/* 继承父组件的 section 结构样式（scoped 无法穿透） */
+.detail-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+.detail-section:last-child {
+  border-bottom: none;
+}
+
+.section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  background: var(--accent-red);
+  flex-shrink: 0;
+}
+
+.count-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--border-color);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-family: var(--mono-font);
+}
+
 /* 折叠触发器 */
 .no-margin {
   margin-bottom: 0 !important;
