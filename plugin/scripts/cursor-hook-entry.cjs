@@ -39,7 +39,7 @@ const {
 } = require('./shared/index.cjs');
 
 // 导入变更追踪模块
-const { recordFileChangeForCursor, getAmbiguousChangeCount } = require('./shared/change.cjs');
+const { recordFileChangeForCursor, getAmbiguousChangeCount, getActiveExecutingNodes } = require('./shared/change.cjs');
 
 // 导入生成的工具白名单配置（仅需 WRITE_TOOLS, SPECIAL_ALLOW, SIGNAL_CODES）
 const { WRITE_TOOLS, SPECIAL_ALLOW, SIGNAL_CODES } = require('../hooks/generated/write-tools.cjs');
@@ -492,6 +492,10 @@ ${validation.reason}
     };
   }
 
+  // 注：变更追踪门控（Edit/Write/MultiEdit 无活跃执行节点时拦截）已移至 handlePreToolUse，
+  // 因为 Cursor 的内置 Edit/Write 不走 beforeMCPExecution，而走 preToolUse。
+  // beforeMCPExecution 只处理 MCP 工具（如 tanmi-workspace 的 node_create 等）。
+
   logHookOutput(sessionId, 'BeforeMCPExecution', 'allow', {
     tool: tool_name,
     phase: phase,
@@ -713,6 +717,92 @@ mcp-cli info ${toolPath}
 }
 
 /**
+ * 处理 preToolUse 事件（Cursor 新增事件，2026-02 文档更新）
+ *
+ * preToolUse 在所有工具（Shell, Read, Write, Edit, MCP, Task 等）执行前触发，
+ * 可通过 matchers 过滤工具名。这里用于变更追踪门控：
+ * 已绑定工作区时，如果没有活跃执行节点，阻止 Edit/Write 工具。
+ *
+ * @param {string} sessionId - 会话 ID
+ * @param {object|null} binding - 绑定信息或 null
+ * @param {object} input - 事件输入 { tool_name, tool_input, tool_use_id, cwd, model }
+ * @returns {{ decision: string, reason?: string, updated_input?: object }}
+ */
+function handlePreToolUse(sessionId, binding, input) {
+  const { tool_name } = input;
+
+  // 未绑定工作区时放行（内建工具不受未绑定写操作限制，那是 MCP 工具的事）
+  if (!binding?.workspaceId) {
+    return { permission: 'allow' };
+  }
+
+  // 只拦截文件修改工具
+  // 注：Cursor 内建工具名为首字母大写（Edit/Write/Shell/Read），实测 2026-02-11 确认
+  const fileTools = ['Edit', 'Write', 'MultiEdit'];
+  if (!fileTools.includes(tool_name)) {
+    return { permission: 'allow' };
+  }
+
+  // 以下检查与 Claude Code handlePreToolUse 保持一致
+  // 注：Cursor preToolUse 拦截格式为 {permission:'deny'}（非 decision，实测 2026-02-11 确认）
+  const graph = getNodeGraph(binding.workspaceId);
+  const phase = normalizeWorkflowPhase(graph?.workflow?.phase);
+  const phaseSkillInvoked = graph?.workflow?.phaseSkillInvoked || false;
+
+  // 1. 流程强制：未调用阶段 Skill 时阻止文件修改
+  if (!phaseSkillInvoked) {
+    const skillName = getSkillForPhase(phase);
+    logHookOutput(sessionId, 'preToolUse', 'deny', {
+      tool: tool_name,
+      phase: phase,
+      reason: 'skill_init_required',
+      workspaceId: binding.workspaceId
+    });
+    return {
+      permission: 'deny',
+      user_message: `已进入工作区模式，必须先调用流程 Skill。请调用：Skill(skill: "${skillName}")`
+    };
+  }
+
+  // 2. 阶段约束：info/design 阶段禁止文件修改
+  const disallowedTools = {
+    'info': ['Edit', 'Write', 'MultiEdit'],
+    'design': ['Edit', 'Write', 'MultiEdit'],
+    'impl': []
+  };
+  const blocked = disallowedTools[phase] || [];
+  if (blocked.includes(tool_name)) {
+    const phaseLabels = { 'info': '信息收集', 'design': '方案设计', 'impl': '实现' };
+    logHookOutput(sessionId, 'preToolUse', 'deny', {
+      tool: tool_name,
+      phase: phase,
+      reason: 'phase_constraint',
+      workspaceId: binding.workspaceId
+    });
+    return {
+      permission: 'deny',
+      user_message: `当前处于「${phaseLabels[phase]}」阶段，不允许使用 ${tool_name}。请使用 signal 工具切换到实现阶段。`
+    };
+  }
+
+  // 3. 变更追踪门控：无活跃执行节点时拦截
+  const activeNodes = getActiveExecutingNodes(graph);
+  if (activeNodes.length === 0) {
+    logHookOutput(sessionId, 'preToolUse', 'deny', {
+      tool: tool_name,
+      reason: 'no_active_executing_node',
+      workspaceId: binding.workspaceId
+    });
+    return {
+      permission: 'deny',
+      user_message: '当前没有进行中的执行节点，无法追踪文件变更。请先 reopen 相关节点 / 创建新执行节点 / 使用 session_unbind 退出工作区后自由修改。'
+    };
+  }
+
+  return { permission: 'allow' };
+}
+
+/**
  * 处理 preCompact 事件
  * 在会话压缩前重置 phaseSkillInvoked，强制压缩后重新调用 skill
  */
@@ -828,6 +918,11 @@ async function main() {
       passThrough();
       break;
 
+    case 'preToolUse':
+      const preToolResult = handlePreToolUse(conversationId, binding, input);
+      console.log(JSON.stringify(preToolResult));
+      break;
+
     case 'stop':
       handleStop(conversationId, binding, input);
       break;
@@ -868,6 +963,7 @@ module.exports = {
   handleAfterFileEdit,
   handleStop,
   handleBeforeSubmitPrompt,
+  handlePreToolUse,
   // 常量（来自共享模块）
   THROTTLE_MS,
   VALID_WORKFLOW_PHASES,

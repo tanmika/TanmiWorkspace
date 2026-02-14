@@ -49,9 +49,19 @@ interface MockBinding {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const cursorHook = require(CURSOR_HOOK_PATH);
 
+// 加载配置模块（用于测试隔离）
+const SHARED_CONFIG_PATH = path.join(
+  ROOT_DIR,
+  "plugin/scripts/shared/config.cjs"
+);
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const sharedConfig = require(SHARED_CONFIG_PATH);
+
 describe("Cursor Hook - P0 Core Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // 隔离配置：默认无配置（等效 allowUnboundWrite: false）
+    sharedConfig._setConfigForTest(null);
     // 清空缓存（如果存在）
     if (typeof cursorHook.clearPendingReminders === "function") {
       cursorHook.clearPendingReminders("test-session");
@@ -60,6 +70,8 @@ describe("Cursor Hook - P0 Core Tests", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    // 恢复配置为正常文件读取，避免跨测试污染
+    sharedConfig._resetConfigForTest();
   });
 
   describe("TC-001: sessionStart 上下文注入", () => {
@@ -123,8 +135,9 @@ describe("Cursor Hook - P0 Core Tests", () => {
   });
 
   describe("TC-003: beforeMCPExecution 写操作阻止", () => {
-    it("Given: 未绑定工作区, When: 调用 node_create, Then: 返回 permission: deny", () => {
-      // Given: 未绑定工作区
+    it("Given: 未绑定工作区且默认配置, When: 调用 node_create, Then: 返回 permission: deny", () => {
+      // Given: 未绑定工作区，默认配置（allowUnboundWrite: false）
+      sharedConfig._setConfigForTest(null);
       const sessionId = "test-session-003";
       const binding = null;
       const input = {
@@ -144,6 +157,28 @@ describe("Cursor Hook - P0 Core Tests", () => {
       expect(result.permission).toBe("deny");
       expect(result.agent_message).toBeDefined();
       expect(result.agent_message).toContain("session_bind");
+    });
+
+    it("Given: 未绑定工作区但 allowUnboundWrite=true, When: 调用 node_create, Then: 返回 permission: allow", () => {
+      // Given: 未绑定工作区，但配置允许未绑定写操作
+      sharedConfig._setConfigForTest({ security: { allowUnboundWrite: true } });
+      const sessionId = "test-session-003b";
+      const binding = null;
+      const input = {
+        tool_name: "node_create",
+        tool_input: { title: "Test Node" },
+      };
+
+      // When: 调用 handleBeforeMCPExecution
+      const result = cursorHook.handleBeforeMCPExecution(
+        sessionId,
+        binding,
+        input
+      );
+
+      // Then: 返回 permission: allow
+      expect(result).toBeDefined();
+      expect(result.permission).toBe("allow");
     });
   });
 
@@ -207,6 +242,7 @@ describe("Cursor Hook - P0 Core Tests", () => {
 describe("Cursor Hook - P1 Auxiliary Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sharedConfig._setConfigForTest(null);
     if (typeof cursorHook.clearPendingReminders === "function") {
       cursorHook.clearPendingReminders("test-session");
     }
@@ -214,6 +250,7 @@ describe("Cursor Hook - P1 Auxiliary Tests", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    sharedConfig._resetConfigForTest();
   });
 
   describe("TC-006: afterShellExecution Bash 错误", () => {
@@ -343,10 +380,12 @@ describe("Cursor Hook - P1 Auxiliary Tests", () => {
 describe("Cursor Hook - P2 Edge Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sharedConfig._setConfigForTest(null);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    sharedConfig._resetConfigForTest();
   });
 
   describe("TC-010: 无 sessionId 静默通过", () => {

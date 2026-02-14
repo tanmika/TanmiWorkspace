@@ -359,6 +359,8 @@ export class StateService {
     }
 
     // 4.5 执行节点 complete 时检查 ambiguous 变更
+    // changeWarned 机制：首次警告+阻止，第二次放行。设计意图是允许用户在知情的情况下
+    // 跳过未认领变更完成节点（如变更确实不属于该节点）。（2026-02-10 审查确认保留此设计）
     if (this.changeService && nodeType === "execution" && action === "complete") {
       const ambiguousCount = await this.changeService.getAmbiguousCount(workspaceId);
       if (ambiguousCount > 0) {
@@ -379,7 +381,8 @@ export class StateService {
       }
     }
 
-    // 4.6 规划节点 complete 时强制检查 ambiguous 变更（无法跳过）
+    // 4.6 规划节点 complete 时强制检查 ambiguous 变更（无法跳过，无 changeWarned 机制）
+    // 规划节点管控子节点执行流程，必须确保所有变更已认领，不允许忽略。
     if (this.changeService && nodeType === "planning" && action === "complete") {
       const ambiguousCount = await this.changeService.getAmbiguousCount(workspaceId);
       if (ambiguousCount > 0) {

@@ -21,6 +21,14 @@ function generateChangeId() {
 
 /**
  * 获取活跃的执行节点列表
+ *
+ * 设计说明：
+ * - 此函数用于 dispatch 并发场景的变更归属判断
+ * - 当 activeNodes=1 时直接归属，>1 时进入 ambiguous 由 claim 机制解决
+ * - 跨子树多个 implementing 节点导致 ambiguous 是 dispatch 并发的正常行为
+ * - activeNodes=0 的场景由 PreToolUse 阶段拦截（见 hook-entry.cjs handlePreToolUse），
+ *   不应到达 PostToolUse 记录阶段
+ *
  * @param {object} graph - 节点图
  * @returns {string[]} 活跃执行节点 ID 列表
  */
@@ -213,6 +221,8 @@ function recordFileChange(params) {
     if (activeNodes.length === 1) {
       targetNodeId = activeNodes[0];
     } else if (activeNodes.length > 1 || activeNodes.length === 0) {
+      // activeNodes > 1：dispatch 并发场景，多个执行节点同时 implementing，通过 claim 机制后续归属
+      // activeNodes = 0：正常不应到达此处（PreToolUse 应已拦截），作为安全兜底记录到 ambiguous
       // 多个活跃节点或无活跃节点，放入 ambiguous
       targetNodeId = null;
       isAmbiguous = true;
@@ -259,9 +269,9 @@ function recordFileChange(params) {
     } else if (toolName === 'Write') {
       // Write 工具：新建或覆盖文件
       const content = toolInput?.content || '';
-      const isNewFile = toolResponse?.isNewFile;
+      const classified = classifyWriteOperation(toolResponse);
 
-      if (isNewFile) {
+      if (classified.isNewFile) {
         operation = {
           type: 'add',
           filePath,
@@ -272,9 +282,12 @@ function recordFileChange(params) {
         operation = {
           type: 'overwrite',
           filePath,
-          // 注意：原始内容可能无法获取
           newContent: content
         };
+        // 保存原始内容（如果 Claude Code 提供了 originalFile）
+        if (classified.originalContent !== null) {
+          operation.originalContent = classified.originalContent;
+        }
       }
     } else {
       logHook('change', 'debug', `不支持的工具: ${toolName}`);
@@ -306,6 +319,9 @@ function recordFileChange(params) {
     }
 
     // 更新文件索引
+    // 注意：fileIndex 中 ambiguous 变更的 nodeId 使用 ''（空字符串），
+    // sequence 中使用 null。类型不一致但不影响功能，claim/transfer 正确处理了两种路径。
+    // （2026-02-10 审查确认，保持现状）
     if (!changesIndex.fileIndex[filePath]) {
       changesIndex.fileIndex[filePath] = [];
     }
@@ -415,8 +431,9 @@ function recordFileChangeForCursor(params) {
       logHook('change', 'warn', `无法读取文件: ${filePath}`);
     }
 
-    // 处理每个编辑操作（Cursor 可能有多个 edits）
-    // 为简化，合并为一个变更记录
+    // Cursor Agent 模式每次只产生一个 edit，多次修改会触发多次 afterFileEdit。
+    // edits 数组格式是为 Tab 补全模式预留的（Tab 模式可能一次修改多处）。
+    // 因此取 edits[0] 不会丢失数据。（2026-02-10 审查确认）
     const edit = edits?.[0];
     if (!edit) {
       logHook('change', 'debug', `无编辑操作: ${filePath}`);
@@ -706,6 +723,38 @@ function recordFileChangeForOpenCode(params) {
   }
 }
 
+/**
+ * 分类 Write 操作的类型（新建 vs 覆盖）
+ *
+ * 修复 Claude Code toolResponse 字段不一致问题：
+ * - 旧逻辑使用 toolResponse.isNewFile（不存在的字段）
+ * - 实际 Claude Code 返回 toolResponse.type === 'create' 表示新建
+ * - 覆盖文件时 toolResponse.originalFile 包含原始内容
+ *
+ * @param {object} toolResponse - Claude Code Write 工具的响应
+ * @returns {{ isNewFile: boolean, originalContent: string|null } | null}
+ */
+function classifyWriteOperation(toolResponse) {
+  if (!toolResponse) {
+    return { isNewFile: false, originalContent: null };
+  }
+
+  // 判断是否新建文件：type='create' 优先，isNewFile 向后兼容
+  const isNewFile = toolResponse.type === 'create' || toolResponse.isNewFile === true;
+
+  // 新建文件时忽略 originalFile（即使矛盾存在也以 type 为准）
+  if (isNewFile) {
+    return { isNewFile: true, originalContent: null };
+  }
+
+  // 提取 originalContent
+  const originalContent = (toolResponse.originalFile !== undefined && toolResponse.originalFile !== null)
+    ? toolResponse.originalFile
+    : null;
+
+  return { isNewFile: false, originalContent };
+}
+
 module.exports = {
   generateChangeId,
   getActiveExecutingNodes,
@@ -716,5 +765,6 @@ module.exports = {
   recordFileChangeForOpenCode,
   getAmbiguousChangeCount,
   extractContext,
-  findStringPosition
+  findStringPosition,
+  classifyWriteOperation
 };

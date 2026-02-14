@@ -1170,7 +1170,17 @@ function installCursorHooks(): void {
 }
 
 /** Cursor TanmiWorkspace 需要配置的 hook 事件 */
-const CURSOR_TANMI_HOOK_EVENTS = ["beforeSubmitPrompt", "afterMCPExecution"];
+const CURSOR_TANMI_HOOK_EVENTS = [
+  "sessionStart",
+  "beforeSubmitPrompt",
+  "beforeMCPExecution",
+  "afterMCPExecution",
+  "afterShellExecution",
+  "afterFileEdit",
+  "preToolUse",
+  "stop",
+  "preCompact",
+];
 
 function configureCursorHooks(): void {
   info("配置 Cursor Hooks...");

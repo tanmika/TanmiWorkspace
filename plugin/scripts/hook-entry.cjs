@@ -37,6 +37,9 @@ const {
   getAmbiguousChangeCount
 } = require('./shared/index.cjs');
 
+// 导入变更追踪共享函数
+const { getActiveExecutingNodes } = require('./shared/change.cjs');
+
 // 导入生成的工具白名单配置
 const { WRITE_TOOLS, SPECIAL_ALLOW, SIGNAL_CODES } = require('../hooks/generated/write-tools.cjs');
 
@@ -566,6 +569,22 @@ function handlePreToolUse(sessionId, binding, input) {
     return;
   }
 
+  // 变更追踪门控：Edit/Write/MultiEdit 在无活跃执行节点时拦截
+  const fileTools = ['Edit', 'Write', 'MultiEdit'];
+  if (fileTools.includes(tool_name)) {
+    const blockResult = shouldBlockFileToolForChangeTracking(binding, graph);
+    if (blockResult) {
+      logHookOutput(sessionId, 'PreToolUse', 'deny', {
+        tool: tool_name,
+        phase: phase,
+        reason: 'no_active_executing_node',
+        workspaceId: binding.workspaceId
+      });
+      outputPreToolUseResponse('deny', blockResult.reason);
+      return;
+    }
+  }
+
   logHookOutput(sessionId, 'PreToolUse', 'allow', {
     tool: tool_name,
     phase: phase
@@ -926,6 +945,37 @@ if (require.main === module) {
   });
 }
 
+/**
+ * 检查是否应该在 PreToolUse 阶段拦截文件工具（Edit/Write）
+ *
+ * 场景：已绑定工作区但所有执行节点都已完成（activeNodes=0），
+ * 此时 Edit/Write 产生的变更会进入 ambiguous 且无法被认领。
+ *
+ * @param {object|null} binding - 会话绑定信息
+ * @param {object|null} graph - 节点图
+ * @returns {object|null} 拦截信息对象（包含 reason 字段），或 null 表示不拦截
+ */
+function shouldBlockFileToolForChangeTracking(binding, graph) {
+  // 未绑定工作区时不拦截
+  if (!binding || !binding.workspaceId) {
+    return null;
+  }
+
+  // 检查活跃执行节点
+  const activeNodes = getActiveExecutingNodes(graph);
+
+  if (activeNodes.length > 0) {
+    // 有活跃节点，不拦截（由 claim 机制处理归属）
+    return null;
+  }
+
+  // 没有活跃执行节点，拦截
+  return {
+    shouldBlock: true,
+    reason: '当前没有进行中的执行节点，无法追踪文件变更。请先 reopen 相关节点 / 创建新执行节点 / 使用 session_unbind 退出工作区后自由修改。'
+  };
+}
+
 // 导出供测试使用
 module.exports = {
   // 辅助函数
@@ -933,6 +983,7 @@ module.exports = {
   isWhitelistedForSkillInit,
   getSkillForPhase,
   validateSignalPreCheck,
+  shouldBlockFileToolForChangeTracking,
   // 事件处理器
   handleSessionStart,
   handleUserPromptSubmit,

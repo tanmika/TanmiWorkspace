@@ -308,3 +308,137 @@ describe("Claude Code Hook - Utility Functions", () => {
     });
   });
 });
+
+describe("Change Tracking - PreToolUse 门控: shouldBlockFileToolForChangeTracking", () => {
+  describe("TC-CT-001: 未绑定工作区时不拦截", () => {
+    it("Given: binding=null, When: 检查门控, Then: 返回 null（不拦截）", () => {
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(null, null);
+      expect(result).toBeNull();
+    });
+
+    it("Given: binding 无 workspaceId, When: 检查门控, Then: 返回 null（不拦截）", () => {
+      const binding = { sessionId: "test-session" };
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(
+        binding,
+        null
+      );
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("TC-CT-002: 有活跃执行节点时不拦截", () => {
+    it("Given: 1 个 implementing 节点, When: 检查门控, Then: 返回 null（不拦截）", () => {
+      const binding = { workspaceId: "ws-1", sessionId: "s-1" };
+      const graph = {
+        nodes: {
+          exec1: { id: "exec1", type: "execution", status: "implementing" },
+        },
+      };
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(
+        binding,
+        graph
+      );
+      expect(result).toBeNull();
+    });
+
+    it("Given: 1 个 validating 节点, When: 检查门控, Then: 返回 null（不拦截）", () => {
+      const binding = { workspaceId: "ws-1", sessionId: "s-1" };
+      const graph = {
+        nodes: {
+          exec1: { id: "exec1", type: "execution", status: "validating" },
+        },
+      };
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(
+        binding,
+        graph
+      );
+      expect(result).toBeNull();
+    });
+
+    it("Given: 多个活跃节点 (dispatch 并发), When: 检查门控, Then: 返回 null（不拦截，由 claim 机制处理）", () => {
+      const binding = { workspaceId: "ws-1", sessionId: "s-1" };
+      const graph = {
+        nodes: {
+          exec1: { id: "exec1", type: "execution", status: "implementing" },
+          exec2: { id: "exec2", type: "execution", status: "implementing" },
+        },
+      };
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(
+        binding,
+        graph
+      );
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("TC-CT-003: 无活跃执行节点时应拦截", () => {
+    it("Given: 所有执行节点已 completed, When: 检查门控, Then: 返回拦截信息", () => {
+      const binding = { workspaceId: "ws-1", sessionId: "s-1" };
+      const graph = {
+        nodes: {
+          exec1: { id: "exec1", type: "execution", status: "completed" },
+          exec2: { id: "exec2", type: "execution", status: "completed" },
+        },
+      };
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(
+        binding,
+        graph
+      );
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty("reason");
+      expect(typeof result.reason).toBe("string");
+    });
+
+    it("Given: 没有任何执行节点, When: 检查门控, Then: 返回拦截信息", () => {
+      const binding = { workspaceId: "ws-1", sessionId: "s-1" };
+      const graph = {
+        nodes: {
+          plan1: { id: "plan1", type: "planning", status: "completed" },
+        },
+      };
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(
+        binding,
+        graph
+      );
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty("reason");
+    });
+
+    it("Given: graph.nodes 为空对象, When: 检查门控, Then: 返回拦截信息", () => {
+      const binding = { workspaceId: "ws-1", sessionId: "s-1" };
+      const graph = { nodes: {} };
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(
+        binding,
+        graph
+      );
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty("reason");
+    });
+
+    it("Given: graph 无 nodes 属性, When: 检查门控, Then: 返回拦截信息", () => {
+      const binding = { workspaceId: "ws-1", sessionId: "s-1" };
+      const graph = {};
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(
+        binding,
+        graph
+      );
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty("reason");
+    });
+
+    it("Given: 有 pending 执行节点但无 implementing/validating, When: 检查门控, Then: 返回拦截信息", () => {
+      const binding = { workspaceId: "ws-1", sessionId: "s-1" };
+      const graph = {
+        nodes: {
+          exec1: { id: "exec1", type: "execution", status: "pending" },
+        },
+      };
+      const result = hookEntry.shouldBlockFileToolForChangeTracking(
+        binding,
+        graph
+      );
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty("reason");
+    });
+  });
+});

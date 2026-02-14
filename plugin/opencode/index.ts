@@ -190,6 +190,7 @@ type Plugin = (ctx: PluginContext) => Promise<PluginHooks>;
 import { createRequire } from 'module';
 import path from 'path';
 import { homedir } from 'os';
+import { readFileSync, existsSync } from 'fs';
 
 // 创建 require 函数用于加载 CommonJS 模块
 const require = createRequire(import.meta.url);
@@ -204,6 +205,35 @@ function getTanmiBaseDir(): string {
   const isDev = process.env.NODE_ENV === 'development' || process.env.TANMI_DEV === 'true';
   const baseDir = isDev ? '.tanmi-workspace-dev' : '.tanmi-workspace';
   return path.join(homedir(), baseDir);
+}
+
+/**
+ * 直接读取 session binding（绕过 shared/config.cjs 的路径检测问题）
+ *
+ * 问题：OpenCode 进程可能有 NODE_ENV=development，导致 getTanmiBaseDir() 和
+ * shared/config.cjs 都指向 dev 目录。但实际 MCP 服务器可能是生产版（写入 ~/.tanmi-workspace/）。
+ * 插件无法可靠判断 AI 连接的是哪个 MCP 服务器。
+ *
+ * 修复：同时查找 prod 和 dev 两个 bindings 文件，找到即返回。
+ */
+function readSessionBindingDirect(sessionId: string): SessionState['binding'] {
+  const candidates = [
+    path.join(homedir(), '.tanmi-workspace', 'session-bindings.json'),
+    path.join(homedir(), '.tanmi-workspace-dev', 'session-bindings.json'),
+  ];
+
+  for (const bindingsPath of candidates) {
+    try {
+      if (!existsSync(bindingsPath)) continue;
+      const content = readFileSync(bindingsPath, 'utf-8');
+      const data = JSON.parse(content);
+      const binding = data?.bindings?.[sessionId];
+      if (binding) return binding;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 /**
@@ -396,11 +426,10 @@ function resetSessionState(): void {
  */
 function handleSessionCreated(sessionId: string, directory: string): void {
   // 1. 获取 shared 模块
-  const bindingModule = getBindingModule();
   const contextModule = getContextModule();
 
-  // 2. 检查会话绑定状态
-  const binding = bindingModule.getSessionBinding(sessionId);
+  // 2. 检查会话绑定状态（使用 readSessionBindingDirect 绕过路径问题）
+  const binding = readSessionBindingDirect(sessionId);
 
   // 3. 生成上下文注入内容
   let contextToInject: string;
@@ -664,6 +693,20 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
       const shortToolName = normalizeToolName(toolName);
 
       // ========================================
+      // 0. 同步 binding 状态
+      // 每次 hook 触发时从文件重新读取 binding，确保状态与 MCP 服务器一致
+      // ========================================
+      const sessionId = input.sessionID || currentSessionState.sessionId;
+      if (sessionId) {
+        const freshBinding = readSessionBindingDirect(sessionId);
+        // 同步更新 currentSessionState，确保后续检查使用最新状态
+        currentSessionState.binding = freshBinding;
+        if (!currentSessionState.sessionId) {
+          currentSessionState.sessionId = sessionId;
+        }
+      }
+
+      // ========================================
       // 1. 未绑定工作区时的检查
       // ========================================
       if (!currentSessionState.binding?.workspaceId) {
@@ -672,7 +715,7 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
           return; // 允许执行
         }
 
-        // 检查是否为 TanmiWorkspace 写操作工具
+        // 检查是否为 TanmiWorkspace 写操作工具（MCP 工具）
         if (WRITE_TOOLS.has(shortToolName)) {
           const config = getGlobalConfig();
           // 默认拒绝未绑定的写操作，除非配置明确允许
@@ -681,12 +724,25 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
           }
         }
 
+        // 检查内建文件修改工具（write/edit/multiedit）
+        // 注：WRITE_TOOLS 仅包含 MCP 工具名，内建工具需单独检查
+        const builtinWriteTools = ['write', 'edit', 'multiedit'];
+        if (builtinWriteTools.includes(toolName?.toLowerCase())) {
+          const config = getGlobalConfig();
+          if (!config?.security?.allowUnboundWrite) {
+            throw new Error(
+              `[TanmiWorkspace] 未绑定工作区，文件修改操作被限制。` +
+              `请先使用 session_bind 绑定工作区，或使用 session_unbind 退出工作区模式。`
+            );
+          }
+        }
+
         // 未绑定时，非写操作工具放行
         return;
       }
 
       // ========================================
-      // 2. 已绑定工作区：检查工作流阶段约束
+      // 2. 已绑定工作区：流程强制 + 阶段约束
       // ========================================
       const workspaceId = currentSessionState.binding.workspaceId;
       const graph = getNodeGraph(workspaceId);
@@ -696,15 +752,37 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
       const rawPhase = graph?.workflow?.phase;
       const phase = (rawPhase && VALID_PHASES.has(rawPhase)) ? rawPhase : 'info';
 
-      // 阶段约束：info/design 阶段禁止文件修改工具
+      // 文件修改工具列表（OpenCode 工具名为小写）
+      const fileWriteTools = ['write', 'edit', 'multiedit'];
+      const isFileWriteTool = fileWriteTools.includes(toolName?.toLowerCase());
+
+      // 2a. 流程强制：未调用阶段 Skill 时阻止文件修改
+      if (isFileWriteTool) {
+        const phaseSkillInvoked = graph?.workflow?.phaseSkillInvoked || false;
+        if (!phaseSkillInvoked) {
+          const skillMapping: Record<string, string> = {
+            'info': 'flow-info',
+            'design': 'flow-design',
+            'impl': 'flow-impl'
+          };
+          const skillName = skillMapping[phase] || 'flow-info';
+          throw new Error(
+            `[TanmiWorkspace] 已进入工作区模式，必须先调用流程 Skill。` +
+            `请调用：Skill(skill: "${skillName}")`
+          );
+        }
+      }
+
+      // 2b. 阶段约束：info/design 阶段禁止文件修改工具
+      // 注：此检查在流程强制之后，只有 phaseSkillInvoked=true 时才会触发
       const phaseConstraints: Record<string, string[]> = {
-        'info': ['Write', 'Edit', 'MultiEdit'],
-        'design': ['Write', 'Edit', 'MultiEdit'],
+        'info': ['write', 'edit', 'multiedit'],
+        'design': ['write', 'edit', 'multiedit'],
         'impl': []
       };
 
       const blockedTools = phaseConstraints[phase] || [];
-      if (blockedTools.includes(toolName)) {
+      if (blockedTools.includes(toolName?.toLowerCase())) {
         const phaseLabels: Record<string, string> = {
           'info': '信息收集',
           'design': '方案设计',
@@ -717,15 +795,30 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
       }
 
       // ========================================
-      // 3. 检查写入限制（writeRestriction）
+      // 3. 变更追踪门控：无活跃执行节点时拦截文件修改
+      // ========================================
+      const fileWriteToolsForTracking = ['write', 'edit', 'multiedit'];
+      if (fileWriteToolsForTracking.includes(toolName?.toLowerCase())) {
+        const { getActiveExecutingNodes } = getChangeModule();
+        const activeNodes = getActiveExecutingNodes(graph);
+        if (activeNodes.length === 0) {
+          throw new Error(
+            `[TanmiWorkspace] 当前没有进行中的执行节点，无法追踪文件变更。` +
+            `请先 reopen 相关节点 / 创建新执行节点 / 使用 session_unbind 退出工作区后自由修改。`
+          );
+        }
+      }
+
+      // ========================================
+      // 4. 检查写入限制（writeRestriction）
       // ========================================
       const wsConfig = getWorkspaceConfig(workspaceId);
       const writeRestriction = wsConfig?.writeRestriction;
 
       if (writeRestriction?.enabled) {
         // 写入限制已启用，检查是否为文件修改工具
-        const fileWriteTools = ['Write', 'Edit', 'MultiEdit'];
-        if (fileWriteTools.includes(toolName)) {
+        const fileWriteTools = ['write', 'edit', 'multiedit'];
+        if (fileWriteTools.includes(toolName?.toLowerCase())) {
           // 检查文件路径是否在限制范围内
           const filePath = toolArgs?.file_path as string;
           if (filePath && writeRestriction.allowedPaths) {
@@ -762,6 +855,16 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
       // args 可能在 output.metadata 中，result 在 output.output 中
       const toolOutput = output.output;
       const metadata = output.metadata || {};
+
+      // 同步 binding 状态（使用 readSessionBindingDirect 绕过 shared/config.cjs 路径问题）
+      const sessionId = input.sessionID || currentSessionState.sessionId;
+      if (sessionId && !currentSessionState.binding?.workspaceId) {
+        const freshBinding = readSessionBindingDirect(sessionId);
+        currentSessionState.binding = freshBinding;
+        if (!currentSessionState.sessionId) {
+          currentSessionState.sessionId = sessionId;
+        }
+      }
 
       // ========== 变更追踪 ==========
       // 处理 Edit/Write 工具的变更追踪（这些不是 tanmi-workspace MCP 工具）
@@ -814,11 +917,10 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
 
       // 2. 处理 session_bind/session_unbind - 同步更新 currentSessionState.binding
       if (shortToolName === 'session_bind' || shortToolName === 'session_unbind') {
-        const bindingModule = getBindingModule();
-        const sessionId = currentSessionState.sessionId;
-        if (sessionId) {
-          // 重新获取最新的 binding 状态
-          const binding = bindingModule.getSessionBinding(sessionId);
+        const sid = currentSessionState.sessionId || input.sessionID;
+        if (sid) {
+          // 重新获取最新的 binding 状态（使用 readSessionBindingDirect）
+          const binding = readSessionBindingDirect(sid);
           currentSessionState.binding = binding;
         }
         // session 操作不需要后续的提醒逻辑
@@ -970,11 +1072,10 @@ const TanmiWorkspacePlugin: Plugin = async ({ project, client, $, directory }) =
       }
 
       // 直接在此处生成上下文（因为 OpenCode 没有 session.created 事件）
-      const bindingModule = getBindingModule();
       const contextModule = getContextModule();
 
-      // 检查会话绑定状态
-      const binding = bindingModule.getSessionBinding(sessionId);
+      // 检查会话绑定状态（使用 readSessionBindingDirect 绕过 shared/config.cjs 路径问题）
+      const binding = readSessionBindingDirect(sessionId);
 
       let contextToInject: string;
       if (binding) {

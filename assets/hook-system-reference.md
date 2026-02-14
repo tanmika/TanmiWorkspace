@@ -159,23 +159,28 @@ fi
 
 ## Cursor Hook 系统
 
-> 更新时间：2026-01-20，基于 Cursor 官方文档 https://cursor.com/docs/agent/hooks
+> 更新时间：2026-02-10，基于 Cursor 官方文档 https://cursor.com/docs/agent/hooks
 
-### 可用事件（15 种）
+### 可用事件（20 种）
 
-**Agent Hooks（13 种）**：
+**Agent Hooks（18 种）**：
 
 | 事件 | 触发时机 | 用途 |
 |------|---------|------|
 | **sessionStart** | 会话创建时 | 环境初始化、上下文注入、阻止会话 |
 | **sessionEnd** | 会话结束时 | 审计、日志、清理 |
 | **beforeSubmitPrompt** | 用户提交消息前 | 验证、阻止提交 |
+| **preToolUse** | 任何工具执行前 | 权限控制、工具拦截（含内建 Edit/Write） |
+| **postToolUse** | 任何工具执行后 | 日志记录、结果处理（含内建 Edit/Write） |
+| **postToolUseFailure** | 工具执行失败后 | 错误处理、诊断日志 |
 | **beforeShellExecution** | Shell 命令执行前 | 权限控制、命令验证 |
 | **afterShellExecution** | Shell 命令执行后 | 日志记录、结果处理 |
 | **beforeMCPExecution** | MCP 工具调用前 | 权限控制、参数验证 |
 | **afterMCPExecution** | MCP 工具调用后 | 日志记录、结果处理 |
 | **beforeReadFile** | 读取文件前 | 权限控制、路径验证 |
 | **afterFileEdit** | 文件编辑后 | 格式化、验证 |
+| **subagentStart** | 子代理启动时 | 子代理监控 |
+| **subagentStop** | 子代理完成时 | 子代理结果处理 |
 | **preCompact** | 上下文压缩前 | 通知用户、审计 |
 | **stop** | Agent 完成响应 | 后续消息提交（最多 5 次自动重试） |
 | **afterAgentResponse** | Agent 响应后 | 响应后处理 |
@@ -188,22 +193,27 @@ fi
 | **beforeTabFileRead** | Tab 读取文件前 | 权限控制、秘密脱敏 |
 | **afterTabFileEdit** | Tab 编辑文件后 | 格式化、验证 |
 
+> **2026-02 新增**：`preToolUse`、`postToolUse`、`postToolUseFailure` 覆盖所有工具类型（内建 Edit/Write/Read、Shell、MCP），
+> 与之前的 `before*/after*` 系列（仅覆盖特定类别）形成互补。`subagentStart`/`subagentStop` 提供子代理生命周期监控。
+
 ### 与 Claude Code 的差异
 
 | 特性 | Claude Code | Cursor |
 |------|------------|--------|
-| 事件数量 | 10 种 | 15 种 |
+| 事件数量 | 10 种 | 20 种 |
 | 会话标识 | `session_id` | `conversation_id`（`session_id` 等同） |
 | SessionStart | ✅ 支持 | ✅ **支持**（`sessionStart`） |
 | SessionEnd | ✅ 支持 | ✅ **支持**（`sessionEnd`） |
-| PreToolUse | ✅ 支持 | ✅ before* 系列 |
-| PostToolUse | ✅ 支持 | ✅ after* 系列 |
+| PreToolUse | ✅ 支持 | ✅ **支持**（`preToolUse`，覆盖所有工具含内建 Edit/Write） |
+| PostToolUse | ✅ 支持 | ✅ **支持**（`postToolUse`，覆盖所有工具含内建 Edit/Write） |
 | PreCompact | ✅ 支持 | ✅ **支持**（`preCompact`） |
+| SubagentStop | ✅ 支持 | ✅ **支持**（`subagentStop`） |
 | Matcher | ✅ 正则匹配 | ❌ 不支持 |
 | 工具参数修改 | ✅ updatedInput | ❌ 不支持 |
 | 上下文注入 | ✅ additionalContext | ✅ `additional_context` / `agent_message` |
-| MCP 工具拦截 | ✅ 通过 matcher | ✅ beforeMCPExecution |
-| Shell 命令拦截 | ✅ matcher="Bash" | ✅ beforeShellExecution |
+| MCP 工具拦截 | ✅ 通过 matcher | ✅ beforeMCPExecution / preToolUse |
+| Shell 命令拦截 | ✅ matcher="Bash" | ✅ beforeShellExecution / preToolUse |
+| 内建工具拦截 | ✅ PreToolUse + matcher | ✅ preToolUse（2026-02 新增） |
 
 ### 配置位置（优先级从高到低）
 
@@ -244,6 +254,12 @@ fi
     ],
     "afterFileEdit": [
       { "command": "./hooks/format.sh" }
+    ],
+    "preToolUse": [
+      { "command": "./hooks/gate.sh" }
+    ],
+    "postToolUse": [
+      { "command": "./hooks/track-tool.sh" }
     ],
     "preCompact": [
       { "command": "./hooks/audit.sh" }
@@ -353,6 +369,35 @@ fi
 }
 ```
 
+**preToolUse**（2026-02 新增，覆盖所有工具类型，实测 2026-02-11 确认）：
+```json
+{
+  "tool_name": "Edit" | "Write" | "Read" | "Shell" | "<mcp_tool>",
+  "tool_input": { "<tool-specific params>" },
+  "tool_use_id": "call_xxx\nctc_xxx"
+}
+```
+> **实测工具名**：内建工具为首字母大写 `Read`/`Write`/`Edit`/`Shell`（非 Claude Code 的 `Bash`）。
+> Write 的 `tool_input` 包含完整 `content` 字段，可用于变更追踪预缓存。
+
+**postToolUse**（2026-02 新增，覆盖所有工具类型）：
+```json
+{
+  "tool_name": "Edit" | "Write" | "Read" | "Shell" | "<mcp_tool>",
+  "tool_input": { "<tool-specific params>" },
+  "tool_output": "<tool result>"
+}
+```
+
+**postToolUseFailure**（2026-02 新增）：
+```json
+{
+  "tool_name": "<tool name>",
+  "tool_input": { "<tool-specific params>" },
+  "error": "<error message>"
+}
+```
+
 **preCompact**：
 ```json
 {
@@ -453,6 +498,15 @@ fi
   "agent_message": "注入给 AI 的上下文（可选）"
 }
 ```
+
+**preToolUse 输出**（2026-02 新增，实测 2026-02-11 确认格式）：
+```json
+{
+  "permission": "allow" | "deny",
+  "user_message": "拒绝原因（deny 时显示，传递给 postToolUseFailure.error_message）"
+}
+```
+> **注意**：格式与 `beforeMCPExecution` 相同（`permission` 字段）。`{decision:'deny'}` 格式**无效**，不会阻止工具执行。
 
 **beforeSubmitPrompt 输出**：
 ```json
@@ -799,6 +853,188 @@ export const TanmiWorkspacePlugin: Plugin = async (ctx) => {
 2. **session.idle vs Stop**
    - Claude Code：可阻止会话结束，强制用户处理
    - OpenCode：只读事件，只能记录警告日志
+
+---
+
+## Change Tracking Hook 支持（实测验证 2026-02-05）
+
+> 以下数据通过实际测试验证，用于评估各客户端对变更追踪功能的支持能力。
+
+### 需求说明
+
+Change Tracking 功能需要在 AI 修改文件后捕获以下信息：
+- `file_path`：文件路径
+- `old_string` / `before`：修改前的内容
+- `new_string` / `after`：修改后的内容
+- `originalFile`：完整的原始文件内容（用于回滚）
+- `content`：Write 操作的文件内容
+- `session_id`：会话标识（用于关联节点）
+
+### 支持矩阵
+
+| 客户端 | 记录 Hook | 门控 Hook | Edit 追踪 | Write 追踪 | session 标识 |
+|--------|----------|----------|----------|-----------|--------------|
+| **Claude Code** | PostToolUse | PreToolUse | ✅ 完整 | ✅ 完整 | session_id |
+| **Cursor** | afterFileEdit / postToolUse | preToolUse | ✅ old/new_string | ⚠️ postToolUse（待验证 tool_output） | conversation_id |
+| **OpenCode** | tool.execute.after | tool.execute.before | ✅ before/after | ⚠️ 无 content | sessionID |
+
+> **2026-02 更新**：Cursor 新增 `preToolUse`/`postToolUse` 事件，覆盖所有工具类型（含内建 Edit/Write）。
+> 门控拦截从"不可能"变为"可实现"；Write 追踪通过 `postToolUse.tool_output` 可能获取数据（待实测验证）。
+
+### Claude Code 实测数据
+
+**Edit 操作** (PostToolUse)：
+```json
+{
+  "session_id": "4ea76939-7c22-4060-92e6-cf51b4b56ade",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/path/to/file.txt",
+    "old_string": "原内容",
+    "new_string": "新内容"
+  },
+  "tool_response": {
+    "filePath": "/path/to/file.txt",
+    "oldString": "原内容",
+    "newString": "新内容",
+    "originalFile": "完整的原始文件内容",
+    "structuredPatch": [...]
+  }
+}
+```
+
+**Write 操作** (PostToolUse)：
+```json
+{
+  "session_id": "...",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/path/to/file.txt",
+    "content": "完整文件内容"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/path/to/file.txt",
+    "content": "完整文件内容",
+    "originalFile": null
+  }
+}
+```
+
+**结论**：Claude Code 提供完整数据，可完全支持 Change Tracking。
+
+### Cursor 实测数据
+
+**Edit 操作** (afterFileEdit)：
+```json
+{
+  "file_path": "/tmp/cursor-test.txt",
+  "edits": [
+    { "old_string": "Hello World", "new_string": "Hello Cursor" }
+  ],
+  "conversation_id": "59b16db3-bae1-4186-87ec-7d42829f629a",
+  "hook_event_name": "afterFileEdit"
+}
+```
+
+**Write 操作**：原先无 Hook 支持，2026-02 新增 `postToolUse` 可覆盖。
+
+**旧版（2026-01）文件相关 Hook**：
+- `afterFileEdit` - Agent 编辑文件后
+- `afterTabFileEdit` - Tab 编辑文件后
+- `beforeReadFile` - 读取文件前
+- `beforeTabFileRead` - Tab 读取文件前
+
+**2026-02 新增覆盖所有工具的 Hook**：
+- `preToolUse` - 任何工具执行前（可拦截 Edit/Write）
+- `postToolUse` - 任何工具执行后（可获取 Edit/Write 的 tool_output）
+- `postToolUseFailure` - 工具执行失败后
+
+**结论**（已更新 2026-02-10）：
+- ✅ Edit 操作可追踪（afterFileEdit 提供 old_string/new_string）
+- ✅ 门控拦截可实现（preToolUse 可阻止 Edit/Write）
+- ⚠️ Write 操作可能可追踪（postToolUse.tool_output 待实测验证是否包含文件内容）
+- ❌ 无 originalFile（需要自行读取文件或通过 preToolUse 预读缓存）
+
+### OpenCode 实测数据
+
+**Edit 操作** (tool.execute.after)：
+```json
+{
+  "input": {
+    "tool": "edit",
+    "sessionID": "ses_3d33f8b9cffebOa1zG9C70m325",
+    "callID": "edit:1"
+  },
+  "output": {
+    "metadata": {
+      "filediff": {
+        "file": "/tmp/opencode-test.txt",
+        "before": "Hello World",
+        "after": "Hello OpenCode"
+      }
+    },
+    "title": "tmp/opencode-test.txt",
+    "output": "Edit applied successfully."
+  }
+}
+```
+
+**Write 操作** (tool.execute.after)：
+```json
+{
+  "input": {
+    "tool": "write",
+    "sessionID": "ses_3d33f8b9cffebOa1zG9C70m325",
+    "callID": "write:0"
+  },
+  "output": {
+    "metadata": {
+      "filepath": "/tmp/opencode-test.txt",
+      "exists": false
+    },
+    "title": "tmp/opencode-test.txt",
+    "output": "Wrote file successfully."
+  }
+}
+```
+
+**注意**：`input` 中只有 `tool`, `sessionID`, `callID`，**没有 args**！编辑详情在 `output.metadata` 中。
+
+**结论**：
+- ✅ Edit 操作可追踪（通过 `output.metadata.filediff`）
+- ⚠️ Write 操作只有 filepath，**没有写入的 content**
+- ✅ 有 sessionID 可用
+
+### Write 操作支持方案
+
+由于 Cursor/OpenCode 的 Write 操作无法直接获取内容，需要额外处理：
+
+| 方案 | 描述 | 适用客户端 | 优缺点 |
+|------|------|-----------|--------|
+| **A** | Hook 中读取文件 | OpenCode | 简单，但无 originalFile |
+| **B** | before+after 配合 | OpenCode | 完整，但需维护缓存 |
+| **C** | 降级（不追踪） | Cursor | 简单，无回滚能力 |
+
+**方案 B 详细流程**（推荐 OpenCode 使用）：
+```
+tool.execute.before (callID: "write:0")
+    └─ 文件存在？读取 originalFile 缓存到 Map<callID, content>
+
+tool.execute.after (callID: "write:0")
+    └─ 读取新文件内容
+    └─ 从 Map 取出 originalFile
+    └─ 记录 ChangeRecord
+    └─ 清理 Map
+```
+
+### 建议策略
+
+| 客户端 | Edit 追踪 | Write 追踪 | 回滚能力 |
+|--------|----------|-----------|---------|
+| **Claude Code** | ✅ 完整 | ✅ 完整 | ✅ 完整 |
+| **Cursor** | ✅ 完整 | ❌ 无法追踪 | ⚠️ 仅 Edit |
+| **OpenCode** | ✅ 完整 | ⚠️ 需 before+after | ⚠️ Write 需额外处理 |
 
 ---
 

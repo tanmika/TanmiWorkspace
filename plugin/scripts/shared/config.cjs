@@ -60,6 +60,8 @@ const CONFIG_PATH = path.join(TANMI_HOME, 'config.json');
 let cachedGlobalConfig = null;
 let configMtime = null;
 let configSize = null;
+// 测试用配置覆盖：非 null 时 getGlobalConfig 直接返回此值（跳过文件读取）
+let _testConfigOverride = undefined;
 
 /**
  * 获取全局配置
@@ -67,6 +69,11 @@ let configSize = null;
  * @returns {object|null} 全局配置对象或 null
  */
 function getGlobalConfig() {
+  // 测试覆盖模式：直接返回注入的配置
+  if (_testConfigOverride !== undefined) {
+    return _testConfigOverride;
+  }
+
   try {
     // 检查文件是否存在
     if (!fs.existsSync(CONFIG_PATH)) {
@@ -96,6 +103,25 @@ function getGlobalConfig() {
   }
 }
 
+/**
+ * 设置测试用配置覆盖（跳过文件读取）
+ * @param {object|null} config - 配置对象，null 表示无配置，undefined 恢复正常读取
+ */
+function _setConfigForTest(config) {
+  _testConfigOverride = config;
+}
+
+/**
+ * 清除测试用配置覆盖，恢复正常文件读取行为
+ * 同时清除文件缓存
+ */
+function _resetConfigForTest() {
+  _testConfigOverride = undefined;
+  cachedGlobalConfig = null;
+  configMtime = null;
+  configSize = null;
+}
+
 module.exports = {
   IS_DEV,
   DIR_SUFFIX,
@@ -106,5 +132,7 @@ module.exports = {
   MCP_URL,
   WORKSPACE_KEYWORDS,
   CONFIG_PATH,
-  getGlobalConfig
+  getGlobalConfig,
+  _setConfigForTest,
+  _resetConfigForTest
 };
