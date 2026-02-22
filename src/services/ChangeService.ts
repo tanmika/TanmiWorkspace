@@ -25,6 +25,9 @@ import type {
   ChangeOperationUpdate,
   ChangeOperationAdd,
   ChangeOperationOverwrite,
+  WorkspaceChangesOverviewPatch,
+  WorkspaceChangesOverviewFile,
+  WorkspaceChangesOverviewResult,
 } from "../types/change.js";
 import type { NodeMeta, NodeGraph } from "../types/node.js";
 import { TanmiError } from "../types/errors.js";
@@ -582,6 +585,94 @@ export class ChangeService {
     const { projectRoot, wsDirName } = await this.resolveWorkspaceInfo(workspaceId);
     const changesIndex = await this.readChangesIndex(projectRoot, wsDirName);
     return changesIndex.ambiguous.length;
+  }
+
+  /**
+   * 获取工作区变更概览 — 按文件分组，每个文件的 patch 列表含节点标题
+   */
+  async getWorkspaceOverview(workspaceId: string): Promise<WorkspaceChangesOverviewResult> {
+    const { projectRoot, wsDirName, isArchived } = await this.resolveWorkspaceInfo(workspaceId);
+    const graph = await this.json.readGraph(projectRoot, wsDirName, isArchived);
+    const changesIndex = await this.readChangesIndex(projectRoot, wsDirName);
+
+    // 构建 nodeId → title 映射（title 编码在 dirName 中：标题_短ID，root 为 "root"）
+    const nodeTitleMap = new Map<string, string>();
+    for (const [nodeId, meta] of Object.entries(graph.nodes)) {
+      const m = meta as NodeMeta;
+      if (m.dirName === "root") {
+        nodeTitleMap.set(nodeId, "root");
+      } else {
+        // dirName 格式: "标题_短ID"，提取 _ 之前的部分作为 title
+        const lastUnderscore = m.dirName.lastIndexOf("_");
+        nodeTitleMap.set(nodeId, lastUnderscore > 0 ? m.dirName.slice(0, lastUnderscore) : m.dirName);
+      }
+    }
+
+    // 按 fileIndex 分组，每条 change 读取记录获取详情
+    const filesMap = new Map<string, WorkspaceChangesOverviewPatch[]>();
+
+    for (const [filePath, entries] of Object.entries(changesIndex.fileIndex)) {
+      const patches: WorkspaceChangesOverviewPatch[] = [];
+
+      for (const entry of entries) {
+        const nodeId = entry.nodeId || null;
+        const changePath = this.getChangeRecordPath(
+          projectRoot, wsDirName, nodeId, entry.changeId, graph
+        );
+        const record = await this.readChangeRecord(changePath);
+        if (!record) continue;
+
+        const patch: WorkspaceChangesOverviewPatch = {
+          changeId: record.id,
+          nodeId,
+          nodeTitle: nodeId ? (nodeTitleMap.get(nodeId) ?? nodeId) : null,
+          type: record.operation.type,
+          timestamp: record.timestamp,
+          client: record.client,
+        };
+
+        // 填充变化量
+        const op = record.operation;
+        if (op.type === "add") {
+          patch.addCount = op.content.split("\n").length;
+        } else if (op.type === "update") {
+          patch.delCount = op.oldLines.length;
+          patch.addCount = op.newLines.length;
+        } else if (op.type === "overwrite") {
+          if (op.originalContent != null) {
+            patch.delCount = op.originalContent.split("\n").length;
+          }
+          if (op.newContent != null) {
+            patch.addCount = op.newContent.split("\n").length;
+          }
+        }
+
+        patches.push(patch);
+      }
+
+      if (patches.length > 0) {
+        // 按时间排序
+        patches.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        filesMap.set(filePath, patches);
+      }
+    }
+
+    // 转为数组并按第一个 patch 的时间排序
+    const files: WorkspaceChangesOverviewFile[] = Array.from(filesMap.entries())
+      .map(([filePath, patches]) => ({ filePath, patches }))
+      .sort((a, b) => {
+        const ta = new Date(a.patches[0].timestamp).getTime();
+        const tb = new Date(b.patches[0].timestamp).getTime();
+        return ta - tb;
+      });
+
+    const totalChanges = files.reduce((sum, f) => sum + f.patches.length, 0);
+
+    return {
+      files,
+      totalFiles: files.length,
+      totalChanges,
+    };
   }
 
   /**

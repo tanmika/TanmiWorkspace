@@ -653,6 +653,29 @@ export interface NodeDeleteWithRevertError {
   revertResults: ChangeRevertItemResult[]
 }
 
+// 工作区变更概览
+export interface WorkspaceChangesOverviewPatch {
+  changeId: string
+  nodeId: string | null
+  nodeTitle: string | null
+  type: 'add' | 'update' | 'delete' | 'overwrite'
+  timestamp: string
+  client: ChangeClient
+  addCount?: number
+  delCount?: number
+}
+
+export interface WorkspaceChangesOverviewFile {
+  filePath: string
+  patches: WorkspaceChangesOverviewPatch[]
+}
+
+export interface WorkspaceChangesOverviewResult {
+  files: WorkspaceChangesOverviewFile[]
+  totalFiles: number
+  totalChanges: number
+}
+
 // ========== 搜索类型 ==========
 
 /**

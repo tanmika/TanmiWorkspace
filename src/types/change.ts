@@ -251,3 +251,28 @@ export interface RecordChangeResult {
   nodeId: string | null;          // 实际归属的节点，null 表示在 ambiguous
   isAmbiguous: boolean;
 }
+
+/**
+ * 工作区变更概览 — 按文件分组的 Patch 列表
+ */
+export interface WorkspaceChangesOverviewPatch {
+  changeId: string;
+  nodeId: string | null;
+  nodeTitle: string | null;       // 解析后的节点标题
+  type: ChangeOperation["type"];  // add | update | delete | overwrite
+  timestamp: string;
+  client: ChangeClient;
+  addCount?: number;              // 新增行数（add/update 时有值）
+  delCount?: number;              // 删除行数（update 时有值）
+}
+
+export interface WorkspaceChangesOverviewFile {
+  filePath: string;
+  patches: WorkspaceChangesOverviewPatch[];
+}
+
+export interface WorkspaceChangesOverviewResult {
+  files: WorkspaceChangesOverviewFile[];
+  totalFiles: number;
+  totalChanges: number;
+}

@@ -114,6 +114,33 @@ export async function changeRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
+   * GET /api/workspaces/:wid/changes/ambiguous/list - 获取 ambiguous 变更列表（summary 模式）
+   */
+  fastify.get<{ Params: WorkspaceIdParams }>(
+    "/workspaces/:wid/changes/ambiguous/list",
+    { schema: workspaceIdSchema },
+    async (request) => {
+      const { wid } = request.params;
+      return await change.listChanges({
+        workspaceId: wid,
+        summary: true,
+      });
+    }
+  );
+
+  /**
+   * GET /api/workspaces/:wid/changes/overview - 工作区变更概览（按文件分组）
+   */
+  fastify.get<{ Params: WorkspaceIdParams }>(
+    "/workspaces/:wid/changes/overview",
+    { schema: workspaceIdSchema },
+    async (request) => {
+      const { wid } = request.params;
+      return await change.getWorkspaceOverview(wid);
+    }
+  );
+
+  /**
    * POST /api/workspaces/:wid/changes/revert - 回滚变更
    */
   fastify.post<{ Params: WorkspaceIdParams; Body: RevertBody }>(

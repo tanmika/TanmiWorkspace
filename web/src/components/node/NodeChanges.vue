@@ -19,6 +19,7 @@ const loading = ref(false)
 const changes = ref<ChangeRecordSummary[]>([])
 const totalCount = ref(0)
 const ambiguousCount = ref(0)
+const ambiguousChanges = ref<ChangeRecordSummary[]>([])
 const expandedIds = ref<Set<string>>(new Set())
 const revertResult = ref<ChangeRevertResult | null>(null)
 const reverting = ref(false)
@@ -39,11 +40,12 @@ async function fetchChanges() {
   try {
     const [listResult, ambResult] = await Promise.all([
       changeApi.list(props.workspaceId, props.nodeId),
-      changeApi.ambiguousCount(props.workspaceId),
+      changeApi.ambiguousList(props.workspaceId),
     ])
     changes.value = listResult.changes
     totalCount.value = listResult.totalCount
-    ambiguousCount.value = ambResult.count
+    ambiguousCount.value = ambResult.totalCount
+    ambiguousChanges.value = ambResult.changes
   } catch {
     // 静默处理
   } finally {
@@ -54,9 +56,6 @@ async function fetchChanges() {
 // 展开/折叠区域
 function toggleOpen() {
   isOpen.value = !isOpen.value
-  if (isOpen.value && changes.value.length === 0) {
-    fetchChanges()
-  }
 }
 
 // 展开/折叠单条变更
@@ -77,6 +76,12 @@ function getDiffLines(operation: ChangeOperationSummary): DiffLine[] {
 function formatTime(timestamp: string): string {
   const d = new Date(timestamp)
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+// 取文件路径最后两级
+function shortFilePath(filePath: string): string {
+  const parts = filePath.split('/')
+  return parts.length > 2 ? parts.slice(-2).join('/') : filePath
 }
 
 // 判断是否可回滚
@@ -119,17 +124,16 @@ async function revertAll() {
   }
 }
 
-// 监听节点切换
+// 监听节点切换（immediate 确保初始也 fetch）
 watch(() => props.nodeId, () => {
   changes.value = []
   totalCount.value = 0
   ambiguousCount.value = 0
+  ambiguousChanges.value = []
   expandedIds.value.clear()
   revertResult.value = null
-  if (isOpen.value) {
-    fetchChanges()
-  }
-})
+  fetchChanges()
+}, { immediate: true })
 
 // 暴露刷新方法
 defineExpose({ fetchChanges, changes, totalCount })
@@ -151,104 +155,120 @@ defineExpose({ fetchChanges, changes, totalCount })
       <!-- 加载中 -->
       <div v-if="loading" class="changes-empty">加载中...</div>
 
-      <!-- 空状态 -->
-      <template v-else-if="totalCount === 0">
-        <div class="changes-empty">
-          <div class="changes-empty-icon">◇</div>
-          暂无变更记录
-        </div>
-      </template>
-
-      <!-- 有变更 -->
       <template v-else>
-        <!-- Ambiguous 提示 -->
+        <!-- Ambiguous 提示（独立于节点变更，始终显示） -->
         <div v-if="ambiguousCount > 0" class="ambiguous-banner">
           <span class="ambiguous-icon">⚠</span>
-          <div>
+          <div class="ambiguous-body">
             <div class="ambiguous-text">
-              存在 <span class="ambiguous-count">{{ ambiguousCount }}</span> 条待认领变更（多节点并发时产生）
+              存在 <span class="ambiguous-count">{{ ambiguousCount }}</span> 条待认领变更
+            </div>
+            <div class="ambiguous-files">
+              <span
+                v-for="ac in ambiguousChanges"
+                :key="ac.id"
+                class="ambiguous-file-item"
+              >
+                <span class="amb-op" :class="ac.operation.type">{{ ac.operation.type.toUpperCase() }}</span>
+                <span class="amb-path">{{ shortFilePath(ac.operation.filePath) }}</span>
+              </span>
             </div>
             <div class="ambiguous-hint">由 AI 通过 change_claim 工具处理认领</div>
           </div>
         </div>
 
-        <!-- 操作栏 -->
-        <div class="changes-toolbar">
-          <span class="toolbar-info">{{ totalCount }} changes · {{ fileCount }} files</span>
-          <div v-if="hasRevertable" class="toolbar-actions">
-            <button class="btn-sm danger" :disabled="reverting" @click="revertAll">回滚全部</button>
-          </div>
+        <!-- 空状态（节点无变更且无 ambiguous） -->
+        <div v-if="totalCount === 0 && ambiguousCount === 0" class="changes-empty">
+          <div class="changes-empty-icon">◇</div>
+          暂无变更记录
         </div>
 
-        <!-- 变更列表 -->
-        <div class="changes-list">
-          <div v-for="change in changes" :key="change.id" class="change-item">
-            <!-- 变更头部 -->
-            <div
-              class="change-header"
-              :class="{ active: expandedIds.has(change.id) }"
-              @click="toggleExpand(change.id)"
-            >
-              <span class="change-expand-icon" :class="{ expanded: expandedIds.has(change.id) }">▶</span>
-              <span class="op-badge" :class="change.operation.type">{{ change.operation.type.toUpperCase() }}</span>
-              <span class="change-filepath">{{ change.operation.filePath }}</span>
-              <span class="change-time">{{ formatTime(change.timestamp) }}</span>
-              <button
-                v-if="isRevertable(change.operation)"
-                class="change-revert-btn"
-                :disabled="reverting"
-                @click.stop="revertSingle(change.id)"
-              >REVERT</button>
+        <!-- 有节点变更 -->
+        <template v-if="totalCount > 0">
+          <!-- 操作栏 -->
+          <div class="changes-toolbar">
+            <span class="toolbar-info">{{ totalCount }} changes · {{ fileCount }} files</span>
+            <div v-if="hasRevertable" class="toolbar-actions">
+              <button class="btn-sm danger" :disabled="reverting" @click="revertAll">回滚全部</button>
             </div>
+          </div>
 
-            <!-- Diff 展开 -->
-            <div v-if="expandedIds.has(change.id)" class="change-diff">
-              <template v-if="change.operation.type === 'add'">
-                <div class="diff-newfile-hint">+ 新建文件 · {{ change.operation.lineCount }} 行</div>
-              </template>
-              <template v-else-if="change.operation.type === 'delete'">
-                <div class="diff-delete-hint">文件已删除</div>
-              </template>
-              <template v-else-if="change.operation.type === 'overwrite'">
-                <div class="diff-overwrite-hint">
-                  ⚠ 文件被整体覆盖 · {{ change.operation.hasOriginal ? '有原始内容备份，可回滚' : '无法回滚，未保存原始内容' }}
+          <!-- 变更列表 -->
+          <div class="changes-list">
+            <div v-for="change in changes" :key="change.id" class="change-item">
+              <!-- 变更头部 -->
+              <div
+                class="change-header"
+                :class="{ active: expandedIds.has(change.id) }"
+                @click="toggleExpand(change.id)"
+              >
+                <span class="change-expand-icon" :class="{ expanded: expandedIds.has(change.id) }">▶</span>
+                <span class="op-badge" :class="change.operation.type">{{ change.operation.type.toUpperCase() }}</span>
+                <span class="change-filepath">{{ change.operation.filePath }}</span>
+                <span class="change-time">{{ formatTime(change.timestamp) }}</span>
+              </div>
+
+              <!-- Diff 展开 -->
+              <div v-if="expandedIds.has(change.id)" class="change-diff">
+                <!-- 详情操作栏 -->
+                <div class="diff-action-bar">
+                  <span class="diff-action-info">
+                    <template v-if="change.operation.type === 'add'">+ 新建文件 · {{ change.operation.lineCount }} 行</template>
+                    <template v-else-if="change.operation.type === 'delete'">文件已删除</template>
+                    <template v-else-if="change.operation.type === 'overwrite'">⚠ 文件被整体覆盖</template>
+                    <template v-else-if="change.operation.type === 'update'">精确替换</template>
+                  </span>
+                  <button
+                    v-if="isRevertable(change.operation)"
+                    class="btn-sm revert"
+                    :disabled="reverting"
+                    @click="revertSingle(change.id)"
+                  >REVERT</button>
+                  <span v-else class="diff-no-revert">不可回滚</span>
                 </div>
-              </template>
-              <template v-else-if="change.operation.type === 'update'">
-                <table class="diff-table">
-                  <tr
-                    v-for="(line, idx) in getDiffLines(change.operation)"
-                    :key="idx"
-                    :class="`diff-line-${line.type}`"
-                  >
-                    <template v-if="line.type === 'hunk'">
-                      <td colspan="3">{{ line.content }}</td>
-                    </template>
-                    <template v-else>
-                      <td class="diff-line-num">{{ line.type === 'add' ? '' : line.lineNum }}</td>
-                      <td class="diff-op">{{ line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' ' }}</td>
-                      <td class="diff-content">{{ line.content }}</td>
-                    </template>
-                  </tr>
-                </table>
-              </template>
+
+                <!-- Diff 内容 -->
+                <template v-if="change.operation.type === 'overwrite'">
+                  <div class="diff-overwrite-hint">
+                    {{ change.operation.hasOriginal ? '有原始内容备份' : '未保存原始内容' }}
+                  </div>
+                </template>
+                <template v-else-if="change.operation.type === 'update'">
+                  <table class="diff-table">
+                    <tr
+                      v-for="(line, idx) in getDiffLines(change.operation)"
+                      :key="idx"
+                      :class="`diff-line-${line.type}`"
+                    >
+                      <template v-if="line.type === 'hunk'">
+                        <td colspan="3">{{ line.content }}</td>
+                      </template>
+                      <template v-else>
+                        <td class="diff-line-num">{{ line.type === 'add' ? '' : line.lineNum }}</td>
+                        <td class="diff-op">{{ line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' ' }}</td>
+                        <td class="diff-content">{{ line.content }}</td>
+                      </template>
+                    </tr>
+                  </table>
+                </template>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- 回滚结果 -->
-        <div v-if="revertResult" class="revert-result" :class="revertResult.success ? 'success' : 'partial'">
-          <div class="revert-result-title">{{ revertResult.success ? '✓ 回滚完成' : '⚠ 部分回滚失败' }}</div>
-          <div
-            v-for="item in revertResult.results"
-            :key="item.changeId"
-            class="revert-result-item"
-            :class="item.success ? 'revert-ok' : 'revert-fail'"
-          >
-            {{ item.success ? '✓' : '✗' }} {{ item.changeId.slice(0, 8) }}
-            {{ item.success ? '— 已回滚' : `— ${item.reason}` }}
+          <!-- 回滚结果 -->
+          <div v-if="revertResult" class="revert-result" :class="revertResult.success ? 'success' : 'partial'">
+            <div class="revert-result-title">{{ revertResult.success ? '✓ 回滚完成' : '⚠ 部分回滚失败' }}</div>
+            <div
+              v-for="item in revertResult.results"
+              :key="item.changeId"
+              class="revert-result-item"
+              :class="item.success ? 'revert-ok' : 'revert-fail'"
+            >
+              {{ item.success ? '✓' : '✗' }} {{ item.changeId.slice(0, 8) }}
+              {{ item.success ? '— 已回滚' : `— ${item.reason}` }}
+            </div>
           </div>
-        </div>
+        </template>
       </template>
     </template>
   </div>
@@ -336,6 +356,13 @@ defineExpose({ fetchChanges, changes, totalCount })
 .ambiguous-icon {
   font-size: 14px;
   flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 1px;
+}
+
+.ambiguous-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .ambiguous-text {
@@ -350,10 +377,59 @@ defineExpose({ fetchChanges, changes, totalCount })
   color: var(--accent-orange);
 }
 
+.ambiguous-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 6px;
+}
+
+.ambiguous-file-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.amb-op {
+  font-family: var(--mono-font);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.amb-op.add {
+  background: var(--diff-add-line);
+  color: var(--diff-add-text);
+}
+.amb-op.update {
+  background: var(--diff-hunk-bg);
+  color: var(--diff-hunk-text);
+}
+.amb-op.delete {
+  background: var(--diff-del-line);
+  color: var(--diff-del-text);
+}
+.amb-op.overwrite {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.amb-path {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
 .ambiguous-hint {
   font-size: 10px;
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 /* 操作栏 */
@@ -407,6 +483,16 @@ defineExpose({ fetchChanges, changes, totalCount })
   background: var(--accent-red);
   color: #fff;
   box-shadow: 2px 2px 0 rgba(217, 43, 43, 0.3);
+}
+
+.btn-sm.revert {
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+.btn-sm.revert:hover:not(:disabled) {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  box-shadow: 2px 2px 0 rgba(217, 43, 43, 0.2);
 }
 
 /* 变更列表 */
@@ -497,39 +583,34 @@ defineExpose({ fetchChanges, changes, totalCount })
   flex-shrink: 0;
 }
 
-/* 单条回滚按钮 */
-.change-revert-btn {
-  font-family: var(--mono-font);
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: all 0.15s;
-}
-.change-header:hover .change-revert-btn {
-  opacity: 1;
-  border-color: var(--border-color);
-}
-.change-revert-btn:hover {
-  border-color: var(--accent-red) !important;
-  color: var(--accent-red) !important;
-  background: var(--diff-del-bg) !important;
-}
-.change-revert-btn:disabled {
-  opacity: 0.3 !important;
-  cursor: not-allowed;
-}
-
 /* Diff 展开内容 */
 .change-diff {
   border-top: 1px solid var(--border-color);
   background: var(--card-footer);
   overflow: hidden;
+}
+
+/* 详情操作栏 */
+.diff-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-color);
+}
+
+.diff-action-info {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.diff-no-revert {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .diff-table {
@@ -596,22 +677,6 @@ defineExpose({ fetchChanges, changes, totalCount })
 }
 
 /* 提示区 */
-.diff-newfile-hint {
-  padding: 12px 16px;
-  font-size: 11px;
-  color: var(--diff-add-text);
-  background: var(--diff-add-bg);
-  font-family: var(--mono-font);
-}
-
-.diff-delete-hint {
-  padding: 12px 16px;
-  font-size: 11px;
-  color: var(--diff-del-text);
-  background: var(--diff-del-bg);
-  font-family: var(--mono-font);
-}
-
 .diff-overwrite-hint {
   padding: 12px 16px;
   font-size: 11px;
@@ -678,6 +743,11 @@ defineExpose({ fetchChanges, changes, totalCount })
 /* 暗色主题覆盖 */
 [data-theme="dark"] .ambiguous-banner {
   background: #2a2000;
+}
+
+[data-theme="dark"] .amb-op.overwrite {
+  background: #3d3000;
+  color: #f5c842;
 }
 
 [data-theme="dark"] .op-badge.overwrite {

@@ -5,13 +5,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { useWorkspaceStore, useNodeStore, useSettingsStore, useToastStore, useMemoStore } from '@/stores'
 import { adminApi } from '@/api/admin'
 import { workspaceApi } from '@/api/workspace'
+import { changeApi } from '@/api/change'
 import { searchApi } from '@/api/search'
 import { getGlobalSSE } from '@/composables/useSSE'
 import NodeTree from '@/components/node/NodeTree.vue'
 import NodeTreeGraph from '@/components/node/NodeTreeGraph.vue'
 import NodeDetail from '@/components/node/NodeDetail.vue'
 import NodeIcon from '@/components/tree/NodeIcon.vue'
-import type { NodeType, NodeStatus } from '@/types'
+import type { NodeType, NodeStatus, WorkspaceChangesOverviewFile } from '@/types'
 import MemoDetail from '@/components/memo/MemoDetail.vue'
 import MemoDrawerDetail from '@/components/memo/MemoDrawerDetail.vue'
 import EnableDispatchDialog from '@/components/dispatch/EnableDispatchDialog.vue'
@@ -215,6 +216,45 @@ async function loadWorkspace() {
 
 // 工作区详情抽屉状态
 const showWorkspaceDetail = ref(false)
+
+// 变更概览
+const changesOverview = ref<WorkspaceChangesOverviewFile[]>([])
+const changesOverviewTotal = ref(0)
+const changesOverviewExpanded = ref<Set<string>>(new Set())
+
+async function fetchChangesOverview() {
+  try {
+    const result = await changeApi.overview(workspaceId.value)
+    changesOverview.value = result.files
+    changesOverviewTotal.value = result.totalChanges
+  } catch {
+    // 静默处理
+  }
+}
+
+function toggleFileExpand(filePath: string) {
+  if (changesOverviewExpanded.value.has(filePath)) {
+    changesOverviewExpanded.value.delete(filePath)
+  } else {
+    changesOverviewExpanded.value.add(filePath)
+  }
+}
+
+function shortPath(filePath: string): string {
+  // 取最后两级路径显示
+  const parts = filePath.split('/')
+  return parts.length > 2 ? parts.slice(-2).join('/') : filePath
+}
+
+function handleOverviewNodeClick(nodeId: string) {
+  showWorkspaceDetail.value = false
+  handleNodeSelect(nodeId)
+}
+
+// 打开抽屉时加载变更概览
+watch(showWorkspaceDetail, (open) => {
+  if (open) fetchChangesOverview()
+})
 
 // 抽屉宽度（可拖动调整）
 const DEFAULT_DRAWER_WIDTH = 450
@@ -1145,6 +1185,53 @@ function closeExportWarningDialog() {
                 </div>
               </div>
               <div v-else class="empty-tip">暂无日志记录</div>
+            </div>
+
+            <!-- 文件变更概览 -->
+            <div v-if="changesOverview.length > 0" class="detail-section">
+              <div class="section-title">
+                File Changes / 文件变更
+                <span class="count-badge">{{ changesOverviewTotal }}</span>
+              </div>
+              <div class="changes-overview">
+                <div
+                  v-for="file in changesOverview"
+                  :key="file.filePath"
+                  class="co-file"
+                >
+                  <div
+                    class="co-file-header"
+                    :class="{ active: changesOverviewExpanded.has(file.filePath) }"
+                    @click="toggleFileExpand(file.filePath)"
+                  >
+                    <span class="co-expand" :class="{ expanded: changesOverviewExpanded.has(file.filePath) }">▶</span>
+                    <span class="co-filepath">{{ shortPath(file.filePath) }}</span>
+                    <span class="co-patch-count">{{ file.patches.length }}</span>
+                  </div>
+                  <div v-if="changesOverviewExpanded.has(file.filePath)" class="co-patches">
+                    <div
+                      v-for="patch in file.patches"
+                      :key="patch.changeId"
+                      class="co-patch"
+                    >
+                      <span class="co-op" :class="patch.type">{{ patch.type.toUpperCase() }}</span>
+                      <span v-if="patch.addCount || patch.delCount" class="co-delta">
+                        <span v-if="patch.delCount" class="co-del">-{{ patch.delCount }}</span>
+                        <span v-if="patch.addCount" class="co-add">+{{ patch.addCount }}</span>
+                      </span>
+                      <span
+                        v-if="patch.nodeId"
+                        class="co-node clickable"
+                        :title="patch.nodeId"
+                        @click.stop="handleOverviewNodeClick(patch.nodeId!)"
+                      >{{ patch.nodeTitle }}</span>
+                      <span v-else class="co-node ambiguous">待认领</span>
+                      <span class="co-time">{{ new Date(patch.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) }}</span>
+                      <span class="co-client">{{ patch.client }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2340,5 +2427,159 @@ function closeExportWarningDialog() {
   margin: 0;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* 文件变更概览 */
+.changes-overview {
+  border: 1px solid var(--border-color);
+}
+
+.co-file {
+  border-bottom: 1px solid var(--border-color);
+}
+.co-file:last-child {
+  border-bottom: none;
+}
+
+.co-file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.co-file-header:hover {
+  background: var(--path-bg);
+}
+.co-file-header.active {
+  background: var(--path-bg);
+}
+
+.co-expand {
+  font-size: 9px;
+  color: var(--text-muted);
+  width: 10px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.co-expand.expanded {
+  transform: rotate(90deg);
+}
+
+.co-filepath {
+  font-family: var(--mono-font);
+  font-size: 12px;
+  color: var(--accent-blue);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.co-patch-count {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 1px 5px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+.co-patches {
+  border-top: 1px solid var(--border-color);
+  background: var(--card-footer);
+}
+
+.co-patch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 30px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border-color);
+}
+.co-patch:last-child {
+  border-bottom: none;
+}
+
+.co-op {
+  font-family: var(--mono-font);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.co-op.add {
+  background: var(--diff-add-line);
+  color: var(--diff-add-text);
+}
+.co-op.update {
+  background: var(--diff-hunk-bg);
+  color: var(--diff-hunk-text);
+}
+.co-op.delete {
+  background: var(--diff-del-line);
+  color: var(--diff-del-text);
+}
+.co-op.overwrite {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.co-delta {
+  display: flex;
+  gap: 4px;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.co-del {
+  color: var(--diff-del-text);
+}
+.co-add {
+  color: var(--diff-add-text);
+}
+
+.co-node {
+  color: var(--text-secondary);
+  font-size: 11px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.co-node.clickable {
+  cursor: pointer;
+}
+.co-node.clickable:hover {
+  color: var(--accent-blue);
+  text-decoration: underline;
+}
+.co-node.ambiguous {
+  color: var(--accent-orange);
+  font-style: italic;
+}
+
+.co-time {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.co-client {
+  font-family: var(--mono-font);
+  font-size: 9px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+[data-theme="dark"] .co-op.overwrite {
+  background: #3d3000;
+  color: #f5c842;
 }
 </style>

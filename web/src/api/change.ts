@@ -4,6 +4,7 @@ import type {
   ChangeListResult,
   AmbiguousCountResult,
   ChangeRevertResult,
+  WorkspaceChangesOverviewResult,
 } from '@/types'
 
 export const changeApi = {
@@ -19,6 +20,11 @@ export const changeApi = {
     return client.get(`/workspaces/${workspaceId}/changes/ambiguous`)
   },
 
+  // 获取 ambiguous 变更列表（summary 模式）
+  ambiguousList(workspaceId: string): Promise<ChangeListResult> {
+    return client.get(`/workspaces/${workspaceId}/changes/ambiguous/list`)
+  },
+
   // 回滚变更（实际执行）
   revert(workspaceId: string, changeIds: string[]): Promise<ChangeRevertResult> {
     return client.post(`/workspaces/${workspaceId}/changes/revert`, { changeIds })
@@ -27,5 +33,10 @@ export const changeApi = {
   // 模拟回滚（dry-run）
   revertCheck(workspaceId: string, changeIds: string[]): Promise<ChangeRevertResult> {
     return client.post(`/workspaces/${workspaceId}/changes/revert-check`, { changeIds })
+  },
+
+  // 工作区变更概览（按文件分组）
+  overview(workspaceId: string): Promise<WorkspaceChangesOverviewResult> {
+    return client.get(`/workspaces/${workspaceId}/changes/overview`)
   },
 }
