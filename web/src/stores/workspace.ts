@@ -116,7 +116,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const dispatchStatus = computed(() => {
     const dispatch = currentWorkspace.value?.dispatch
     if (!dispatch?.enabled) return 'disabled'
-    return dispatch.useGit ? 'enabled-git' : 'enabled'
+    return 'enabled'
   })
 
   // 当前工作流阶段
@@ -258,14 +258,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentLogs.value = []
   }
 
-  async function enableDispatch(useGit?: boolean) {
+  async function enableDispatch() {
     if (!currentWorkspace.value) {
       throw new Error('当前没有选中的工作区')
     }
     loading.value = true
     error.value = null
     try {
-      const result = await workspaceApi.enableDispatch(currentWorkspace.value.id, useGit)
+      const result = await workspaceApi.enableDispatch(currentWorkspace.value.id)
       // 刷新工作区配置
       await fetchWorkspace(currentWorkspace.value.id)
       return result
@@ -277,14 +277,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  async function disableDispatch(options: import('@/types').DisableDispatchOptions) {
+  async function disableDispatch() {
     if (!currentWorkspace.value) {
       throw new Error('当前没有选中的工作区')
     }
     loading.value = true
     error.value = null
     try {
-      const result = await workspaceApi.executeDisableDispatch(currentWorkspace.value.id, options)
+      const result = await workspaceApi.disableDispatch(currentWorkspace.value.id)
       // 刷新工作区配置
       await fetchWorkspace(currentWorkspace.value.id)
       return result
@@ -320,25 +320,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  async function switchDispatchMode(useGit: boolean) {
-    if (!currentWorkspace.value) {
-      throw new Error('当前没有选中的工作区')
-    }
-    loading.value = true
-    error.value = null
-    try {
-      const result = await workspaceApi.switchDispatchMode(currentWorkspace.value.id, useGit)
-      // 刷新工作区配置
-      await fetchWorkspace(currentWorkspace.value.id)
-      return result
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : '切换派发模式失败'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
   return {
     // 状态
     workspaces,
@@ -368,7 +349,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     clearCurrent,
     enableDispatch,
     disableDispatch,
-    switchDispatchMode,
     setPhase,
   }
 })

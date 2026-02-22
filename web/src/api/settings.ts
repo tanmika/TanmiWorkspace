@@ -5,7 +5,7 @@ import client from './client'
 
 export interface GlobalSettings {
   version: '1.0'
-  defaultDispatchMode: 'none' | 'git' | 'no-git'
+  defaultDispatchMode: 'none' | 'enabled'
   tutorialVersion?: string  // 已创建的教程版本
   security?: {
     allowUnboundWrite?: boolean  // 允许未绑定会话执行写操作
@@ -93,7 +93,7 @@ export const settingsApi = {
    * 更新全局配置
    */
   async updateSettings(params: {
-    defaultDispatchMode?: 'none' | 'git' | 'no-git'
+    defaultDispatchMode?: 'none' | 'enabled'
     security?: {
       allowUnboundWrite?: boolean
     }

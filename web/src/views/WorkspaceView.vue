@@ -17,7 +17,6 @@ import MemoDetail from '@/components/memo/MemoDetail.vue'
 import MemoDrawerDetail from '@/components/memo/MemoDrawerDetail.vue'
 import EnableDispatchDialog from '@/components/dispatch/EnableDispatchDialog.vue'
 import DisableDispatchDialog from '@/components/dispatch/DisableDispatchDialog.vue'
-import SwitchDispatchModeDialog from '@/components/dispatch/SwitchDispatchModeDialog.vue'
 import WsButton from '@/components/ui/WsButton.vue'
 import WsModal from '@/components/ui/WsModal.vue'
 import PhaseBadge from '@/components/tree/PhaseBadge.vue'
@@ -540,7 +539,6 @@ async function handleCreateNode() {
 // 派发模式控制
 const showEnableDispatchDialog = ref(false)
 const showDisableDispatchDialog = ref(false)
-const showSwitchModeDialog = ref(false)
 const isEnablingDispatch = ref(false)
 
 async function handlePhaseChange(phase: import('@/types').WorkflowPhase) {
@@ -584,13 +582,8 @@ async function handleEnableDispatch() {
   }
 }
 
-// @ts-ignore - Reserved for future disable dispatch button
 function handleDisableDispatch() {
   showDisableDispatchDialog.value = true
-}
-
-function handleSwitchMode() {
-  showSwitchModeDialog.value = true
 }
 
 async function handleDispatchSuccess() {
@@ -963,14 +956,10 @@ function closeExportWarningDialog() {
             <span
               :class="[
                 'badge-status',
-                workspaceStore.dispatchStatus === 'disabled' ? 'disabled' :
-                workspaceStore.dispatchStatus === 'enabled' ? 'enabled' : 'git'
+                workspaceStore.dispatchStatus === 'disabled' ? 'disabled' : 'enabled'
               ]"
             >
-              {{
-                workspaceStore.dispatchStatus === 'disabled' ? 'OFF' :
-                workspaceStore.dispatchStatus === 'enabled' ? 'ON' : 'GIT'
-              }}
+              {{ workspaceStore.dispatchStatus === 'disabled' ? 'OFF' : 'ON' }}
             </span>
             <button
               v-if="workspaceStore.dispatchStatus === 'disabled'"
@@ -978,7 +967,11 @@ function closeExportWarningDialog() {
               :disabled="isEnablingDispatch"
               @click="handleEnableDispatch"
             >ENABLE</button>
-            <button v-else class="ws-btn config-btn" @click="handleSwitchMode">CONFIG</button>
+            <button
+              v-else
+              class="ws-btn config-btn"
+              @click="handleDisableDispatch"
+            >DISABLE</button>
           </div>
         </div>
         <div class="info-item" v-if="hasRulesOrDocs">
@@ -1295,12 +1288,6 @@ function closeExportWarningDialog() {
       @success="handleDispatchSuccess"
     />
 
-    <!-- 切换派发模式对话框 -->
-    <SwitchDispatchModeDialog
-      v-model="showSwitchModeDialog"
-      @success="handleDispatchSuccess"
-    />
-
     <!-- 导出警告弹窗 -->
     <WsModal v-model="showExportWarningDialog" title="导出警告">
       <div class="export-warning-content">
@@ -1602,11 +1589,6 @@ function closeExportWarningDialog() {
   color: #fff;
 }
 
-.badge-status.git {
-  background: var(--accent-orange);
-  color: #000;
-}
-
 [data-theme="dark"] .badge-status.disabled {
   background: #333;
   color: #aaa;
@@ -1616,11 +1598,6 @@ function closeExportWarningDialog() {
 [data-theme="dark"] .badge-status.enabled {
   background: var(--accent-green);
   color: #fff;
-}
-
-[data-theme="dark"] .badge-status.git {
-  background: var(--accent-orange);
-  color: #000;
 }
 
 .dispatch-controls {

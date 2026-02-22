@@ -1371,7 +1371,7 @@ tanmi-workspace plugins
     }
 
     // 启用 no-git 派发模式
-    await this.dispatch.enable({ workspaceId: result.workspaceId, useGit: false });
+    await this.dispatch.enable({ workspaceId: result.workspaceId });
 
     // 置顶教程工作区，方便用户快速访问（失败不阻断主流程）
     try {

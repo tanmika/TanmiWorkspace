@@ -12,7 +12,7 @@ export const configGetTool: TanmiTool = {
 
 返回：
 - version: 配置版本
-- defaultDispatchMode: 默认派发模式 ("none" | "git" | "no-git")
+- defaultDispatchMode: 默认派发模式 ("none" | "enabled")
 
 **使用场景**：
 - 查看当前全局配置
@@ -35,8 +35,7 @@ export const configSetTool: TanmiTool = {
 可配置项：
 - defaultDispatchMode: 默认派发模式
   - "none": 不启用派发（默认）
-  - "git": Git 模式（实验功能，自动分支管理）
-  - "no-git": 无 Git 模式（仅元数据管理）
+  - "enabled": 启用派发模式
 - security.allowUnboundWrite: 是否允许未绑定会话时执行写操作（默认 false）
 
 **使用场景**：
@@ -52,8 +51,8 @@ export const configSetTool: TanmiTool = {
     properties: {
       defaultDispatchMode: {
         type: "string",
-        enum: ["none", "git", "no-git"],
-        description: '默认派发模式 ("none" | "git" | "no-git")',
+        enum: ["none", "enabled"],
+        description: '默认派发模式 ("none" | "enabled")',
       },
       security: {
         type: "object",

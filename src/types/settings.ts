@@ -23,7 +23,7 @@ export interface SecurityConfig {
  */
 export interface GlobalConfig {
   version: "1.0";
-  defaultDispatchMode: "none" | "git" | "no-git";
+  defaultDispatchMode: "none" | "enabled";
   logLevel?: LogLevel;  // 日志级别，默认 'info'
   tutorialCreated?: boolean;  // 教程工作区是否已创建（只创建一次）
   tutorialVersion?: string;   // 上次运行的系统版本，版本变更时创建更新工作区
@@ -55,7 +55,7 @@ export interface ConfigGetResult {
  * config_set 输入
  */
 export interface ConfigSetParams {
-  defaultDispatchMode?: "none" | "git" | "no-git";
+  defaultDispatchMode?: "none" | "enabled";
   logLevel?: LogLevel;
   security?: SecurityConfig;
 }

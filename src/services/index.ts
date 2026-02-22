@@ -17,7 +17,6 @@ export type {
   DispatchPrepareResult,
   DispatchUpgradeResult,
   DispatchCompleteResult,
-  GitStatusInfo,
 } from "./DispatchService.js";
 export type {
   SessionBindParams,

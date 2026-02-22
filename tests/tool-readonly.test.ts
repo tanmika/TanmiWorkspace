@@ -62,8 +62,6 @@ const EXPECTED_READONLY_TOOLS = new Set([
   // capability
   "capability_list",
   "plugin_path",
-  // dispatch
-  "dispatch_cleanup",
   // search
   "workspace_search",
   "content_search",
@@ -106,7 +104,6 @@ const EXPECTED_WRITE_TOOLS = new Set([
   "dispatch_complete",
   "dispatch_enable",
   "dispatch_disable",
-  "dispatch_disable_execute",
   "dispatch_create",
   // config
   "config_set",

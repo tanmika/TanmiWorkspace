@@ -61,9 +61,16 @@ export class ConfigService {
         return defaultConfig;
       }
 
-      // 验证 defaultDispatchMode
-      if (!["none", "git", "no-git"].includes(config.defaultDispatchMode)) {
-        throw new TanmiError("INVALID_CONFIG", `无效的 defaultDispatchMode: ${config.defaultDispatchMode}`);
+      // 验证 defaultDispatchMode（兼容迁移旧值 "git" / "no-git"）
+      const rawMode = config.defaultDispatchMode as string;
+      if (!["none", "enabled"].includes(rawMode)) {
+        // 迁移旧值: "git" 和 "no-git" 统一为 "enabled"
+        if (rawMode === "git" || rawMode === "no-git") {
+          config.defaultDispatchMode = "enabled";
+          await this.writeConfig(config);
+        } else {
+          throw new TanmiError("INVALID_CONFIG", `无效的 defaultDispatchMode: ${rawMode}`);
+        }
       }
 
       // 验证 logLevel，非法值使用默认值
@@ -138,7 +145,7 @@ export class ConfigService {
   /**
    * 获取默认派发模式
    */
-  async getDefaultDispatchMode(): Promise<"none" | "git" | "no-git"> {
+  async getDefaultDispatchMode(): Promise<"none" | "enabled"> {
     const config = await this.readConfig();
     return config.defaultDispatchMode;
   }

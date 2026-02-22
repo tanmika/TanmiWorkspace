@@ -472,16 +472,12 @@ export const TOOLS_QUICK_REFERENCE = `
 | 工具 | 用途 | 关键参数 |
 |------|------|----------|
 | dispatch_enable | 启用派发模式 | workspaceId |
-| dispatch_disable | 禁用派发模式 | workspaceId, merge? |
+| dispatch_disable | 禁用派发模式 | workspaceId |
 | dispatch_node | 准备派发任务 | workspaceId, nodeId |
 | dispatch_complete | 处理派发结果 | workspaceId, nodeId, success, conclusion? |
-| dispatch_cleanup | 清理派发分支 | workspaceId, cleanupType? |
 
 **派发模式说明**：
-- 派发模式允许将执行节点任务交给独立的 subagent 执行
-- 启用后自动创建 Git 分支，支持失败回滚
-- 可配合测试节点实现自动验证
-- 使用 node_create 的 createTestNode 参数创建配对测试节点
+- 派发模式允许将执行节点任务交给独立的 subagent 执行，提高并行效率
 `;
 
 /**
@@ -1045,9 +1041,7 @@ node_create({
 \`\`\`
 1. 用户确认启用派发
     ↓
-dispatch_enable({ workspaceId, useGit: true/false })
-  - useGit: false（默认）→ 无 Git 模式
-  - useGit: true → Git 模式（需要项目是 git 仓库）
+dispatch_enable({ workspaceId })
     ↓
 2. 创建执行节点（可带配对测试节点）
 node_create({
@@ -1074,11 +1068,6 @@ dispatch_complete({ success: true/false, conclusion: "..." })
     ↓
 8. 完成后禁用派发
 dispatch_disable({ workspaceId })
-  → 返回 actionRequired: { type: "dispatch_complete_choice", ... }
-  ⚠️ **必须询问用户**：使用 AskUserQuestion 让用户选择：
-  - Git 模式：合并策略（sequential/squash/cherry-pick/skip）、是否保留分支
-  - 无 Git 模式：确认禁用即可
-dispatch_disable_execute({ workspaceId, mergeStrategy, ... })  // 参数来自用户选择
 \`\`\`
 
 ### 测试节点验证

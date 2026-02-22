@@ -788,8 +788,7 @@ Read(file_path: <返回的 path>)
 
     // 派发模式信息
     if (config.dispatch?.enabled) {
-      const dispatchMode = config.dispatch.useGit ? "Git 模式" : "无 Git 模式";
-      lines.push("│" + ` 派发: 已启用 (${dispatchMode})`.padEnd(width - 2) + "│");
+      lines.push("│" + ` 派发: 已启用`.padEnd(width - 2) + "│");
     } else {
       lines.push("│" + ` 派发: 未启用`.padEnd(width - 2) + "│");
     }
@@ -829,8 +828,7 @@ Read(file_path: <返回的 path>)
 
     // 派发模式信息
     if (config.dispatch?.enabled) {
-      const dispatchMode = config.dispatch.useGit ? "Git 模式" : "无 Git 模式";
-      lines.push(`**派发模式**: 已启用 (${dispatchMode})`);
+      lines.push(`**派发模式**: 已启用`);
     } else {
       lines.push(`**派发模式**: 未启用`);
     }
@@ -2126,12 +2124,10 @@ Read(file_path: <返回的 path>)
       // enabledAt 设为 0 表示导出状态（导入时会重置）
       const cleanedDispatch: typeof cleaned.dispatch = {
         enabled: cleaned.dispatch.enabled,
-        useGit: cleaned.dispatch.useGit,
         enabledAt: 0, // 导出时重置为 0，导入后需要重新启用
         limits: cleaned.dispatch.limits,
         review: cleaned.dispatch.review,
       };
-      // 不复制 Git 相关的本地信息（originalBranch, processBranch, backupBranches）
       cleaned.dispatch = cleanedDispatch;
     }
 

@@ -42,7 +42,7 @@ function loadComponentVersions(): ComponentVersionsConfig {
 
 // 请求类型定义
 interface ConfigUpdateBody {
-  defaultDispatchMode?: "none" | "git" | "no-git";
+  defaultDispatchMode?: "none" | "enabled";
   security?: {
     allowUnboundWrite?: boolean;
   };

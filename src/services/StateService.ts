@@ -25,7 +25,6 @@ import type { DocRef } from "../types/workspace.js";
 import { randomBytes } from "crypto";
 import { GuidanceService } from "./GuidanceService.js";
 import type { GuidanceContext } from "../types/guidance.js";
-import { isGitRepo, getCurrentCommit } from "../utils/git.js";
 import { eventService } from "./EventService.js";
 import { ChangeService } from "./ChangeService.js";
 
@@ -288,7 +287,7 @@ export class StateService {
       if (nodeMeta.dispatch?.status === "executing") {
         throw new TanmiError(
           "DISPATCH_IN_PROGRESS",
-          `节点 ${nodeId} 正在派发执行中，请等待 subagent 完成后由系统更新状态。如需强制终止，请使用 dispatch_cleanup。`
+          `节点 ${nodeId} 正在派发执行中，请等待 subagent 完成后由系统更新状态。如需强制终止，请使用 dispatch_disable。`
         );
       }
 
@@ -312,8 +311,7 @@ export class StateService {
 
       // 4.3.3 派发子节点 start 时，设置 dispatch.startMarker 和 status
       if (action === "start" && (isDispatchChild || hasDispatchPending)) {
-        const useGit = config.dispatch.useGit ?? false;
-        const startMarker = useGit ? await getCurrentCommit(projectRoot) : Date.now().toString();
+        const startMarker = Date.now().toString();
         nodeMeta.dispatch = {
           ...nodeMeta.dispatch,
           startMarker,
@@ -647,42 +645,14 @@ export class StateService {
       if (!config.dispatch?.enabled) {
         const isFirstExecution = this.isFirstNonInfoCollectionExecution(graph.nodes, nodeMeta, nodeId);
         if (isFirstExecution) {
-          try {
-            const isGit = await isGitRepo(projectRoot);
-            // 无论是否 git 仓库都询问，但提示不同模式
-            if (isGit) {
-              result.actionRequired = {
-                type: "ask_dispatch",
-                message: "检测到项目是 Git 仓库，是否启用派发模式？\n\n派发模式允许将执行节点任务交给独立的 subagent 执行。提供两种模式：\n- **无 Git 模式**（默认，推荐）：仅更新元数据，不影响代码，安全\n- **Git 模式**（实验功能）：自动创建分支、提交、回滚，支持失败自动恢复，但有一定风险",
-                data: {
-                  projectRoot,
-                  workspaceId,
-                  isGitRepo: true,
-                },
-              };
-            } else {
-              result.actionRequired = {
-                type: "ask_dispatch",
-                message: "是否启用派发模式（无 Git 模式）？\n\n派发模式允许将执行节点任务交给独立的 subagent 执行。\n当前项目不是 git 仓库，将使用无 Git 模式（仅更新元数据，不影响代码）。",
-                data: {
-                  projectRoot,
-                  workspaceId,
-                  isGitRepo: false,
-                },
-              };
-            }
-          } catch {
-            // 检测失败，按非 git 仓库处理
-            result.actionRequired = {
-              type: "ask_dispatch",
-              message: "是否启用派发模式（无 Git 模式）？\n\n派发模式允许将执行节点任务交给独立的 subagent 执行。\n将使用无 Git 模式（仅更新元数据，不影响代码）。",
-              data: {
-                projectRoot,
-                workspaceId,
-                isGitRepo: false,
-              },
-            };
-          }
+          result.actionRequired = {
+            type: "ask_dispatch",
+            message: "是否启用派发模式？\n\n派发模式允许将执行节点任务交给独立的 subagent 执行，提高并行效率。",
+            data: {
+              projectRoot,
+              workspaceId,
+            },
+          };
         }
       }
     }

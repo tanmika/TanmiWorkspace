@@ -226,75 +226,25 @@ export async function workspaceRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /api/workspaces/:id/dispatch/enable - 启用派发模式
    */
-  fastify.post<{ Params: WorkspaceIdParams; Body: { useGit?: boolean } }>(
+  fastify.post<{ Params: WorkspaceIdParams }>(
     "/workspaces/:id/dispatch/enable",
     { schema: workspaceIdParamsSchema },
-    async (request: FastifyRequest<{ Params: WorkspaceIdParams; Body: { useGit?: boolean } }>) => {
+    async (request: FastifyRequest<{ Params: WorkspaceIdParams }>) => {
       return services.dispatch.enable({
         workspaceId: request.params.id,
-        useGit: request.body?.useGit,
       });
     }
   );
 
   /**
-   * POST /api/workspaces/:id/dispatch/disable - 查询禁用派发选项
+   * POST /api/workspaces/:id/dispatch/disable - 禁用派发模式
    */
   fastify.post<{ Params: WorkspaceIdParams }>(
     "/workspaces/:id/dispatch/disable",
     { schema: workspaceIdParamsSchema },
     async (request: FastifyRequest<{ Params: WorkspaceIdParams }>) => {
-      return services.dispatch.queryDisable({
+      return services.dispatch.disable({
         workspaceId: request.params.id,
-      });
-    }
-  );
-
-  /**
-   * POST /api/workspaces/:id/dispatch/disable/execute - 执行禁用派发
-   */
-  fastify.post<{
-    Params: WorkspaceIdParams;
-    Body: {
-      mergeStrategy: "sequential" | "squash" | "cherry-pick" | "skip";
-      keepBackupBranch?: boolean;
-      keepProcessBranch?: boolean;
-      commitMessage?: string;
-    };
-  }>(
-    "/workspaces/:id/dispatch/disable/execute",
-    { schema: workspaceIdParamsSchema },
-    async (
-      request: FastifyRequest<{
-        Params: WorkspaceIdParams;
-        Body: {
-          mergeStrategy: "sequential" | "squash" | "cherry-pick" | "skip";
-          keepBackupBranch?: boolean;
-          keepProcessBranch?: boolean;
-          commitMessage?: string;
-        };
-      }>
-    ) => {
-      return services.dispatch.executeDisable({
-        workspaceId: request.params.id,
-        mergeStrategy: request.body.mergeStrategy,
-        keepBackupBranch: request.body.keepBackupBranch,
-        keepProcessBranch: request.body.keepProcessBranch,
-        commitMessage: request.body.commitMessage,
-      });
-    }
-  );
-
-  /**
-   * POST /api/workspaces/:id/dispatch/switch - 切换派发模式
-   */
-  fastify.post<{ Params: WorkspaceIdParams; Body: { useGit: boolean } }>(
-    "/workspaces/:id/dispatch/switch",
-    { schema: workspaceIdParamsSchema },
-    async (request: FastifyRequest<{ Params: WorkspaceIdParams; Body: { useGit: boolean } }>) => {
-      return services.dispatch.switchMode({
-        workspaceId: request.params.id,
-        useGit: request.body.useGit,
       });
     }
   );

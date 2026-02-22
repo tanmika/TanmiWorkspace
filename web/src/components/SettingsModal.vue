@@ -60,14 +60,13 @@ async function loadBackupCount() {
 
 // 派发配置弹窗
 const showDispatchConfig = ref(false)
-const tempMode = ref<'none' | 'git' | 'no-git'>('none')
+const tempMode = ref<'none' | 'enabled'>('none')
 
 // 派发模式显示文字
 const dispatchModeLabel = computed(() => {
   switch (localMode.value) {
     case 'none': return '每次询问'
-    case 'git': return 'Git 模式'
-    case 'no-git': return '无 Git 模式'
+    case 'enabled': return '自动启用'
     default: return '-'
   }
 })
@@ -97,11 +96,8 @@ const emit = defineEmits<{
 }>()
 
 // 本地状态
-const localMode = ref<'none' | 'git' | 'no-git'>('none')
+const localMode = ref<'none' | 'enabled'>('none')
 const localAllowUnboundWrite = ref(false)
-
-// Git 模式警告弹窗
-const showGitWarning = ref(false)
 
 // 监听弹窗打开，加载配置
 watch(() => props.visible, async (isVisible) => {
@@ -207,7 +203,7 @@ function handleClose() {
 }
 
 // 选择模式（弹窗内临时选择）
-function selectMode(mode: 'none' | 'git' | 'no-git') {
+function selectMode(mode: 'none' | 'enabled') {
   tempMode.value = mode
 }
 
@@ -224,16 +220,6 @@ function cancelDispatchConfig() {
 
 // 保存派发配置
 async function saveDispatchConfig() {
-  // 如果切换到 git 模式，显示警告确认
-  if (settingsStore.settings.defaultDispatchMode !== 'git' && tempMode.value === 'git') {
-    showGitWarning.value = true
-    return
-  }
-  await doSaveDispatch()
-}
-
-// 执行保存派发配置
-async function doSaveDispatch() {
   try {
     await settingsStore.updateSettings({
       defaultDispatchMode: tempMode.value,
@@ -621,17 +607,6 @@ async function handleGenerateTutorial() {
     </template>
   </WsModal>
 
-  <!-- Git 模式警告确认 -->
-  <WsConfirmDialog
-    v-model="showGitWarning"
-    title="Git 模式警告"
-    message="选择此选项后，启用派发时将自动使用 Git 模式（自动创建分支、提交、回滚）。此功能为实验性功能，可能会影响 Git 历史。确定要设置吗？"
-    type="warning"
-    confirm-text="确定设置"
-    cancel-text="取消"
-    @confirm="doSaveDispatch"
-  />
-
   <!-- 索引管理弹窗 -->
   <IndexManagementModal
     v-model:visible="showIndexManagement"
@@ -722,53 +697,21 @@ async function handleGenerateTutorial() {
           <input type="radio" name="dispatch-mode" :checked="tempMode === 'none'">
           <div>
             <span class="radio-card-title">每次询问 (Recommended)</span>
-            <span class="radio-card-desc">启用派发时弹窗让用户选择模式。</span>
+            <span class="radio-card-desc">启用派发时弹窗让用户确认。</span>
           </div>
         </label>
 
         <label
           class="radio-card"
-          :class="{ selected: tempMode === 'no-git' }"
-          @click="selectMode('no-git')"
+          :class="{ selected: tempMode === 'enabled' }"
+          @click="selectMode('enabled')"
         >
-          <input type="radio" name="dispatch-mode" :checked="tempMode === 'no-git'">
+          <input type="radio" name="dispatch-mode" :checked="tempMode === 'enabled'">
           <div>
-            <span class="radio-card-title">自动使用无 Git 模式</span>
-            <span class="radio-card-desc">直接启用派发，仅更新元数据，不影响代码仓库。</span>
+            <span class="radio-card-title">自动启用</span>
+            <span class="radio-card-desc">直接启用派发，跳过确认弹窗。</span>
           </div>
         </label>
-
-        <label
-          class="radio-card"
-          :class="{ selected: tempMode === 'git' }"
-          @click="selectMode('git')"
-        >
-          <input type="radio" name="dispatch-mode" :checked="tempMode === 'git'">
-          <div>
-            <span class="radio-card-title">自动使用 Git 模式 (Experimental)</span>
-            <span class="radio-card-desc">直接启用派发，自动创建分支、提交、回滚。</span>
-          </div>
-        </label>
-      </div>
-
-      <!-- Git 模式警告 -->
-      <div v-if="tempMode === 'git'" class="warning-block">
-        <div class="warning-title">GIT MODE RISKS</div>
-        <ul class="warning-list">
-          <li>自动创建 <span class="code-tag">tanmi_workspace/process/*</span> 分支</li>
-          <li>任务完成时自动提交代码</li>
-          <li>测试失败时执行 <span class="code-tag">git reset --hard</span>（可能丢失未提交代码）</li>
-          <li>合并时可能产生冲突</li>
-        </ul>
-      </div>
-
-      <!-- 无 Git 模式说明 -->
-      <div v-if="tempMode === 'no-git'" class="info-block">
-        <div class="info-title">NO-GIT MODE LIMITS</div>
-        <ul class="info-list">
-          <li>测试失败时无法自动回滚</li>
-          <li>建议在执行前手动备份重要文件</li>
-        </ul>
       </div>
     </div>
 
@@ -984,99 +927,6 @@ async function handleGenerateTutorial() {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
-}
-
-/* 警告框 */
-.warning-block {
-  background: #fff8f0;
-  border: 1px solid #e6a23c;
-  border-left-width: 4px;
-  padding: 16px;
-  margin-top: 12px;
-}
-
-[data-theme="dark"] .warning-block {
-  background: #2a2010;
-  border-color: #b8860b;
-}
-
-.warning-title {
-  color: #d35400;
-  font-weight: 700;
-  font-size: 12px;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  font-family: var(--mono-font);
-  letter-spacing: 0.5px;
-}
-
-[data-theme="dark"] .warning-title {
-  color: #f5a623;
-}
-
-.warning-list {
-  margin: 0;
-  padding-left: 20px;
-  font-size: 12px;
-  color: #885a0c;
-  line-height: 1.8;
-}
-
-[data-theme="dark"] .warning-list {
-  color: #d4a537;
-}
-
-/* 信息框 */
-.info-block {
-  background: #f0f9ff;
-  border: 1px solid var(--accent-blue);
-  border-left-width: 4px;
-  padding: 16px;
-  margin-top: 12px;
-}
-
-[data-theme="dark"] .info-block {
-  background: #0a1929;
-  border-color: #1e88e5;
-}
-
-.info-title {
-  color: #1565c0;
-  font-weight: 700;
-  font-size: 12px;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  font-family: var(--mono-font);
-  letter-spacing: 0.5px;
-}
-
-[data-theme="dark"] .info-title {
-  color: #64b5f6;
-}
-
-.info-list {
-  margin: 0;
-  padding-left: 20px;
-  font-size: 12px;
-  color: #1565c0;
-  line-height: 1.8;
-}
-
-[data-theme="dark"] .info-list {
-  color: #64b5f6;
-}
-
-.code-tag {
-  font-family: var(--mono-font);
-  background: rgba(255, 255, 255, 0.6);
-  padding: 1px 5px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  font-size: 11px;
-}
-
-[data-theme="dark"] .code-tag {
-  background: rgba(0, 0, 0, 0.3);
-  border-color: rgba(255, 255, 255, 0.1);
 }
 
 /* 派发配置区 */

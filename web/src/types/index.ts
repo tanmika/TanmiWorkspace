@@ -36,8 +36,8 @@ export type NodeDispatchStatus = 'pending' | 'executing' | 'testing' | 'passed' 
 
 // 节点派发信息
 export interface NodeDispatchInfo {
-  startMarker: string // Git 模式=commit hash，无 Git 模式=时间戳
-  endMarker?: string // Git 模式=commit hash，无 Git 模式=时间戳
+  startMarker: string // 时间戳
+  endMarker?: string // 时间戳
   status: NodeDispatchStatus
 }
 
@@ -127,11 +127,7 @@ export interface DispatchLimits {
 // 派发配置
 export interface DispatchConfig {
   enabled: boolean
-  useGit: boolean
   enabledAt: number
-  originalBranch?: string
-  processBranch?: string
-  backupBranches?: string[]
   limits?: DispatchLimits
 }
 
@@ -354,35 +350,13 @@ export interface ProblemClearResult {
 
 // ========== 派发相关类型 ==========
 
-export type MergeStrategy = 'sequential' | 'squash' | 'cherry-pick' | 'skip'
-
-export interface DisableDispatchOptions {
-  mergeStrategy: MergeStrategy
-  keepBackupBranch?: boolean
-  keepProcessBranch?: boolean
-  commitMessage?: string
-}
-
-export interface DisableDispatchQueryResult {
-  success: boolean
-  status: {
-    originalBranch?: string
-    processBranch?: string
-    backupBranch?: string | null
-    hasBackupChanges: boolean
-    processCommits?: Array<{ hash: string; message: string }>
-    useGit: boolean
-  }
-  hint?: string
-}
-
 export interface EnableDispatchResult {
   success: boolean
   config: DispatchConfig
   hint?: string
 }
 
-export interface DisableDispatchExecuteResult {
+export interface DisableDispatchResult {
   success: boolean
   hint?: string
 }

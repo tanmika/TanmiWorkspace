@@ -11,14 +11,25 @@
  * - TC-DEL-REVERT-007: revert=true + 多个变更（mix add/update）→ 全部可回滚则成功
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 
-// 为 HTTP 测试生成唯一目录（server inject 不需要 mock homedir，但需要一个项目目录）
+// 为每个测试文件生成唯一的测试目录（隔离本地数据）
 const testId = crypto.randomUUID().slice(0, 8);
+const testBasePath = `.test-del-revert-${testId}`;
+const mockHomeDir = path.join(process.cwd(), testBasePath, "home");
+
+// Mock os 模块，使 homedir() 返回测试专用目录
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    homedir: () => mockHomeDir,
+  };
+});
 
 // 响应类型定义
 interface DeleteSuccessResponse {
@@ -41,10 +52,12 @@ type DeleteResponse = DeleteSuccessResponse | DeleteRevertFailResponse;
 
 describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
   let server: FastifyInstance;
-  let workspaceId: string;
 
   beforeAll(async () => {
-    // 使用 createServer 启动 Fastify 实例（与 setup.test.ts 同模式）
+    // 确保测试目录存在
+    await fs.mkdir(mockHomeDir, { recursive: true });
+
+    // 动态导入（在 mock 生效后）
     const { createServer } = await import("../../src/http/server.js");
     server = await createServer();
     await server.ready();
@@ -52,6 +65,8 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
 
   afterAll(async () => {
     await server.close();
+    // 清理测试目录
+    await fs.rm(path.join(process.cwd(), testBasePath), { recursive: true, force: true }).catch(() => {});
   });
 
   /**
@@ -63,7 +78,7 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
     projectRoot: string;
   }> {
     // 先创建 projectRoot 目录（validateProjectRoot 要求目录在 home/cwd 下且已存在）
-    const projectRootPath = path.join(process.cwd(), `.test-del-revert-${testId}-${Date.now()}`);
+    const projectRootPath = path.join(process.cwd(), testBasePath, `project-${Date.now()}`);
     await fs.mkdir(projectRootPath, { recursive: true });
 
     // 通过 API 创建工作区
@@ -71,11 +86,13 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
       method: "POST",
       url: "/api/workspaces",
       payload: {
-        name: `test-del-revert-${testId}`,
+        name: `test-del-revert-${Date.now()}`,
         goal: "Test delete with revert",
         projectRoot: projectRootPath,
       },
     });
+
+    expect(initRes.statusCode).toBe(201);
     const wsBody = JSON.parse(initRes.body);
     const wid = wsBody.workspaceId;
     const projectRoot = wsBody.projectRoot;
@@ -217,9 +234,6 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
       await expect(
         services.change.listChanges({ workspaceId: wid, nodeId: nid })
       ).rejects.toThrow("不存在");
-
-      // 清理
-      await fs.rm(projectRoot, { recursive: true, force: true }).catch(() => {});
     });
   });
 
@@ -253,15 +267,12 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
         url: `/api/workspaces/${wid}/nodes/${nid}`,
       });
       expect(getRes.statusCode).toBe(200);
-
-      // 清理
-      await fs.rm(projectRoot, { recursive: true, force: true }).catch(() => {});
     });
   });
 
   describe("TC-DEL-REVERT-003: revert=true + 节点无变更记录 → 正常删除", () => {
     it("Given: 节点没有任何变更记录, When: DELETE ?revert=true, Then: 正常删除节点", async () => {
-      const { wid, nid, projectRoot } = await createWorkspaceAndNode();
+      const { wid, nid } = await createWorkspaceAndNode();
 
       const response = await server.inject({
         method: "DELETE",
@@ -278,9 +289,6 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
         url: `/api/workspaces/${wid}/nodes/${nid}`,
       });
       expect(getRes.statusCode).toBe(404);
-
-      // 清理
-      await fs.rm(projectRoot, { recursive: true, force: true }).catch(() => {});
     });
   });
 
@@ -302,9 +310,6 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
       // 文件内容不应被回滚（因为没有 revert 参数）
       const contentAfter = await fs.readFile(filePath, "utf-8");
       expect(contentAfter).toBe(contentBefore);
-
-      // 清理
-      await fs.rm(projectRoot, { recursive: true, force: true }).catch(() => {});
     });
   });
 
@@ -326,15 +331,12 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
       // 文件内容不应被回滚
       const contentAfter = await fs.readFile(filePath, "utf-8");
       expect(contentAfter).toBe(contentBefore);
-
-      // 清理
-      await fs.rm(projectRoot, { recursive: true, force: true }).catch(() => {});
     });
   });
 
   describe("TC-DEL-REVERT-006: revert=true + 节点不存在 → 返回 404", () => {
     it("Given: 节点 ID 不存在, When: DELETE ?revert=true, Then: 404", async () => {
-      const { wid, projectRoot } = await createWorkspaceAndNode();
+      const { wid } = await createWorkspaceAndNode();
 
       const response = await server.inject({
         method: "DELETE",
@@ -342,9 +344,6 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
       });
 
       expect(response.statusCode).toBe(404);
-
-      // 清理
-      await fs.rm(projectRoot, { recursive: true, force: true }).catch(() => {});
     });
   });
 
@@ -378,9 +377,6 @@ describe("DELETE /api/workspaces/:wid/nodes/:nid with revert", () => {
         url: `/api/workspaces/${wid}/nodes/${nid}`,
       });
       expect(getRes.statusCode).toBe(404);
-
-      // 清理
-      await fs.rm(projectRoot, { recursive: true, force: true }).catch(() => {});
     });
   });
 });

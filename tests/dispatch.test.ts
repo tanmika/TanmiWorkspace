@@ -1,13 +1,12 @@
 // tests/dispatch.test.ts
-// DispatchService 完备测试套件
-// 覆盖 Bug 1-4 的所有修复场景
+// DispatchService 测试套件
+// Git 派发模式已剥离，仅保留无 Git 派发相关测试
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { DispatchService, DISPATCH_HINT } from "../src/services/DispatchService.js";
 import type { FileSystemAdapter } from "../src/storage/FileSystemAdapter.js";
 import type { JsonStorage } from "../src/storage/JsonStorage.js";
 import type { MarkdownStorage } from "../src/storage/MarkdownStorage.js";
-import type { ConfigService } from "../src/services/ConfigService.js";
 import type { WorkspaceConfig, WorkspaceIndex, WorkspaceEntry } from "../src/types/workspace.js";
 import type { NodeGraph, NodeMeta } from "../src/types/node.js";
 
@@ -107,403 +106,378 @@ function createMockMd(): MarkdownStorage {
   } as unknown as MarkdownStorage;
 }
 
-function createMockConfigService(defaultMode: "git" | "no-git" | "none" = "none"): ConfigService {
-  return {
-    getDefaultDispatchMode: vi.fn().mockResolvedValue(defaultMode),
-  } as unknown as ConfigService;
-}
+// ========== Git 工具 Mock（仅保留 isGitRepo + ensureGitExclude） ==========
 
-// ========== Git 工具 Mock ==========
-
-// 注意：需要 mock git 工具模块
 vi.mock("../src/utils/git.js", () => ({
   isGitRepo: vi.fn().mockResolvedValue(true),
   ensureGitExclude: vi.fn().mockResolvedValue(undefined),
-  getCurrentBranch: vi.fn().mockResolvedValue("main"),
-  hasUncommittedChanges: vi.fn().mockResolvedValue(false),
-  createBackupBranch: vi.fn().mockResolvedValue("tanmi-backup/ws-test-001/1"),
-  createProcessBranch: vi.fn().mockResolvedValue("tanmi-process/ws-test-001"),
-  checkoutProcessBranch: vi.fn().mockResolvedValue(undefined),
-  checkoutBranch: vi.fn().mockResolvedValue(undefined),
-  getCurrentCommit: vi.fn().mockResolvedValue("abc1234567890"),
-  commitDispatch: vi.fn().mockResolvedValue("def0987654321"),
-  resetToCommit: vi.fn().mockResolvedValue(undefined),
-  mergeProcessBranch: vi.fn().mockResolvedValue(undefined),
-  deleteAllWorkspaceBranches: vi.fn().mockResolvedValue(undefined),
-  deleteProcessBranch: vi.fn().mockResolvedValue(undefined),
-  deleteBackupBranch: vi.fn().mockResolvedValue(undefined),
-  getActiveDispatchWorkspace: vi.fn().mockResolvedValue(null),
-  getProcessBranchName: vi.fn().mockReturnValue("tanmi-process/ws-test-001"),
-  isOnProcessBranch: vi.fn().mockResolvedValue(true),
-  getCommitsBetween: vi.fn().mockResolvedValue([]),
-  getUncommittedChangesSummary: vi.fn().mockResolvedValue(""),
-  squashMergeProcessBranch: vi.fn().mockResolvedValue(undefined),
-  rebaseMergeProcessBranch: vi.fn().mockResolvedValue(undefined),
-  cherryPickToWorkingTree: vi.fn().mockResolvedValue(undefined),
-  getLatestBackupBranch: vi.fn().mockResolvedValue(null),
 }));
 
 // ========== 测试套件 ==========
 
-// TODO: 这些测试需要更新以匹配当前的业务逻辑
-// 1. Mock 需要更精确地处理多工作区场景
-// 2. enableDispatch 的冲突检测逻辑已变更
 describe("DispatchService", () => {
   let service: DispatchService;
   let mockFs: FileSystemAdapter;
   let mockJson: JsonStorage;
   let mockMd: MarkdownStorage;
-  let mockConfig: ConfigService;
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  // ========== Bug 1: 派发模式冲突限制逻辑测试 ==========
-  describe("Bug 1: 冲突检测逻辑", () => {
+  // ========== enableDispatch 测试 ==========
+  describe("enableDispatch", () => {
 
-    describe("1.1 无 Git 模式不检查冲突", () => {
-      it("无 Git 模式启用后，另一个工作区可以启用无 Git 模式", async () => {
-        // 场景：ws-001 已用无 Git 模式启用，ws-002 也要用无 Git 模式
-        const existingWorkspaces: WorkspaceEntry[] = [
-          {
-            id: "ws-001",
-            name: "Workspace 1",
-            dirName: "Workspace 1_001",
-            projectRoot: "/project",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: "ws-002",
-            name: "Workspace 2",
-            dirName: "Workspace 2_002",
-            projectRoot: "/project",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ];
+    it("启用派发模式成功，返回 config 不包含 git 相关字段", async () => {
+      const config: WorkspaceConfig = {
+        id: "ws-test-001",
+        name: "Test Workspace",
+        dirName: "Test Workspace_test001",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+      };
 
-        const ws001Config: WorkspaceConfig = {
-          id: "ws-001",
-          name: "Workspace 1",
-          dirName: "Workspace 1_001",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-          dispatch: {
-            enabled: true,
-            useGit: false,  // 无 Git 模式
-            enabledAt: Date.now(),
-          },
-        };
+      mockFs = createMockFs();
+      mockJson = createMockJson({ config });
+      mockMd = createMockMd();
 
-        const ws002Config: WorkspaceConfig = {
-          id: "ws-002",
-          name: "Workspace 2",
-          dirName: "Workspace 2_002",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-        };
+      service = new DispatchService(mockJson, mockMd, mockFs);
 
-        mockFs = createMockFs();
-        mockJson = createMockJson({
-          index: { version: "5.0", workspaces: existingWorkspaces },
-        });
-        mockMd = createMockMd();
-        mockConfig = createMockConfigService("no-git");
+      const result = await service.enableDispatch("ws-test-001", "/project");
 
-        // 根据 workspaceId 返回不同 dirName
-        (mockJson.getWorkspaceLocation as any).mockImplementation(
-          async (wsId: string) => {
-            if (wsId === "ws-002") {
-              return { projectRoot: "/project", dirName: "Workspace 2_002" };
-            }
-            return { projectRoot: "/project", dirName: "Workspace 1_001" };
-          }
-        );
+      expect(result.success).toBe(true);
+      expect(result.config.enabled).toBe(true);
+      expect(result.config.enabledAt).toBeDefined();
 
-        // 根据 dirName 返回不同配置
-        (mockJson.readWorkspaceConfig as any).mockImplementation(
-          async (_projectRoot: string, wsDirName: string) => {
-            if (wsDirName === "Workspace 2_002") {
-              return ws002Config;
-            }
-            return ws001Config;
-          }
-        );
-
-        service = new DispatchService(mockJson, mockMd, mockFs, mockConfig);
-
-        // ws-002 启用无 Git 模式应该成功（不检查冲突）
-        const result = await service.enableDispatch("ws-002", "/project", { useGit: false });
-
-        expect(result.success).toBe(true);
-        expect(result.config.useGit).toBe(false);
-      });
-
-      it("无 Git 模式启用后，另一个工作区可以启用 Git 模式", async () => {
-        const existingWorkspaces: WorkspaceEntry[] = [
-          {
-            id: "ws-001",
-            name: "Workspace 1",
-            dirName: "Workspace 1_001",
-            projectRoot: "/project",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: "ws-002",
-            name: "Workspace 2",
-            dirName: "Workspace 2_002",
-            projectRoot: "/project",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ];
-
-        const ws001Config: WorkspaceConfig = {
-          id: "ws-001",
-          name: "Workspace 1",
-          dirName: "Workspace 1_001",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-          dispatch: {
-            enabled: true,
-            useGit: false,  // 已有无 Git 模式
-            enabledAt: Date.now(),
-          },
-        };
-
-        const ws002Config: WorkspaceConfig = {
-          id: "ws-002",
-          name: "Workspace 2",
-          dirName: "Workspace 2_002",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-        };
-
-        mockFs = createMockFs();
-        mockJson = createMockJson({
-          index: { version: "5.0", workspaces: existingWorkspaces },
-        });
-        mockMd = createMockMd();
-        mockConfig = createMockConfigService();
-
-        // 根据 workspaceId 返回不同 dirName
-        (mockJson.getWorkspaceLocation as any).mockImplementation(
-          async (wsId: string) => {
-            if (wsId === "ws-002") {
-              return { projectRoot: "/project", dirName: "Workspace 2_002" };
-            }
-            return { projectRoot: "/project", dirName: "Workspace 1_001" };
-          }
-        );
-
-        (mockJson.readWorkspaceConfig as any).mockImplementation(
-          async (_projectRoot: string, wsDirName: string) => {
-            if (wsDirName === "Workspace 2_002") {
-              return ws002Config;
-            }
-            return ws001Config;
-          }
-        );
-
-        service = new DispatchService(mockJson, mockMd, mockFs, mockConfig);
-
-        // ws-002 启用 Git 模式应该成功（ws-001 是无 Git 模式，不冲突）
-        const result = await service.enableDispatch("ws-002", "/project", { useGit: true });
-
-        expect(result.success).toBe(true);
-        expect(result.config.useGit).toBe(true);
-      });
+      // 验证不包含 git 相关字段
+      expect((result.config as any).useGit).toBeUndefined();
+      expect((result.config as any).originalBranch).toBeUndefined();
+      expect((result.config as any).processBranch).toBeUndefined();
+      expect((result.config as any).backupBranches).toBeUndefined();
     });
 
-    describe("1.2 Git 模式检查同仓库冲突", () => {
-      it("Git 模式启用后，同一 git 仓库的另一个工作区不能启用 Git 模式", async () => {
-        const existingWorkspaces: WorkspaceEntry[] = [
-          {
-            id: "ws-001",
-            name: "Workspace 1",
-            dirName: "Workspace 1_001",
-            projectRoot: "/project",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: "ws-002",
-            name: "Workspace 2",
-            dirName: "Workspace 2_002",
-            projectRoot: "/project",  // 同一 projectRoot
-            status: "active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ];
+    it("已启用时再次启用应抛出错误", async () => {
+      const config: WorkspaceConfig = {
+        id: "ws-test-001",
+        name: "Test Workspace",
+        dirName: "Test Workspace_test001",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+        dispatch: {
+          enabled: true,
+          enabledAt: Date.now(),
+        },
+      };
 
-        const ws001Config: WorkspaceConfig = {
+      mockFs = createMockFs();
+      mockJson = createMockJson({ config });
+      mockMd = createMockMd();
+
+      service = new DispatchService(mockJson, mockMd, mockFs);
+
+      await expect(
+        service.enableDispatch("ws-test-001", "/project")
+      ).rejects.toThrow(/派发模式已启用/);
+    });
+
+    it("多个工作区可以同时启用派发模式（不再有 git 冲突检测）", async () => {
+      const existingWorkspaces: WorkspaceEntry[] = [
+        {
           id: "ws-001",
           name: "Workspace 1",
           dirName: "Workspace 1_001",
+          projectRoot: "/project",
           status: "active",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-          dispatch: {
-            enabled: true,
-            useGit: true,  // 已有 Git 模式
-            enabledAt: Date.now(),
-            originalBranch: "main",
-            processBranch: "tanmi-process/ws-001",
-          },
-        };
-
-        const ws002Config: WorkspaceConfig = {
+        },
+        {
           id: "ws-002",
           name: "Workspace 2",
           dirName: "Workspace 2_002",
+          projectRoot: "/project",
           status: "active",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-        };
+        },
+      ];
 
-        mockFs = createMockFs();
-        mockJson = createMockJson({
-          index: { version: "5.0", workspaces: existingWorkspaces },
-        });
-        mockMd = createMockMd();
-        mockConfig = createMockConfigService();
+      const ws001Config: WorkspaceConfig = {
+        id: "ws-001",
+        name: "Workspace 1",
+        dirName: "Workspace 1_001",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+        dispatch: {
+          enabled: true,
+          enabledAt: Date.now(),
+        },
+      };
 
-        // 根据 workspaceId 返回不同 dirName
-        (mockJson.getWorkspaceLocation as any).mockImplementation(
-          async (wsId: string) => {
-            if (wsId === "ws-002") {
-              return { projectRoot: "/project", dirName: "Workspace 2_002" };
-            }
-            return { projectRoot: "/project", dirName: "Workspace 1_001" };
-          }
-        );
+      const ws002Config: WorkspaceConfig = {
+        id: "ws-002",
+        name: "Workspace 2",
+        dirName: "Workspace 2_002",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+      };
 
-        (mockJson.readWorkspaceConfig as any).mockImplementation(
-          async (_projectRoot: string, wsDirName: string) => {
-            if (wsDirName === "Workspace 2_002") {
-              return ws002Config;
-            }
-            return ws001Config;
-          }
-        );
-
-        service = new DispatchService(mockJson, mockMd, mockFs, mockConfig);
-
-        // ws-002 启用 Git 模式应该失败（ws-001 已用 Git 模式）
-        await expect(
-          service.enableDispatch("ws-002", "/project", { useGit: true })
-        ).rejects.toThrow(/正在使用 Git 模式派发/);
+      mockFs = createMockFs();
+      mockJson = createMockJson({
+        index: { version: "5.0", workspaces: existingWorkspaces },
       });
+      mockMd = createMockMd();
 
-      it("Git 模式启用后，另一个工作区可以启用无 Git 模式", async () => {
-        const existingWorkspaces: WorkspaceEntry[] = [
-          {
-            id: "ws-001",
-            name: "Workspace 1",
-            dirName: "Workspace 1_001",
-            projectRoot: "/project",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: "ws-002",
-            name: "Workspace 2",
-            dirName: "Workspace 2_002",
-            projectRoot: "/project",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ];
-
-        const ws001Config: WorkspaceConfig = {
-          id: "ws-001",
-          name: "Workspace 1",
-          dirName: "Workspace 1_001",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-          dispatch: {
-            enabled: true,
-            useGit: true,  // 已有 Git 模式
-            enabledAt: Date.now(),
-            originalBranch: "main",
-            processBranch: "tanmi-process/ws-001",
-          },
-        };
-
-        const ws002Config: WorkspaceConfig = {
-          id: "ws-002",
-          name: "Workspace 2",
-          dirName: "Workspace 2_002",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-        };
-
-        mockFs = createMockFs();
-        mockJson = createMockJson({
-          index: { version: "5.0", workspaces: existingWorkspaces },
-        });
-        mockMd = createMockMd();
-        mockConfig = createMockConfigService("no-git");
-
-        // 根据 workspaceId 返回不同 dirName
-        (mockJson.getWorkspaceLocation as any).mockImplementation(
-          async (wsId: string) => {
-            if (wsId === "ws-002") {
-              return { projectRoot: "/project", dirName: "Workspace 2_002" };
-            }
-            return { projectRoot: "/project", dirName: "Workspace 1_001" };
+      (mockJson.getWorkspaceLocation as any).mockImplementation(
+        async (wsId: string) => {
+          if (wsId === "ws-002") {
+            return { projectRoot: "/project", dirName: "Workspace 2_002" };
           }
-        );
+          return { projectRoot: "/project", dirName: "Workspace 1_001" };
+        }
+      );
 
-        (mockJson.readWorkspaceConfig as any).mockImplementation(
-          async (_projectRoot: string, wsDirName: string) => {
-            if (wsDirName === "Workspace 2_002") {
-              return ws002Config;
-            }
-            return ws001Config;
+      (mockJson.readWorkspaceConfig as any).mockImplementation(
+        async (_projectRoot: string, wsDirName: string) => {
+          if (wsDirName === "Workspace 2_002") {
+            return ws002Config;
           }
-        );
+          return ws001Config;
+        }
+      );
 
-        service = new DispatchService(mockJson, mockMd, mockFs, mockConfig);
+      service = new DispatchService(mockJson, mockMd, mockFs);
 
-        // ws-002 启用无 Git 模式应该成功
-        const result = await service.enableDispatch("ws-002", "/project", { useGit: false });
+      // ws-002 启用应该成功（不再有 git 模式冲突检测）
+      const result = await service.enableDispatch("ws-002", "/project");
 
-        expect(result.success).toBe(true);
-        expect(result.config.useGit).toBe(false);
-      });
+      expect(result.success).toBe(true);
+      expect(result.config.enabled).toBe(true);
     });
   });
 
-  // ========== Bug 2: 节点完成状态测试 ==========
-  describe("Bug 2: 节点完成状态", () => {
+  // ========== disableDispatch 测试 ==========
+  describe("disableDispatch", () => {
 
-    describe("2.1 completeDispatch 成功路径", () => {
+    it("禁用派发模式成功（新签名：workspaceId, projectRoot）", async () => {
+      const config: WorkspaceConfig = {
+        id: "ws-test-001",
+        name: "Test Workspace",
+        dirName: "Test Workspace_test001",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+        dispatch: {
+          enabled: true,
+          enabledAt: Date.now(),
+        },
+      };
+
+      const graph: NodeGraph = {
+        version: "5.0",
+        currentFocus: null,
+        nodes: {
+          root: {
+            id: "root",
+            dirName: "root",
+            type: "planning",
+            parentId: null,
+            children: [],
+            status: "planning",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      };
+
+      mockFs = createMockFs();
+      mockJson = createMockJson({ config, graph });
+      mockMd = createMockMd();
+
+      service = new DispatchService(mockJson, mockMd, mockFs);
+
+      const result = await service.disableDispatch("ws-test-001", "/project");
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("关闭");
+
+      // 验证配置被清理
+      const writeConfigCalls = (mockJson.writeWorkspaceConfig as any).mock.calls;
+      expect(writeConfigCalls.length).toBe(1);
+      const savedConfig = writeConfigCalls[0][2] as WorkspaceConfig;
+      expect(savedConfig.dispatch).toBeUndefined();
+
+      // 验证日志被记录
+      const logCalls = (mockMd.appendLog as any).mock.calls;
+      expect(logCalls.length).toBe(1);
+    });
+
+    it("有 executing 节点时禁用应抛出错误", async () => {
+      const graph: NodeGraph = {
+        version: "5.0",
+        currentFocus: null,
+        nodes: {
+          root: {
+            id: "root",
+            dirName: "root",
+            type: "planning",
+            parentId: null,
+            children: ["node-exec-001"],
+            status: "monitoring",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          "node-exec-001": {
+            id: "node-exec-001",
+            dirName: "执行任务_exec001",
+            type: "execution",
+            parentId: "root",
+            children: [],
+            status: "implementing",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            dispatch: {
+              startMarker: "abc123",
+              status: "executing",
+            },
+          },
+        },
+      };
+
+      const config: WorkspaceConfig = {
+        id: "ws-test-001",
+        name: "Test Workspace",
+        dirName: "Test Workspace_test001",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+        dispatch: {
+          enabled: true,
+          enabledAt: Date.now(),
+        },
+      };
+
+      mockFs = createMockFs();
+      mockJson = createMockJson({ config, graph });
+      mockMd = createMockMd();
+
+      service = new DispatchService(mockJson, mockMd, mockFs);
+
+      await expect(
+        service.disableDispatch("ws-test-001", "/project")
+      ).rejects.toThrow(/正在派发执行中/);
+    });
+
+    it("passed/failed 状态节点不阻塞禁用", async () => {
+      const graph: NodeGraph = {
+        version: "5.0",
+        currentFocus: null,
+        nodes: {
+          root: {
+            id: "root",
+            dirName: "root",
+            type: "planning",
+            parentId: null,
+            children: ["node-exec-001"],
+            status: "monitoring",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          "node-exec-001": {
+            id: "node-exec-001",
+            dirName: "执行任务_exec001",
+            type: "execution",
+            parentId: "root",
+            children: [],
+            status: "completed",
+            isolate: false,
+            references: [],
+            conclusion: "已完成",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            dispatch: {
+              startMarker: "abc123",
+              endMarker: "def456",
+              status: "passed",
+            },
+          },
+        },
+      };
+
+      const config: WorkspaceConfig = {
+        id: "ws-test-001",
+        name: "Test Workspace",
+        dirName: "Test Workspace_test001",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+        dispatch: {
+          enabled: true,
+          enabledAt: Date.now(),
+        },
+      };
+
+      mockFs = createMockFs();
+      mockJson = createMockJson({ config, graph });
+      mockMd = createMockMd();
+
+      service = new DispatchService(mockJson, mockMd, mockFs);
+
+      const result = await service.disableDispatch("ws-test-001", "/project");
+      expect(result.success).toBe(true);
+    });
+
+    it("派发模式未启用时，直接返回成功", async () => {
+      const config: WorkspaceConfig = {
+        id: "ws-test-001",
+        name: "Test Workspace",
+        dirName: "Test Workspace_test001",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+        // 没有 dispatch 配置
+      };
+
+      mockFs = createMockFs();
+      mockJson = createMockJson({ config });
+      mockMd = createMockMd();
+
+      service = new DispatchService(mockJson, mockMd, mockFs);
+
+      const result = await service.disableDispatch("ws-test-001", "/project");
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("已禁用");
+    });
+  });
+
+  // ========== 节点完成状态测试 ==========
+  describe("completeDispatch 节点完成状态", () => {
+
+    describe("成功路径", () => {
       it("success=true 时，节点状态变为 completed，dispatch.status 变为 passed", async () => {
         const graph: NodeGraph = {
           version: "5.0",
@@ -552,7 +526,6 @@ describe("DispatchService", () => {
           rootNodeId: "root",
           dispatch: {
             enabled: true,
-            useGit: false,
             enabledAt: Date.now(),
           },
         };
@@ -635,7 +608,6 @@ describe("DispatchService", () => {
           rootNodeId: "root",
           dispatch: {
             enabled: true,
-            useGit: false,
             enabledAt: Date.now(),
           },
         };
@@ -666,7 +638,7 @@ describe("DispatchService", () => {
       });
     });
 
-    describe("2.2 dispatch.status 保留（不清空）", () => {
+    describe("dispatch 对象保留（不清空）", () => {
       it("完成后 dispatch 对象应该保留，不被删除", async () => {
         const graph: NodeGraph = {
           version: "5.0",
@@ -715,7 +687,6 @@ describe("DispatchService", () => {
           rootNodeId: "root",
           dispatch: {
             enabled: true,
-            useGit: false,
             enabledAt: Date.now(),
           },
         };
@@ -747,423 +718,204 @@ describe("DispatchService", () => {
     });
   });
 
-  // ========== Bug 3: 父节点提醒机制测试 ==========
-  describe("Bug 3: 父节点提醒机制", () => {
+  // ========== 父节点提醒机制测试 ==========
+  describe("completeDispatch 父节点提醒", () => {
 
-    describe("3.1 completeDispatch 父节点完成提醒", () => {
-      it("完成最后一个子节点时，如果父节点是 planning 且 monitoring，应该有提醒", async () => {
-        const graph: NodeGraph = {
-          version: "5.0",
-          currentFocus: "node-exec-002",
-          nodes: {
-            root: {
-              id: "root",
-              dirName: "root",
-              type: "planning",
-              parentId: null,
-              children: ["node-plan-001"],
-              status: "monitoring",
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            "node-plan-001": {
-              id: "node-plan-001",
-              dirName: "规划节点_plan001",
-              type: "planning",
-              parentId: "root",
-              children: ["node-exec-001", "node-exec-002"],
-              status: "monitoring",  // 父节点在监控状态
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            "node-exec-001": {
-              id: "node-exec-001",
-              dirName: "执行任务1_exec001",
-              type: "execution",
-              parentId: "node-plan-001",
-              children: [],
-              status: "completed",  // 已完成
-              isolate: false,
-              references: [],
-              conclusion: "完成",
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            "node-exec-002": {
-              id: "node-exec-002",
-              dirName: "执行任务2_exec002",
-              type: "execution",
-              parentId: "node-plan-001",
-              children: [],
-              status: "implementing",  // 正在执行
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              dispatch: {
-                startMarker: "abc123",
-                status: "executing",
-              },
+    it("完成最后一个子节点时，hint 为 SUCCESS", async () => {
+      const graph: NodeGraph = {
+        version: "5.0",
+        currentFocus: "node-exec-002",
+        nodes: {
+          root: {
+            id: "root",
+            dirName: "root",
+            type: "planning",
+            parentId: null,
+            children: ["node-plan-001"],
+            status: "monitoring",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          "node-plan-001": {
+            id: "node-plan-001",
+            dirName: "规划节点_plan001",
+            type: "planning",
+            parentId: "root",
+            children: ["node-exec-001", "node-exec-002"],
+            status: "monitoring",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          "node-exec-001": {
+            id: "node-exec-001",
+            dirName: "执行任务1_exec001",
+            type: "execution",
+            parentId: "node-plan-001",
+            children: [],
+            status: "completed",
+            isolate: false,
+            references: [],
+            conclusion: "完成",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          "node-exec-002": {
+            id: "node-exec-002",
+            dirName: "执行任务2_exec002",
+            type: "execution",
+            parentId: "node-plan-001",
+            children: [],
+            status: "implementing",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            dispatch: {
+              startMarker: "abc123",
+              status: "executing",
             },
           },
-        };
+        },
+      };
 
-        const config: WorkspaceConfig = {
-          id: "ws-test-001",
-          name: "Test Workspace",
-          dirName: "Test Workspace_test001",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-          dispatch: {
-            enabled: true,
-            useGit: false,
-            enabledAt: Date.now(),
-          },
-        };
+      const config: WorkspaceConfig = {
+        id: "ws-test-001",
+        name: "Test Workspace",
+        dirName: "Test Workspace_test001",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+        dispatch: {
+          enabled: true,
+          enabledAt: Date.now(),
+        },
+      };
 
-        mockFs = createMockFs();
-        mockJson = createMockJson({ config, graph });
-        mockMd = createMockMd();
+      mockFs = createMockFs();
+      mockJson = createMockJson({ config, graph });
+      mockMd = createMockMd();
 
-        service = new DispatchService(mockJson, mockMd, mockFs);
+      service = new DispatchService(mockJson, mockMd, mockFs);
 
-        const result = await service.completeDispatch(
-          "ws-test-001",
-          "/project",
-          "node-exec-002",
-          true,
-          "最后一个任务完成"
-        );
+      const result = await service.completeDispatch(
+        "ws-test-001",
+        "/project",
+        "node-exec-002",
+        true,
+        "最后一个任务完成"
+      );
 
-        expect(result.success).toBe(true);
-        // 新版本 completeDispatch 简化了 hint，不再包含父节点提醒
-        expect(result.hint).toBe(DISPATCH_HINT.SUCCESS);
-      });
-
-      it("还有其他子节点未完成时，hint 仍然是执行完成", async () => {
-        const graph: NodeGraph = {
-          version: "5.0",
-          currentFocus: "node-exec-001",
-          nodes: {
-            root: {
-              id: "root",
-              dirName: "root",
-              type: "planning",
-              parentId: null,
-              children: ["node-plan-001"],
-              status: "monitoring",
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            "node-plan-001": {
-              id: "node-plan-001",
-              dirName: "规划节点_plan001",
-              type: "planning",
-              parentId: "root",
-              children: ["node-exec-001", "node-exec-002"],
-              status: "monitoring",
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            "node-exec-001": {
-              id: "node-exec-001",
-              dirName: "执行任务1_exec001",
-              type: "execution",
-              parentId: "node-plan-001",
-              children: [],
-              status: "implementing",  // 正在执行
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              dispatch: {
-                startMarker: "abc123",
-                status: "executing",
-              },
-            },
-            "node-exec-002": {
-              id: "node-exec-002",
-              dirName: "执行任务2_exec002",
-              type: "execution",
-              parentId: "node-plan-001",
-              children: [],
-              status: "pending",  // 还未开始
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-          },
-        };
-
-        const config: WorkspaceConfig = {
-          id: "ws-test-001",
-          name: "Test Workspace",
-          dirName: "Test Workspace_test001",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-          dispatch: {
-            enabled: true,
-            useGit: false,
-            enabledAt: Date.now(),
-          },
-        };
-
-        mockFs = createMockFs();
-        mockJson = createMockJson({ config, graph });
-        mockMd = createMockMd();
-
-        service = new DispatchService(mockJson, mockMd, mockFs);
-
-        const result = await service.completeDispatch(
-          "ws-test-001",
-          "/project",
-          "node-exec-001",
-          true,
-          "第一个任务完成"
-        );
-
-        expect(result.success).toBe(true);
-        // 新版本 completeDispatch 简化了 hint
-        expect(result.hint).toBe(DISPATCH_HINT.SUCCESS);
-      });
+      expect(result.success).toBe(true);
+      expect(result.hint).toBe(DISPATCH_HINT.SUCCESS);
     });
 
-    describe("3.2 queryDisableDispatch 提醒", () => {
-      it("存在可完成的 planning 节点时，actionRequired.message 应包含提醒", async () => {
-        const graph: NodeGraph = {
-          version: "5.0",
-          currentFocus: null,
-          nodes: {
-            root: {
-              id: "root",
-              dirName: "root",
-              type: "planning",
-              parentId: null,
-              children: ["node-plan-001"],
-              status: "monitoring",
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            "node-plan-001": {
-              id: "node-plan-001",
-              dirName: "规划节点_plan001",
-              type: "planning",
-              parentId: "root",
-              children: ["node-exec-001"],
-              status: "monitoring",  // monitoring 状态
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            "node-exec-001": {
-              id: "node-exec-001",
-              dirName: "执行任务_exec001",
-              type: "execution",
-              parentId: "node-plan-001",
-              children: [],
-              status: "completed",  // 子节点已完成
-              isolate: false,
-              references: [],
-              conclusion: "已完成",
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              dispatch: {
-                startMarker: "abc123",
-                endMarker: "def456",
-                status: "passed",
-              },
+    it("还有其他子节点未完成时，hint 仍然是执行完成", async () => {
+      const graph: NodeGraph = {
+        version: "5.0",
+        currentFocus: "node-exec-001",
+        nodes: {
+          root: {
+            id: "root",
+            dirName: "root",
+            type: "planning",
+            parentId: null,
+            children: ["node-plan-001"],
+            status: "monitoring",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          "node-plan-001": {
+            id: "node-plan-001",
+            dirName: "规划节点_plan001",
+            type: "planning",
+            parentId: "root",
+            children: ["node-exec-001", "node-exec-002"],
+            status: "monitoring",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          "node-exec-001": {
+            id: "node-exec-001",
+            dirName: "执行任务1_exec001",
+            type: "execution",
+            parentId: "node-plan-001",
+            children: [],
+            status: "implementing",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            dispatch: {
+              startMarker: "abc123",
+              status: "executing",
             },
           },
-        };
-
-        const config: WorkspaceConfig = {
-          id: "ws-test-001",
-          name: "Test Workspace",
-          dirName: "Test Workspace_test001",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-          dispatch: {
-            enabled: true,
-            useGit: false,
-            enabledAt: Date.now(),
+          "node-exec-002": {
+            id: "node-exec-002",
+            dirName: "执行任务2_exec002",
+            type: "execution",
+            parentId: "node-plan-001",
+            children: [],
+            status: "pending",
+            isolate: false,
+            references: [],
+            conclusion: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           },
-        };
+        },
+      };
 
-        mockFs = createMockFs();
-        mockJson = createMockJson({ config, graph });
-        mockMd = createMockMd();
+      const config: WorkspaceConfig = {
+        id: "ws-test-001",
+        name: "Test Workspace",
+        dirName: "Test Workspace_test001",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        rootNodeId: "root",
+        dispatch: {
+          enabled: true,
+          enabledAt: Date.now(),
+        },
+      };
 
-        service = new DispatchService(mockJson, mockMd, mockFs);
+      mockFs = createMockFs();
+      mockJson = createMockJson({ config, graph });
+      mockMd = createMockMd();
 
-        const result = await service.queryDisableDispatch("ws-test-001", "/project");
+      service = new DispatchService(mockJson, mockMd, mockFs);
 
-        expect("actionRequired" in result).toBe(true);
-        if ("actionRequired" in result) {
-          expect(result.actionRequired.message).toContain("提醒");
-          expect(result.actionRequired.message).toContain("node-plan-001");
-        }
-      });
+      const result = await service.completeDispatch(
+        "ws-test-001",
+        "/project",
+        "node-exec-001",
+        true,
+        "第一个任务完成"
+      );
 
-      it("无 executing 状态节点时，应该允许查询（passed/failed 不阻塞）", async () => {
-        const graph: NodeGraph = {
-          version: "5.0",
-          currentFocus: null,
-          nodes: {
-            root: {
-              id: "root",
-              dirName: "root",
-              type: "planning",
-              parentId: null,
-              children: ["node-exec-001"],
-              status: "monitoring",
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            "node-exec-001": {
-              id: "node-exec-001",
-              dirName: "执行任务_exec001",
-              type: "execution",
-              parentId: "root",
-              children: [],
-              status: "completed",
-              isolate: false,
-              references: [],
-              conclusion: "已完成",
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              dispatch: {
-                startMarker: "abc123",
-                endMarker: "def456",
-                status: "passed",  // passed 状态不阻塞
-              },
-            },
-          },
-        };
-
-        const config: WorkspaceConfig = {
-          id: "ws-test-001",
-          name: "Test Workspace",
-          dirName: "Test Workspace_test001",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-          dispatch: {
-            enabled: true,
-            useGit: false,
-            enabledAt: Date.now(),
-          },
-        };
-
-        mockFs = createMockFs();
-        mockJson = createMockJson({ config, graph });
-        mockMd = createMockMd();
-
-        service = new DispatchService(mockJson, mockMd, mockFs);
-
-        // 应该成功返回，不抛出 DISPATCH_IN_PROGRESS 错误
-        const result = await service.queryDisableDispatch("ws-test-001", "/project");
-        expect("actionRequired" in result || "success" in result).toBe(true);
-      });
-
-      it("有 executing 状态节点时，应该抛出错误", async () => {
-        const graph: NodeGraph = {
-          version: "5.0",
-          currentFocus: null,
-          nodes: {
-            root: {
-              id: "root",
-              dirName: "root",
-              type: "planning",
-              parentId: null,
-              children: ["node-exec-001"],
-              status: "monitoring",
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            "node-exec-001": {
-              id: "node-exec-001",
-              dirName: "执行任务_exec001",
-              type: "execution",
-              parentId: "root",
-              children: [],
-              status: "implementing",
-              isolate: false,
-              references: [],
-              conclusion: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              dispatch: {
-                startMarker: "abc123",
-                status: "executing",  // executing 状态阻塞
-              },
-            },
-          },
-        };
-
-        const config: WorkspaceConfig = {
-          id: "ws-test-001",
-          name: "Test Workspace",
-          dirName: "Test Workspace_test001",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          rootNodeId: "root",
-          dispatch: {
-            enabled: true,
-            useGit: false,
-            enabledAt: Date.now(),
-          },
-        };
-
-        mockFs = createMockFs();
-        mockJson = createMockJson({ config, graph });
-        mockMd = createMockMd();
-
-        service = new DispatchService(mockJson, mockMd, mockFs);
-
-        await expect(
-          service.queryDisableDispatch("ws-test-001", "/project")
-        ).rejects.toThrow(/正在派发执行中/);
-      });
+      expect(result.success).toBe(true);
+      expect(result.hint).toBe(DISPATCH_HINT.SUCCESS);
     });
   });
 
   // ========== dispatchNode 节点类型验证测试 ==========
-  describe("dispatchNode 节点类型验证", () => {
+  describe("upgradeToDispatchParent 节点类型验证", () => {
 
     describe("允许的节点类型", () => {
       it("execution 节点可以升级为派发母节点", async () => {
@@ -1210,7 +962,6 @@ describe("DispatchService", () => {
           rootNodeId: "root",
           dispatch: {
             enabled: true,
-            useGit: false,
             enabledAt: Date.now(),
           },
         };
@@ -1250,7 +1001,7 @@ describe("DispatchService", () => {
               dirName: "规划节点_plan001",
               type: "planning",
               parentId: "root",
-              children: [],  // 没有子节点
+              children: [],
               status: "planning",
               isolate: false,
               references: [],
@@ -1271,7 +1022,6 @@ describe("DispatchService", () => {
           rootNodeId: "root",
           dispatch: {
             enabled: true,
-            useGit: false,
             enabledAt: Date.now(),
           },
         };
@@ -1313,7 +1063,7 @@ describe("DispatchService", () => {
               dirName: "规划节点_plan001",
               type: "planning",
               parentId: "root",
-              children: ["node-exec-001"],  // 有子节点
+              children: ["node-exec-001"],
               status: "planning",
               isolate: false,
               references: [],
@@ -1347,7 +1097,6 @@ describe("DispatchService", () => {
           rootNodeId: "root",
           dispatch: {
             enabled: true,
-            useGit: false,
             enabledAt: Date.now(),
           },
         };
@@ -1365,11 +1114,11 @@ describe("DispatchService", () => {
     });
   });
 
-  // ========== Bug 4: dirName 解析测试 ==========
-  describe("Bug 4: dirName 解析", () => {
+  // ========== dirName 解析测试 ==========
+  describe("dirName 解析", () => {
 
-    describe("4.1 prepareDispatch 使用 dirName", () => {
-      it("节点有 dirName 时，使用 dirName 读取 Info.md", async () => {
+    describe("prepareDispatch 使用 dirName", () => {
+      it("节点有 dirName 时，prepareDispatch 返回正确结果", async () => {
         const graph: NodeGraph = {
           version: "5.0",
           currentFocus: null,
@@ -1389,7 +1138,7 @@ describe("DispatchService", () => {
             },
             "node-exec-001": {
               id: "node-exec-001",
-              dirName: "执行任务_exec001",  // 有 dirName
+              dirName: "执行任务_exec001",
               type: "execution",
               parentId: "root",
               children: [],
@@ -1413,7 +1162,6 @@ describe("DispatchService", () => {
           rootNodeId: "root",
           dispatch: {
             enabled: true,
-            useGit: false,
             enabledAt: Date.now(),
           },
         };
@@ -1426,13 +1174,11 @@ describe("DispatchService", () => {
 
         const result = await service.prepareDispatch("ws-test-001", "/project", "node-exec-001");
 
-        // 新版本 prepareDispatch 使用 readGraph 而非 readNodeInfo
-        // 验证返回的 actionRequired 包含正确信息
         expect(result.success).toBe(true);
         expect(result.actionRequired).toBeDefined();
       });
 
-      it("节点没有 dirName 时，使用 nodeId 读取 Info.md", async () => {
+      it("节点没有 dirName 时，prepareDispatch 仍返回正确结果", async () => {
         const graph: NodeGraph = {
           version: "5.0",
           currentFocus: null,
@@ -1452,7 +1198,7 @@ describe("DispatchService", () => {
             },
             "node-exec-001": {
               id: "node-exec-001",
-              dirName: "",  // 空 dirName
+              dirName: "",
               type: "execution",
               parentId: "root",
               children: [],
@@ -1476,7 +1222,6 @@ describe("DispatchService", () => {
           rootNodeId: "root",
           dispatch: {
             enabled: true,
-            useGit: false,
             enabledAt: Date.now(),
           },
         };
@@ -1489,14 +1234,12 @@ describe("DispatchService", () => {
 
         const result = await service.prepareDispatch("ws-test-001", "/project", "node-exec-001");
 
-        // 新版本 prepareDispatch 使用 readGraph 而非 readNodeInfo
-        // 验证返回的 actionRequired 包含正确信息
         expect(result.success).toBe(true);
         expect(result.actionRequired).toBeDefined();
       });
     });
 
-    describe("4.2 completeDispatch 使用 dirName", () => {
+    describe("completeDispatch 使用 dirName", () => {
       it("完成时使用 dirName 更新 Info.md", async () => {
         const graph: NodeGraph = {
           version: "5.0",
@@ -1517,7 +1260,7 @@ describe("DispatchService", () => {
             },
             "node-exec-001": {
               id: "node-exec-001",
-              dirName: "Web 前端优化_exec001",  // 有 dirName（含空格）
+              dirName: "Web 前端优化_exec001",
               type: "execution",
               parentId: "root",
               children: [],
@@ -1545,7 +1288,6 @@ describe("DispatchService", () => {
           rootNodeId: "root",
           dispatch: {
             enabled: true,
-            useGit: false,
             enabledAt: Date.now(),
           },
         };

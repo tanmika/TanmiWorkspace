@@ -714,33 +714,15 @@ Read(file_path: <返回的 path>)
         // Dispatch 工具
         case "dispatch_enable": {
           const workspaceId = args?.workspaceId as string;
-          const useGit = args?.useGit as boolean | undefined;
           const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
-          result = await services.dispatch.enableDispatch(workspaceId, projectRoot, { useGit });
+          result = await services.dispatch.enableDispatch(workspaceId, projectRoot);
           break;
         }
 
         case "dispatch_disable": {
           const workspaceId = args?.workspaceId as string;
           const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
-          result = await services.dispatch.queryDisableDispatch(workspaceId, projectRoot);
-          break;
-        }
-
-        case "dispatch_disable_execute": {
-          const workspaceId = args?.workspaceId as string;
-          const mergeStrategy = args?.mergeStrategy as "sequential" | "squash" | "cherry-pick" | "skip";
-          const keepBackupBranch = args?.keepBackupBranch as boolean | undefined;
-          const keepProcessBranch = args?.keepProcessBranch as boolean | undefined;
-          const commitMessage = args?.commitMessage as string | undefined;
-          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
-          result = await services.dispatch.executeDisableChoice(projectRoot, {
-            workspaceId,
-            mergeStrategy,
-            keepBackupBranch: keepBackupBranch ?? false,
-            keepProcessBranch: keepProcessBranch ?? false,
-            commitMessage,
-          });
+          result = await services.dispatch.disableDispatch(workspaceId, projectRoot);
           break;
         }
 
@@ -770,13 +752,6 @@ Read(file_path: <返回的 path>)
           break;
         }
 
-        case "dispatch_cleanup": {
-          const workspaceId = args?.workspaceId as string;
-          const projectRoot = await services.workspace.resolveProjectRoot(workspaceId);
-          result = await services.dispatch.cleanupBranches(workspaceId, projectRoot);
-          break;
-        }
-
         case "dispatch_create": {
           const workspaceId = args?.workspaceId as string;
           const parentId = args?.parentId as string;
@@ -800,7 +775,7 @@ Read(file_path: <返回的 path>)
         }
 
         case "config_set": {
-          const defaultDispatchMode = args?.defaultDispatchMode as "none" | "git" | "no-git" | undefined;
+          const defaultDispatchMode = args?.defaultDispatchMode as "none" | "enabled" | undefined;
           const security = args?.security as { allowUnboundWrite?: boolean } | undefined;
           result = await services.config.set({ defaultDispatchMode, security });
           break;
