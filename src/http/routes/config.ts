@@ -12,6 +12,7 @@ import {
   installClaudeAllForApi,
   installCursorAllForApi,
   installOpenCodeAllForApi,
+  installCodexAllForApi,
   type PlatformInstallResult,
 } from "../../cli/plugins.js";
 
@@ -20,6 +21,7 @@ interface ComponentVersionsConfig {
   claudeCode: Record<string, string>;
   cursor: Record<string, string>;
   opencode: Record<string, string>;
+  codex: Record<string, string>;
 }
 
 // 加载组件最低版本配置
@@ -36,6 +38,7 @@ function loadComponentVersions(): ComponentVersionsConfig {
       claudeCode: {},
       cursor: {},
       opencode: {},
+      codex: {},
     };
   }
 }
@@ -143,7 +146,7 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
       };
     };
 
-    // 构建各平台状态（移除 codex）
+    // 构建各平台状态
     const platforms = {
       claudeCode: {
         name: "Claude Code",
@@ -175,6 +178,15 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
           skills: defaultComponent(),
         },
       },
+      codex: {
+        name: "Codex CLI",
+        enabled: false,
+        components: {
+          mcp: defaultComponent(),
+          skills: defaultComponent(),
+          instructions: defaultComponent(), // Codex 用 instructions 替代 hooks
+        },
+      },
     };
 
     // 填充实际数据
@@ -183,21 +195,29 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
       const versions = componentVersions[key as keyof ComponentVersionsConfig] || {};
       if (info?.enabled) {
         platform.enabled = true;
-        platform.components.mcp = buildComponentStatus(info.components.mcp, versions.mcp);
-        // OpenCode 用 plugins，其他平台用 hooks
+        (platform.components as Record<string, unknown>).mcp = buildComponentStatus(info.components.mcp, versions.mcp);
+        (platform.components as Record<string, unknown>).skills = buildComponentStatus(info.components.skills, versions.skills);
+        // 各平台差异化组件
         if (key === "opencode") {
           (platform.components as Record<string, unknown>).plugins = buildComponentStatus(
             info.components.plugins,
             versions.plugins
           );
+          (platform.components as Record<string, unknown>).agents = buildComponentStatus(info.components.agents, versions.agents);
+        } else if (key === "codex") {
+          // Codex: instructions 替代 hooks/agents
+          (platform.components as Record<string, unknown>).instructions = buildComponentStatus(
+            info.components.instructions,
+            versions.instructions
+          );
         } else {
+          // Claude Code / Cursor: hooks + agents
           (platform.components as Record<string, unknown>).hooks = buildComponentStatus(
             info.components.hooks,
             versions.hooks
           );
+          (platform.components as Record<string, unknown>).agents = buildComponentStatus(info.components.agents, versions.agents);
         }
-        platform.components.agents = buildComponentStatus(info.components.agents, versions.agents);
-        platform.components.skills = buildComponentStatus(info.components.skills, versions.skills);
       }
     }
 
@@ -218,7 +238,7 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
   }
 
   // 有效平台列表
-  const VALID_PLATFORMS = ["claude", "cursor", "opencode"] as const;
+  const VALID_PLATFORMS = ["claude", "cursor", "opencode", "codex"] as const;
   type ValidPlatform = typeof VALID_PLATFORMS[number];
 
   // 平台安装函数映射
@@ -226,6 +246,7 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
     claude: installClaudeAllForApi,
     cursor: installCursorAllForApi,
     opencode: installOpenCodeAllForApi,
+    codex: installCodexAllForApi,
   };
 
   /**

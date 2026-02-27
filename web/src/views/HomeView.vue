@@ -55,9 +55,9 @@ const pluginBannerDismissed = ref(isDismissedToday())
 // 检查平台是否有过期组件
 function hasOutdatedComponent(platform: PlatformStatus): boolean {
   const comps = platform.components
-  // hooks 和 plugins 是互斥的：Claude Code/Cursor 用 hooks，OpenCode 用 plugins
-  const hooksOrPluginsOutdated = comps.hooks?.outdated || comps.plugins?.outdated || false
-  return comps.mcp.outdated || hooksOrPluginsOutdated || comps.agents.outdated || comps.skills.outdated
+  // hooks/plugins/instructions 互斥：Claude Code/Cursor 用 hooks，OpenCode 用 plugins，Codex 用 instructions
+  const hooksOrPluginsOutdated = comps.hooks?.outdated || comps.plugins?.outdated || comps.instructions?.outdated || false
+  return comps.mcp.outdated || hooksOrPluginsOutdated || (comps.agents?.outdated ?? false) || comps.skills.outdated
 }
 
 // 是否显示插件更新横幅

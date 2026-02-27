@@ -93,13 +93,14 @@ export interface PlatformInstallation {
   enabled: boolean;
   installedAt: string;  // ISO timestamp
   components: {
-    hooks?: ComponentInfo;     // Claude Code / Cursor 用 hooks
-    plugins?: ComponentInfo;   // OpenCode 用 plugins（替代 hooks）
+    hooks?: ComponentInfo;         // Claude Code / Cursor 用 hooks
+    plugins?: ComponentInfo;       // OpenCode 用 plugins（替代 hooks）
     mcp: ComponentInfo;
-    agents?: ComponentInfo;    // Claude Code / OpenCode 特有（dispatch agents）
-    skills?: ComponentInfo;    // Claude Code / OpenCode 特有（skills 模板）
-    agentsMd?: ComponentInfo;  // Codex 特有
-    modes?: ComponentInfo;     // Cursor 特有
+    agents?: ComponentInfo;        // Claude Code / OpenCode 特有（dispatch agents）
+    skills?: ComponentInfo;        // Claude Code / OpenCode 特有（skills 模板）
+    agentsMd?: ComponentInfo;      // Codex 特有（旧字段，保持兼容）
+    instructions?: ComponentInfo;  // Codex 特有（AGENTS.md 工作流注入）
+    modes?: ComponentInfo;         // Cursor 特有
   };
 }
 

@@ -183,9 +183,9 @@ function formatTime(isoString?: string | null) {
 // 检查平台是否有过期组件
 function hasOutdatedComponent(platform: PlatformStatus): boolean {
   const comps = platform.components
-  // hooks 和 plugins 是互斥的：Claude Code/Cursor 用 hooks，OpenCode 用 plugins
-  const hooksOrPluginsOutdated = comps.hooks?.outdated || comps.plugins?.outdated || false
-  return comps.mcp.outdated || hooksOrPluginsOutdated || comps.agents.outdated || comps.skills.outdated
+  // hooks/plugins/instructions 互斥：Claude Code/Cursor 用 hooks，OpenCode 用 plugins，Codex 用 instructions
+  const hooksOrPluginsOutdated = comps.hooks?.outdated || comps.plugins?.outdated || comps.instructions?.outdated || false
+  return comps.mcp.outdated || hooksOrPluginsOutdated || (comps.agents?.outdated ?? false) || comps.skills.outdated
 }
 
 // 获取状态指示器样式类
@@ -497,6 +497,39 @@ async function handleGenerateTutorial() {
                 <span
                   class="component-name"
                   :class="getIndicatorClass(installationStatus.platforms.opencode.components[comp as keyof typeof installationStatus.platforms.opencode.components])"
+                >{{ comp.charAt(0).toUpperCase() + comp.slice(1) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Codex CLI -->
+          <div class="platform-card">
+            <div class="platform-label">
+              <span class="platform-name">CODEX CLI</span>
+              <span
+                class="platform-status"
+                :class="{
+                  installed: installationStatus.platforms.codex.enabled && !hasOutdatedComponent(installationStatus.platforms.codex),
+                  outdated: installationStatus.platforms.codex.enabled && hasOutdatedComponent(installationStatus.platforms.codex),
+                  disabled: !installationStatus.platforms.codex.enabled
+                }"
+              >
+                {{ !installationStatus.platforms.codex.enabled ? 'NOT INSTALLED' : (hasOutdatedComponent(installationStatus.platforms.codex) ? 'UPDATE' : 'INSTALLED') }}
+              </span>
+            </div>
+            <div class="component-box">
+              <div
+                v-for="comp in ['mcp', 'skills', 'instructions']"
+                :key="comp"
+                class="component-cell"
+              >
+                <span
+                  class="status-block"
+                  :class="getIndicatorClass(installationStatus.platforms.codex.components[comp as keyof typeof installationStatus.platforms.codex.components])"
+                ></span>
+                <span
+                  class="component-name"
+                  :class="getIndicatorClass(installationStatus.platforms.codex.components[comp as keyof typeof installationStatus.platforms.codex.components])"
                 >{{ comp.charAt(0).toUpperCase() + comp.slice(1) }}</span>
               </div>
             </div>

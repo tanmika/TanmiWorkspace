@@ -1,6 +1,6 @@
 #!/bin/bash
 # 开发环境 setup 命令
-# 用法: ./scripts/dev-setup.sh [--claude-code|--cursor|--opencode|--status|--help]
+# 用法: ./scripts/dev-setup.sh [--claude-code|--cursor|--opencode|--codex|--status|--help]
 # 自动设置 TANMI_DEV=true，更新开发环境的 installation-meta.json
 
 set -e
@@ -8,7 +8,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 # 参数验证
-VALID_ARGS=("--claude-code" "--cursor" "--opencode" "-o" "--status" "--help" "-h")
+VALID_ARGS=("--claude-code" "--cursor" "--opencode" "-o" "--codex" "-c" "--status" "--help" "-h")
 
 # 如果没有参数，显示用法说明
 if [ $# -eq 0 ]; then
@@ -18,6 +18,7 @@ if [ $# -eq 0 ]; then
   echo "  --claude-code    快速配置 Claude Code"
   echo "  --cursor         快速配置 Cursor"
   echo "  --opencode, -o   快速配置 OpenCode"
+  echo "  --codex, -c      快速配置 Codex CLI"
   echo "  --status         查看当前配置状态"
   echo "  --help, -h       显示帮助信息"
   echo ""
@@ -33,6 +34,7 @@ for arg in "$@"; do
     echo "  --claude-code    快速配置 Claude Code"
     echo "  --cursor         快速配置 Cursor"
     echo "  --opencode, -o   快速配置 OpenCode"
+    echo "  --codex, -c      快速配置 Codex CLI"
     echo "  --status         查看当前配置状态"
     echo "  --help, -h       显示帮助信息"
     echo ""

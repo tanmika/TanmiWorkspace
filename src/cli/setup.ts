@@ -14,6 +14,7 @@ import {
   installClaudeAll,
   installCursorAll,
   installOpenCodeAll,
+  installCodexAll,
   updateInstallationMeta,
   getPluginStatus,
 } from "./plugins.js";
@@ -97,6 +98,15 @@ interface Environment {
     skillsInstalled: number;
     skillsNeedsUpdate?: boolean;
   };
+  codex: {
+    installed: boolean;
+    mcpConfigured: boolean;
+    mcpNeedsUpdate?: boolean;
+    skillsInstalled: number;
+    skillsNeedsUpdate?: boolean;
+    instructionsInstalled: boolean;
+    instructionsNeedsUpdate?: boolean;
+  };
 }
 
 async function detectEnvironment(): Promise<Environment> {
@@ -168,6 +178,8 @@ async function detectEnvironment(): Promise<Environment> {
   // 检测插件安装状态
   const pluginStatus = getPluginStatus();
 
+  const codexHome = join(HOME, ".codex");
+
   return {
     nodeVersion: process.versions.node,
     currentVersion: pluginStatus.currentVersion,
@@ -202,6 +214,15 @@ async function detectEnvironment(): Promise<Environment> {
       agentsNeedsUpdate: pluginStatus.opencode?.agentsNeedsUpdate,
       skillsInstalled: pluginStatus.opencode?.skills?.length ?? 0,
       skillsNeedsUpdate: pluginStatus.opencode?.skillsNeedsUpdate,
+    },
+    codex: {
+      installed: existsSync(codexHome),
+      mcpConfigured: pluginStatus.codex?.mcp ?? false,
+      mcpNeedsUpdate: pluginStatus.codex?.mcpNeedsUpdate,
+      skillsInstalled: pluginStatus.codex?.skills?.length ?? 0,
+      skillsNeedsUpdate: pluginStatus.codex?.skillsNeedsUpdate,
+      instructionsInstalled: pluginStatus.codex?.instructions ?? false,
+      instructionsNeedsUpdate: pluginStatus.codex?.instructionsNeedsUpdate,
     },
   };
 }
@@ -249,6 +270,14 @@ function showStatus(env: Environment) {
   console.log(`  Plugin: ${formatPluginStatus(env.opencode.pluginInstalled, null, env.opencode.pluginNeedsUpdate)}`);
   console.log(`  Agents: ${formatPluginStatus(env.opencode.agentsInstalled > 0, env.opencode.agentsInstalled, env.opencode.agentsNeedsUpdate)}`);
   console.log(`  Skills: ${formatPluginStatus(env.opencode.skillsInstalled > 0, env.opencode.skillsInstalled, env.opencode.skillsNeedsUpdate)}`);
+  console.log("");
+
+  const codexHome = join(HOME, ".codex");
+  console.log(colors.bold("Codex CLI:"));
+  console.log(`  目录:         ${env.codex.installed ? colors.green("✓") : colors.yellow("✗")} ${codexHome}`);
+  console.log(`  MCP:          ${env.codex.mcpConfigured ? colors.green("✓ 已配置") : colors.yellow("○ 未配置")}`);
+  console.log(`  Skills:       ${formatPluginStatus(env.codex.skillsInstalled > 0, env.codex.skillsInstalled, env.codex.skillsNeedsUpdate)}`);
+  console.log(`  Instructions: ${formatPluginStatus(env.codex.instructionsInstalled, null, env.codex.instructionsNeedsUpdate)}`);
   console.log("");
 }
 
@@ -427,14 +456,16 @@ async function configureOpenCodeMcp(): Promise<boolean> {
 }
 
 // 安装插件（Hooks/Plugin + Agents + Skills）
-async function installPlugins(platform: "claude" | "cursor" | "opencode"): Promise<boolean> {
+async function installPlugins(platform: "claude" | "cursor" | "opencode" | "codex"): Promise<boolean> {
   try {
     if (platform === "claude") {
       installClaudeAll();
     } else if (platform === "cursor") {
       installCursorAll();
-    } else {
+    } else if (platform === "opencode") {
       installOpenCodeAll();
+    } else {
+      installCodexAll();
     }
     return true;
   } catch (error) {
@@ -455,6 +486,7 @@ ${colors.bold("用法:")}
   tanmi-workspace setup --claude-code  快速配置 Claude Code
   tanmi-workspace setup --cursor     快速配置 Cursor
   tanmi-workspace setup --opencode   快速配置 OpenCode
+  tanmi-workspace setup --codex      快速配置 Codex CLI
   tanmi-workspace setup --help       显示帮助
 
 ${colors.bold("说明:")}
@@ -510,6 +542,23 @@ export default async function setup() {
     return;
   }
 
+  if (args.includes("--codex") || args.includes("-c")) {
+    console.log(colors.bold("\n=== TanmiWorkspace Codex CLI 快速配置 ===\n"));
+
+    console.log(colors.bold("当前状态:"));
+    console.log(`  MCP:          ${env.codex.mcpConfigured ? colors.green("已配置") : colors.yellow("未配置")}`);
+    console.log(`  Skills:       ${formatPluginStatus(env.codex.skillsInstalled > 0, env.codex.skillsInstalled, env.codex.skillsNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
+    console.log(`  Instructions: ${formatPluginStatus(env.codex.instructionsInstalled, null, env.codex.instructionsNeedsUpdate).replace(/[✓○⚠]\s*/, "")}`);
+    console.log("");
+
+    await installPlugins("codex");
+
+    console.log("\n" + colors.green("配置完成！Codex CLI 注意事项："));
+    console.log("  - 无 Hook 系统，请手动调用 session_bind 绑定工作区");
+    console.log("  - AGENTS.md 已注入工作流指引（全局生效）");
+    return;
+  }
+
   if (args.includes("--opencode") || args.includes("-o")) {
     console.log(colors.bold("\n=== TanmiWorkspace OpenCode 快速配置 ===\n"));
 
@@ -552,6 +601,11 @@ export default async function setup() {
   if (env.opencode.installed) {
     const status = env.opencode.mcpConfigured ? " (已配置)" : "";
     platforms.push({ name: `OpenCode${status}`, value: "opencode" });
+  }
+
+  if (env.codex.installed) {
+    const status = env.codex.mcpConfigured ? " (已配置)" : "";
+    platforms.push({ name: `Codex CLI${status}`, value: "codex" });
   }
 
   platforms.push({ name: "显示手动配置说明", value: "manual" });
@@ -637,6 +691,16 @@ ${colors.bold("4. 其他平台")}
     console.log("\n" + colors.green(colors.bold("✓ 配置完成！")));
     console.log("\n下一步:");
     console.log("  1. 重启 OpenCode");
+    console.log('  2. 说「介绍一下工作台的使用方式」开始使用\n');
+  }
+
+  if (platform === "codex") {
+    await installPlugins("codex");
+
+    console.log("\n" + colors.green(colors.bold("✓ 配置完成！")));
+    console.log("\n注意事项:");
+    console.log("  - Codex CLI 无 Hook 系统，请手动调用 session_bind");
+    console.log("  - AGENTS.md 工作流指引已全局注入");
     console.log('  2. 说「介绍一下工作台的使用方式」开始使用\n');
   }
 }

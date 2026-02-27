@@ -18,5 +18,13 @@
     "plugins": "1.11.1",
     "agents": "1.11.0",
     "skills": "1.11.4"
+  },
+  "codex": {
+    "mcp": "1.0.0",
+    "skills": "1.11.4",
+    "instructions": "1.0.0",
+    "hooks": "0.0.0",
+    "agents": "0.0.0",
+    "plugins": "0.0.0"
   }
 }

@@ -381,6 +381,7 @@ function handleFileToolUse(sessionId, binding, tool_name, tool_input, tool_respo
 | **Claude Code** | PostToolUse | ✅ 完整 | ✅ 完整 | session_id |
 | **Cursor** | afterFileEdit | ✅ old/new_string | ❌ 无 Hook | conversation_id |
 | **OpenCode** | tool.execute.after | ✅ before/after | ⚠️ 无 content | sessionID |
+| **Codex CLI** | ❌ 无 Hook 系统 | - | - | - |
 
 ### Cursor 实测数据
 
@@ -485,6 +486,41 @@ Cursor/OpenCode 的 Write 操作：
 - **Cursor**：方案 C（降级，Write 无法追踪）
 - **OpenCode**：方案 B（before+after 配合获取完整数据）
 
+### Codex CLI（调研结论，2026-02-27）
+
+Codex CLI **没有 Hook 系统**，无法实现变更追踪的核心能力。
+
+**Hook 现状**：
+- 只有 `notify` 配置，在任务完成/需要用户响应时执行一条 shell 命令
+- 无法拦截工具调用（无 PreToolUse/PostToolUse 等价物）
+- Hook 系统是社区长期需求（[Discussion #2150](https://github.com/openai/codex/discussions/2150)），官方暂无时间表
+
+**可集成的能力**：
+
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| MCP 工具 | ✅ 可用 | 同时支持 stdio 和 Streamable HTTP，可直接对接现有 MCP 服务 |
+| Skills | ✅ 原生支持 | `SKILL.md` + front matter 格式与 TanmiWorkspace 高度兼容，存放于 `.agents/skills/` |
+| 多代理 | ⚠️ 实验性 | 内置多代理调度（`spawn_agents_on_csv`），机制与 dispatch 系统不同，不可复用 |
+| 变更追踪 | ❌ 不支持 | 无 Hook，无法自动捕获 Edit/Write |
+| 权限门控 | ❌ 不支持 | 无 PreToolUse，无法阻止未绑定时的写操作 |
+| 自动 session 绑定 | ❌ 不支持 | 无 SessionStart，需用户手动调用 `session_bind` |
+
+**MCP 配置示例**：
+```toml
+# ~/.codex/config.toml
+[[mcp.servers]]
+name = "tanmi-workspace"
+url = "http://localhost:3000/mcp"   # Streamable HTTP，直接对接现有服务
+```
+
+**Skills 格式**（与 TanmiWorkspace 一致）：
+```
+.agents/skills/
+└── aligning-intent/
+    └── SKILL.md   # name + description front matter 相同格式
+```
+
 ### 支持策略总结
 
 | 客户端 | Edit 追踪 | Write 追踪 | 回滚能力 |
@@ -492,6 +528,7 @@ Cursor/OpenCode 的 Write 操作：
 | Claude Code | ✅ 完整 | ✅ 完整 | ✅ 完整 |
 | Cursor | ✅ 完整 | ❌ 无法追踪 | ⚠️ 仅 Edit |
 | OpenCode | ✅ 完整 | ⚠️ 需 before+after | ⚠️ Write 需额外处理 |
+| Codex CLI | ❌ 无 Hook | ❌ 无 Hook | ❌ 不支持 |
 
 ### 长文本真实测试验证（2026-02-05）
 

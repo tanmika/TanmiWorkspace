@@ -556,7 +556,7 @@ export interface MemoListResult {
 
 // ========== Change Tracking 类型 ==========
 
-export type ChangeClient = 'claude-code' | 'cursor' | 'opencode'
+export type ChangeClient = 'claude-code' | 'cursor' | 'opencode' | 'codex'
 export type ChangeOperationType = 'add' | 'update' | 'overwrite' | 'delete'
 
 export interface ChangeOperationAddSummary {

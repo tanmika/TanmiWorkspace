@@ -37,9 +37,10 @@ export interface ComponentStatus {
 // 平台组件状态
 export interface PlatformComponents {
   mcp: ComponentStatus
-  hooks?: ComponentStatus   // Claude Code / Cursor 用 hooks
-  plugins?: ComponentStatus // OpenCode 用 plugins
-  agents: ComponentStatus
+  hooks?: ComponentStatus         // Claude Code / Cursor 用 hooks
+  plugins?: ComponentStatus       // OpenCode 用 plugins
+  instructions?: ComponentStatus  // Codex CLI 用 instructions
+  agents?: ComponentStatus        // Codex 不支持，可选
   skills: ComponentStatus
 }
 
@@ -50,13 +51,14 @@ export interface PlatformStatus {
   components: PlatformComponents
 }
 
-// 安装状态响应（移除 codex）
+// 安装状态响应
 export interface InstallationStatusResult {
   currentVersion: string
   platforms: {
     claudeCode: PlatformStatus
     cursor: PlatformStatus
     opencode: PlatformStatus
+    codex: PlatformStatus
   }
   updateCommand: string
 }

@@ -32,8 +32,8 @@ const errorMessage = ref('')
 // 检查平台是否有过期组件
 function hasOutdatedComponent(platform: APIPlatformStatus): boolean {
   const comps = platform.components
-  const hooksOrPluginsOutdated = comps.hooks?.outdated || comps.plugins?.outdated || false
-  return comps.mcp.outdated || hooksOrPluginsOutdated || comps.agents.outdated || comps.skills.outdated
+  const hooksOrPluginsOutdated = comps.hooks?.outdated || comps.plugins?.outdated || comps.instructions?.outdated || false
+  return comps.mcp.outdated || hooksOrPluginsOutdated || (comps.agents?.outdated ?? false) || comps.skills.outdated
 }
 
 // 获取平台状态类名

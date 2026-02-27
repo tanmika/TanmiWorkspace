@@ -877,6 +877,7 @@ Change Tracking 功能需要在 AI 修改文件后捕获以下信息：
 | **Claude Code** | PostToolUse | PreToolUse | ✅ 完整 | ✅ 完整 | session_id |
 | **Cursor** | afterFileEdit / postToolUse | preToolUse | ✅ old/new_string | ⚠️ postToolUse（待验证 tool_output） | conversation_id |
 | **OpenCode** | tool.execute.after | tool.execute.before | ✅ before/after | ⚠️ 无 content | sessionID |
+| **Codex CLI** | ❌ 无 Hook 系统 | ❌ | ❌ | ❌ | - |
 
 > **2026-02 更新**：Cursor 新增 `preToolUse`/`postToolUse` 事件，覆盖所有工具类型（含内建 Edit/Write）。
 > 门控拦截从"不可能"变为"可实现"；Write 追踪通过 `postToolUse.tool_output` 可能获取数据（待实测验证）。
@@ -1006,6 +1007,26 @@ Change Tracking 功能需要在 AI 修改文件后捕获以下信息：
 - ⚠️ Write 操作只有 filepath，**没有写入的 content**
 - ✅ 有 sessionID 可用
 
+### Codex CLI（调研结论，2026-02-27）
+
+Codex CLI **没有 Hook 系统**，无法实现 Change Tracking 的任何自动化能力。
+
+**Hook 现状**：
+- 唯一的 hook 机制是 `notify` 配置，仅在任务完成或需要用户响应时执行一条 shell 命令
+- 无法拦截工具调用，无 PreToolUse / PostToolUse 等价物
+- 社区长期需求（[Discussion #2150](https://github.com/openai/codex/discussions/2150)），官方暂无时间表
+
+**可集成的能力**（不依赖 Hook）：
+
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| MCP 工具 | ✅ 可用 | 同时支持 stdio 和 Streamable HTTP，可直接对接现有 MCP 服务 |
+| Skills | ✅ 原生支持 | `SKILL.md` + front matter 格式与 TanmiWorkspace 完全兼容，存放于 `.agents/skills/` |
+| 多代理 | ⚠️ 实验性 | 内置多代理调度，机制与 TanmiWorkspace dispatch 系统不同 |
+| Change Tracking | ❌ | 无 Hook，无法自动捕获 Edit/Write 操作 |
+| 权限门控 | ❌ | 无 PreToolUse，无法阻止未绑定时的写操作 |
+| session 自动绑定 | ❌ | 无 SessionStart，需用户手动调用 `session_bind` |
+
 ### Write 操作支持方案
 
 由于 Cursor/OpenCode 的 Write 操作无法直接获取内容，需要额外处理：
@@ -1035,6 +1056,7 @@ tool.execute.after (callID: "write:0")
 | **Claude Code** | ✅ 完整 | ✅ 完整 | ✅ 完整 |
 | **Cursor** | ✅ 完整 | ❌ 无法追踪 | ⚠️ 仅 Edit |
 | **OpenCode** | ✅ 完整 | ⚠️ 需 before+after | ⚠️ Write 需额外处理 |
+| **Codex CLI** | ❌ 无 Hook | ❌ 无 Hook | ❌ 不支持 |
 
 ---
 

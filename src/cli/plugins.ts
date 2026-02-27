@@ -64,6 +64,12 @@ const OPENCODE_AGENTS = join(OPENCODE_HOME, "agents");
 const OPENCODE_SKILLS = join(OPENCODE_HOME, "skills");
 const OPENCODE_PLUGINS = join(OPENCODE_HOME, "plugins");
 
+// Codex CLI 配置
+const CODEX_HOME = join(HOME, ".codex");
+const CODEX_CONFIG = join(CODEX_HOME, "config.toml");
+const CODEX_SKILLS_DIR = join(CODEX_HOME, "skills");
+const CODEX_AGENTS_MD = join(CODEX_HOME, "AGENTS.md");
+
 // 安装元信息
 const INSTALLATION_META_PATH = join(TANMI_HOME, "installation-meta.json");
 
@@ -324,6 +330,17 @@ interface PluginStatus {
     skillsVersion?: string;
     skillsNeedsUpdate?: boolean;
   };
+  codex: {
+    mcp: boolean;
+    mcpVersion?: string;
+    mcpNeedsUpdate?: boolean;
+    skills: string[];
+    skillsVersion?: string;
+    skillsNeedsUpdate?: boolean;
+    instructions: boolean;
+    instructionsVersion?: string;
+    instructionsNeedsUpdate?: boolean;
+  };
 }
 
 // 比较版本，完整比较 major.minor.patch
@@ -438,6 +455,46 @@ function getPluginStatus(): PluginStatus {
   }
   const opencodeSkillsVersion = opencodePlatform?.components?.skills?.version;
 
+  // Codex MCP - 检测 config.toml 中是否有 tanmi-workspace
+  const codexPlatform = meta.global.platforms["codex"];
+  let codexMcpInstalled = false;
+  if (existsSync(CODEX_CONFIG)) {
+    try {
+      const tomlContent = readFileSync(CODEX_CONFIG, "utf-8");
+      codexMcpInstalled = tomlContent.includes('name = "tanmi-workspace"');
+    } catch {
+      // 读取失败
+    }
+  }
+  const codexMcpVersion = codexPlatform?.components?.mcp?.version;
+
+  // Codex skills - 动态检测已安装的 skill
+  const installedCodexSkills: string[] = [];
+  if (existsSync(PLUGIN_SKILLS) && existsSync(CODEX_SKILLS_DIR)) {
+    const sourceSkills = readdirSync(PLUGIN_SKILLS).filter((name) => {
+      const fullPath = join(PLUGIN_SKILLS, name);
+      return statSync(fullPath).isDirectory() && existsSync(join(fullPath, "SKILL.md"));
+    });
+    for (const skill of sourceSkills) {
+      if (existsSync(join(CODEX_SKILLS_DIR, skill, "SKILL.md"))) {
+        installedCodexSkills.push(skill);
+      }
+    }
+  }
+  const codexSkillsVersion = codexPlatform?.components?.skills?.version;
+
+  // Codex AGENTS.md 注入检测
+  let codexInstructionsInstalled = false;
+  if (existsSync(CODEX_AGENTS_MD)) {
+    try {
+      const agentsMdContent = readFileSync(CODEX_AGENTS_MD, "utf-8");
+      codexInstructionsInstalled = agentsMdContent.includes(AGENTS_MARKER_START);
+    } catch {
+      // 读取失败
+    }
+  }
+  const codexInstructionsVersion = codexPlatform?.components?.instructions?.version;
+
   return {
     currentVersion,
     claude: {
@@ -472,6 +529,17 @@ function getPluginStatus(): PluginStatus {
       skills: installedOpencodeSkills,
       skillsVersion: opencodeSkillsVersion,
       skillsNeedsUpdate: installedOpencodeSkills.length > 0 && needsVersionUpdate(opencodeSkillsVersion, currentVersion),
+    },
+    codex: {
+      mcp: codexMcpInstalled,
+      mcpVersion: codexMcpVersion,
+      mcpNeedsUpdate: codexMcpInstalled && needsVersionUpdate(codexMcpVersion, currentVersion),
+      skills: installedCodexSkills,
+      skillsVersion: codexSkillsVersion,
+      skillsNeedsUpdate: installedCodexSkills.length > 0 && needsVersionUpdate(codexSkillsVersion, currentVersion),
+      instructions: codexInstructionsInstalled,
+      instructionsVersion: codexInstructionsVersion,
+      instructionsNeedsUpdate: codexInstructionsInstalled && needsVersionUpdate(codexInstructionsVersion, currentVersion),
     },
   };
 }
@@ -558,6 +626,18 @@ function showStatus(): void {
   }
   console.log("");
 
+  // Codex CLI
+  console.log(colors.bold("Codex CLI:"));
+  console.log(`  MCP:          ${formatComponentStatus(status.codex.mcp, null, status.codex.mcpNeedsUpdate, status.codex.mcpVersion)}`);
+  console.log(`  Skills:       ${formatComponentStatus(status.codex.skills.length > 0, status.codex.skills.length, status.codex.skillsNeedsUpdate, status.codex.skillsVersion)}`);
+  if (status.codex.skills.length > 0) {
+    for (const skill of status.codex.skills) {
+      console.log(`                ${colors.gray("-")} ${skill}`);
+    }
+  }
+  console.log(`  Instructions: ${formatComponentStatus(status.codex.instructions, null, status.codex.instructionsNeedsUpdate, status.codex.instructionsVersion)}`);
+  console.log("");
+
   // 安装路径
   console.log(colors.gray("安装路径:"));
   console.log(colors.gray(`  Scripts: ${TANMI_SCRIPTS}`));
@@ -568,6 +648,9 @@ function showStatus(): void {
   console.log(colors.gray(`  OpenCode Plugins: ${OPENCODE_PLUGINS}`));
   console.log(colors.gray(`  OpenCode Agents:  ${OPENCODE_AGENTS}`));
   console.log(colors.gray(`  OpenCode Skills:  ${OPENCODE_SKILLS}`));
+  console.log(colors.gray(`  Codex Config: ${CODEX_CONFIG}`));
+  console.log(colors.gray(`  Codex Skills: ${CODEX_SKILLS_DIR}`));
+  console.log(colors.gray(`  Codex AGENTS.md: ${CODEX_AGENTS_MD}`));
   console.log("");
 }
 
@@ -1570,6 +1653,412 @@ export function uninstallCursorAll(): void {
 }
 
 // ============================================================================
+// Codex CLI 插件
+// ============================================================================
+
+// AGENTS.md 标记常量
+const AGENTS_MARKER_START = "<---TanmiWorkspace--->";
+const AGENTS_MARKER_END = "</---TanmiWorkspace--->";
+
+const AGENTS_MD_CONTENT = `## TanmiWorkspace 工作流指引
+- 每个会话开始时调用 session_bind 绑定工作区
+- 节点生命周期：create → start → complete
+- 使用 Skills：$flow-info（信息阶段）、$executing-task（执行任务）
+- 修改文件前确认已绑定到执行节点（context_get 检查）`;
+
+/**
+ * 合并 Codex config.toml 中的 MCP 条目
+ * 不依赖外部 TOML 解析库，使用字符串处理
+ */
+function mergeCodexMcpEntry(tomlContent: string, command: string): string {
+  const serverBlock = `\n[[mcp.servers]]\nname = "tanmi-workspace"\ncommand = "${command}"\n`;
+
+  if (tomlContent.includes('name = "tanmi-workspace"')) {
+    // 已存在：替换 command 行（使用多行匹配）
+    return tomlContent.replace(
+      /(\[\[mcp\.servers\]\][^\[]*?name = "tanmi-workspace"[^\[]*?command = ")[^"]*(")/s,
+      `$1${command}$2`
+    );
+  }
+  // 不存在：追加
+  return tomlContent + serverBlock;
+}
+
+/**
+ * 从 Codex config.toml 中移除 tanmi-workspace MCP 条目
+ */
+function removeCodexMcpEntry(tomlContent: string): string {
+  // 匹配从 [[mcp.servers]] 开始到下一个 [[...]] 或文件末尾的 tanmi-workspace 条目
+  return tomlContent.replace(
+    /\n\[\[mcp\.servers\]\]\nname = "tanmi-workspace"\ncommand = "[^"]*"\n/g,
+    "\n"
+  ).replace(
+    /\[\[mcp\.servers\]\]\nname = "tanmi-workspace"\ncommand = "[^"]*"\n/g,
+    ""
+  );
+}
+
+/**
+ * 向 AGENTS.md 注入 TanmiWorkspace 标记块（幂等）
+ */
+function injectAgentsMdBlock(existing: string, content: string): string {
+  const block = `${AGENTS_MARKER_START}\n${content}\n${AGENTS_MARKER_END}`;
+  if (existing.includes(AGENTS_MARKER_START)) {
+    // 替换现有标记块（update，幂等）
+    return existing.replace(
+      new RegExp(`${AGENTS_MARKER_START}[\\s\\S]*?${AGENTS_MARKER_END}`),
+      block
+    );
+  }
+  // 追加（文件存在但无标记块）
+  return existing.trim() + "\n\n" + block + "\n";
+}
+
+/**
+ * 从 AGENTS.md 中移除 TanmiWorkspace 标记块，保留其他内容
+ */
+function removeAgentsMdBlock(existing: string): string {
+  return existing
+    .replace(new RegExp(`\\n*${AGENTS_MARKER_START}[\\s\\S]*?${AGENTS_MARKER_END}\\n*`), "\n")
+    .trim();
+}
+
+function installCodexMcpConfig(): void {
+  info("配置 Codex CLI MCP...");
+
+  ensureDir(CODEX_HOME);
+
+  const IS_DEV_MODE = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
+  const command = IS_DEV_MODE
+    ? `node "${join(PROJECT_ROOT, "dist", "index.js")}"`
+    : "tanmi-workspace";
+
+  let tomlContent = "";
+  if (existsSync(CODEX_CONFIG)) {
+    tomlContent = readFileSync(CODEX_CONFIG, "utf-8");
+  }
+
+  const newContent = mergeCodexMcpEntry(tomlContent, command);
+  writeFileSync(CODEX_CONFIG, newContent, "utf-8");
+
+  success(`MCP 已配置到 ${CODEX_CONFIG} (command: ${command})`);
+  updateInstallationMeta("codex", "mcp", "update");
+  logToFile("CODEX_MCP_INSTALL", `command: ${command}`);
+}
+
+function uninstallCodexMcpConfig(): void {
+  info("移除 Codex CLI MCP 配置...");
+
+  if (!existsSync(CODEX_CONFIG)) {
+    info("config.toml 不存在，跳过");
+    return;
+  }
+
+  const tomlContent = readFileSync(CODEX_CONFIG, "utf-8");
+  if (!tomlContent.includes('name = "tanmi-workspace"')) {
+    info("未找到 tanmi-workspace MCP 条目，跳过");
+    return;
+  }
+
+  const newContent = removeCodexMcpEntry(tomlContent);
+  writeFileSync(CODEX_CONFIG, newContent, "utf-8");
+  success(`已从 ${CODEX_CONFIG} 移除 tanmi-workspace MCP 条目`);
+  updateInstallationMeta("codex", "mcp", "remove");
+  logToFile("CODEX_MCP_UNINSTALL", "removed");
+}
+
+function installCodexSkills(): void {
+  info("安装 Codex Skills...");
+
+  if (!existsSync(PLUGIN_SKILLS)) {
+    warn(`Skills 模板目录不存在: ${PLUGIN_SKILLS}`);
+    return;
+  }
+
+  const skillDirs = readdirSync(PLUGIN_SKILLS).filter((name) => {
+    const fullPath = join(PLUGIN_SKILLS, name);
+    return statSync(fullPath).isDirectory();
+  });
+
+  if (skillDirs.length === 0) {
+    warn("Skills 模板目录为空");
+    return;
+  }
+
+  ensureDir(CODEX_SKILLS_DIR);
+  const currentVersion = getPackageVersion();
+
+  // 1. 清理废弃的 Skill（黑名单）
+  for (const deprecated of DEPRECATED_SKILLS) {
+    const deprecatedPath = join(CODEX_SKILLS_DIR, deprecated);
+    if (existsSync(deprecatedPath)) {
+      removeDir(deprecatedPath);
+      info(`  - 已删除废弃 Skill: ${deprecated}`);
+      logToFile("CODEX_SKILL_CLEANUP", `删除废弃 Skill (黑名单): ${deprecated}`);
+    }
+  }
+
+  // 2. 清理有标记但源不存在的 Skill（自动检测废弃）
+  if (existsSync(CODEX_SKILLS_DIR)) {
+    const installedSkills = readdirSync(CODEX_SKILLS_DIR).filter((name) => {
+      const fullPath = join(CODEX_SKILLS_DIR, name);
+      return statSync(fullPath).isDirectory();
+    });
+    for (const skill of installedSkills) {
+      const skillPath = join(CODEX_SKILLS_DIR, skill);
+      const markerPath = join(skillPath, ".tanmi-managed");
+      const existsInSource = existsSync(join(PLUGIN_SKILLS, skill));
+
+      if (existsSync(markerPath) && !existsInSource) {
+        removeDir(skillPath);
+        info(`  - 已删除废弃 Skill: ${skill}`);
+        logToFile("CODEX_SKILL_CLEANUP", `删除废弃 Skill (源不存在): ${skill}`);
+      }
+    }
+  }
+
+  // 3. 安装 Skill 并添加标记文件
+  let count = 0;
+  for (const skillName of skillDirs) {
+    const skillSrcDir = join(PLUGIN_SKILLS, skillName);
+    const skillMdPath = join(skillSrcDir, "SKILL.md");
+
+    if (existsSync(skillMdPath)) {
+      const skillDestDir = join(CODEX_SKILLS_DIR, skillName);
+
+      if (existsSync(skillDestDir)) {
+        removeDir(skillDestDir);
+      }
+
+      copyDir(skillSrcDir, skillDestDir);
+
+      try {
+        const markerContent = JSON.stringify(
+          {
+            installedAt: new Date().toISOString(),
+            installedVersion: currentVersion,
+            source: "tanmi-workspace",
+          },
+          null,
+          2
+        );
+        writeFileSync(join(skillDestDir, ".tanmi-managed"), markerContent);
+      } catch (err) {
+        warn(`无法写入标记文件: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      info(`  - ${skillName}/`);
+      count++;
+    }
+  }
+
+  if (count === 0) {
+    warn("未找到有效的 Skill 目录（需包含 SKILL.md）");
+    return;
+  }
+
+  success(`已安装 ${count} 个 Codex Skill 到 ${CODEX_SKILLS_DIR}/`);
+  logToFile("CODEX_SKILL_INSTALL", `安装 ${count} 个 Skill (v${currentVersion})`);
+  updateInstallationMeta("codex", "skills", "update");
+}
+
+function uninstallCodexSkills(): void {
+  info("卸载 Codex Skills...");
+
+  if (!existsSync(CODEX_SKILLS_DIR)) {
+    return;
+  }
+
+  const installedSkills = readdirSync(CODEX_SKILLS_DIR).filter((name) => {
+    const fullPath = join(CODEX_SKILLS_DIR, name);
+    try {
+      return statSync(fullPath).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+
+  let deletedCount = 0;
+  for (const skillName of installedSkills) {
+    const skillPath = join(CODEX_SKILLS_DIR, skillName);
+    const markerPath = join(skillPath, ".tanmi-managed");
+
+    if (existsSync(markerPath)) {
+      if (removeDir(skillPath)) {
+        success(`已删除 ${skillPath}/`);
+        deletedCount++;
+      }
+    }
+  }
+
+  if (deletedCount === 0) {
+    info("没有找到 tanmi 管理的 Skill");
+  }
+
+  if (isDirEmpty(CODEX_SKILLS_DIR)) {
+    removeDir(CODEX_SKILLS_DIR);
+  }
+
+  updateInstallationMeta("codex", "skills", "remove");
+}
+
+function installCodexAgentsMd(): void {
+  info("注入 Codex AGENTS.md 工作流指引...");
+
+  ensureDir(CODEX_HOME);
+
+  let existing = "";
+  if (existsSync(CODEX_AGENTS_MD)) {
+    existing = readFileSync(CODEX_AGENTS_MD, "utf-8");
+  }
+
+  const newContent = injectAgentsMdBlock(existing, AGENTS_MD_CONTENT);
+  writeFileSync(CODEX_AGENTS_MD, newContent, "utf-8");
+
+  success(`工作流指引已注入到 ${CODEX_AGENTS_MD}`);
+  updateInstallationMeta("codex", "instructions", "update");
+  logToFile("CODEX_AGENTS_MD_INSTALL", "injected");
+}
+
+function uninstallCodexAgentsMd(): void {
+  info("移除 Codex AGENTS.md 工作流指引...");
+
+  if (!existsSync(CODEX_AGENTS_MD)) {
+    info("AGENTS.md 不存在，跳过");
+    return;
+  }
+
+  const existing = readFileSync(CODEX_AGENTS_MD, "utf-8");
+  if (!existing.includes(AGENTS_MARKER_START)) {
+    info("未找到 TanmiWorkspace 标记块，跳过");
+    return;
+  }
+
+  const newContent = removeAgentsMdBlock(existing);
+  if (newContent.trim() === "") {
+    // 文件内容全部是 TanmiWorkspace 注入的，删除文件
+    rmSync(CODEX_AGENTS_MD);
+    success(`已删除 ${CODEX_AGENTS_MD}`);
+  } else {
+    writeFileSync(CODEX_AGENTS_MD, newContent + "\n", "utf-8");
+    success(`已从 ${CODEX_AGENTS_MD} 移除 TanmiWorkspace 标记块`);
+  }
+
+  updateInstallationMeta("codex", "instructions", "remove");
+  logToFile("CODEX_AGENTS_MD_UNINSTALL", "removed");
+}
+
+export function installCodexAll(): void {
+  info("安装 Codex CLI 全部组件...");
+  console.log("");
+
+  installCodexMcpConfig();
+  installCodexSkills();
+  installCodexAgentsMd();
+
+  console.log("");
+  success("Codex CLI 组件安装完成！");
+  info("注意：Codex CLI 不支持 Hook 系统，session 绑定需手动触发。");
+}
+
+export function uninstallCodexAll(): void {
+  info("卸载 Codex CLI 全部组件...");
+  console.log("");
+
+  uninstallCodexMcpConfig();
+  uninstallCodexSkills();
+  uninstallCodexAgentsMd();
+
+  console.log("");
+  success("Codex CLI 组件已卸载");
+}
+
+export function installCodexAllForApi(): PlatformInstallResult {
+  const steps: InstallStepResult[] = [];
+
+  steps.push(executeStep("配置 MCP", () => {
+    ensureDir(CODEX_HOME);
+    const IS_DEV_MODE = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
+    const command = IS_DEV_MODE
+      ? `node "${join(PROJECT_ROOT, "dist", "index.js")}"`
+      : "tanmi-workspace";
+
+    let tomlContent = "";
+    if (existsSync(CODEX_CONFIG)) {
+      tomlContent = readFileSync(CODEX_CONFIG, "utf-8");
+    }
+
+    writeFileSync(CODEX_CONFIG, mergeCodexMcpEntry(tomlContent, command), "utf-8");
+    updateInstallationMeta("codex", "mcp", "update");
+  }));
+
+  steps.push(executeStep("安装 Skills", () => {
+    if (!existsSync(PLUGIN_SKILLS)) {
+      throw new Error(`Skills 模板目录不存在: ${PLUGIN_SKILLS}`);
+    }
+
+    const skillDirs = readdirSync(PLUGIN_SKILLS).filter((name) => {
+      const fullPath = join(PLUGIN_SKILLS, name);
+      return statSync(fullPath).isDirectory();
+    });
+
+    if (skillDirs.length === 0) {
+      throw new Error("Skills 模板目录为空");
+    }
+
+    ensureDir(CODEX_SKILLS_DIR);
+    const currentVersion = getPackageVersion();
+
+    for (const deprecated of DEPRECATED_SKILLS) {
+      const deprecatedPath = join(CODEX_SKILLS_DIR, deprecated);
+      if (existsSync(deprecatedPath)) {
+        removeDir(deprecatedPath);
+      }
+    }
+
+    let count = 0;
+    for (const skillName of skillDirs) {
+      const skillSrcDir = join(PLUGIN_SKILLS, skillName);
+      const skillMdPath = join(skillSrcDir, "SKILL.md");
+
+      if (existsSync(skillMdPath)) {
+        const skillDestDir = join(CODEX_SKILLS_DIR, skillName);
+        if (existsSync(skillDestDir)) {
+          removeDir(skillDestDir);
+        }
+        copyDir(skillSrcDir, skillDestDir);
+
+        const markerContent = JSON.stringify({
+          installedAt: new Date().toISOString(),
+          installedVersion: currentVersion,
+          source: "tanmi-workspace",
+        }, null, 2);
+        writeFileSync(join(skillDestDir, ".tanmi-managed"), markerContent);
+        count++;
+      }
+    }
+
+    if (count === 0) {
+      throw new Error("未找到有效的 Skill 目录（需包含 SKILL.md）");
+    }
+
+    updateInstallationMeta("codex", "skills", "update");
+  }));
+
+  steps.push(executeStep("注入 AGENTS.md", () => {
+    ensureDir(CODEX_HOME);
+    let existing = "";
+    if (existsSync(CODEX_AGENTS_MD)) {
+      existing = readFileSync(CODEX_AGENTS_MD, "utf-8");
+    }
+    writeFileSync(CODEX_AGENTS_MD, injectAgentsMdBlock(existing, AGENTS_MD_CONTENT), "utf-8");
+    updateInstallationMeta("codex", "instructions", "update");
+  }));
+
+  return { platform: "codex", steps };
+}
+
+// ============================================================================
 // OpenCode 插件
 // ============================================================================
 
@@ -2202,11 +2691,13 @@ ${colors.bold("平台:")}
   --claude    Claude Code (Hooks, Agents, Skills)
   --cursor    Cursor (Hooks, Agents, Skills)
   --opencode  OpenCode (Plugin, Agents, Skills)
+  --codex     Codex CLI (MCP, Skills, AGENTS.md 指引)
 
 ${colors.bold("示例:")}
   tanmi-workspace plugins                    # 查看状态
   tanmi-workspace plugins install --claude   # 安装 Claude 插件
   tanmi-workspace plugins install --opencode # 安装 OpenCode 插件
+  tanmi-workspace plugins install --codex    # 安装 Codex CLI 支持
   tanmi-workspace plugins uninstall --cursor # 卸载 Cursor 插件
 `);
 }
@@ -2235,8 +2726,10 @@ export default function main(): void {
         installCursorAll();
       } else if (platform === "--opencode") {
         installOpenCodeAll();
+      } else if (platform === "--codex") {
+        installCodexAll();
       } else {
-        error("请指定平台: --claude, --cursor 或 --opencode");
+        error("请指定平台: --claude, --cursor, --opencode 或 --codex");
         showHelp();
         process.exit(1);
       }
@@ -2249,8 +2742,10 @@ export default function main(): void {
         uninstallCursorAll();
       } else if (platform === "--opencode") {
         uninstallOpenCodeAll();
+      } else if (platform === "--codex") {
+        uninstallCodexAll();
       } else {
-        error("请指定平台: --claude, --cursor 或 --opencode");
+        error("请指定平台: --claude, --cursor, --opencode 或 --codex");
         showHelp();
         process.exit(1);
       }

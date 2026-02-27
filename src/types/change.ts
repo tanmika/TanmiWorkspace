@@ -3,7 +3,7 @@
 /**
  * 客户端类型
  */
-export type ChangeClient = "claude-code" | "cursor" | "opencode";
+export type ChangeClient = "claude-code" | "cursor" | "opencode" | "codex";
 
 /**
  * 变更操作类型 - 添加文件
