@@ -405,10 +405,23 @@ async function configureCursorMcp(): Promise<boolean> {
       mcp.mcpServers = {};
     }
 
-    (mcp.mcpServers as Record<string, unknown>)["tanmi-workspace"] = {
-      command: "npx",
-      args: ["tanmi-workspace"],
-    };
+    // dev 模式指向本地编译产物，生产模式使用 npx
+    const mcpEntry = IS_DEV
+      ? {
+          command: "node",
+          args: [join(__dirname, "..", "..", "dist", "index.js")],
+          env: {
+            TANMI_DEV: "true",
+            NODE_ENV: "development",
+            DISABLE_HTTP: "true",
+          },
+        }
+      : {
+          command: "npx",
+          args: ["tanmi-workspace"],
+        };
+
+    (mcp.mcpServers as Record<string, unknown>)["tanmi-workspace"] = mcpEntry;
 
     writeFileSync(CURSOR_MCP, JSON.stringify(mcp, null, 2));
     console.log(colors.green("  ✓ MCP 配置已写入 " + CURSOR_MCP));

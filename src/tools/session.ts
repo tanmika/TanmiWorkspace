@@ -12,6 +12,10 @@ export const sessionBindTool: TanmiTool = {
 
 绑定后，Hook 会在每次对话时自动注入工作区上下文（目标、规则、聚焦节点等）。
 
+**sessionId 传入规则**：
+- Claude Code / Cursor / OpenCode：由 Hook/Plugin 自动注入，无需手动传入
+- Codex / 其他平台：省略 sessionId，服务端将自动生成并在返回结果的 _generatedSessionId 字段中附上，请记住它以便后续调用使用
+
 **使用场景**：
 - 用户说"帮我激活/切换到 XX 工作区"
 - AI 开始执行复杂任务前主动询问是否绑定
@@ -21,7 +25,8 @@ export const sessionBindTool: TanmiTool = {
     properties: {
       sessionId: {
         type: "string",
-        description: "Claude Code 会话 ID（从环境变量或 Hook 输入获取）",
+        description:
+          "会话 ID。Claude Code / Cursor / OpenCode 由 Hook 自动注入；Codex 等其他平台可省略，服务端将自动生成并在响应的 _generatedSessionId 字段中返回。",
       },
       workspaceId: {
         type: "string",
@@ -32,7 +37,7 @@ export const sessionBindTool: TanmiTool = {
         description: "同时聚焦到某个节点（可选）",
       },
     },
-    required: ["sessionId", "workspaceId"],
+    required: ["workspaceId"],
   },
 };
 
@@ -46,6 +51,10 @@ export const sessionUnbindTool: TanmiTool = {
 
 解绑后，Hook 将不再注入工作区上下文。
 
+**sessionId 传入规则**：
+- Claude Code / Cursor / OpenCode：由 Hook/Plugin 自动注入
+- Codex / 其他平台：传入 session_bind 返回的 _generatedSessionId
+
 **使用场景**：
 - 用户说"先停一下工作区"
 - 用户说"我要做点别的事"
@@ -55,7 +64,8 @@ export const sessionUnbindTool: TanmiTool = {
     properties: {
       sessionId: {
         type: "string",
-        description: "Claude Code 会话 ID",
+        description:
+          "会话 ID。Claude Code / Cursor / OpenCode 由 Hook 自动注入；Codex 等平台需传入 session_bind 返回的 _generatedSessionId。",
       },
     },
     required: ["sessionId"],
@@ -73,6 +83,10 @@ export const sessionStatusTool: TanmiTool = {
 - 如果已绑定：工作区信息、聚焦节点、规则列表
 - 如果未绑定：可用的活跃工作区列表
 
+**sessionId 传入规则**：
+- Claude Code / Cursor / OpenCode：由 Hook/Plugin 自动注入
+- Codex / 其他平台：传入 session_bind 返回的 _generatedSessionId
+
 **使用场景**：
 - Hook 内部检查是否应该激活
 - AI 查询当前状态
@@ -83,7 +97,8 @@ export const sessionStatusTool: TanmiTool = {
     properties: {
       sessionId: {
         type: "string",
-        description: "Claude Code 会话 ID",
+        description:
+          "会话 ID。Claude Code / Cursor / OpenCode 由 Hook 自动注入；Codex 等平台需传入 session_bind 返回的 _generatedSessionId。",
       },
     },
     required: ["sessionId"],
@@ -115,7 +130,8 @@ export const getPendingChangesTool: TanmiTool = {
     properties: {
       sessionId: {
         type: "string",
-        description: "Claude Code 会话 ID（用于获取绑定的工作区）",
+        description:
+          "会话 ID（用于获取绑定的工作区）。Claude Code / Cursor / OpenCode 由 Hook 自动注入；Codex 等平台需传入 session_bind 返回的 _generatedSessionId。",
       },
       workspaceId: {
         type: "string",

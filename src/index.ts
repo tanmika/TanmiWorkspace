@@ -21,6 +21,8 @@ import { eventService } from "./services/EventService.js";
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import * as fs from "fs";
+import * as os from "os";
 import { resolvePluginPath } from "./utils/pluginPath.js";
 import { workspaceTools } from "./tools/workspace.js";
 import { nodeTools } from "./tools/node.js";
@@ -49,6 +51,38 @@ import { formatManualChangeReminder } from "./utils/manualChangeFormatter.js";
 import { devLog } from "./utils/devLog.js";
 import { INTERNAL_RULES_HASH } from "./services/NodeService.js";
 import { aiAdapter, addLineNumbers } from "./adapters/OutputAdapter.js";
+import { generateId } from "./utils/id.js";
+
+// ============================================================================
+// 平台识别与会话 ID 管理
+// ============================================================================
+
+// 连接级别的客户端名称（在 oninitialized 握手后赋值）
+let _mcpClientName: string | undefined;
+
+// 已知的 Hook/Plugin 平台（会通过 Hook 自动注入 sessionId，无需手动传入）
+const HOOK_PLATFORM_CLIENT_NAMES = new Set([
+  "cursor-vscode", // Cursor IDE
+  "opencode",      // OpenCode
+]);
+
+/**
+ * 判断当前连接是否来自已知的 Hook/Plugin 平台
+ * Hook 平台：Claude Code（CLAUDE_CODE_ENTRYPOINT 环境变量）、Cursor、OpenCode
+ */
+function isHookPlatform(): boolean {
+  if (process.env.CLAUDE_CODE_ENTRYPOINT) return true;
+  return _mcpClientName !== undefined && HOOK_PLATFORM_CLIENT_NAMES.has(_mcpClientName);
+}
+
+/**
+ * 从工具调用参数中提取 sessionId（非空字符串才有效）
+ */
+function resolveSessionId(args: Record<string, unknown> | undefined): string | null {
+  const val = args?.sessionId;
+  if (typeof val === "string" && val.trim() !== "") return val.trim();
+  return null;
+}
 
 // ============================================================================
 // 配置
@@ -58,6 +92,51 @@ const IS_DEV = process.env.NODE_ENV === "development" || process.env.TANMI_DEV =
 const DEFAULT_PORT = IS_DEV ? "19541" : "19540";
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? DEFAULT_PORT, 10);
 const DISABLE_HTTP = process.env.DISABLE_HTTP === "true";
+
+// ============================================================================
+// MCP 启动探针（用于排查 Codex 是否每次调用都拉起新进程）
+// ============================================================================
+const TANMI_BASE_DIR = IS_DEV ? ".tanmi-workspace-dev" : ".tanmi-workspace";
+const MCP_STARTUP_PROBE_PATH = join(os.homedir(), TANMI_BASE_DIR, "logs", "mcp-startup.jsonl");
+const MCP_STARTUP_PROBE_FALLBACK_PATH = join(os.tmpdir(), "tanmi-workspace-mcp-startup.jsonl");
+
+function appendProbeRecord(filePath: string, record: unknown): void {
+  const dir = dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.appendFileSync(filePath, JSON.stringify(record) + "\n", "utf-8");
+}
+
+function writeMcpStartupProbe(): void {
+  // 采集全量 env（排除敏感密钥，保留所有可能的 session/id 相关变量）
+  const fullEnv: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    fullEnv[k] = v;
+  }
+
+  const record = {
+    ts: new Date().toISOString(),
+    pid: process.pid,
+    ppid: process.ppid,
+    cwd: process.cwd(),
+    argv: process.argv,
+    isDev: IS_DEV,
+    httpPort: HTTP_PORT,
+    disableHttp: DISABLE_HTTP,
+    env: fullEnv,
+  };
+
+  try {
+    appendProbeRecord(MCP_STARTUP_PROBE_PATH, record);
+  } catch {
+    try {
+      appendProbeRecord(MCP_STARTUP_PROBE_FALLBACK_PATH, record);
+    } catch {
+      // 静默失败：探针不应影响 MCP 启动
+    }
+  }
+}
 
 // ============================================================================
 // 日志工具
@@ -193,9 +272,6 @@ function createMcpServer(services: Services): Server {
     const { name, arguments: rawArgs } = request.params;
     const startTime = Date.now();
 
-    // 记录 MCP 调用开始
-    logMcpStart(name, rawArgs as Record<string, unknown> || {});
-
     try {
       // 确保基础目录存在
       await services.fs.ensureIndex();
@@ -221,6 +297,9 @@ function createMcpServer(services: Services): Server {
         args = validation.correctedArgs;
         paramWarnings = validation.warnings;
       }
+
+      // 记录 MCP 调用开始（使用纠正/补全后的参数，便于落到会话日志）
+      logMcpStart(name, args || {});
 
       // ========================================================================
       // 未绑定写入安全检查
@@ -644,32 +723,78 @@ Read(file_path: <返回的 path>)
           break;
 
         // Session 工具
-        case "session_bind":
-          result = await services.session.bind({
-            sessionId: args?.sessionId as string,
+        case "session_bind": {
+          let sessionId = resolveSessionId(args);
+          let generatedSessionId: string | undefined;
+
+          if (!sessionId) {
+            if (isHookPlatform()) {
+              throw new TanmiError(
+                "INVALID_PARAMS",
+                "缺少 sessionId。当前平台（Claude Code / Cursor / OpenCode）应通过 Hook 或 Plugin 自动注入 sessionId，请检查 Hook 配置是否正常。"
+              );
+            }
+            // 非 Hook 平台（Codex / 未知平台）：自动生成 sessionId
+            sessionId = `sess:${generateId()}`;
+            generatedSessionId = sessionId;
+          }
+
+          const bindResult = await services.session.bind({
+            sessionId,
             workspaceId: args?.workspaceId as string,
             nodeId: args?.nodeId as string | undefined,
           });
-          break;
 
-        case "session_unbind":
-          result = await services.session.unbind({
-            sessionId: args?.sessionId as string,
-          });
+          if (generatedSessionId) {
+            result = {
+              ...bindResult,
+              _generatedSessionId: generatedSessionId,
+              _note: "sessionId 已由服务端自动生成。请在本次对话中记住此 ID，并在调用 session_unbind、session_status、get_pending_changes 等工具时传入。",
+            };
+          } else {
+            result = bindResult;
+          }
           break;
+        }
 
-        case "session_status":
-          result = await services.session.status({
-            sessionId: args?.sessionId as string,
-          });
+        case "session_unbind": {
+          const sessionId = resolveSessionId(args);
+          if (!sessionId) {
+            const hint = isHookPlatform()
+              ? "当前平台应通过 Hook 自动注入 sessionId，请检查 Hook 配置。"
+              : "请提供通过 session_bind 返回的 _generatedSessionId。";
+            throw new TanmiError("INVALID_PARAMS", `缺少 sessionId。${hint}`);
+          }
+          result = await services.session.unbind({ sessionId });
           break;
+        }
 
-        case "get_pending_changes":
+        case "session_status": {
+          const sessionId = resolveSessionId(args);
+          if (!sessionId) {
+            const hint = isHookPlatform()
+              ? "当前平台应通过 Hook 自动注入 sessionId，请检查 Hook 配置。"
+              : "请提供通过 session_bind 返回的 _generatedSessionId。";
+            throw new TanmiError("INVALID_PARAMS", `缺少 sessionId。${hint}`);
+          }
+          result = await services.session.status({ sessionId });
+          break;
+        }
+
+        case "get_pending_changes": {
+          const sessionId = resolveSessionId(args);
+          if (!sessionId) {
+            const hint = isHookPlatform()
+              ? "当前平台应通过 Hook 自动注入 sessionId，请检查 Hook 配置。"
+              : "请提供通过 session_bind 返回的 _generatedSessionId。";
+            throw new TanmiError("INVALID_PARAMS", `缺少 sessionId。${hint}`);
+          }
           result = await services.session.getPendingChanges({
-            sessionId: args?.sessionId as string,
+            sessionId,
             workspaceId: args?.workspaceId as string | undefined,
           });
           break;
+        }
 
         // Help 工具
         case "tanmi_help":
@@ -1384,7 +1509,31 @@ async function main() {
   // 3. 创建并启动 MCP server
   const mcpServer = createMcpServer(services);
   const transport = new StdioServerTransport();
+  // 在 initialize 握手完成后捕获 clientInfo（用于识别平台来源）
+  mcpServer.oninitialized = () => {
+    try {
+      const clientVersion = (mcpServer as unknown as Record<string, unknown>)._clientVersion as
+        | { name?: string; version?: string }
+        | undefined;
+      if (clientVersion) {
+        // 设置连接级别的客户端名称，用于平台识别（isHookPlatform）
+        _mcpClientName = clientVersion.name;
+        appendProbeRecord(MCP_STARTUP_PROBE_PATH, {
+          type: "client_info",
+          ts: new Date().toISOString(),
+          pid: process.pid,
+          ppid: process.ppid,
+          clientName: clientVersion.name,
+          clientVersion: clientVersion.version,
+        });
+      }
+    } catch {
+      // 静默失败，探针不影响主流程
+    }
+  };
+
   await mcpServer.connect(transport);
+  writeMcpStartupProbe();
   logMcp("Server started");
 
   // 4. 优雅退出处理
