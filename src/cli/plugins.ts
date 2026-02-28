@@ -1670,32 +1670,64 @@ const AGENTS_MD_CONTENT = `## TanmiWorkspace 工作流指引
  * 合并 Codex config.toml 中的 MCP 条目
  * 不依赖外部 TOML 解析库，使用字符串处理
  */
-function mergeCodexMcpEntry(tomlContent: string, command: string): string {
-  const serverBlock = `\n[[mcp.servers]]\nname = "tanmi-workspace"\ncommand = "${command}"\n`;
+function mergeCodexMcpEntry(tomlContent: string, serverBlock: string): string {
+  const normalizedBlock = serverBlock.trimEnd() + "\n";
 
-  if (tomlContent.includes('name = "tanmi-workspace"')) {
-    // 已存在：替换 command 行（使用多行匹配）
-    return tomlContent.replace(
-      /(\[\[mcp\.servers\]\][^\[]*?name = "tanmi-workspace"[^\[]*?command = ")[^"]*(")/s,
-      `$1${command}$2`
-    );
-  }
-  // 不存在：追加
-  return tomlContent + serverBlock;
+  // Codex 官方配置键是 `mcp_servers`（不是 `mcp.servers` / `[[mcp.servers]]`）。
+  // 这里兼容清理以下几类历史/错误写法，避免重复或导致 Codex 不识别：
+  // 1) [[mcp.servers]] + name = "tanmi-workspace"（早期误实现）
+  // 2) [mcp.servers."tanmi-workspace"]（社区常见但非官方键名）
+  // 3) [mcp_servers."tanmi-workspace"]（官方键名）
+  // 4) dotted assignments: mcp_servers."tanmi-workspace".command = ...
+
+  const legacyArrayStyleRegex =
+    /^\[\[mcp\.servers\]\][\s\S]*?^name\s*=\s*"tanmi-workspace"[\s\S]*?(?=^\[\[mcp\.servers\]\]|^\[|$(?![\s\S]))/gm;
+
+  const legacyTableStyleRegex =
+    /^\[mcp\.servers\.(?:"tanmi-workspace"|tanmi-workspace)(?:\.[^\]]+)?\][\s\S]*?(?=^\[|$(?![\s\S]))/gm;
+
+  const officialTableStyleRegex =
+    /^\[mcp_servers\.(?:"tanmi-workspace"|tanmi-workspace)(?:\.[^\]]+)?\][\s\S]*?(?=^\[|$(?![\s\S]))/gm;
+
+  const dottedAssignmentsRegex =
+    /^mcp_servers\.(?:"tanmi-workspace"|tanmi-workspace)\.[^\n]*\n?/gm;
+
+  const cleaned = tomlContent
+    .replace(legacyArrayStyleRegex, "")
+    .replace(legacyTableStyleRegex, "")
+    .replace(officialTableStyleRegex, "")
+    .replace(dottedAssignmentsRegex, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+
+  const prefix = cleaned.length > 0 ? "\n\n" : "";
+  return cleaned + prefix + normalizedBlock;
 }
 
 /**
  * 从 Codex config.toml 中移除 tanmi-workspace MCP 条目
  */
 function removeCodexMcpEntry(tomlContent: string): string {
-  // 匹配从 [[mcp.servers]] 开始到下一个 [[...]] 或文件末尾的 tanmi-workspace 条目
-  return tomlContent.replace(
-    /\n\[\[mcp\.servers\]\]\nname = "tanmi-workspace"\ncommand = "[^"]*"\n/g,
-    "\n"
-  ).replace(
-    /\[\[mcp\.servers\]\]\nname = "tanmi-workspace"\ncommand = "[^"]*"\n/g,
-    ""
-  );
+  const legacyArrayStyleRegex =
+    /^\[\[mcp\.servers\]\][\s\S]*?^name\s*=\s*"tanmi-workspace"[\s\S]*?(?=^\[\[mcp\.servers\]\]|^\[|$(?![\s\S]))/gm;
+
+  const legacyTableStyleRegex =
+    /^\[mcp\.servers\.(?:"tanmi-workspace"|tanmi-workspace)(?:\.[^\]]+)?\][\s\S]*?(?=^\[|$(?![\s\S]))/gm;
+
+  const officialTableStyleRegex =
+    /^\[mcp_servers\.(?:"tanmi-workspace"|tanmi-workspace)(?:\.[^\]]+)?\][\s\S]*?(?=^\[|$(?![\s\S]))/gm;
+
+  const dottedAssignmentsRegex =
+    /^mcp_servers\.(?:"tanmi-workspace"|tanmi-workspace)\.[^\n]*\n?/gm;
+
+  const removed = tomlContent
+    .replace(legacyArrayStyleRegex, "")
+    .replace(legacyTableStyleRegex, "")
+    .replace(officialTableStyleRegex, "")
+    .replace(dottedAssignmentsRegex, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return removed.length > 0 ? removed + "\n" : "";
 }
 
 /**
@@ -1729,21 +1761,33 @@ function installCodexMcpConfig(): void {
   ensureDir(CODEX_HOME);
 
   const IS_DEV_MODE = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
-  const command = IS_DEV_MODE
-    ? `node "${join(PROJECT_ROOT, "dist", "index.js")}"`
-    : "tanmi-workspace";
+  const escapeTomlBasicString = (value: string) =>
+    value
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\r/g, "\\r")
+      .replace(/\n/g, "\\n");
+
+  // Codex 的 MCP 配置：使用官方键 `mcp_servers.<id>.command/args`。
+  const serverBlock = IS_DEV_MODE
+    ? (() => {
+        const scriptPath = join(PROJECT_ROOT, "dist", "index.js");
+        return `[mcp_servers."tanmi-workspace"]\ncommand = "node"\nargs = ["${escapeTomlBasicString(scriptPath)}"]\n\n[mcp_servers."tanmi-workspace".env]\nTANMI_DEV = "true"\nNODE_ENV = "development"\nDISABLE_HTTP = "true"\n`;
+      })()
+    : `[mcp_servers."tanmi-workspace"]\ncommand = "tanmi-workspace"\n`;
 
   let tomlContent = "";
   if (existsSync(CODEX_CONFIG)) {
     tomlContent = readFileSync(CODEX_CONFIG, "utf-8");
   }
 
-  const newContent = mergeCodexMcpEntry(tomlContent, command);
+  const newContent = mergeCodexMcpEntry(tomlContent, serverBlock);
   writeFileSync(CODEX_CONFIG, newContent, "utf-8");
 
-  success(`MCP 已配置到 ${CODEX_CONFIG} (command: ${command})`);
+  const statusMsg = IS_DEV_MODE ? `node "${join(PROJECT_ROOT, "dist", "index.js")}"` : "tanmi-workspace";
+  success(`MCP 已配置到 ${CODEX_CONFIG} (command: ${statusMsg})`);
   updateInstallationMeta("codex", "mcp", "update");
-  logToFile("CODEX_MCP_INSTALL", `command: ${command}`);
+  logToFile("CODEX_MCP_INSTALL", `command: ${statusMsg}`);
 }
 
 function uninstallCodexMcpConfig(): void {
@@ -1755,7 +1799,17 @@ function uninstallCodexMcpConfig(): void {
   }
 
   const tomlContent = readFileSync(CODEX_CONFIG, "utf-8");
-  if (!tomlContent.includes('name = "tanmi-workspace"')) {
+  const hasTanmiMcpEntry =
+    // 早期误实现：数组风格 + name 字段
+    /\[\[mcp\.servers\]\][\s\S]*?^name\s*=\s*"tanmi-workspace"/m.test(tomlContent)
+    // 社区常见但非官方：表风格 mcp.servers.<id>
+    || /^\[mcp\.servers\.(?:"tanmi-workspace"|tanmi-workspace)\]/m.test(tomlContent)
+    // 官方：表风格 mcp_servers.<id>
+    || /^\[mcp_servers\.(?:"tanmi-workspace"|tanmi-workspace)\]/m.test(tomlContent)
+    // 官方（dotted assignments）
+    || /^mcp_servers\.(?:"tanmi-workspace"|tanmi-workspace)\./m.test(tomlContent);
+
+  if (!hasTanmiMcpEntry) {
     info("未找到 tanmi-workspace MCP 条目，跳过");
     return;
   }
@@ -1979,16 +2033,26 @@ export function installCodexAllForApi(): PlatformInstallResult {
   steps.push(executeStep("配置 MCP", () => {
     ensureDir(CODEX_HOME);
     const IS_DEV_MODE = process.env.NODE_ENV === "development" || process.env.TANMI_DEV === "true";
-    const command = IS_DEV_MODE
-      ? `node "${join(PROJECT_ROOT, "dist", "index.js")}"`
-      : "tanmi-workspace";
+    const escapeTomlBasicString = (value: string) =>
+      value
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"')
+        .replace(/\r/g, "\\r")
+        .replace(/\n/g, "\\n");
+
+    const serverBlock = IS_DEV_MODE
+      ? (() => {
+          const scriptPath = join(PROJECT_ROOT, "dist", "index.js");
+          return `[mcp_servers."tanmi-workspace"]\ncommand = "node"\nargs = ["${escapeTomlBasicString(scriptPath)}"]\n\n[mcp_servers."tanmi-workspace".env]\nTANMI_DEV = "true"\nNODE_ENV = "development"\nDISABLE_HTTP = "true"\n`;
+        })()
+      : `[mcp_servers."tanmi-workspace"]\ncommand = "tanmi-workspace"\n`;
 
     let tomlContent = "";
     if (existsSync(CODEX_CONFIG)) {
       tomlContent = readFileSync(CODEX_CONFIG, "utf-8");
     }
 
-    writeFileSync(CODEX_CONFIG, mergeCodexMcpEntry(tomlContent, command), "utf-8");
+    writeFileSync(CODEX_CONFIG, mergeCodexMcpEntry(tomlContent, serverBlock), "utf-8");
     updateInstallationMeta("codex", "mcp", "update");
   }));
 

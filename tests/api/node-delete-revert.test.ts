@@ -16,6 +16,7 @@ import type { FastifyInstance } from "fastify";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import * as os from "node:os";
 
 // 为每个测试文件生成唯一的测试目录（隔离本地数据）
 const testId = crypto.randomUUID().slice(0, 8);

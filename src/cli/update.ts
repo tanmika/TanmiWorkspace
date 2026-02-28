@@ -91,7 +91,7 @@ export function updatePluginsIfNeeded(): PluginUpdateResult {
   }
 
   // 检测 Codex CLI 插件
-  if (status.codex.mcp || status.codex.skills.length > 0 || status.codex.instructions) {
+  if (status.codex && (status.codex.mcp || status.codex.skills.length > 0 || status.codex.instructions)) {
     if (status.codex.mcpNeedsUpdate || status.codex.skillsNeedsUpdate || status.codex.instructionsNeedsUpdate) {
       platformsToUpdate.push("codex");
     }
